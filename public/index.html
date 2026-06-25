@@ -538,8 +538,12 @@ async function renderHome(){
 }
 
 async function toggleArticleVerfuegbar(id, current){
+  let hinweis=null;
+  if(current){
+    hinweis=prompt('Hinweis für die Stores (optional)\nz.B. "wird erst Donnerstag geliefert"','')||'';
+  }
   try{
-    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current})});
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current, verfuegbar_hinweis: current?hinweis:null})});
     articles=await api('articles?select=*&order=sort_order');
     renderOrder();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
@@ -567,7 +571,7 @@ function renderOrderSection(cats, label, color, icon){
           <div>
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
-            ${(!isOrg && !verfuegbar)?'<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ aktuell nicht lieferbar</div>':''}
+            ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${a.verfuegbar_hinweis?a.verfuegbar_hinweis:'aktuell nicht verfügbar'}</div>`:''}
           </div>
         </div>
         ${isOrg?`
@@ -665,8 +669,9 @@ async function renderKCOrderTab(el, tabHtml){
       </td>
       <td style="color:var(--muted);">${soll}</td>
       <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
-      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:(verfuegbar?'<span class="badge badge-ok">ja</span>':'<span class="badge badge-warn">nein</span>')}</td>
-    </tr>`;
+      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:(verfuegbar?'<span class="badge badge-ok">ja</span>':`<span class="badge badge-warn" title="${a.verfuegbar_hinweis||'aktuell nicht verfügbar'}">nein</span>`)}</td>
+    </tr>
+    ${!isOrg && !verfuegbar && a.verfuegbar_hinweis?`<tr><td colspan="5" style="font-size:10px;color:#DC2626;padding-top:0;">↳ ${a.verfuegbar_hinweis}</td></tr>`:''}`;
   });
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Negative Bestellung = Überbestand. Grün hinterlegtes Feld = heute aktualisiert (Datum darunter = letzte Eingabe).</div>`;
@@ -2374,4 +2379,4 @@ window.addEventListener('online',()=>{});
 initLogin().catch(console.error);
 </script>
 </body>
-</html>   
+</html>
