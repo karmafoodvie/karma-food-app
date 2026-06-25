@@ -168,6 +168,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
+    <div id="v-maengel" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -232,9 +233,9 @@ const KONTROLLE_PUNKTE = [
   {icon:'🥜', titel:'Allergene', oneliner:'Was ist drin? Hier nachschauen.', text:'Die 14 gesetzlich gekennzeichneten Stoffe (z.B. Gluten, Nüsse, Milch, Soja), die bei manchen Gästen heftige bis lebensgefährliche Reaktionen auslösen können. Zu jedem Gericht muss bekannt sein, welche Allergene enthalten sind — schriftlich oder mündlich, aber dann muss wirklich jemand Bescheid wissen, der gerade da ist.', target:'allergene'},
   {icon:'🐭', titel:'Schädlinge im Griff', oneliner:'Liegt in der grünen Mappe im Store.', text:'Mäuse, Schaben, Motten & Co. Die Kontrolle der Fallen/Köder in Küche und Lager wird auf Papier dokumentiert — die grüne Mappe liegt direkt im Store. Bei einer Kontrolle einfach zeigen.', target:null, badgeText:'📁 Mappe'},
   {icon:'🎓', titel:'Hygiene-Schulungen', oneliner:'Wer wurde wann geschult?', text:'Händewaschen, Kopfbedeckung, nicht krank arbeiten und mehr. Mindestens 1x im Jahr (plus bei neuen Mitarbeitenden) nachweisbar schulen — mit Datum, nicht nur „haben wir mal erklärt".', target:'schulung'},
-  {icon:'🧽', titel:'Sauber & desinfiziert', oneliner:'Was, wann, wie geputzt wurde.', text:'Nicht nur „sieht sauber aus": Es muss klar sein, was, wann, wie und mit welchem Mittel gereinigt wird — und ob danach zusätzlich desinfiziert wurde. Reines Putzen tötet Keime nicht zuverlässig ab.', target:null},
-  {icon:'🔧', titel:'Kaputt & gemeldet?', oneliner:'Schäden im Überblick.', text:'Z.B. ein fehlendes Handwaschbecken oder ein kaputtes Gerät. Muss erkannt, gemeldet und behoben werden — am besten mit Datum, wann\'s gemeldet und wann\'s repariert wurde.', target:null},
-  {icon:'🌡️', titel:'Temperatur-Listen', oneliner:'Kühlschrank, Ausgabe, Lieferung.', text:'Kühlschranktemperatur, Temperatur bei der Essensausgabe, Temperatur bei der Lieferung — jeden Tag mit echtem Messwert aufschreiben, nicht geschätzt oder einfach abgehakt.', target:null}
+  {icon:'🧽', titel:'Sauber & desinfiziert', oneliner:'Reinigungsprotokoll im Daily Check-up.', text:'Nicht nur „sieht sauber aus": Es muss klar sein, was, wann, wie und mit welchem Mittel gereinigt wird — und ob danach zusätzlich desinfiziert wurde. Reines Putzen tötet Keime nicht zuverlässig ab. Du findest und bestätigst das im Daily Check-up unter Reinigungs- & Kontrollprotokoll.', target:'dailycheck'},
+  {icon:'🔧', titel:'Kaputt & gemeldet?', oneliner:'Schaden melden →', text:'Z.B. ein fehlendes Handwaschbecken oder ein kaputtes Gerät. Muss erkannt, gemeldet und behoben werden — am besten mit Datum, wann\'s gemeldet und wann\'s repariert wurde.', target:'maengel'},
+  {icon:'🌡️', titel:'Temperatur-Listen', oneliner:'Wareneingang & Kühlschrank im Daily Check-up.', text:'Kühlschranktemperatur und Temperatur bei der Lieferung — jeden Tag mit echtem Messwert aufschreiben, nicht geschätzt oder einfach abgehakt. Du findest und bestätigst das im Daily Check-up unter „Wareneingangskontrolle" und „Kühleinrichtungen".', target:'dailycheck'}
 ];
 
 let currentStore = null;
@@ -396,11 +397,11 @@ function goTo(v){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   const nb=document.getElementById('nav-'+v);
   if(nb) nb.classList.add('active');
-  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up'};
+  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -417,12 +418,25 @@ async function renderHome(){
   const el=document.getElementById('v-home');
 
   let remindersHtml='';
+  let dcStatus={wek:false,reinCount:0,kuehl:false};
   if(currentStore?.id!=='zentrale'){
     const todayDate=new Date().toISOString().split('T')[0];
     const dayIdx=(new Date().getDay()+6)%7; // Mon=0 ... Sun=6
     const isWeekday=dayIdx<5;
     const isKCDay=dayIdx===1||dayIdx===3; // Dienstag oder Donnerstag
     const reminders=[];
+
+    try{
+      const [wekToday,reinToday,kuehlToday]=await Promise.all([
+        api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=id`).catch(()=>[]),
+        api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]),
+        api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=id`).catch(()=>[])
+      ]);
+      dcStatus.wek=(wekToday||[]).length>0;
+      const r=(reinToday||[])[0];
+      dcStatus.reinCount=r?(r.reinigung_erledigt?1:0)+(r.desinfektion_erledigt?1:0):0;
+      dcStatus.kuehl=(kuehlToday||[]).length>0;
+    }catch(e){console.error(e);}
 
     try{
       const ordersToday=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=article_id`).catch(()=>[]);
@@ -469,29 +483,20 @@ async function renderHome(){
     </div>
     ${homeMode==='alltag'?`
     <div style="margin-bottom:6px;">${remindersHtml}</div>
-    <div class="home-card" onclick="goTo('check')" style="margin-top:10px;">
+    <div class="home-card" onclick="goTo('dailycheck')" style="margin-top:10px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <div class="hc-icon"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
-        <span style="font-weight:500;">Checklisten</span>
-      </div>
-      ${CL_TYPES.map(t=>{const items=templates[t]||[];const d=items.filter(x=>clDone[x.id]).length;const all=items.length;const pill=d===all?'<span class="badge badge-ok">erledigt</span>':d===0?'<span class="badge badge-warn">ausstehend</span>':`<span class="badge badge-pend">${d}/${all}</span>`;return`<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">${CL_LABELS[t]}</span>${pill}</div>`;}).join('')}
-    </div>
-    <div class="home-card" onclick="goTo('dailycheck')">
-      <div style="display:flex;align-items:center;gap:8px;">
         <div class="hc-icon"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
         <span style="font-weight:500;">Daily Check-up</span>
       </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">Wareneingangskontrolle</span>${dcStatus.wek?'<span class="badge badge-ok">erledigt</span>':'<span class="badge badge-warn">ausstehend</span>'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">Reinigung & Desinfektion</span>${dcStatus.reinCount===2?'<span class="badge badge-ok">erledigt</span>':dcStatus.reinCount===0?'<span class="badge badge-warn">ausstehend</span>':`<span class="badge badge-pend">${dcStatus.reinCount}/2</span>`}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">Kühleinrichtungen</span>${dcStatus.kuehl?'<span class="badge badge-ok">erledigt</span>':'<span class="badge badge-warn">ausstehend</span>'}</div>
     </div>
+    <div class="section-lbl" style="margin-top:14px;">📖 Nachschlagen</div>
     <div class="home-card" onclick="goTo('allergene')">
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="hc-icon"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
         <span style="font-weight:500;">Zutaten & Allergene</span>
-      </div>
-    </div>
-    <div class="home-card" onclick="goTo('schulung')">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div class="hc-icon"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg></div>
-        <span style="font-weight:500;">Schulungen</span>
       </div>
     </div>`:`
     <div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);">
@@ -528,9 +533,18 @@ async function renderHome(){
   translateEl(el);
 }
 
+async function toggleArticleVerfuegbar(id, current){
+  try{
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current})});
+    articles=await api('articles?select=*&order=sort_order');
+    renderOrder();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+
 // ---- ORDER ----
 let activeOrderTab='transporter';
 function renderOrderSection(cats, label, color, icon){
+  const isOrg=currentStore?.id==='zentrale';
   let html=`<div class="section-banner" style="background:${color}12;border-left-color:${color};">
     <span style="font-size:18px;">${icon}</span>
     <div><div style="font-size:12px;font-weight:600;color:${color};">${label}</div>
@@ -542,16 +556,25 @@ function renderOrderSection(cats, label, color, icon){
     html+=`<div class="section-lbl">${cat}</div><div class="card">`;
     items.forEach(a=>{
       const v=orderQtys[a.id]||0;
+      const verfuegbar=a.verfuegbar!==false;
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
           ${a.image_url?`<img src="${a.image_url}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
-          <div><div class="item-name">${a.name}</div><div class="item-unit">${a.unit}</div></div>
+          <div>
+            <div class="item-name">${a.name}</div>
+            <div class="item-unit">${a.unit}</div>
+            ${(!isOrg && !verfuegbar)?'<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ aktuell nicht lieferbar</div>':''}
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;">
+        ${isOrg?`
+          <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+        `:`
+        <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
           <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
           <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
           <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
         </div>
+        `}
       </div>`;
     });
     html+='</div>';
@@ -618,9 +641,10 @@ async function renderKCOrderTab(el, tabHtml){
   const istData=await api(`kc_stock?store_id=eq.${currentStore.id}&select=article_id,ist_bestand,updated_date`).catch(()=>[]);
   const istMap={};
   (istData||[]).forEach(d=>istMap[d.article_id]=d);
+  const isOrg=currentStore?.id==='zentrale';
 
   html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table">
-    <thead><tr><th style="text-align:left;">Artikel</th><th>IST</th><th>SOLL</th><th>Bestellung</th></tr></thead><tbody>`;
+    <thead><tr><th style="text-align:left;">Artikel</th><th>IST</th><th>SOLL</th><th>Bestellung</th><th>Lieferbar</th></tr></thead><tbody>`;
   kcItems.forEach(a=>{
     const rec=istMap[a.id];
     const ist=rec?.ist_bestand ?? '';
@@ -628,7 +652,8 @@ async function renderKCOrderTab(el, tabHtml){
     const bestellung=(ist!=='' && ist!==null) ? (soll - ist) : null;
     const updatedToday=rec?.updated_date===today;
     const updatedLabel=rec?.updated_date ? new Date(rec.updated_date).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}) : '';
-    html+=`<tr>
+    const verfuegbar=a.verfuegbar!==false;
+    html+=`<tr${(!isOrg && !verfuegbar)?' style="opacity:0.4;"':''}>
       <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
       <td>
         <input type="number" value="${ist}" onchange="updateIstBestandStore(${a.id}, this.value)" style="width:50px;text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:5px;font-size:12px;padding:5px;background:${updatedToday?'#F0FDF4':'#fff'};">
@@ -636,6 +661,7 @@ async function renderKCOrderTab(el, tabHtml){
       </td>
       <td style="color:var(--muted);">${soll}</td>
       <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
+      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:(verfuegbar?'<span class="badge badge-ok">ja</span>':'<span class="badge badge-warn">nein</span>')}</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
@@ -978,6 +1004,31 @@ function renderCheck(){
   renderClBody();
 }
 function switchCl(t){activeCl=t;document.querySelectorAll('.cl-tab').forEach((b,i)=>b.classList.toggle('active',CL_TYPES[i]===t));renderClBody();}
+function clItemEmoji(text){
+  const t=(text||'').toLowerCase();
+  if(t.includes('aufsperr')||t.includes('einstempeln')) return '🔑';
+  if(t.includes('absperr')||t.includes('abschließen')) return '🔒';
+  if(t.includes('warmhalte')) return '🔥';
+  if(t.includes('kaffee')) return '☕';
+  if(t.includes('alles sauber')||t.includes('sauber?')) return '🧼';
+  if(t.includes('reinig')||t.includes('putzen')||t.includes('wischen')) return '🧹';
+  if(t.includes('desinfiz')) return '🧴';
+  if(t.includes('verpackung')) return '📦';
+  if(t.includes('limetten')||t.includes('schneiden')||t.includes('einräumen')) return '🥗';
+  if(t.includes('tafel')||t.includes('beschriften')) return '✏️';
+  if(t.includes('musik')) return '🎵';
+  if(t.includes('geschirrspüler')) return '🍽️';
+  if(t.includes('einsortieren')) return '📥';
+  if(t.includes('bestellt')) return '✅';
+  if(t.includes('whatsapp')) return '💬';
+  if(t.includes('kassa')||t.includes('kasse')) return '💶';
+  if(t.includes('müll')||t.includes('mistkübel')||t.includes('mist')) return '🗑️';
+  if(t.includes('licht')) return '💡';
+  if(t.includes('kühl')) return '❄️';
+  if(t.includes('boden')) return '🧺';
+  return '📝';
+}
+const CL_SECTION_EMOJI={oeffnung:'🔑',reinigung:'🧹',abschluss:'🌙'};
 function renderClBody(){
   const items=templates[activeCl]||[];
   const done=items.filter(x=>clDone[x.id]).length;
@@ -987,14 +1038,14 @@ function renderClBody(){
     <div class="progress-bar"><div class="progress-fill" style="width:${items.length?Math.round(done/items.length*100):0}%"></div></div>
     <div class="card">`;
   secs.forEach(sec=>{
-    html+=`<div class="section-lbl" style="padding:8px 14px 4px;">${sec}</div>`;
+    html+=`<div class="section-lbl" style="padding:8px 14px 4px;">${CL_SECTION_EMOJI[activeCl]||'📋'} ${sec}</div>`;
     items.filter(x=>x.section===sec).forEach(item=>{
       const d=!!clDone[item.id];
       html+=`<div class="cl-item" onclick="toggleCl(${item.id})">
         <div class="check-box${d?' done':''}">
           ${d?`<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>`:''}
         </div>
-        <span class="cl-text${d?' done':''}">${item.item_text}</span>
+        <span class="cl-text${d?' done':''}">${clItemEmoji(item.item_text)} ${item.item_text}</span>
       </div>`;
     });
   });
@@ -1056,6 +1107,13 @@ function renderOrg(){
         <span class="org-btn-sub">Zentrale Liste, wird automatisch in allen Filialen angezeigt</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('maengel')" style="border-color:#0F6E56;">
+      <span class="org-btn-icon">🔧</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0F6E56;">Mängel — Übersicht</span>
+        <span class="org-btn-sub">Gemeldete Schäden aller Filialen, Status verwalten</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('dailycheck')" style="border-color:#0F6E56;">
       <span class="org-btn-icon">🩺</span>
       <div class="org-btn-text">
@@ -1101,6 +1159,17 @@ async function renderAllergene(){
     </div>
     <div id="allergeneListAdmin"></div>
   ` : `
+    <div class="card" style="padding:14px;">
+      <div style="font-weight:500;margin-bottom:10px;">Die 14 Allergene</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;">
+        ${ALLERGENE.map(a=>`
+          <div style="font-size:12px;display:flex;align-items:baseline;gap:6px;">
+            <span class="badge" style="background:var(--green-light);color:var(--green);min-width:20px;text-align:center;flex-shrink:0;">${a.code}</span>
+            <span style="color:var(--sub);">${a.label}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
     <input id="all-search" type="text" placeholder="Gericht suchen…" oninput="filterAllergeneCheatsheet()" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;">
     <div id="all-cheatlist"></div>
   `;
@@ -1388,16 +1457,23 @@ async function buildDailyCheckHistoryHtml(){
   html+=`</tbody></table></div></div>`;
 
   html+=`<div class="section-lbl">Kühleinrichtungen</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Klein</th><th>Groß</th></tr></thead><tbody>`;
-  html+=(kuehl||[]).map(k=>`<tr><td>${new Date(k.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[k.store_id]||k.store_id}</td><td><span class="badge ${k.temp_klein<=7?'badge-ok':'badge-warn'}">${k.temp_klein}°C</span></td><td><span class="badge ${k.temp_gross<=8?'badge-ok':'badge-warn'}">${k.temp_gross}°C</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
+  html+=(kuehl||[]).map(k=>`<tr><td>${new Date(k.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[k.store_id]||k.store_id}</td><td><span class="badge ${k.temp_klein<=6?'badge-ok':'badge-warn'}">${k.temp_klein}°C</span></td><td><span class="badge ${k.temp_gross<=6?'badge-ok':'badge-warn'}">${k.temp_gross}°C</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
   html+=`</tbody></table></div></div>`;
   return html;
+}
+
+function backToHomeHtml(){
+  return `<div onclick="goTo('home')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
+    <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Zurück zur Übersicht
+  </div>`;
 }
 
 async function renderDailyCheck(){
   const el=document.getElementById('v-dailycheck');
   const isOrg=currentStore?.id==='zentrale';
   if(isOrg){
-    el.innerHTML='<div id="dailyCheckHistory"></div>';
+    el.innerHTML=backToHomeHtml()+'<div id="dailyCheckHistory"></div>';
     translateEl(el);
     document.getElementById('dailyCheckHistory').innerHTML=await buildDailyCheckHistoryHtml();
     return;
@@ -1412,7 +1488,7 @@ async function renderDailyCheck(){
   const wareOkDefault=!wek || wek.ware_ok!==false;
   const reinig=(reinRows||[])[0];
   const kuehl=(kuehlRows||[])[0];
-  el.innerHTML = `
+  el.innerHTML = backToHomeHtml()+`
     <div class="section-lbl" style="color:var(--green);">🌡️ Wareneingangskontrolle</div>
     <div class="card" style="padding:14px;border:1.5px solid var(--green);overflow:visible;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Temperatur der heute gelieferten Speisen. Soll: über 65°C.</div>
@@ -1423,7 +1499,7 @@ async function renderDailyCheck(){
         <span class="cl-text">Ware in Ordnung</span>
       </div>
       <div class="item-row" style="border-bottom:none;padding:8px 0 10px;">
-        <div class="item-name">Temperatur (°C)</div>
+        <div class="item-name">Temperatur (Ware ist über 65°)</div>
         <input id="wek-temp" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${wek?.temperatur??''}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
       <div id="wek-massnahme-wrap" style="display:${(wek && wek.temperatur<65)?'block':'none'};margin-bottom:8px;">
@@ -1449,11 +1525,11 @@ async function renderDailyCheck(){
     <div class="section-lbl" style="color:var(--green);">❄️ Kühleinrichtungen</div>
     <div class="card" style="border:1.5px solid var(--green);">
       <div class="item-row">
-        <div class="item-name">Kleiner Kühlschrank (Soll: 7°C)</div>
+        <div class="item-name">Kleiner Kühlschrank (Soll: 6°C)</div>
         <input id="kuehl-klein" type="number" step="0.1" value="${kuehl?.temp_klein??''}" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
       <div class="item-row">
-        <div class="item-name">Großer Kühlschrank (Soll: 8°C)</div>
+        <div class="item-name">Großer Kühlschrank (Soll: 6°C)</div>
         <input id="kuehl-gross" type="number" step="0.1" value="${kuehl?.temp_gross??''}" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
     </div>
@@ -1515,6 +1591,69 @@ async function saveKuehleinrichtungen(){
     await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
     await api('kuehleinrichtungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,temp_klein:klein,temp_gross:gross,mitarbeiter:currentStore.name}])});
     showToast('✔ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+
+// ---- MÄNGEL / SCHADENSMELDUNG ----
+async function renderMaengel(){
+  const el=document.getElementById('v-maengel');
+  const isOrg=currentStore?.id==='zentrale';
+  if(isOrg){
+    const [rows, stores] = await Promise.all([
+      api('maengel?select=*&order=gemeldet_am.desc').catch(()=>[]),
+      api('stores?select=id,name').catch(()=>[])
+    ]);
+    const storeMap=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
+    el.innerHTML=(rows||[]).map(m=>`
+      <div class="card" style="padding:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <strong data-no-translate>${storeMap[m.store_id]||m.store_id}</strong>
+          <span class="badge ${m.status==='behoben'?'badge-ok':'badge-warn'}">${m.status==='behoben'?'behoben':'offen'}</span>
+        </div>
+        <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · behoben: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
+        ${m.status!=='behoben'?`<div style="margin-top:8px;"><button onclick="markMangelBehoben(${m.id})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--green);cursor:pointer;">Als behoben markieren</button></div>`:''}
+      </div>
+    `).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
+    translateEl(el);
+    return;
+  }
+  el.innerHTML = `
+    <div class="section-lbl" style="color:var(--green);">🔧 Schaden melden</div>
+    <div class="card" style="padding:14px;">
+      <textarea id="mangel-text" placeholder="Was ist kaputt oder fehlt? (z.B. Handwaschbecken defekt)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+      <button class="submit-btn" onclick="sendMangelMeldung()">Schaden melden ✓</button>
+    </div>
+  `;
+  translateEl(el);
+}
+
+async function sendMangelMeldung(){
+  const text=document.getElementById('mangel-text')?.value?.trim();
+  if(!text){ showToast('Bitte Beschreibung eingeben'); return; }
+  const now=new Date().toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  try{
+    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,beschreibung:text,gemeldet_von:currentStore.name,status:'offen'}])});
+    await emailjs.send('service_xla195w','template_9uiq1wf',{
+      name: currentStore.name+' — Schadensmeldung',
+      time: now,
+      message: text,
+      title: 'Karma Food Schadensmeldung',
+      to_email: 'tini@karmafood.at'
+    });
+    showToast('✓ Gemeldet & E-Mail verschickt!');
+    document.getElementById('mangel-text').value='';
+  }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
+}
+
+async function markMangelBehoben(id){
+  try{
+    const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
+    const m=(rows||[])[0];
+    if(!m) return;
+    await api(`maengel?id=eq.${id}`,{method:'DELETE'});
+    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:m.store_id,beschreibung:m.beschreibung,gemeldet_am:m.gemeldet_am,gemeldet_von:m.gemeldet_von,status:'behoben',behoben_am:new Date().toISOString(),behoben_von:currentStore?.name||'Organisation'}])});
+    renderMaengel();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
