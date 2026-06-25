@@ -439,10 +439,13 @@ async function renderHome(){
     }catch(e){console.error(e);}
 
     try{
-      const ordersToday=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=article_id`).catch(()=>[]);
+      const [ordersToday, kcSubToday] = await Promise.all([
+        api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=article_id`).catch(()=>[]),
+        api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=id`).catch(()=>[])
+      ]);
       const orderedIds=new Set((ordersToday||[]).map(o=>o.article_id));
       const transporterDone=articles.some(a=>TRANSPORTER_CATS.includes(a.category)&&orderedIds.has(a.id));
-      const kcDone=articles.some(a=>KC_CATS.includes(a.category)&&orderedIds.has(a.id));
+      const kcDone=(kcSubToday||[]).length>0;
       const sweetsDone=articles.some(a=>SWEETS_CATS.includes(a.category)&&orderedIds.has(a.id));
       if(!transporterDone) reminders.push({icon:'🚚',color:'#F97316',text:'Transporter-Bestellung noch nicht abgeschickt',tab:'order',orderTab:'transporter'});
       if(isKCDay&&!kcDone) reminders.push({icon:'📦',color:'#A855F7',text:'KC-Bestellung (heute Bestelltag) noch offen',tab:'order',orderTab:'kc'});
@@ -679,10 +682,13 @@ async function renderKCOrderTab(el, tabHtml){
 async function submitKCNote(){
   const today=new Date().toISOString().split('T')[0];
   const note=document.getElementById('special-note-kc')?.value?.trim()||'';
-  if(!note){showToast('IST-Werte werden automatisch gespeichert. Anmerkung ist optional.');goTo('home');return;}
   try{
-    await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
-    await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
+    await api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
+    await api('kc_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today}])});
+    if(note){
+      await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
+      await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
+    }
     showToast('✓ KC gespeichert!');
     goTo('home');
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
@@ -1440,7 +1446,11 @@ async function loadSchulungStatusStore(){
 }
 
 // ---- DAILY CHECK-UP ----
-async function buildDailyCheckHistoryHtml(){
+let dcHistoryData=null;
+let activeDcTab='wek';
+const DC_TABS=[{k:'wek',icon:'🌡️',label:'Wareneingang'},{k:'rein',icon:'🧽',label:'Reinigung'},{k:'kuehl',icon:'❄️',label:'Kühlung'}];
+
+async function loadDailyCheckHistoryData(){
   const [wek, rein, kuehl, stores] = await Promise.all([
     api('wareneingang?select=*&order=datum.desc&limit=60').catch(()=>[]),
     api('reinigungsprotokoll?select=*&order=datum.desc&limit=60').catch(()=>[]),
@@ -1448,18 +1458,36 @@ async function buildDailyCheckHistoryHtml(){
     api('stores?select=id,name').catch(()=>[])
   ]);
   const storeMap=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
-  let html=`<div class="section-lbl">Wareneingangskontrolle</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th style="text-align:left;">Lieferant</th><th style="text-align:left;">Ware</th><th>i.O.</th><th>Temp.</th><th style="text-align:left;">Maßnahme</th></tr></thead><tbody>`;
-  html+=(wek||[]).map(w=>`<tr><td>${new Date(w.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[w.store_id]||w.store_id}</td><td>${w.lieferant||'-'}</td><td>${w.ware||'-'}</td><td><span class="badge ${w.ware_ok===false?'badge-warn':'badge-ok'}">${w.ware_ok===false?'nein':'ja'}</span></td><td><span class="badge ${w.temperatur>=65?'badge-ok':'badge-warn'}">${w.temperatur}°C</span></td><td style="text-align:left;font-size:11px;color:var(--muted);">${w.massnahme||'-'}</td></tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
-  html+=`</tbody></table></div></div>`;
+  dcHistoryData={wek,rein,kuehl,storeMap};
+}
 
-  html+=`<div class="section-lbl">Reinigungs- & Kontrollprotokoll</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Reinigung</th><th>Desinfektion</th></tr></thead><tbody>`;
-  html+=(rein||[]).map(r=>`<tr><td>${new Date(r.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[r.store_id]||r.store_id}</td><td><span class="badge ${r.reinigung_erledigt?'badge-ok':'badge-warn'}">${r.reinigung_erledigt?'erledigt':'offen'}</span></td><td><span class="badge ${r.desinfektion_erledigt?'badge-ok':'badge-warn'}">${r.desinfektion_erledigt?'erledigt':'offen'}</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
-  html+=`</tbody></table></div></div>`;
+function buildDcTabButtonsHtml(){
+  return `<div style="display:flex;gap:6px;margin-bottom:12px;">${DC_TABS.map(t=>`<button class="cl-tab${activeDcTab===t.k?' active':''}" onclick="switchDcTab('${t.k}')">${t.icon} ${t.label}</button>`).join('')}</div>`;
+}
 
-  html+=`<div class="section-lbl">Kühleinrichtungen</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Klein</th><th>Groß</th></tr></thead><tbody>`;
-  html+=(kuehl||[]).map(k=>`<tr><td>${new Date(k.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[k.store_id]||k.store_id}</td><td><span class="badge ${k.temp_klein<=6?'badge-ok':'badge-warn'}">${k.temp_klein}°C</span></td><td><span class="badge ${k.temp_gross<=6?'badge-ok':'badge-warn'}">${k.temp_gross}°C</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
-  html+=`</tbody></table></div></div>`;
-  return html;
+function switchDcTab(k){ activeDcTab=k; renderDcTabContent(); }
+
+function renderDcTabContent(){
+  const wrap=document.getElementById('dcTabButtons');
+  const el=document.getElementById('dcTabContent');
+  if(!el || !dcHistoryData) return;
+  if(wrap) wrap.innerHTML=buildDcTabButtonsHtml();
+  const {wek,rein,kuehl,storeMap}=dcHistoryData;
+  let html='';
+  if(activeDcTab==='wek'){
+    html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th style="text-align:left;">Lieferant</th><th style="text-align:left;">Ware</th><th>i.O.</th><th>Temp.</th><th style="text-align:left;">Maßnahme</th></tr></thead><tbody>`;
+    html+=(wek||[]).map(w=>`<tr><td>${new Date(w.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[w.store_id]||w.store_id}</td><td>${w.lieferant||'-'}</td><td>${w.ware||'-'}</td><td><span class="badge ${w.ware_ok===false?'badge-warn':'badge-ok'}">${w.ware_ok===false?'nein':'ja'}</span></td><td><span class="badge ${w.temperatur>=65?'badge-ok':'badge-warn'}">${w.temperatur}°C</span></td><td style="text-align:left;font-size:11px;color:var(--muted);">${w.massnahme||'-'}</td></tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
+    html+=`</tbody></table></div></div>`;
+  } else if(activeDcTab==='rein'){
+    html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Reinigung</th><th>Desinfektion</th></tr></thead><tbody>`;
+    html+=(rein||[]).map(r=>`<tr><td>${new Date(r.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[r.store_id]||r.store_id}</td><td><span class="badge ${r.reinigung_erledigt?'badge-ok':'badge-warn'}">${r.reinigung_erledigt?'erledigt':'offen'}</span></td><td><span class="badge ${r.desinfektion_erledigt?'badge-ok':'badge-warn'}">${r.desinfektion_erledigt?'erledigt':'offen'}</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
+    html+=`</tbody></table></div></div>`;
+  } else {
+    html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Klein</th><th>Groß</th></tr></thead><tbody>`;
+    html+=(kuehl||[]).map(k=>`<tr><td>${new Date(k.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[k.store_id]||k.store_id}</td><td><span class="badge ${k.temp_klein<=6?'badge-ok':'badge-warn'}">${k.temp_klein}°C</span></td><td><span class="badge ${k.temp_gross<=6?'badge-ok':'badge-warn'}">${k.temp_gross}°C</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
+    html+=`</tbody></table></div></div>`;
+  }
+  el.innerHTML=html;
 }
 
 function backToHomeHtml(){
@@ -1473,9 +1501,10 @@ async function renderDailyCheck(){
   const el=document.getElementById('v-dailycheck');
   const isOrg=currentStore?.id==='zentrale';
   if(isOrg){
-    el.innerHTML=backToHomeHtml()+'<div id="dailyCheckHistory"></div>';
+    el.innerHTML=backToHomeHtml()+'<div id="dcTabButtons"></div><div id="dcTabContent"></div>';
     translateEl(el);
-    document.getElementById('dailyCheckHistory').innerHTML=await buildDailyCheckHistoryHtml();
+    await loadDailyCheckHistoryData();
+    renderDcTabContent();
     return;
   }
   const today=new Date().toISOString().split('T')[0];
