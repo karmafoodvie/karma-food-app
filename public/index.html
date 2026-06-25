@@ -246,6 +246,7 @@ let activeCl = 'oeffnung';
 let clDone = {};
 let stockData = {};
 let activePackTab = 'transporter';
+function goToPackTab(tab){ activePackTab=tab; goTo('pack'); }
 let lang = localStorage.getItem('kf_lang') || 'de';
 const tCache = {};
 
@@ -1078,32 +1079,45 @@ function renderOrg(){
   const el=document.getElementById('v-org');
   el.innerHTML=`
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Wähle einen Bereich:</div>
-    <button class="org-btn" onclick="goTo('pack')" style="border-color:#F97316;">
+
+    <button class="org-btn" onclick="goToPackTab('transporter')" style="border-color:#F97316;">
       <span class="org-btn-icon">🚚</span>
       <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#F97316;">Bestellliste — Transporter & KC</span>
-        <span class="org-btn-sub">Alle Filial-Bestellungen, getrennt nach Transporter und Lager Shop</span>
+        <span class="org-btn-title" style="color:#F97316;">Bestellliste — Transporter</span>
+        <span class="org-btn-sub">Alle Filial-Bestellungen für den Transporter · Verantwortlich: Transporter</span>
       </div>
     </button>
-    <button class="org-btn" onclick="goTo('msg')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">📋</span>
+
+    <button class="org-btn" onclick="goToPackTab('kc')" style="border-color:#A855F7;">
+      <span class="org-btn-icon">📦</span>
       <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Bestellungen</span>
-        <span class="org-btn-sub">Übersicht welche Filialen heute bestellt haben</span>
+        <span class="org-btn-title" style="color:#A855F7;">Bestellliste — KC</span>
+        <span class="org-btn-sub">IST/SOLL/Bestellung — Lager Shop · Verantwortlich: Ines</span>
       </div>
     </button>
+
     <button class="org-btn" onclick="goTo('sweets')" style="border-color:#EC4899;">
       <span class="org-btn-icon">🍰</span>
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#EC4899;">Sweets</span>
-        <span class="org-btn-sub">Gesamtübersicht aller Filial-Bestellungen für morgen</span>
+        <span class="org-btn-sub">Gesamtübersicht aller Filial-Bestellungen für morgen · Verantwortlich: Kitchen Crewmember</span>
       </div>
     </button>
+
     <button class="org-btn" onclick="goTo('kitchen')" style="border-color:#DC2626;">
       <span class="org-btn-icon">🍲</span>
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#DC2626;">Küche</span>
-        <span class="org-btn-sub">Wochenplan, Mengen & Entsorgung aller Filialen</span>
+        <span class="org-btn-sub">Wochenplan, Mengen, Beilagen & Forecast aller Filialen · Verantwortlich: Küchenchef</span>
+      </div>
+    </button>
+
+    <div class="section-lbl">🗂️ Management</div>
+    <button class="org-btn" onclick="goTo('pack')" style="border-color:#0F6E56;">
+      <span class="org-btn-icon">📋</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0F6E56;">Bestellungen</span>
+        <span class="org-btn-sub">Übersicht welche Filialen heute bestellt haben</span>
       </div>
     </button>
     <button class="org-btn" onclick="goTo('allergene')" style="border-color:#0F6E56;">
@@ -1956,7 +1970,7 @@ function getWeekDates(offset){
 function isoDate(d){return d.toISOString().split('T')[0];}
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
-  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">Wochenplan</button><button class="cl-tab${kitchenTab==='disposal'?' active':''}" onclick="switchKitchenTab('disposal')">Heute</button><button class="cl-tab${kitchenTab==='history'?' active':''}" onclick="switchKitchenTab('history')">Wochenübersicht</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">Beilagen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">Forecast</button></div>`;
+  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">Wochenplan</button><button class="cl-tab${kitchenTab==='disposal'?' active':''}" onclick="switchKitchenTab('disposal')">Heute</button><button class="cl-tab${kitchenTab==='history'?' active':''}" onclick="switchKitchenTab('history')">Entsorgungsliste</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">Beilagen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">Forecast</button></div>`;
 
   if(kitchenTab==='plan'){
     const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
@@ -1977,34 +1991,38 @@ async function renderKitchen(){
     });
   }else if(kitchenTab==='disposal'){
     const stores=await api('stores?select=id,name&order=id');
-    const storeList=stores.filter(s=>s.id!=='zentrale');
+    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen');
     const today=new Date().toISOString().split('T')[0];
-    const weekday=WEEKDAYS[((new Date().getDay()+6)%7)]?.k; // Mon=0..Fri=4, Sat/Sun fallback
-    const menu=await api(`weekly_menu?weekday=eq.${weekday}&select=slot,dish_name`).catch(()=>[]);
-    const menuMap={};
-    (menu||[]).forEach(m=>menuMap[m.slot]=m.dish_name);
-    const disp=await api(`disposal?disposal_date=eq.${today}&select=store_id,slot,dish_name,sold_out_time,leftover_qty`).catch(()=>[]);
-    const dispMap={};
-    (disp||[]).forEach(d=>{if(!dispMap[d.slot])dispMap[d.slot]={};dispMap[d.slot][d.store_id]=d;});
+    const todayWeekday=new Date().getDay();
+    const wdStr=WEEKDAY_STR[todayWeekday];
+    const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
+    const dayMenu=menu.filter(m=>m.weekday===wdStr && m.slot!=='salat');
+    const dishNames=[...new Set(dayMenu.map(m=>m.dish_name).filter(n=>n && n!=='Reis'))];
+    const reisEntry=dayMenu.find(m=>m.slot==='reis');
+    const allDishes=['Salat', ...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
+    const forecastToday=await api(`forecast_qty?forecast_date=eq.${today}&select=store_id,dish_name,qty,source`).catch(()=>[]);
+    const fMap={};
+    (forecastToday||[]).forEach(f=>{ if(!fMap[f.store_id])fMap[f.store_id]={}; fMap[f.store_id][f.dish_name]=f; });
 
-    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})}</div>`;
-    if(!weekday){
+    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})} — geplante Menge, die heute an die Filialen geschickt wird</div>`;
+    if(!wdStr){
       html+=`<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:13px;">Am Wochenende gibt es keinen Speiseplan.</div>`;
     }else{
-      MENU_SLOTS.forEach(s=>{
-        const dishName=menuMap[s.k]||s.l;
-        html+=`<div class="section-lbl" data-no-translate>${dishName} <span style="color:var(--muted);font-weight:400;">(${s.l})</span></div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Filiale</th><th>Ausverkauft</th><th>Rest</th></tr></thead><tbody>`;
-        storeList.forEach(st=>{
-          const rec=(dispMap[s.k]||{})[st.id];
-          const col=STORE_COLORS[st.id]||'#888';
-          html+=`<tr>
-            <td data-no-translate style="color:${col};font-size:12px;">${st.name.split(' ')[0]}</td>
-            <td style="font-size:12px;">${rec?.sold_out_time?rec.sold_out_time.slice(0,5):'·'}</td>
-            <td style="font-weight:${rec?.leftover_qty?'600':'400'};color:${rec?.leftover_qty?'#A32D2D':'var(--muted)'};">${rec?.leftover_qty??'·'}</td>
-          </tr>`;
-        });
-        html+='</tbody></table></div></div>';
+      html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
+        <th style="text-align:left;">Filiale</th>
+        ${allDishes.map(d=>`<th data-no-translate style="font-size:11px;">${d}</th>`).join('')}
+      </tr></thead><tbody>`;
+      storeList.forEach(st=>{
+        const cells=allDishes.map(dish=>{
+          const rec=(fMap[st.id]||{})[dish];
+          if(!rec) return '<td style="color:var(--border);">·</td>';
+          const manual=rec.source==='manual';
+          return `<td style="font-weight:${manual?'700':'400'};color:${manual?'#0369A1':'#1a1a18'};font-size:12px;">${formatQty(rec.qty)}${manual?'*':''}</td>`;
+        }).join('');
+        html+=`<tr><td data-no-translate style="color:${STORE_COLORS[st.id]||'#888'};font-size:12px;">${st.name.split(' ')[0]}</td>${cells}</tr>`;
       });
+      html+='</tbody></table></div></div>';
+      html+=`<div style="font-size:10px;color:var(--muted);padding:2px 4px 8px;">* von Filiale angepasst</div>`;
     }
   }else if(kitchenTab==='supply'){
     // BEILAGEN — Soll-Mengen aller Filialen für die ganze Woche, mit Gesamtsumme pro Artikel/Tag
