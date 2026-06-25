@@ -318,7 +318,7 @@ async function initLogin() {
         <span class="store-dot" style="background:${col};"></span>${s.name}
       </button>`;
     }).join('');
-    const saved = sessionStorage.getItem('kf_store');
+    const saved = localStorage.getItem('kf_store');
     if (saved) loginAs(JSON.parse(saved));
   } catch(e) {
     document.getElementById('store-list').innerHTML=`<p style="color:red;font-size:12px;">Fehler: ${e.message}</p>`;
@@ -345,7 +345,7 @@ async function checkPin(){
   const name=document.getElementById('pin-input').dataset.storeName;
   try {
     const s=await api(`stores?id=eq.${id}&pin=eq.${pin}&select=id,name`);
-    if(s?.length) { sessionStorage.setItem('kf_store',JSON.stringify({id,name})); loginAs({id,name}); }
+    if(s?.length) { localStorage.setItem('kf_store',JSON.stringify({id,name})); loginAs({id,name}); }
     else document.getElementById('pin-error').style.display='block';
   } catch { document.getElementById('pin-error').style.display='block'; }
 }
@@ -370,7 +370,7 @@ async function loginAs(store){
   await loadAll();
   goTo('home');
 }
-function doLogout(){ if(confirm('Abmelden?')){ sessionStorage.removeItem('kf_store'); location.reload(); } }
+function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store'); location.reload(); } }
 
 // ---- DATA ----
 async function loadAll(){
