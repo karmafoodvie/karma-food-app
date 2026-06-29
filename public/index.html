@@ -169,6 +169,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
     <div id="v-maengel" class="view"></div>
+    <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -239,6 +240,7 @@ const KONTROLLE_PUNKTE = [
 ];
 
 let currentStore = null;
+let currentView = 'home';
 let articles = [];
 let templates = {};
 let orderQtys = {};
@@ -393,16 +395,17 @@ async function loadAll(){
 
 // ---- NAV ----
 function goTo(v){
+  currentView=v;
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('show'));
   document.getElementById('v-'+v).classList.add('show');
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   const nb=document.getElementById('nav-'+v);
   if(nb) nb.classList.add('active');
-  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden'};
+  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -537,6 +540,35 @@ async function renderHome(){
   translateEl(el);
 }
 
+// ---- VERFÜGBARKEIT (Organisation) ----
+function renderVerfuegbarkeit(){
+  const el=document.getElementById('v-verfuegbarkeit');
+  const allCats=[...TRANSPORTER_CATS, 'Webshop-Produkte'];
+  let html=backToHomeHtml();
+  html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Artikel auf "nicht lieferbar" stellen — Stores sehen das sofort beim Bestellen.</div>`;
+  allCats.forEach(cat=>{
+    const items=articles.filter(a=>a.category===cat);
+    if(!items.length) return;
+    html+=`<div class="section-lbl">${cat}</div><div class="card">`;
+    items.forEach(a=>{
+      const verfuegbar=a.verfuegbar!==false;
+      html+=`<div class="item-row">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;">
+          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          <div>
+            <div class="item-name">${a.name}</div>
+            ${(!verfuegbar && a.verfuegbar_hinweis)?`<div style="font-size:11px;color:#DC2626;">${a.verfuegbar_hinweis}</div>`:''}
+          </div>
+        </div>
+        <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  el.innerHTML=html;
+  translateEl(el);
+}
+
 async function toggleArticleVerfuegbar(id, current){
   let hinweis=null;
   if(current){
@@ -545,7 +577,7 @@ async function toggleArticleVerfuegbar(id, current){
   try{
     await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current, verfuegbar_hinweis: current?hinweis:null})});
     articles=await api('articles?select=*&order=sort_order');
-    renderOrder();
+    if(currentView==='verfuegbarkeit') renderVerfuegbarkeit(); else renderOrder();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
@@ -860,6 +892,12 @@ async function computeAutoSuggestion(storeId, dishName, weekdayStr){
   });
   return count ? Math.round((total/count)*4)/4 : null; // auf Viertel runden
 }
+function isLasagneLocked(dateStr){
+  const cutoff=new Date(dateStr+'T12:00:00');
+  cutoff.setDate(cutoff.getDate()-1); // Vortag, 12:00 Uhr
+  return new Date()>cutoff;
+}
+
 async function renderForecastOrderTab(el, tabHtml){
   const tab=ORDER_TABS.forecast;
   let html=tabHtml;
@@ -869,7 +907,7 @@ async function renderForecastOrderTab(el, tabHtml){
   html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
     <span style="font-size:18px;">${tab.icon}</span>
     <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
-    <div style="font-size:10px;color:var(--muted);">Orientierungsmenge für die Küche — bei Bedarf anpassen</div></div>
+    <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen</div></div>
   </div>`;
 
   const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
@@ -926,6 +964,9 @@ async function renderForecastOrderTab(el, tabHtml){
         const autoVal=(suggestionMap[dateStr]||{})[dish];
         const val=rec ? rec.qty : autoVal;
         const isSuggestion=!rec && autoVal!=null;
+        if(dish==='Lasagne' && isLasagneLocked(dateStr)){
+          return `<td style="padding:4px;"><div title="Gesperrt — Lasagne wird bereits produziert" style="width:54px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div></td>`;
+        }
         return `<td style="padding:4px;"><input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${dish}" data-date="${dateStr}"
           onchange="updateForecastQty(this)"
           style="width:54px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:5px 2px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};"></td>`;
@@ -934,9 +975,12 @@ async function renderForecastOrderTab(el, tabHtml){
 
     // Hinweistext bei Lasagne-Tagen
     if(hasLasagne){
-      html+=`<div style="font-size:11px;color:#15803D;padding:4px 2px 10px;display:flex;align-items:center;gap:4px;">
+      html+=`<div style="font-size:11px;color:#15803D;padding:4px 2px 2px;display:flex;align-items:center;gap:4px;">
         <span>🥗</span><span>Grüner Salat + Dressing wird automatisch mitproduziert (Lasagne-Tag)</span>
       </div>`;
+      html+=isLasagneLocked(dateStr)
+        ? `<div style="font-size:11px;color:#92400E;padding:0 2px 10px;display:flex;align-items:center;gap:4px;"><span>🔒</span><span>Lasagne-Menge ist fixiert — wird bereits produziert</span></div>`
+        : `<div style="font-size:11px;color:#92400E;padding:0 2px 10px;display:flex;align-items:center;gap:4px;"><span>⏰</span><span>Lasagne-Menge bitte bis spätestens 12:00 Uhr am Vortag anpassen</span></div>`;
     } else {
       html+=`<div style="padding-bottom:6px;"></div>`;
     }
@@ -1118,6 +1162,13 @@ function renderOrg(){
     </button>
 
     <div class="section-lbl">🗂️ Management</div>
+    <button class="org-btn" onclick="goTo('verfuegbarkeit')" style="border-color:#0F6E56;">
+      <span class="org-btn-icon">🚫</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0F6E56;">Verfügbarkeit verwalten</span>
+        <span class="org-btn-sub">Artikel als nicht lieferbar markieren, Stores werden gewarnt</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('pack')" style="border-color:#0F6E56;">
       <span class="org-btn-icon">📋</span>
       <div class="org-btn-text">
@@ -2009,7 +2060,7 @@ async function renderKitchen(){
     const fMap={};
     (forecastToday||[]).forEach(f=>{ if(!fMap[f.store_id])fMap[f.store_id]={}; fMap[f.store_id][f.dish_name]=f; });
 
-    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})} — geplante Menge, die heute an die Filialen geschickt wird</div>`;
+    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})} — geplante Menge in Behältern, die heute an die Filialen geschickt wird</div>`;
     if(!wdStr){
       html+=`<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:13px;">Am Wochenende gibt es keinen Speiseplan.</div>`;
     }else{
