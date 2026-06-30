@@ -312,7 +312,7 @@ async function api(path, opts={}) {
 // ---- LOGIN ----
 async function initLogin() {
   try {
-    const stores = await api('stores?select=id,name&order=id');
+    const stores = (await api('stores?select=id,name&order=id')).filter(s=>s.id!=='1070');
     const list = document.getElementById('store-list');
     if (!stores?.length) { list.innerHTML='<p style="color:red;font-size:12px;">Verbindungsfehler</p>'; return; }
     list.innerHTML = stores.map(s => {
@@ -322,7 +322,11 @@ async function initLogin() {
       </button>`;
     }).join('');
     const saved = localStorage.getItem('kf_store');
-    if (saved) loginAs(JSON.parse(saved));
+    if (saved) {
+      const parsed=JSON.parse(saved);
+      if(parsed.id==='1070'){ localStorage.removeItem('kf_store'); }
+      else { loginAs(parsed); }
+    }
   } catch(e) {
     document.getElementById('store-list').innerHTML=`<p style="color:red;font-size:12px;">Fehler: ${e.message}</p>`;
   }
@@ -346,6 +350,7 @@ async function checkPin(){
   const pin=document.getElementById('pin-input').value;
   const id=document.getElementById('pin-input').dataset.storeId;
   const name=document.getElementById('pin-input').dataset.storeName;
+  if(id==='1070'){ document.getElementById('pin-error').textContent='Diese Filiale ist geschlossen.'; document.getElementById('pin-error').style.display='block'; return; }
   try {
     const s=await api(`stores?id=eq.${id}&pin=eq.${pin}&select=id,name`);
     if(s?.length) { localStorage.setItem('kf_store',JSON.stringify({id,name})); loginAs({id,name}); }
@@ -1325,7 +1330,7 @@ async function buildSchulungMatrixHtml(){
     api('stores?select=id,name&order=id').catch(()=>[]),
     api('schulungen?select=*').catch(()=>[])
   ]);
-  const storeList=(stores||[]).filter(s=>s.id!=='zentrale');
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070');
   if(!themen?.length || !storeList.length) return '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Themen oder Filialen vorhanden.</div>';
   const latest={};
   (entries||[]).forEach(e=>{
@@ -1438,7 +1443,7 @@ async function fillSchulungDropdowns(){
   const themaSel=document.getElementById('sch-thema-select');
   const storeSel=document.getElementById('sch-store-select');
   if(themaSel) themaSel.innerHTML=(themen||[]).length?(themen.map(t=>`<option value="${t.id}">${t.titel}</option>`).join('')):'<option value="">— erst ein Thema anlegen —</option>';
-  if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
 
 async function saveSchulungEntry(){
@@ -1759,7 +1764,7 @@ async function markMangelBehoben(id){
 // ---- PACK ----
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
-  const storeList=stores.filter(s=>s.id!=='zentrale');
+  const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
   const el=document.getElementById('v-pack');
 
   let html=`
@@ -1799,7 +1804,7 @@ async function renderPack(){
     html+='</tbody></table></div></div>';
   });
 
-  const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale');
+  const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
   if(specs.length){
     html+=`<div class="section-lbl">Sonderbestellungen</div><div class="card">`;
     specs.forEach(s=>{const store=stores.find(x=>x.id===s.store_id);const col=STORE_COLORS[s.store_id]||'#888';html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;"><span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;margin-top:3px;"></span><div><div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div><div style="font-size:13px;color:var(--sub);">${s.note}</div></div></div>`;});
@@ -1860,7 +1865,7 @@ async function renderMsg(){
   const specRaw=await api(`special_orders?order_date=eq.${today}&select=store_id,note`).catch(()=>[]);
   const el=document.getElementById('v-msg');
   let html=`<div class="section-lbl">Bestellstatus heute</div><div class="card">`;
-  stores.filter(s=>s.id!=='zentrale').forEach(s=>{
+  stores.filter(s=>s.id!=='zentrale' && s.id!=='1070').forEach(s=>{
     const ord=allOrdRaw.filter(o=>o.store_id===s.id);
     const total=ord.reduce((a,o)=>a+o.quantity,0);
     const spec=(specRaw||[]).find(x=>x.store_id===s.id);
@@ -2047,7 +2052,7 @@ async function renderKitchen(){
     });
   }else if(kitchenTab==='disposal'){
     const stores=await api('stores?select=id,name&order=id');
-    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen');
+    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
     const today=new Date().toISOString().split('T')[0];
     const todayWeekday=new Date().getDay();
     const wdStr=WEEKDAY_STR[todayWeekday];
@@ -2083,7 +2088,7 @@ async function renderKitchen(){
   }else if(kitchenTab==='supply'){
     // BEILAGEN — Soll-Mengen aller Filialen für die ganze Woche, mit Gesamtsumme pro Artikel/Tag
     const stores=await api('stores?select=id,name&order=id');
-    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen');
+    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
     const todayWeekday=new Date().getDay();
     const weekDates=getWeekdayDates();
     const fromDate=weekDates[1], toDate=weekDates[5];
@@ -2157,7 +2162,7 @@ async function renderKitchen(){
   }else if(kitchenTab==='forecast'){
     // FORECAST — Portionsmengen aller Filialen für die ganze Woche, wie das Excel-Vorbild
     const stores=await api('stores?select=id,name&order=id');
-    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen');
+    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
     const todayWeekday=new Date().getDay();
     const weekDates=getWeekdayDates();
     const fromDate=weekDates[1], toDate=weekDates[5];
@@ -2218,7 +2223,7 @@ async function renderKitchen(){
   }else{
     // WOCHENÜBERSICHT — historischer Verlauf wie im Excel, eine Woche pro Bildschirm
     const stores=await api('stores?select=id,name&order=id');
-    const storeList=stores.filter(s=>s.id!=='zentrale');
+    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
     const weekDates=getWeekDates(weekOffset);
     const fromDate=isoDate(weekDates[0]);
     const toDate=isoDate(weekDates[4]);
@@ -2291,7 +2296,7 @@ async function renderSweets(){
   const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o.quantity;});
-  const storeList=stores.filter(s=>s.id!=='zentrale');
+  const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
   const sweetsItems=articles.filter(a=>a.category==='Sweets');
   const todayStr=new Date().toLocaleDateString('de-AT');
 
@@ -2341,7 +2346,7 @@ let kcTab='shop';
 async function renderKCLager(){
   const el=document.getElementById('v-kclager');
   const stores=await api('stores?select=id,name&order=id');
-  const storeList=stores.filter(s=>s.id!=='zentrale');
+  const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
   if(!kcLagerStoreId) kcLagerStoreId=storeList[0]?.id;
 
   let html=`<div class="cl-tabs"><button class="cl-tab${kcTab==='shop'?' active':''}" onclick="switchKCTab('shop')">Lager Shop</button><button class="cl-tab${kcTab==='kitchen'?' active':''}" onclick="switchKCTab('kitchen')">Lager Küche</button></div>`;
