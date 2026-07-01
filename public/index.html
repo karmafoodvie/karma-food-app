@@ -170,6 +170,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-dailycheck" class="view"></div>
     <div id="v-maengel" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
+    <div id="v-schichtende" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -406,11 +407,11 @@ function goTo(v){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   const nb=document.getElementById('nav-'+v);
   if(nb) nb.classList.add('active');
-  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten'};
+  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -420,6 +421,89 @@ function goToReminder(tab, orderTab){
 window.goToReminder=goToReminder;
 
 // ---- HOME ----
+// ---- GAMIFICATION / SCORING ----
+async function computeAndSaveScore(storeId){
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    const [wek,rein,kuehl,disposal,forecast] = await Promise.all([
+      api(`wareneingang?store_id=eq.${storeId}&datum=eq.${today}&select=id`).catch(()=>[]),
+      api(`reinigungsprotokoll?store_id=eq.${storeId}&datum=eq.${today}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]),
+      api(`kuehleinrichtungen?store_id=eq.${storeId}&datum=eq.${today}&select=id`).catch(()=>[]),
+      api(`disposal?store_id=eq.${storeId}&disposal_date=eq.${today}&select=leftover_qty`).catch(()=>[]),
+      api(`forecast_qty?store_id=eq.${storeId}&forecast_date=eq.${today}&select=qty,dish_name`).catch(()=>[])
+    ]);
+    const haccp_done=(wek||[]).length>0 && (rein||[])[0]?.reinigung_erledigt && (rein||[])[0]?.desinfektion_erledigt && (kuehl||[]).length>0;
+    const waste_total=(disposal||[]).reduce((s,d)=>s+(d.leftover_qty||0),0);
+
+    // Streak: Vortag prüfen
+    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+    const yd=yesterday.toISOString().split('T')[0];
+    const prevScore=(await api(`store_scores?store_id=eq.${storeId}&datum=eq.${yd}&select=streak_haccp`).catch(()=>[]))[0];
+    const prevStreak=prevScore?.streak_haccp||0;
+    const streak_haccp=haccp_done?(prevStreak+1):0;
+
+    await api(`store_scores?store_id=eq.${storeId}&datum=eq.${today}`,{method:'DELETE'});
+    await api('store_scores',{method:'POST',body:JSON.stringify([{store_id:storeId,datum:today,streak_haccp,waste_total,schrittende_done:false}])});
+  }catch(e){console.error('score error',e);}
+}
+
+async function loadGamificationWidget(storeId){
+  const today=new Date().toISOString().split('T')[0];
+  const monday=new Date(); monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
+  const mondayStr=monday.toISOString().split('T')[0];
+  try{
+    const [myScores, allStores, allScoresWeek] = await Promise.all([
+      api(`store_scores?store_id=eq.${storeId}&datum=gte.${mondayStr}&order=datum.desc&select=*`).catch(()=>[]),
+      api('stores?select=id,name&order=id').catch(()=>[]),
+      api(`store_scores?datum=gte.${mondayStr}&select=store_id,waste_total,streak_haccp`).catch(()=>[])
+    ]);
+    const todayScore=(myScores||[]).find(s=>s.datum===today);
+    const streak=todayScore?.streak_haccp||0;
+    const storeList=(allStores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
+
+    // Waste-Rangliste diese Woche
+    const wasteByStore={};
+    (allScoresWeek||[]).forEach(s=>{
+      if(!wasteByStore[s.store_id]) wasteByStore[s.store_id]=0;
+      wasteByStore[s.store_id]+=(s.waste_total||0);
+    });
+    const wasteSorted=storeList.map(s=>({...s,waste:wasteByStore[s.id]||0})).sort((a,b)=>a.waste-b.waste);
+    const myRank=wasteSorted.findIndex(s=>s.id===storeId)+1;
+
+    let html=`<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:12px;margin-top:10px;">`;
+    html+=`<div style="font-size:12px;font-weight:500;color:var(--color-text-secondary);margin-bottom:10px;">🏆 Diese Woche</div>`;
+    html+=`<div style="display:flex;gap:8px;margin-bottom:10px;">`;
+    // Streak
+    const streakColor=streak>=5?'#0F6E56':streak>=3?'#BA7517':'var(--color-text-secondary)';
+    html+=`<div style="flex:1;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:22px;font-weight:500;color:${streakColor};">${streak>0?'🔥':''} ${streak}</div>
+      <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px;">Check-up Streak</div>
+    </div>`;
+    // Waste Rang
+    const rankEmoji=myRank===1?'🥇':myRank===2?'🥈':myRank===3?'🥉':'';
+    html+=`<div style="flex:1;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:8px;padding:10px;text-align:center;">
+      <div style="font-size:22px;font-weight:500;color:var(--color-text-primary);">${rankEmoji} ${myRank || '–'}</div>
+      <div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px;">Waste-Rang</div>
+    </div>`;
+    html+=`</div>`;
+
+    // Mini-Rangliste
+    html+=`<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px;">♻️ Wenigste Reste (Woche)</div>`;
+    wasteSorted.slice(0,4).forEach((s,i)=>{
+      const isMe=s.id===storeId;
+      const col=STORE_COLORS[s.id]||'#888';
+      html+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;${i<wasteSorted.length-1?'border-bottom:0.5px solid var(--color-border-tertiary);':''}">
+        <span style="font-size:12px;font-weight:500;color:var(--color-text-secondary);min-width:16px;">${i+1}</span>
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+        <span style="font-size:12px;flex:1;font-weight:${isMe?'500':'400'};color:${isMe?'var(--color-text-primary)':'var(--color-text-secondary)'};" data-no-translate>${s.name.split(' ')[0]}</span>
+        <span style="font-size:12px;color:var(--color-text-secondary);">${s.waste.toFixed(1)}</span>
+      </div>`;
+    });
+    html+=`</div>`;
+    return html;
+  }catch(e){console.error(e);return '';}
+}
+
 async function renderHome(){
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
   const allItems=Object.values(templates).flat();
@@ -445,7 +529,11 @@ async function renderHome(){
       const r=(reinToday||[])[0];
       dcStatus.reinCount=r?(r.reinigung_erledigt?1:0)+(r.desinfektion_erledigt?1:0):0;
       dcStatus.kuehl=(kuehlToday||[]).length>0;
+      if(isWeekday) computeAndSaveScore(currentStore.id).catch(()=>{});
     }catch(e){console.error(e);}
+
+    let gamificationHtml='';
+    if(isWeekday) gamificationHtml=await loadGamificationWidget(currentStore.id).catch(()=>'');
 
     try{
       const [ordersToday, kcSubToday] = await Promise.all([
@@ -510,7 +598,15 @@ async function renderHome(){
         <div class="hc-icon"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
         <span style="font-weight:500;">Zutaten & Allergene</span>
       </div>
-    </div>`:`
+    </div>
+    <div onclick="goTo('schichtende')" style="margin-top:16px;background:var(--green);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <div>
+        <div style="font-weight:600;color:#fff;font-size:15px;">🌙 Schicht abschließen</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px;">5 Schritte — dauert 2 Minuten</div>
+      </div>
+      <span style="color:#fff;font-size:20px;">→</span>
+    </div>
+    ${gamificationHtml||''}`:`
     <div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);">
       <div style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:4px;">🛡️ Kontrollbesuch? Kein Stress.</div>
       <div style="font-size:13px;color:var(--sub);">Hier findest du in Sekunden alles, was du zeigen musst. Einfach den passenden Punkt antippen.</div>
@@ -953,15 +1049,18 @@ async function renderForecastOrderTab(el, tabHtml){
       <th style="text-align:left;color:#A21CAF;">Salat</th>
       ${allDishes.map(d=>`<th data-no-translate>${d}</th>`).join('')}
     </tr></thead><tbody><tr>
-      <td style="padding:4px;">${hasLasagne?'<span style="font-size:11px;color:#15803D;">🥗 automatisch</span>':(()=>{
+      <td style="padding:4px;">${(()=>{
         const rec=(fMap[dateStr]||{})['Salat'];
         const manual=rec?.source==='manual';
         const autoVal=(suggestionMap[dateStr]||{})['Salat'];
         const val=rec ? rec.qty : autoVal;
         const isSuggestion=!rec && autoVal!=null;
-        return `<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="Salat" data-date="${dateStr}"
-          onchange="updateForecastQty(this)"
-          style="width:54px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:5px 2px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+          <input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="Salat" data-date="${dateStr}"
+            onchange="updateForecastQty(this)"
+            style="width:54px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:5px 2px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">
+          ${hasLasagne?'<span style="font-size:9px;color:#15803D;">auto</span>':''}
+        </div>`;
       })()}</td>
       ${allDishes.map(dish=>{
         const rec=(fMap[dateStr]||{})[dish];
@@ -1759,6 +1858,106 @@ async function markMangelBehoben(id){
     await api('maengel',{method:'POST',body:JSON.stringify([{store_id:m.store_id,beschreibung:m.beschreibung,gemeldet_am:m.gemeldet_am,gemeldet_von:m.gemeldet_von,status:'behoben',behoben_am:new Date().toISOString(),behoben_von:currentStore?.name||'Organisation'}])});
     renderMaengel();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+
+// ---- SCHICHTENDE ----
+async function renderSchichtende(){
+  const el=document.getElementById('v-schichtende');
+  const today=new Date().toISOString().split('T')[0];
+
+  // Alle Daten parallel laden
+  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday] = await Promise.all([
+    api('checklist_templates?list_type=eq.abschluss&select=id').catch(()=>[]),
+    api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`).catch(()=>[]),
+    api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=id`).catch(()=>[]),
+    api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=id`).catch(()=>[]),
+    api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=id`).catch(()=>[]),
+    api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]),
+    api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=id`).catch(()=>[]),
+    api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[])
+  ]);
+
+  const clDoneIds=new Set((clDoneToday||[]).map(x=>x.template_id));
+  const clTotal=(clTemplates||[]).length;
+  const clDoneCount=(clTemplates||[]).filter(t=>clDoneIds.has(t.id)).length;
+  const schritte=[
+    {id:'abschluss', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten erledigt`, done:clDoneCount===clTotal && clTotal>0, link:'check'},
+    {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal'},
+    {id:'wochensalat', label:'Wochensalat gemeldet', sub:'Rest + Bedarf morgen', done:(wochensalatToday||[]).length>0, link:'order'},
+    {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang, Reinigung & Kühlung', done:(wekToday||[]).length>0 && (reinToday||[])[0]?.reinigung_erledigt && (reinToday||[])[0]?.desinfektion_erledigt && (kuehlToday||[]).length>0, link:'dailycheck'},
+    {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null}
+  ];
+
+  const allDone=schritte.every(s=>s.done);
+  const alreadySubmitted=(uebergabeToday||[]).length>0 && allDone;
+
+  let html=backToHomeHtml();
+  html+=`<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Bitte alle 5 Schritte erledigen, bevor du die Schicht abschließt.</div>`;
+
+  schritte.forEach((s,i)=>{
+    const check=s.done
+      ? `<div style="width:26px;height:26px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg></div>`
+      : `<div style="width:26px;height:26px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:600;color:var(--muted);">${i+1}</div>`;
+    const linkBtn=s.link && !s.done ? `<button onclick="goTo('${s.link}')" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">Jetzt erledigen →</button>` : '';
+    html+=`<div class="card" style="padding:12px;border:1.5px solid ${s.done?'var(--green)':'var(--border)'};${s.id==='uebergabe'&&!s.done?'border-color:#BA7517;':''}">
+      <div style="display:flex;align-items:center;gap:10px;">
+        ${check}
+        <div style="flex:1;">
+          <div style="font-weight:500;${s.done?'color:var(--green);':''}">${s.label}</div>
+          <div style="font-size:12px;color:var(--muted);">${s.sub}</div>
+        </div>
+        ${linkBtn}
+      </div>
+      ${s.id==='uebergabe'&&!s.done?`<textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen? (Pflicht)" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea><button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>`:''}
+      ${s.id==='uebergabe'&&s.done?`<div style="font-size:12px;color:var(--sub);margin-top:8px;padding:8px;background:var(--green-light);border-radius:6px;">${uebergabeToday[0]?.notiz||''}</div>`:''}
+    </div>`;
+  });
+
+  if(alreadySubmitted){
+    html+=`<div style="background:var(--green-light);border:1.5px solid var(--green);border-radius:14px;padding:16px;text-align:center;margin-top:16px;">
+      <div style="font-size:22px;margin-bottom:6px;">🌙</div>
+      <div style="font-weight:600;color:var(--green);font-size:15px;">Schicht erfolgreich abgeschlossen</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px;">Zusammenfassung wurde an Tini geschickt</div>
+    </div>`;
+  } else if(allDone){
+    html+=`<button class="submit-btn" style="margin-top:16px;font-size:15px;padding:16px;" onclick="submitSchichtende()">🌙 Schicht jetzt abschließen & E-Mail senden</button>`;
+  } else {
+    html+=`<div style="background:#FEF3C7;border:1px solid #D97706;border-radius:10px;padding:12px;text-align:center;margin-top:16px;font-size:13px;color:#92400E;">
+      <strong>${schritte.filter(s=>!s.done).length} Schritte noch offen</strong> — bitte erst alles erledigen
+    </div>`;
+  }
+  el.innerHTML=html;
+  translateEl(el);
+}
+
+async function saveUebergabeNotiz(){
+  const notiz=document.getElementById('uebergabe-text')?.value?.trim();
+  if(!notiz){ showToast('Bitte Notiz eingeben'); return; }
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
+    await api('schicht_uebergabe',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,notiz}])});
+    showToast('✔ Notiz gespeichert');
+    renderSchichtende();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+
+async function submitSchichtende(){
+  const today=new Date().toISOString().split('T')[0];
+  const now=new Date().toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  try{
+    const uebergabe=(await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}&select=notiz`).catch(()=>[]))[0];
+    const notiz=uebergabe?.notiz||'(keine Notiz)';
+    await emailjs.send('service_xla195w','template_9uiq1wf',{
+      name: `${currentStore.name} — Schichtende`,
+      time: now,
+      message: `✅ Abschluss-Checkliste: erledigt\n✅ Entsorgung: eingetragen\n✅ Wochensalat: gemeldet\n✅ Daily Check-up: vollständig\n\n📋 Übergabe-Notiz:\n${notiz}`,
+      title: `Schichtende ${currentStore.name}`,
+      to_email: 'tini@karmafood.at'
+    });
+    showToast('✔ Schicht abgeschlossen & E-Mail gesendet!');
+    renderSchichtende();
+  }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen');}
 }
 
 // ---- PACK ----
