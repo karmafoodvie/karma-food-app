@@ -231,6 +231,7 @@ const ALLERGENE = [
 let homeMode='alltag';
 const FIXER_LIEFERANT='Michi – Karma Transporter';
 function setHomeMode(m){ homeMode=m; renderHome(); }
+function renderKontrolleOverlay(){ homeMode='kontrolle'; goTo('home'); }
 const KONTROLLE_PUNKTE = [
   {icon:'🥜', titel:'Allergene', oneliner:'Was ist drin? Hier nachschauen.', text:'Die 14 gesetzlich gekennzeichneten Stoffe (z.B. Gluten, Nüsse, Milch, Soja), die bei manchen Gästen heftige bis lebensgefährliche Reaktionen auslösen können. Zu jedem Gericht muss bekannt sein, welche Allergene enthalten sind — schriftlich oder mündlich, aber dann muss wirklich jemand Bescheid wissen, der gerade da ist.', target:'allergene'},
   {icon:'🐭', titel:'Schädlinge im Griff', oneliner:'Liegt in der grünen Mappe im Store.', text:'Mäuse, Schaben, Motten & Co. Die Kontrolle der Fallen/Köder in Küche und Lager wird auf Papier dokumentiert — die grüne Mappe liegt direkt im Store. Bei einer Kontrolle einfach zeigen.', target:null, badgeText:'📁 Mappe'},
@@ -577,39 +578,87 @@ async function renderHome(){
     <div style="font-size:16px;font-weight:600;padding:4px 0 4px;">Guten Tag 👋</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${today}</div>
     ${currentStore?.id!=='zentrale'?`
-    <div style="display:flex;gap:8px;margin-bottom:14px;">
-      <button class="cl-tab ${homeMode==='alltag'?'active':''}" onclick="setHomeMode('alltag')">📋 Alltagsgeschäft</button>
-      <button class="cl-tab ${homeMode==='kontrolle'?'active':''}" onclick="setHomeMode('kontrolle')">🛡️ Kontrolle</button>
+
+    <!-- START BUTTON -->
+    <div onclick="goTo('dailycheck')" style="background:var(--green);border-radius:14px;padding:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:16px;">
+      <div>
+        <div style="font-weight:600;color:#fff;font-size:16px;">☀️ Let's start the shift!</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px;">Daily Check-up starten</div>
+      </div>
+      <span style="color:#fff;font-size:22px;">→</span>
     </div>
-    ${homeMode==='alltag'?`
-    <div style="margin-bottom:6px;">${remindersHtml}</div>
-    <div class="home-card" onclick="goTo('dailycheck')" style="margin-top:10px;">
+
+    <!-- ERINNERUNGEN -->
+    <div style="margin-bottom:4px;">${remindersHtml}</div>
+
+    <!-- PHASE 1: VOR DER SCHICHT -->
+    <div class="section-lbl" style="margin-top:12px;">🌅 Vor der Schicht</div>
+    <div class="home-card" onclick="goTo('dailycheck')">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <div class="hc-icon"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
         <span style="font-weight:500;">Daily Check-up</span>
+        <span style="font-size:10px;color:var(--green);background:var(--green-light);padding:2px 6px;border-radius:20px;margin-left:auto;">optional</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">Wareneingangskontrolle</span>${dcStatus.wek?'<span class="badge badge-ok">erledigt</span>':'<span class="badge badge-warn">ausstehend</span>'}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">Reinigung & Desinfektion</span>${dcStatus.reinCount===2?'<span class="badge badge-ok">erledigt</span>':dcStatus.reinCount===0?'<span class="badge badge-warn">ausstehend</span>':`<span class="badge badge-pend">${dcStatus.reinCount}/2</span>`}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;"><span style="font-size:12px;color:var(--muted);">Kühleinrichtungen</span>${dcStatus.kuehl?'<span class="badge badge-ok">erledigt</span>':'<span class="badge badge-warn">ausstehend</span>'}</div>
     </div>
-    <div class="section-lbl" style="margin-top:14px;">📖 Nachschlagen</div>
-    <div class="home-card" onclick="goTo('allergene')">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div class="hc-icon"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
-        <span style="font-weight:500;">Zutaten & Allergene</span>
+
+    <!-- PHASE 2: WÄHREND DER SCHICHT -->
+    <div class="section-lbl" style="margin-top:14px;">☕ Während der Schicht</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <div class="home-card" onclick="goTo('allergene')" style="flex:1;margin-bottom:0;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <div class="hc-icon" style="width:28px;height:28px;"><svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+          <span style="font-weight:500;font-size:13px;">Zutaten &<br>Allergene</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);">Nachschlagen</div>
+      </div>
+      <div style="display:flex;align-items:center;font-size:18px;color:var(--muted);">⇄</div>
+      <div class="home-card" onclick="goTo('disposal')" style="flex:1;margin-bottom:0;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <div class="hc-icon" style="width:28px;height:28px;"><svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></div>
+          <span style="font-weight:500;font-size:13px;">Entsorgung /<br>Food Waste</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);">Restmengen</div>
       </div>
     </div>
-    <div onclick="goTo('schichtende')" style="margin-top:16px;background:var(--green);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+    <div onclick="renderKontrolleOverlay()" style="font-size:11px;color:var(--green);text-align:center;margin-bottom:4px;cursor:pointer;">🛡️ Kontrolle &amp; HACCP →</div>
+
+    <!-- PHASE 3: NACH DER SCHICHT -->
+    <div class="section-lbl" style="margin-top:14px;">🌙 Nach der Schicht</div>
+    <div onclick="goTo('schichtende')" style="background:var(--green);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:8px;">
       <div>
-        <div style="font-weight:600;color:#fff;font-size:15px;">🌙 Schicht abschließen</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px;">5 Schritte — dauert 2 Minuten</div>
+        <div style="font-weight:600;color:#fff;font-size:15px;">Schicht abschließen</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px;">🍰 Sweets · 🚚 Transporter · 📦 KC</div>
       </div>
       <span style="color:#fff;font-size:20px;">→</span>
     </div>
-    ${gamificationHtml||''}`:`
+    <div style="display:flex;gap:6px;margin-bottom:4px;">
+      <div onclick="goToReminder('order','sweets')" style="flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;text-align:center;">
+        <div style="font-size:15px;margin-bottom:2px;">🍰</div>
+        <div style="font-size:11px;font-weight:500;">Sweets</div>
+      </div>
+      <div onclick="goToReminder('order','transporter')" style="flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;text-align:center;">
+        <div style="font-size:15px;margin-bottom:2px;">🚚</div>
+        <div style="font-size:11px;font-weight:500;">Transporter</div>
+      </div>
+      <div onclick="goToReminder('order','kc')" style="flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:10px;padding:9px 10px;cursor:pointer;text-align:center;">
+        <div style="font-size:15px;margin-bottom:2px;">📦</div>
+        <div style="font-size:11px;font-weight:500;">KC</div>
+      </div>
+    </div>
+
+    <!-- GAMIFICATION -->
+    ${gamificationHtml||''}
+    `:''}
+    ${currentStore?.id!=='zentrale' && homeMode==='kontrolle'?`
+    <div style="font-size:16px;font-weight:600;padding:4px 0 4px;">Guten Tag 👋</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${today}</div>
+    <div onclick="setHomeMode('alltag')" style="font-size:12px;color:var(--green);margin-bottom:12px;cursor:pointer;">← Zurück zum Tagesablauf</div>
     <div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);">
       <div style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:4px;">🛡️ Kontrollbesuch? Kein Stress.</div>
-      <div style="font-size:13px;color:var(--sub);">Hier findest du in Sekunden alles, was du zeigen musst. Einfach den passenden Punkt antippen.</div>
+      <div style="font-size:13px;color:var(--sub);">Hier findest du in Sekunden alles, was du zeigen musst.</div>
     </div>
     ${KONTROLLE_PUNKTE.map(p=>`
       <div class="card" style="padding:0;">
@@ -627,8 +676,7 @@ async function renderHome(){
         </details>
       </div>
     `).join('')}
-    <div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 4px 0;">Diese Punkte gehören zu eurem HACCP-Eigenkontrollsystem.</div>
-    `}`:''}
+    `:''}
     ${currentStore?.id==='zentrale'?`
     <div class="home-card" onclick="goTo('org')">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
