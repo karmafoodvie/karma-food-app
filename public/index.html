@@ -172,6 +172,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
     <div id="v-waehrend" class="view"></div>
+    <div id="v-kontrolle" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -191,7 +192,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="nav-btn" onclick="goTo('disposal')" id="nav-disposal">
       <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Entsorgung
     </button>
-    <button class="nav-btn" onclick="renderKontrolleOverlay()" id="nav-kontrolle">
+    <button class="nav-btn" onclick="goTo('kontrolle')" id="nav-kontrolle">
       <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Kontrolle
     </button>
     <button class="nav-btn" onclick="goTo('org')" id="nav-org" style="display:none;">
@@ -235,8 +236,35 @@ const ALLERGENE = [
 ];
 let homeMode='alltag';
 const FIXER_LIEFERANT='Michi – Karma Transporter';
+function renderKontrolleView(){
+  const el=document.getElementById('v-kontrolle');
+  let html=`<div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);margin-bottom:8px;">
+    <div style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:4px;">🛡️ Kontrollbesuch? Kein Stress.</div>
+    <div style="font-size:13px;color:var(--sub);">Hier findest du in Sekunden alles, was du zeigen musst.</div>
+  </div>`;
+  KONTROLLE_PUNKTE.forEach(p=>{
+    html+=`<div class="card" style="padding:0;margin-bottom:6px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px;${p.target?'cursor:pointer;':''}" ${p.target?`onclick="goTo('${p.target}')"`:''}>
+        <span style="font-size:22px;">${p.icon}</span>
+        <div style="flex:1;">
+          <div style="font-weight:500;">${p.titel}</div>
+          <div style="font-size:12px;color:var(--muted);">${p.oneliner}</div>
+        </div>
+        ${p.target?'<span style="color:var(--green);font-size:20px;">→</span>':(p.badgeText?`<span style="font-size:11px;color:var(--muted);">${p.badgeText}</span>`:'<span class="badge badge-pend">bald</span>')}
+      </div>
+      <details style="padding:0 14px 12px;">
+        <summary style="font-size:12px;color:var(--green);cursor:pointer;">ℹ️ Was bedeutet das?</summary>
+        <div style="font-size:12px;color:var(--sub);margin-top:6px;">${p.text}</div>
+      </details>
+    </div>`;
+  });
+  el.innerHTML=html;
+  translateEl(el);
+}
+
+// Keep old overlay function as alias (used by some older links)
+function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
-function renderKontrolleOverlay(){ homeMode='kontrolle'; goTo('home'); }
 const KONTROLLE_PUNKTE = [
   {icon:'🥜', titel:'Allergene', oneliner:'Was ist drin? Hier nachschauen.', text:'Die 14 gesetzlich gekennzeichneten Stoffe (z.B. Gluten, Nüsse, Milch, Soja), die bei manchen Gästen heftige bis lebensgefährliche Reaktionen auslösen können. Zu jedem Gericht muss bekannt sein, welche Allergene enthalten sind — schriftlich oder mündlich, aber dann muss wirklich jemand Bescheid wissen, der gerade da ist.', target:'allergene'},
   {icon:'🐭', titel:'Schädlinge im Griff', oneliner:'Liegt in der grünen Mappe im Store.', text:'Mäuse, Schaben, Motten & Co. Die Kontrolle der Fallen/Köder in Küche und Lager wird auf Papier dokumentiert — die grüne Mappe liegt direkt im Store. Bei einer Kontrolle einfach zeigen.', target:null, badgeText:'📁 Mappe'},
@@ -427,11 +455,11 @@ function goTo(v, noPush=false){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   const nb=document.getElementById('nav-'+v);
   if(nb) nb.classList.add('active');
-  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht'};
+  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -706,30 +734,6 @@ async function renderHome(){
       </div>
     </div>
 
-    <!-- GAMIFICATION -->
-    ${gamificationHtml||''}
-
-    <div onclick="setHomeMode('alltag')" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--green);margin-bottom:12px;cursor:pointer;">← Zurück zum Tagesablauf</div>
-    <div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);">
-      <div style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:4px;">🛡️ Kontrollbesuch? Kein Stress.</div>
-      <div style="font-size:13px;color:var(--sub);">Hier findest du in Sekunden alles, was du zeigen musst.</div>
-    </div>
-    ${KONTROLLE_PUNKTE.map(p=>`
-      <div class="card" style="padding:0;">
-        <div style="display:flex;align-items:center;gap:10px;padding:14px;${p.target?'cursor:pointer;':''}" ${p.target?`onclick="goTo('${p.target}')"`:''}>
-          <span style="font-size:22px;">${p.icon}</span>
-          <div style="flex:1;">
-            <div style="font-weight:500;">${p.titel}</div>
-            <div style="font-size:12px;color:var(--muted);">${p.oneliner}</div>
-          </div>
-          ${p.target?'<span style="color:var(--green);font-size:20px;">→</span>':(p.badgeText?`<span style="font-size:11px;color:var(--muted);">${p.badgeText}</span>`:'<span class="badge badge-pend">bald</span>')}
-        </div>
-        <details style="padding:0 14px 12px;">
-          <summary style="font-size:12px;color:var(--green);cursor:pointer;">ℹ️ Was bedeutet das?</summary>
-          <div style="font-size:12px;color:var(--sub);margin-top:6px;">${p.text}</div>
-        </details>
-      </div>
-    `).join('')}
     `:''}
     ${currentStore?.id==='zentrale'?`
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Wähle einen Bereich:</div>
