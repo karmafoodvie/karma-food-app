@@ -1597,44 +1597,53 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
   if(!wrap) return;
   let html='';
 
+  function parseZutatenSections(zutaten){
+    if(!zutaten) return [];
+    // Split on double newline or "ÖL" appearing after first section
+    const parts = zutaten.split(/\n\s*\n|(?=ÖL\s*[,\.])/g).filter(p=>p.trim());
+    if(parts.length<=1) return [{label:null, text:zutaten.replace(/\n/g,' ').trim()}];
+    return parts.map((p,i)=>({
+      label: i===0?null:'Dressing',
+      text: p.replace(/\n/g,' ').trim()
+    }));
+  }
+
+  function renderZutatItems(text){
+    return text.split(/[,]+/).map(s=>s.trim()).filter(Boolean).map(item=>{
+      const up=item.toUpperCase();
+      const isAllergen=/(GLUTEN|WEIZEN|MEHL|TEIGBLÄTTER|TEIG BLATT|LASAGNE BLÄTTER|MILCH|KÄSE|JOGHURT|BUTTER|RAHM|PARMESAN|MOZZARELLA|SOJA|TOFU|SOJAHACK|SOJAJOGHURT|SESAM|SELLERIE|SELLIERE|SENF|ERDNUSS)/.test(up);
+      return isAllergen
+        ? `<strong style="color:#92400E;">${item}</strong>`
+        : item;
+    }).join(' · ');
+  }
+
   function renderDishCard(name, zutaten, allergeneStr, isToday=false){
-    const codes = allergeneStr ? allergeneStr.split(/[,\-·\s]+/).map(c=>c.trim()).filter(c=>c&&c.length<=3) : [];
-    const zutatItems = zutaten ? zutaten.replace(/\n/g,' ').split(/[,·]+/).map(s=>s.trim()).filter(Boolean) : [];
+    const codes = allergeneStr
+      ? [...new Set(allergeneStr.replace(/ALLERGENE[:\s]*/gi,'').split(/[,\s\-·]+/).map(c=>c.trim().toUpperCase()).filter(c=>c&&c.length<=2&&/^[A-R]$/.test(c)))]
+      : [];
+    const sections = parseZutatenSections(zutaten);
     return `<div class="card" style="padding:14px;margin-bottom:10px;${isToday?'border-left:3px solid var(--green);':''}" data-gericht="${name.toLowerCase()}">
-      <div style="font-size:15px;font-weight:700;margin-bottom:8px;">${name}</div>
-      ${codes.length?`
-      <div style="margin-bottom:10px;">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:4px;">⚠️ ALLERGENE</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">
-          ${codes.map(c=>{const a=ALLERGENE.find(x=>x.code===c);return `<div style="background:#FEF3C7;border:1.5px solid #D97706;border-radius:8px;padding:4px 10px;font-size:12px;"><strong style="color:#92400E;">${c}</strong>${a?` <span style="color:#78350F;font-size:11px;">— ${a.label}</span>`:''}</div>`;}).join('')}
-        </div>
-      </div>`:`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">✅ Keine deklarationspflichtigen Allergene</div>`}
-      ${zutatItems.length?`
-      <div>
-        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">🧂 ZUTATEN</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px 8px;">
-          ${zutatItems.map(item=>{
-            const up=item.toUpperCase();
-            const isA=/(GLUTEN|WEIZEN|MEHL|TEIGBLÄTTER|TEIG BLATT|LASAGNE BLÄTTER)/.test(up);
-            const isG=/(MILCH|KÄSE|JOGHURT|BUTTER|RAHM|PARMESAN|MOZZARELLA)/.test(up);
-            const isF=/(SOJA|TOFU|SOJAHACK|SOJAJOGHURT)/.test(up);
-            const isL=/(SESAM)/.test(up);
-            const isC=/(SELLERIE|SELLIERE)/.test(up);
-            const isAllergen=isA||isG||isF||isL||isC;
-            return `<span style="font-size:12px;${isAllergen?'font-weight:700;color:#92400E;text-decoration:underline dotted;':''}">${item}</span>`;
-          }).join('<span style="color:var(--border);"> · </span>')}
-        </div>
-      </div>`:''}
+      <div style="font-size:15px;font-weight:700;margin-bottom:10px;">${name}</div>
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;flex-shrink:0;">⚠️ ALLERGENE</span>
+        ${codes.length
+          ? `<span style="font-size:14px;font-weight:700;color:#92400E;letter-spacing:.08em;">${codes.join(', ')}</span>`
+          : `<span style="font-size:12px;color:var(--muted);">keine</span>`}
+      </div>
+      ${sections.length?`<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">🧂 ZUTATEN</div>
+      ${sections.map(sec=>`
+        ${sec.label?`<div style="font-size:10px;font-weight:700;color:#185FA5;letter-spacing:.05em;margin:6px 0 3px;">🥗 DRESSING</div>`:''}
+        <div style="font-size:12px;color:var(--sub);line-height:1.8;">${renderZutatItems(sec.text)}</div>
+      `).join('')}`:''}
     </div>`;
   }
 
-  // Heutiges Menü zuerst
   if(todayMenu.length){
     const validDishes = todayMenu.filter(d=>d.name&&!d.name.startsWith('ÖL')&&!d.name.startsWith('ZUTATEN'));
     if(validDishes.length){
       html+=`<div style="font-size:11px;font-weight:700;color:var(--green);letter-spacing:.05em;margin-bottom:8px;">📋 HEUTE</div>`;
       validDishes.forEach(dish=>{
-        // Check if there's a Supabase override
         const override=(allergeneCache||[]).find(e=>e.gericht===dish.name);
         const zutaten = override?.zutaten || dish.zutaten || '';
         const allergene = override?.allergene_codes?.join(',') || dish.allergene || '';
@@ -1643,7 +1652,6 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
     }
   }
 
-  // Alle anderen Gerichte
   if((list||[]).length){
     if(todayMenu.length) html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin:14px 0 8px;">📂 ALLE GERICHTE</div>`;
     list.forEach(entry=>{
