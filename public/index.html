@@ -171,6 +171,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-maengel" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
+    <div id="v-waehrend" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -421,11 +422,11 @@ function goTo(v, noPush=false){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   const nb=document.getElementById('nav-'+v);
   if(nb) nb.classList.add('active');
-  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen'};
+  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -1845,9 +1846,10 @@ async function renderDailyCheck(){
   const reinig=(reinRows||[])[0];
   const kuehl=(kuehlRows||[])[0];
   el.innerHTML = backToHomeHtml()+`
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Alle drei Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
+
     <div class="section-lbl" style="color:var(--green);">🌡️ Wareneingangskontrolle</div>
     <div class="card" style="padding:14px;border:1.5px solid var(--green);overflow:visible;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Temperatur der heute gelieferten Speisen. Soll: über 65°C.</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Lieferant: <strong style="color:var(--sub);" data-no-translate>${FIXER_LIEFERANT}</strong></div>
       <div style="font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;">Angelieferte Waren — bitte antippen:</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="wek-ware-chips">${
@@ -1860,20 +1862,18 @@ async function renderDailyCheck(){
         <div class="check-box${wareOkDefault?' done':''}" id="wek-ware-ok-box" data-value="${wareOkDefault?'1':'0'}">${wareOkDefault?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Ware in Ordnung</span>
       </div>
-      <div class="item-row" style="border-bottom:none;padding:8px 0 10px;">
+      <div class="item-row" style="border-bottom:none;padding:8px 0 4px;">
         <div class="item-name">🌡️ Temperatur eintragen (über 65° verpflichtend)</div>
         <input id="wek-temp" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${wek?.temperatur??''}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
-      <div id="wek-massnahme-wrap" style="display:${(wek && wek.temperatur<65)?'block':'none'};margin-bottom:8px;">
+      <div id="wek-massnahme-wrap" style="display:${(wek && wek.temperatur<65)?'block':'none'};margin-top:6px;">
         <input id="wek-massnahme" type="text" placeholder="Maßnahme bei Abweichung (Pflicht)" value="${wek?.massnahme||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
       </div>
-      <button class="submit-btn" style="margin-top:0;" onclick="saveWareneingang()">Speichern ✔</button>
     </div>
 
     <div class="section-lbl" style="color:var(--green);">🧽 Reinigungs- & Kontrollprotokoll</div>
-    <div class="card" style="border:1.5px solid var(--green);overflow:visible;">
-      <div style="padding:14px 14px 0;font-size:12px;color:var(--sub);">Ein Reinigungs-/Desinfektionsplan samt Durchführungsdokumentation (wer, wann, wo, wie und womit reinigt) muss eingehalten werden.</div>
-      <div style="padding:8px 14px 10px;font-size:11px;color:var(--muted);line-height:1.6;">Vorreinigen → Hauptreinigen → Desinfizieren → Nachspülen → Trocknen</div>
+    <div class="card" style="border:1.5px solid var(--green);">
+      <div style="padding:14px 14px 4px;font-size:11px;color:var(--muted);line-height:1.6;">Vorreinigen → Hauptreinigen → Desinfizieren → Nachspülen → Trocknen</div>
       <div class="cl-item" onclick="toggleReinigungField('reinigung_erledigt')">
         <div class="check-box${reinig?.reinigung_erledigt?' done':''}">${reinig?.reinigung_erledigt?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Reinigung erledigt</span>
@@ -1886,18 +1886,121 @@ async function renderDailyCheck(){
 
     <div class="section-lbl" style="color:var(--green);">❄️ Kühleinrichtungen</div>
     <div class="card" style="border:1.5px solid var(--green);">
+      <div style="background:#E6F1FB;border-radius:8px;margin:10px 14px 6px;padding:8px 10px;font-size:11px;color:#0C447C;">
+        ℹ️ <strong>Speisen:</strong> 4–6°C &nbsp;·&nbsp; <strong>Getränke:</strong> 7–10°C
+      </div>
       <div class="item-row">
-        <div class="item-name">🧊 Kleiner Kühlschrank <span title="Speisen: 4–6°C · Getränke: 7–10°C" style="cursor:help;font-size:11px;color:var(--muted);margin-left:4px;">ℹ️</span></div>
+        <div class="item-name">🧊 Kleiner Kühlschrank</div>
         <input id="kuehl-klein" type="number" step="0.1" value="${kuehl?.temp_klein??''}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
       <div class="item-row">
-        <div class="item-name">🧊 Großer Kühlschrank <span title="Speisen: 4–6°C · Getränke: 7–10°C" style="cursor:help;font-size:11px;color:var(--muted);margin-left:4px;">ℹ️</span></div>
+        <div class="item-name">🧊 Großer Kühlschrank</div>
         <input id="kuehl-gross" type="number" step="0.1" value="${kuehl?.temp_gross??''}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
     </div>
-    <button class="submit-btn" style="margin-top:8px;" onclick="saveKuehleinrichtungen()">Kühltemperaturen speichern ✔</button>
+
+    <button class="submit-btn" style="margin-top:16px;font-size:15px;padding:14px;" onclick="saveDailyCheckAll()">
+      Alles speichern & weiter ☀️ →
+    </button>
   `;
   translateEl(el);
+}
+
+async function saveDailyCheckAll(){
+  const today=new Date().toISOString().split('T')[0];
+  const temp=parseFloat(document.getElementById('wek-temp')?.value);
+  if(isNaN(temp)){ showToast('Bitte Temperatur eintragen'); return; }
+  const massnahmeEl=document.getElementById('wek-massnahme');
+  const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
+  if(temp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
+  const klein=parseFloat(document.getElementById('kuehl-klein')?.value);
+  const gross=parseFloat(document.getElementById('kuehl-gross')?.value);
+  if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Kühltemperaturen eintragen'); return; }
+  const ware=getSelectedWaren()||'';
+  const wareOk=document.getElementById('wek-ware-ok-box')?.dataset.value==='1';
+  try{
+    await Promise.all([
+      (async()=>{
+        await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
+        await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:temp,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
+      })(),
+      (async()=>{
+        await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
+        await api('kuehleinrichtungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,temp_klein:klein,temp_gross:gross,mitarbeiter:currentStore.name}])});
+      })()
+    ]);
+    showToast('✔ Daily Check-up gespeichert!');
+    goTo('waehrend');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+
+async function renderWaehrend(){
+  const el=document.getElementById('v-waehrend');
+  const today=new Date().toISOString().split('T')[0];
+  const menu=await api(`weekly_menu?select=weekday,slot,dish_name`).catch(()=>[]);
+  const todayWd=(['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
+  const todayDishes=(menu||[]).filter(m=>m.weekday===todayWd).map(m=>m.dish_name).filter(Boolean);
+
+  let html=backToHomeHtml();
+  html+=`<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Heute im Menü und Food Waste für heute eintragen.</div>`;
+
+  // Heutige Gerichte
+  if(todayDishes.length){
+    html+=`<div class="section-lbl">☕ Heutige Gerichte</div>
+    <div class="card" style="padding:12px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">`;
+    todayDishes.forEach(d=>{ html+=`<div style="background:var(--green-light);color:var(--green);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:500;">${d}</div>`; });
+    html+=`</div>
+      <div style="margin-top:10px;"><button onclick="goTo('allergene')" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;color:var(--green);">📋 Zutaten & Allergene nachschlagen →</button></div>
+    </div>`;
+  }
+
+  html+=`<div class="section-lbl" style="margin-top:12px;">🗑️ Entsorgung / Food Waste</div>`;
+  // Inline-Disposal-Form
+  const dispToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=*`).catch(()=>[]);
+  const dispMap={};
+  (dispToday||[]).forEach(d=>{dispMap[d.slot]=d;});
+  const SLOTS=[{k:'salat',l:'Salat'},{k:'gericht1',l:'Gericht 1'},{k:'gericht2',l:'Gericht 2'},{k:'gericht3',l:'Gericht 3'},{k:'reis',l:'Reis'}];
+  html+=`<div class="card" style="padding:12px;">`;
+  SLOTS.forEach(s=>{
+    const rec=dispMap[s.k];
+    html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);">
+      <span style="font-size:12px;flex:1;font-weight:500;">${s.l}</span>
+      <input type="time" id="disp-time-${s.k}" value="${rec?.sold_out_time?.slice(0,5)||''}" style="width:80px;border:1px solid var(--border);border-radius:6px;font-size:12px;padding:4px;">
+      <input type="number" id="disp-qty-${s.k}" placeholder="Rest" step="0.5" value="${rec?.leftover_qty??''}" style="width:60px;text-align:center;border:1px solid var(--border);border-radius:6px;font-size:12px;padding:4px;">
+    </div>`;
+  });
+  html+=`<div style="font-size:10px;color:var(--muted);margin-top:6px;">Zeit = ausverkauft um · Rest = übrig gebliebene Menge</div></div>`;
+
+  html+=`<button class="submit-btn" style="margin-top:16px;font-size:15px;padding:14px;" onclick="saveWaehrendAndNext()">
+    Entsorgung speichern & weiter 🌙 →
+  </button>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+
+async function saveWaehrendAndNext(){
+  const today=new Date().toISOString().split('T')[0];
+  const menu=await api(`weekly_menu?select=weekday,slot,dish_name`).catch(()=>[]);
+  const todayWd=(['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
+  const menuMap={};
+  (menu||[]).filter(m=>m.weekday===todayWd).forEach(m=>{menuMap[m.slot]=m.dish_name;});
+  const SLOTS=['salat','gericht1','gericht2','gericht3','reis'];
+  const rows=[];
+  SLOTS.forEach(slot=>{
+    const timeEl=document.getElementById(`disp-time-${slot}`);
+    const qtyEl=document.getElementById(`disp-qty-${slot}`);
+    const t=timeEl?.value||null;
+    const q=qtyEl?.value!==''?parseFloat(qtyEl?.value):null;
+    if(t||q!==null) rows.push({store_id:currentStore.id,disposal_date:today,slot,dish_name:menuMap[slot]||null,sold_out_time:t||null,leftover_qty:q});
+  });
+  try{
+    await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}`,{method:'DELETE'});
+    if(rows.length) await api('disposal',{method:'POST',body:JSON.stringify(rows)});
+    showToast('✔ Entsorgung gespeichert!');
+    goTo('schichtende');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
 function toggleWareChip(el, ware){
