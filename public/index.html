@@ -677,6 +677,7 @@ async function renderHome(){
         <div style="font-size:11px;color:${disposalDone?'var(--green)':'var(--muted)'};">${disposalDone?'✓ erledigt':'Restmengen'}</div>
       </div>
     </div>
+    ${gamificationHtml||''}
 
     <!-- PHASE 3: NACH DER SCHICHT -->
     <div class="section-lbl" style="margin-top:14px;">🌙 Nach der Schicht</div>
@@ -714,10 +715,6 @@ async function renderHome(){
       <span style="color:var(--muted);font-size:18px;">→</span>
     </div>
 
-    <!-- GAMIFICATION -->
-    ${gamificationHtml||''}
-    `:''}
-    ${currentStore?.id!=='zentrale' && homeMode==='kontrolle'?`
     <div onclick="setHomeMode('alltag')" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--green);margin-bottom:12px;cursor:pointer;">← Zurück zum Tagesablauf</div>
     <div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);">
       <div style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:4px;">🛡️ Kontrollbesuch? Kein Stress.</div>
@@ -1608,11 +1605,36 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
     }));
   }
 
+  function isZutatAllergen(item){
+    const up = item.toUpperCase().trim();
+    return (
+      // A — Glutenhaltiges Getreide
+      /\b(WEIZEN|DINKEL|ROGGEN|GERSTE|HAFER|KAMUT|TEIGBLÄTTER|TEIGBLATT|LASAGNE\s*BLÄTTER|EBLY|MEHL)\b/.test(up) ||
+      // C — Eier
+      /\b(EIER|EIDOTTER)\b/.test(up) || up === 'EI' ||
+      // E — Erdnüsse
+      /\b(ERDNUSS|ERDNÜSSE)\b/.test(up) ||
+      // F — Soja (nicht Kokosmilch!)
+      /\b(SOJA|TOFU|SOJAHACK|SOJAJOGHURT|SOJAFASCHIERTES|SOJAMILCH)\b/.test(up) ||
+      // G — Milch: aber NICHT KOKOSMILCH
+      (/\b(KÄSE|JOGHURT|BUTTER|RAHM|SAHNE|PARMESAN|MOZZARELLA|KUHMILCH|HAFERMILCH)\b/.test(up) ||
+       (/MILCH/.test(up) && !/KOKOS/.test(up))) ||
+      // H — Schalenfrüchte/Nüsse (nicht Kokosnuss!)
+      /\b(MANDELN?|HASELNUSS|HASELNÜSSE|WALNUSS|WALNÜSSE|CASHEW|PEKANNUSS|PISTAZIE|MACADAMIA)\b/.test(up) ||
+      // L — Sellerie
+      /\b(SELLERIE|SELLIERE)\b/.test(up) ||
+      // M — Senf
+      /\b(SENF)\b/.test(up) ||
+      // N — Sesam
+      /\b(SESAM)\b/.test(up) ||
+      // P — Lupinen
+      /\b(LUPINEN?)\b/.test(up)
+    );
+  }
+
   function renderZutatItems(text){
     return text.split(/[,]+/).map(s=>s.trim()).filter(Boolean).map(item=>{
-      const up=item.toUpperCase();
-      const isAllergen=/(GLUTEN|WEIZEN|MEHL|TEIGBLÄTTER|TEIG BLATT|LASAGNE BLÄTTER|MILCH|KÄSE|JOGHURT|BUTTER|RAHM|PARMESAN|MOZZARELLA|SOJA|TOFU|SOJAHACK|SOJAJOGHURT|SESAM|SELLERIE|SELLIERE|SENF|ERDNUSS)/.test(up);
-      return isAllergen
+      return isZutatAllergen(item)
         ? `<strong style="color:#92400E;">${item}</strong>`
         : item;
     }).join(' · ');
