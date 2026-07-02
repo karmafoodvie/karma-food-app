@@ -1587,24 +1587,56 @@ async function deleteAllergenEntry(id){
 let allergeneCache=[];
 async function loadAllergeneCheatsheet(){
   allergeneCache=await api('allergene_rezepturen?select=*&order=gericht.asc').catch(()=>[]);
-  renderAllergeneCheatlist(allergeneCache);
+  // Heute's Menü aus SOMMER_MENU oben anzeigen
+  const todayMenu=getTodayMenu()||[];
+  renderAllergeneCheatlist(allergeneCache, todayMenu);
 }
-function renderAllergeneCheatlist(list){
+
+function renderAllergeneCheatlist(list, todayMenu=[]){
   const wrap=document.getElementById('all-cheatlist');
   if(!wrap) return;
-  wrap.innerHTML=(list||[]).map(entry=>`
-    <div class="card" style="padding:12px;" data-gericht="${entry.gericht.toLowerCase()}">
-      <strong>${entry.gericht}</strong>
-      <div style="margin-top:6px;">
-        ${(entry.allergene_codes||[]).map(c=>{const a=ALLERGENE.find(x=>x.code===c);return `<span class="badge" style="background:var(--green-light);color:var(--green);margin-right:4px;" title="${a?a.label:''}">${c}</span>`;}).join('')||'<span style="font-size:12px;color:var(--muted);">keine Allergene angegeben</span>'}
+  let html='';
+
+  // Heutiges Menü zuerst
+  if(todayMenu.length){
+    html+=`<div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin-bottom:6px;">📋 HEUTE</div>`;
+    todayMenu.forEach(dish=>{
+      if(!dish.name || dish.name.startsWith('ÖL') || dish.name.startsWith('ZUTATEN')) return;
+      const zutaten=dish.zutaten?dish.zutaten.replace(/\n/g,' ').trim():'';
+      const allergene=dish.allergene?dish.allergene.replace('ALLERGENE:','').trim():'';
+      html+=`<div class="card" style="padding:12px;border-left:3px solid var(--green);margin-bottom:8px;">
+        <div style="font-weight:600;font-size:14px;">${dish.name}</div>
+        ${allergene?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">
+          ${allergene.split(/[,\-·\s]+/).filter(c=>c.trim()).map(c=>`<span class="badge" style="background:var(--green-light);color:var(--green);">${c.trim()}</span>`).join('')}
+        </div>`:'<div style="font-size:11px;color:var(--muted);margin-top:4px;">keine Allergene angegeben</div>'}
+        ${zutaten?`<details style="margin-top:6px;"><summary style="font-size:11px;color:var(--green);cursor:pointer;">Zutaten anzeigen</summary><div style="font-size:11px;color:var(--sub);margin-top:4px;line-height:1.5;">${zutaten}</div></details>`:''}
+      </div>`;
+    });
+  }
+
+  // Supabase-Einträge
+  if((list||[]).length){
+    if(todayMenu.length) html+=`<div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin:10px 0 6px;">📂 ALLE GERICHTE</div>`;
+    html+=(list||[]).map(entry=>`
+      <div class="card" style="padding:12px;" data-gericht="${entry.gericht.toLowerCase()}">
+        <strong>${entry.gericht}</strong>
+        <div style="margin-top:6px;">
+          ${(entry.allergene_codes||[]).map(c=>{const a=ALLERGENE.find(x=>x.code===c);return `<span class="badge" style="background:var(--green-light);color:var(--green);margin-right:4px;" title="${a?a.label:''}">${c}</span>`;}).join('')||'<span style="font-size:12px;color:var(--muted);">keine Allergene angegeben</span>'}
+        </div>
+        ${entry.zutaten?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${entry.zutaten}</div>`:''}
       </div>
-      ${entry.zutaten?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${entry.zutaten}</div>`:''}
-    </div>
-  `).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Gerichte angelegt.</div>';
+    `).join('');
+  } else if(!todayMenu.length){
+    html='<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Gerichte angelegt.</div>';
+  }
+  wrap.innerHTML=html;
 }
+
 function filterAllergeneCheatsheet(){
   const q=document.getElementById('all-search').value.toLowerCase();
-  renderAllergeneCheatlist(allergeneCache.filter(e=>e.gericht.toLowerCase().includes(q)));
+  // Filter both today's menu and Supabase list
+  const filteredMenu=getTodayMenu()?.filter(d=>d.name?.toLowerCase().includes(q))||[];
+  renderAllergeneCheatlist(allergeneCache.filter(e=>e.gericht.toLowerCase().includes(q)), filteredMenu);
 }
 
 // ---- SCHULUNGEN ----
