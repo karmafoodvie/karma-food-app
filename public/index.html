@@ -1597,35 +1597,58 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
   if(!wrap) return;
   let html='';
 
-  // Heutiges Menü zuerst
-  if(todayMenu.length){
-    html+=`<div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin-bottom:6px;">📋 HEUTE</div>`;
-    todayMenu.forEach(dish=>{
-      if(!dish.name || dish.name.startsWith('ÖL') || dish.name.startsWith('ZUTATEN')) return;
-      const zutaten=dish.zutaten?dish.zutaten.replace(/\n/g,' ').trim():'';
-      const allergene=dish.allergene?dish.allergene.replace('ALLERGENE:','').trim():'';
-      html+=`<div class="card" style="padding:12px;border-left:3px solid var(--green);margin-bottom:8px;">
-        <div style="font-weight:600;font-size:14px;">${dish.name}</div>
-        ${allergene?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">
-          ${allergene.split(/[,\-·\s]+/).filter(c=>c.trim()).map(c=>`<span class="badge" style="background:var(--green-light);color:var(--green);">${c.trim()}</span>`).join('')}
-        </div>`:'<div style="font-size:11px;color:var(--muted);margin-top:4px;">keine Allergene angegeben</div>'}
-        ${zutaten?`<details style="margin-top:6px;"><summary style="font-size:11px;color:var(--green);cursor:pointer;">Zutaten anzeigen</summary><div style="font-size:11px;color:var(--sub);margin-top:4px;line-height:1.5;">${zutaten}</div></details>`:''}
-      </div>`;
-    });
+  function renderDishCard(name, zutaten, allergeneStr, isToday=false){
+    const codes = allergeneStr ? allergeneStr.split(/[,\-·\s]+/).map(c=>c.trim()).filter(c=>c&&c.length<=3) : [];
+    const zutatItems = zutaten ? zutaten.replace(/\n/g,' ').split(/[,·]+/).map(s=>s.trim()).filter(Boolean) : [];
+    return `<div class="card" style="padding:14px;margin-bottom:10px;${isToday?'border-left:3px solid var(--green);':''}" data-gericht="${name.toLowerCase()}">
+      <div style="font-size:15px;font-weight:700;margin-bottom:8px;">${name}</div>
+      ${codes.length?`
+      <div style="margin-bottom:10px;">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:4px;">⚠️ ALLERGENE</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${codes.map(c=>{const a=ALLERGENE.find(x=>x.code===c);return `<div style="background:#FEF3C7;border:1.5px solid #D97706;border-radius:8px;padding:4px 10px;font-size:12px;"><strong style="color:#92400E;">${c}</strong>${a?` <span style="color:#78350F;font-size:11px;">— ${a.label}</span>`:''}</div>`;}).join('')}
+        </div>
+      </div>`:`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">✅ Keine deklarationspflichtigen Allergene</div>`}
+      ${zutatItems.length?`
+      <div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">🧂 ZUTATEN</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 8px;">
+          ${zutatItems.map(item=>{
+            const up=item.toUpperCase();
+            const isA=/(GLUTEN|WEIZEN|MEHL|TEIGBLÄTTER|TEIG BLATT|LASAGNE BLÄTTER)/.test(up);
+            const isG=/(MILCH|KÄSE|JOGHURT|BUTTER|RAHM|PARMESAN|MOZZARELLA)/.test(up);
+            const isF=/(SOJA|TOFU|SOJAHACK|SOJAJOGHURT)/.test(up);
+            const isL=/(SESAM)/.test(up);
+            const isC=/(SELLERIE|SELLIERE)/.test(up);
+            const isAllergen=isA||isG||isF||isL||isC;
+            return `<span style="font-size:12px;${isAllergen?'font-weight:700;color:#92400E;text-decoration:underline dotted;':''}">${item}</span>`;
+          }).join('<span style="color:var(--border);"> · </span>')}
+        </div>
+      </div>`:''}
+    </div>`;
   }
 
-  // Supabase-Einträge
+  // Heutiges Menü zuerst
+  if(todayMenu.length){
+    const validDishes = todayMenu.filter(d=>d.name&&!d.name.startsWith('ÖL')&&!d.name.startsWith('ZUTATEN'));
+    if(validDishes.length){
+      html+=`<div style="font-size:11px;font-weight:700;color:var(--green);letter-spacing:.05em;margin-bottom:8px;">📋 HEUTE</div>`;
+      validDishes.forEach(dish=>{
+        // Check if there's a Supabase override
+        const override=(allergeneCache||[]).find(e=>e.gericht===dish.name);
+        const zutaten = override?.zutaten || dish.zutaten || '';
+        const allergene = override?.allergene_codes?.join(',') || dish.allergene || '';
+        html += renderDishCard(dish.name, zutaten, allergene, true);
+      });
+    }
+  }
+
+  // Alle anderen Gerichte
   if((list||[]).length){
-    if(todayMenu.length) html+=`<div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em;margin:10px 0 6px;">📂 ALLE GERICHTE</div>`;
-    html+=(list||[]).map(entry=>`
-      <div class="card" style="padding:12px;" data-gericht="${entry.gericht.toLowerCase()}">
-        <strong>${entry.gericht}</strong>
-        <div style="margin-top:6px;">
-          ${(entry.allergene_codes||[]).map(c=>{const a=ALLERGENE.find(x=>x.code===c);return `<span class="badge" style="background:var(--green-light);color:var(--green);margin-right:4px;" title="${a?a.label:''}">${c}</span>`;}).join('')||'<span style="font-size:12px;color:var(--muted);">keine Allergene angegeben</span>'}
-        </div>
-        ${entry.zutaten?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${entry.zutaten}</div>`:''}
-      </div>
-    `).join('');
+    if(todayMenu.length) html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin:14px 0 8px;">📂 ALLE GERICHTE</div>`;
+    list.forEach(entry=>{
+      html+=renderDishCard(entry.gericht, entry.zutaten||'', (entry.allergene_codes||[]).join(','));
+    });
   } else if(!todayMenu.length){
     html='<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Gerichte angelegt.</div>';
   }
@@ -2656,7 +2679,12 @@ function getWeekDates(offset){
 function isoDate(d){return d.toISOString().split('T')[0];}
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
-  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">Wochenplan</button><button class="cl-tab${kitchenTab==='disposal'?' active':''}" onclick="switchKitchenTab('disposal')">Heute</button><button class="cl-tab${kitchenTab==='history'?' active':''}" onclick="switchKitchenTab('history')">Entsorgungsliste</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">Beilagen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">Forecast</button></div>`;
+  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='menu'?' active':''}" onclick="switchKitchenTab('menu')">📋 Wochenmenü</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">Wochenplan</button><button class="cl-tab${kitchenTab==='disposal'?' active':''}" onclick="switchKitchenTab('disposal')">Heute</button><button class="cl-tab${kitchenTab==='history'?' active':''}" onclick="switchKitchenTab('history')">Entsorgungsliste</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">Beilagen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">Forecast</button></div>`;
+
+  if(kitchenTab==='menu'){
+    await renderMenuWoche(el, html);
+    return;
+  }
 
   if(kitchenTab==='plan'){
     const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
@@ -2903,6 +2931,86 @@ async function renderKitchen(){
 }
 function switchKitchenTab(t){kitchenTab=t;if(t==='history')weekOffset=0;renderKitchen();}
 function changeWeek(d){weekOffset+=d;if(weekOffset>0)weekOffset=0;renderKitchen();}
+
+// ---- WOCHENMENÜ (Koch-Leitfaden) ----
+function formatZutatenFuerKoch(zutaten, allergene){
+  if(!zutaten) return '';
+  // Bold allergen-relevant ingredients by checking against known allergy markers
+  const allergenKeywords = {
+    'A':'GLUTEN|WEIZEN|MEHL|DINKEL|ROGGEN|GERSTE|HAFER|KAMUT|LASAGNE BLÄTTER|TEIGBLÄTTER|TEIG BLATTE',
+    'C':'SELLERIE|SELLIERE',
+    'F':'SOJA|SOJAJOGHURT|SOJAFASCHIERTES|SOJAHACK|TOFU',
+    'G':'MILCH|KÄSE|JOGHURT|BUTTER|RAHM|PARMESAN|MOZZARELLA',
+    'L':'SESAM|SESAM SAMEN',
+    'M':'SENF|DRESSING.*SENF',
+    'N':'ERDNUSS|MANDEL|HASELNUSS|CASHEW|WALNUSS|PEKANNUSS|PISTAZIE'
+  };
+  let items = zutaten.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean);
+  return items.map(item=>{
+    const upper = item.toUpperCase();
+    const isAllergen = Object.values(allergenKeywords).some(kw=>new RegExp(kw).test(upper));
+    return isAllergen
+      ? `<strong style="color:#0F6E56;">${item}</strong>`
+      : item;
+  }).join(' · ');
+}
+
+let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
+
+async function renderMenuWoche(el, tabHtml){
+  let html = tabHtml;
+  const woche = CURRENT_SOMMER_WOCHE;
+  const DAYS_DE = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
+  const DAYS_ORDER = ['mo','di','mi','do','fr'];
+  const SLOT_LABEL = {salat:'🥗 Salat/Bowl',gericht2:'🥘 Gericht 2',gericht3:'🍲 Gericht 3'};
+
+  // Load overrides from allergene_rezepturen
+  const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
+  const overrideMap = {};
+  (overrides||[]).forEach(e=>{ overrideMap[e.gericht] = e; });
+
+  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Woche ${woche} — Sommer-Menü. Zutaten/Allergene bearbeiten und speichern, damit alle Stores die aktuellen Infos sehen.</div>`;
+
+  DAYS_ORDER.forEach(day=>{
+    const key = `w${woche}_${day}`;
+    const dishes = SOMMER_MENU[key]||[];
+    if(!dishes.length) return;
+    html += `<div class="section-lbl" style="margin-top:14px;">${DAYS_DE[day]}</div>`;
+    dishes.forEach(dish=>{
+      if(!dish.name||dish.name.startsWith('ÖL')) return;
+      const override = overrideMap[dish.name];
+      const zutaten = override?.zutaten || dish.zutaten || '';
+      const allergene = override?.allergene_codes?.join(',') || dish.allergene || '';
+      const editKey = `${key}_${dish.slot}`;
+      html += `<div class="card" style="padding:12px;margin-bottom:8px;">
+        <div style="font-weight:600;font-size:14px;color:var(--sub);margin-bottom:8px;">${SLOT_LABEL[dish.slot]||dish.slot} — ${dish.name}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;">ALLERGENE (Codes, kommagetrennt)</div>
+        <input id="all-${editKey}" value="${allergene}" placeholder="z.B. A,G,L" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;box-sizing:border-box;font-family:inherit;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;">ZUTATEN</div>
+        <textarea id="zut-${editKey}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;min-height:70px;resize:vertical;box-sizing:border-box;font-family:inherit;">${zutaten}</textarea>
+        <button onclick="saveMenuDish('${dish.name}','${editKey}')" style="margin-top:8px;background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:500;cursor:pointer;">💾 Speichern</button>
+        ${override?`<span style="font-size:10px;color:var(--green);margin-left:8px;">✓ angepasst am ${new Date(override.aktualisiert_am).toLocaleDateString('de-AT')}</span>`:''}
+      </div>`;
+    });
+  });
+
+  el.innerHTML = html;
+  translateEl(el);
+}
+
+async function saveMenuDish(dishName, editKey){
+  const zutaten = document.getElementById(`zut-${editKey}`)?.value?.trim()||'';
+  const allergenStr = document.getElementById(`all-${editKey}`)?.value?.trim()||'';
+  const codes = allergenStr.split(/[,\s]+/).map(c=>c.trim().toUpperCase()).filter(c=>c);
+  try{
+    // Delete existing entry for this dish name, then re-insert
+    await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'});
+    await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten,allergene_codes:codes,verantwortlich:'Küchenchef',aktualisiert_am:new Date().toISOString()}])});
+    showToast(`✔ ${dishName} gespeichert`);
+    // Refresh the view
+    renderKitchen();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
 window.changeWeek=changeWeek;
 async function updateMenu(weekday,slot,dishName){
   try{
