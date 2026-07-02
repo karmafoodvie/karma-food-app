@@ -2172,45 +2172,86 @@ async function renderSchichtende(){
     {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null}
   ];
 
-  const allDone=schritte.every(s=>s.done);
+  const SCHRITT_META={
+    abschluss: {emoji:'📋', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten`, link:'check'},
+    entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
+    morgige:    {emoji:'📅', label:'Morgige Mengen anpassen', sub:'Forecast für morgen', link:'order'},
+    dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Reinigung · Kühlung', link:'dailycheck'},
+    sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Bestellung für morgen', link:'order', orderTab:'sweets'},
+    transporter:{emoji:'🚚', label:'Transporter bestellt', sub:'Verpackungen & Reinigung', link:'order', orderTab:'transporter'},
+    kc:         {emoji:'📦', label:'KC ausgefüllt', sub:'IST-Bestände Webshop', link:'order', orderTab:'kc'},
+    uebergabe:  {emoji:'✍️', label:'Übergabe-Notiz', sub:'Hinweis für nächste Schicht', link:null}
+  };
+
+  const open=schritte.filter(s=>!s.done);
+  const done=schritte.filter(s=>s.done);
+  const allDone=open.length===0;
   const alreadySubmitted=(uebergabeToday||[]).length>0 && allDone;
 
   let html=backToHomeHtml();
-  html+=`<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Schritt für Schritt durch den Schichtabschluss.</div>`;
-
-  schritte.forEach((s,i)=>{
-    const check=s.done
-      ? `<div style="width:26px;height:26px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg></div>`
-      : `<div style="width:26px;height:26px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:600;color:var(--muted);">${i+1}</div>`;
-    const linkFn=s.orderTab?`goToReminder('order','${s.orderTab}')`:s.link?`goTo('${s.link}')`:null;
-    const linkBtn=linkFn&&!s.done?`<button onclick="${linkFn}" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">Jetzt erledigen →</button>`:s.done?'<span style="font-size:11px;color:var(--green);font-weight:500;">✓ erledigt</span>':'';
-    html+=`<div class="card" style="padding:12px;border:1.5px solid ${s.done?'var(--green)':'var(--border)'};background:${s.done?'#F8FDF9':'var(--card)'};${s.id==='uebergabe'&&!s.done?'border-color:#BA7517;':''}margin-bottom:8px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        ${check}
-        <div style="flex:1;">
-          <div style="font-weight:500;${s.done?'color:var(--muted);':''}">${s.label}</div>
-          <div style="font-size:12px;color:var(--muted);">${s.sub}</div>
-        </div>
-        ${linkBtn}
-      </div>
-      ${s.id==='uebergabe'&&!s.done?`<textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen? (Pflicht)" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea><button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>`:''}
-      ${s.id==='uebergabe'&&s.done?`<div style="font-size:12px;color:var(--sub);margin-top:8px;padding:8px;background:var(--green-light);border-radius:6px;">${uebergabeToday[0]?.notiz||''}</div>`:''}
-    </div>`;
-  });
 
   if(alreadySubmitted){
-    html+=`<div style="background:var(--green-light);border:1.5px solid var(--green);border-radius:14px;padding:16px;text-align:center;margin-top:16px;">
-      <div style="font-size:22px;margin-bottom:6px;">🌙</div>
-      <div style="font-weight:600;color:var(--green);font-size:15px;">Schicht erfolgreich abgeschlossen</div>
-      <div style="font-size:12px;color:var(--sub);margin-top:4px;">Zusammenfassung wurde an Tini geschickt</div>
-    </div>`;
-  } else if(allDone){
-    html+=`<button class="submit-btn" style="margin-top:16px;font-size:15px;padding:16px;" onclick="submitSchichtende()">🌙 Schicht jetzt abschließen & E-Mail senden</button>`;
-  } else {
-    html+=`<div style="background:#FEF3C7;border:1px solid #D97706;border-radius:10px;padding:12px;text-align:center;margin-top:16px;font-size:13px;color:#92400E;">
-      <strong>${schritte.filter(s=>!s.done).length} Schritte noch offen</strong> — bitte erst alles erledigen
+    html+=`<div style="background:var(--green-light);border:1.5px solid var(--green);border-radius:14px;padding:20px;text-align:center;margin-bottom:16px;">
+      <div style="font-size:30px;margin-bottom:8px;">🌙</div>
+      <div style="font-weight:600;color:var(--green);font-size:16px;">Schicht abgeschlossen!</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px;">Zusammenfassung wurde an Tini geschickt.</div>
     </div>`;
   }
+
+  // OFFENE SCHRITTE
+  if(open.length>0){
+    html+=`<div style="font-size:13px;font-weight:500;color:var(--sub);margin-bottom:10px;">📌 Noch zu erledigen (${open.length})</div>`;
+    open.forEach(s=>{
+      const m=SCHRITT_META[s.id];
+      const linkFn=m.orderTab?`goToReminder('order','${m.orderTab}')`:m.link?`goTo('${m.link}')`:null;
+      html+=`<div class="card" style="padding:14px;margin-bottom:8px;border:1.5px solid var(--border);${s.id==='uebergabe'?'border-color:#BA7517;':''}">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:24px;flex-shrink:0;">${m.emoji}</span>
+          <div style="flex:1;">
+            <div style="font-weight:600;font-size:14px;">${m.label}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:1px;">${m.sub}</div>
+          </div>
+          ${linkFn?`<button onclick="${linkFn}" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">→</button>`:''}
+        </div>
+        ${s.id==='uebergabe'?`<textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen?" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea><button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>`:''}
+      </div>`;
+    });
+
+    if(!alreadySubmitted && allDone){
+      html+=`<button class="submit-btn" style="margin-top:8px;font-size:15px;padding:14px;" onclick="submitSchichtende()">🌙 Schicht abschließen & E-Mail senden</button>`;
+    }
+  } else if(!alreadySubmitted){
+    html+=`<button class="submit-btn" style="font-size:15px;padding:14px;margin-bottom:16px;" onclick="submitSchichtende()">🌙 Schicht abschließen & E-Mail senden</button>`;
+  }
+
+  // ERLEDIGTE SCHRITTE
+  if(done.length>0){
+    html+=`<div style="display:flex;align-items:center;gap:8px;margin:${open.length?'20px':'8px'} 0 10px;">
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+      <span style="font-size:11px;color:var(--muted);font-weight:500;">✓ erledigt (${done.length})</span>
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+    </div>`;
+    html+=`<div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+    done.forEach(s=>{
+      const m=SCHRITT_META[s.id];
+      html+=`<div style="background:#F8FDF9;border:0.5px solid #9FE1CB;border-radius:20px;padding:5px 10px;font-size:12px;color:var(--green);display:flex;align-items:center;gap:4px;">
+        <span>${m.emoji}</span>
+        <span>${m.label}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>`;
+    });
+    html+=`</div>`;
+
+    // Übergabe-Notiz von heute anzeigen wenn erledigt
+    const uebergabeDone=done.find(s=>s.id==='uebergabe');
+    if(uebergabeDone && uebergabeToday[0]?.notiz){
+      html+=`<div style="margin-top:10px;background:#FFF7ED;border:0.5px solid #F97316;border-radius:8px;padding:10px 12px;font-size:12px;color:var(--sub);">
+        <div style="font-weight:500;color:#E0521F;margin-bottom:3px;">✍️ Deine Übergabe-Notiz</div>
+        ${uebergabeToday[0].notiz}
+      </div>`;
+    }
+  }
+
   el.innerHTML=html;
   translateEl(el);
 }
