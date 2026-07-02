@@ -490,6 +490,26 @@ function getTodayDishNames(){
 }
 
 
+function getDishEmoji(name){
+  if(!name) return '🍽️';
+  const n=name.toUpperCase();
+  if(/LASAGNE/.test(n)) return '🫕';
+  if(/BIRYANI/.test(n)) return '🍚';
+  if(/\bDAL\b|LINSEN/.test(n)) return '🫘';
+  if(/CURRY/.test(n)) return '🍛';
+  if(/\bBOWL\b/.test(n)) return '🥙';
+  if(/SALAT|SALAD/.test(n)) return '🥗';
+  if(/GULASCH/.test(n)) return '🥘';
+  if(/TOFU/.test(n)) return '🟩';
+  if(/MEATBALL/.test(n)) return '🥩';
+  if(/CHILI/.test(n)) return '🌶️';
+  if(/TIKKA|MASALA/.test(n)) return '🍛';
+  if(/ERDÄPFEL|GOULASH|ALOO|WEDGES/.test(n)) return '🥔';
+  if(/SPINAT/.test(n)) return '🌿';
+  if(/BROKKOLI/.test(n)) return '🥦';
+  return '🍽️';
+}
+
 async function computeAndSaveScore(storeId){
   const today=new Date().toISOString().split('T')[0];
   try{
@@ -2717,7 +2737,7 @@ function getWeekDates(offset){
 function isoDate(d){return d.toISOString().split('T')[0];}
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
-  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='menu'?' active':''}" onclick="switchKitchenTab('menu')">🍽️ Diese Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
+  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -2730,33 +2750,65 @@ async function renderKitchen(){
   }
 
   if(kitchenTab==='plan'){
-    const woche = CURRENT_SOMMER_WOCHE;
     const DAYS_ORDER = ['mo','di','mi','do','fr'];
-    const DAYS_DE = {mo:'Mo',di:'Di',mi:'Mi',do:'Do',fr:'Fr'};
     const DAYS_FULL = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
-    const todayWd = (['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
-    const SLOT_COLORS = {salat:'#15803D',gericht2:'#0F6E56',gericht3:'#185FA5'};
     const SLOT_EMOJI = {salat:'🥗',gericht2:'🍲',gericht3:'🥘'};
+    const todayWd = (['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
+    const selectedWoche = window.kochplanWoche || CURRENT_SOMMER_WOCHE;
 
-    html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} — Welches Gericht wird welchen Tag gekocht</div>`;
+    const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
+    const overrideMap = {};
+    (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
-    // Compact grid: one card per day
+    // Week selector
+    html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">`;
+    for(let w=1;w<=4;w++){
+      const active=selectedWoche===w;
+      html+=`<button onclick="window.kochplanWoche=${w};renderKitchen()" style="flex:1;padding:8px 4px;border-radius:10px;border:${active?'2px solid var(--green)':'1.5px solid var(--border)'};background:${active?'var(--green-light)':'var(--card)'};color:${active?'var(--green)':'var(--sub)'};font-weight:${active?'700':'400'};font-size:13px;cursor:pointer;">Woche ${w}</button>`;
+    }
+    html+=`</div>`;
+    html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
+
     DAYS_ORDER.forEach(day=>{
-      const key=`w${woche}_${day}`;
+      const key=`w${selectedWoche}_${day}`;
       const dishes=(typeof SOMMER_MENU!=='undefined'&&SOMMER_MENU[key])||[];
-      const isToday=day===todayWd;
-      html+=`<div style="border:${isToday?'2px solid var(--green)':'0.5px solid var(--border)'};border-radius:10px;margin-bottom:8px;overflow:hidden;">
-        <div style="background:${isToday?'var(--green)':'var(--border)'};padding:6px 12px;font-size:12px;font-weight:700;color:${isToday?'#fff':'var(--sub)'};">${DAYS_FULL[day]}${isToday?' 👈':''}</div>
-        <div style="padding:8px 12px;display:flex;flex-direction:column;gap:5px;">
-          ${dishes.filter(d=>d.name&&!d.name.startsWith('ÖL')).map(dish=>`
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:16px;">${SLOT_EMOJI[dish.slot]||'🍽️'}</span>
-              <span style="font-size:13px;font-weight:500;">${dish.name}</span>
+      const isToday=day===todayWd && selectedWoche===CURRENT_SOMMER_WOCHE;
+      html+=`<div style="border:${isToday?'2px solid var(--green)':'0.5px solid var(--border)'};border-radius:12px;margin-bottom:10px;overflow:hidden;">
+        <div style="background:${isToday?'var(--green)':'#F5F5F3'};padding:8px 14px;font-size:13px;font-weight:700;color:${isToday?'#fff':'var(--sub)'};">${DAYS_FULL[day]}${isToday?' 👈 Heute':''}</div>`;
+
+      const validDishes = dishes.filter(d=>d.name&&!d.name.startsWith('ÖL'));
+      if(!validDishes.length){
+        html+=`<div style="padding:10px 14px;font-size:12px;color:var(--muted);">–</div>`;
+      } else {
+        validDishes.forEach((dish,i)=>{
+          const override = overrideMap[dish.name];
+          const zutaten = (override?.zutaten||dish.zutaten||'').replace(/\n/g,' ').trim();
+          const allergenMain = dish.allergene?.main||[];
+          const allergenDressing = dish.allergene?.dressing||[];
+          const hasZutaten = zutaten.length>0;
+          const detailId = `kp_${selectedWoche}_${day}_${i}`;
+
+          html+=`<div style="${i>0?'border-top:0.5px solid var(--border);':''}">
+            <div onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;">
+              <span style="font-size:20px;">${SLOT_EMOJI[dish.slot]||'🍽️'}</span>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:600;">${dish.name}</div>
+                ${allergenMain.length?`<div style="font-size:11px;margin-top:2px;">⚠️ <strong style="color:#92400E;">${allergenMain.join(', ')}${allergenDressing.length?' · Dressing: '+allergenDressing.join(', '):''}</strong></div>`:'<div style="font-size:11px;color:var(--muted);">✅ Keine Allergene</div>'}
+              </div>
+              ${hasZutaten?`<span style="color:var(--muted);font-size:14px;">▾</span>`:''}
             </div>
-          `).join('')}
-          ${!dishes.length?`<span style="font-size:12px;color:var(--muted);">–</span>`:''}
-        </div>
-      </div>`;
+            ${hasZutaten?`<div id="${detailId}" style="display:none;padding:4px 14px 12px;border-top:0.5px solid var(--border);">
+              <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:5px;">🧂 ZUTATEN</div>
+              <div style="font-size:12px;color:var(--sub);line-height:1.8;">${zutaten.split(',').map(z=>z.trim()).filter(Boolean).map(z=>{
+                const up=z.toUpperCase();
+                const isA=/(SESAM|KÄSE|JOGHURT|BUTTER|TEIGBLÄTTER|SOJA|TOFU|SELLERIE|SELLIERE|SENF|WEIZEN|MEHL)/.test(up);
+                return isA?`<strong style="color:#92400E;">${z}</strong>`:z;
+              }).join(' · ')}</div>
+            </div>`:''}
+          </div>`;
+        });
+      }
+      html+=`</div>`;
     });
   }else if(kitchenTab==='supply'){
     // BEILAGEN — Soll-Mengen aller Filialen für die ganze Woche, mit Gesamtsumme pro Artikel/Tag
@@ -3005,8 +3057,9 @@ async function renderMorgenKoch(el, tabHtml){
   let html = tabHtml;
   html += `<div style="background:var(--green);border-radius:14px;padding:14px 16px;margin-bottom:12px;">
     <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:2px;">Was muss ich morgen kochen?</div>
-    <div style="font-size:20px;font-weight:700;color:#fff;">${DAY_NAME[tomorrowWd]}, ${tomorrow.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
-    ${lastUpdateLabel?`<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:4px;">Zuletzt aktualisiert: ${lastUpdateLabel}</div>`:''}
+    <div style="font-size:22px;font-weight:700;color:#fff;">${DAY_NAME[tomorrowWd]}</div>
+    <div style="font-size:14px;color:rgba(255,255,255,0.85);margin-top:2px;">${tomorrow.toLocaleDateString('de-AT',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    ${lastUpdateLabel?`<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:6px;">Zuletzt aktualisiert: ${lastUpdateLabel}</div>`:''}
   </div>`;
 
   if(!dishNames.length || !['mo','di','mi','do','fr'].includes(tomorrowWd)){
@@ -3019,10 +3072,13 @@ async function renderMorgenKoch(el, tabHtml){
     const total = storeList.reduce((sum,s)=>sum+(storeData[s.id]?.qty||0),0);
     const hasData = total>0;
     html+=`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden;">
-      <div style="background:${hasData?'#0F6E56':'var(--border)'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:16px;font-weight:700;color:#fff;">${dish}</div>
+      <div style="background:${hasData?'var(--green)':'#E5E5E2'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:28px;">${getDishEmoji(dish)}</span>
+          <div style="font-size:16px;font-weight:700;color:#fff;">${dish}</div>
+        </div>
         <div style="text-align:right;">
-          <div style="font-size:28px;font-weight:700;color:#fff;line-height:1;">${total>0?formatQty(total):'–'}</div>
+          <div style="font-size:32px;font-weight:700;color:#fff;line-height:1;">${total>0?formatQty(total):'–'}</div>
           <div style="font-size:10px;color:rgba(255,255,255,0.7);">Behälter total</div>
         </div>
       </div>
@@ -3032,14 +3088,14 @@ async function renderMorgenKoch(el, tabHtml){
           const qty=rec?.qty;
           const changed=rec?.source==='manual';
           const col=STORE_COLORS[s.id]||'#888';
-          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border);">
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;">
               <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></div>
-              <span style="font-size:13px;" data-no-translate>${s.name.split(' ')[0]}</span>
+              <span style="font-size:13px;color:#1a1a18;" data-no-translate>${s.name.split(' ')[0]}</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
               ${changed?`<span style="font-size:10px;color:#185FA5;background:#E6F1FB;padding:1px 6px;border-radius:20px;">angepasst</span>`:''}
-              <span style="font-size:16px;font-weight:600;color:${qty?'var(--sub)':'var(--border)'};">${qty!=null?formatQty(qty):'–'}</span>
+              <span style="font-size:18px;font-weight:700;color:${qty?'#1a1a18':'var(--border)'};">${qty!=null?formatQty(qty):'–'}</span>
             </div>
           </div>`;
         }).join('')}
