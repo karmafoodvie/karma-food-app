@@ -545,6 +545,14 @@ async function renderHome(){
       dcStatus.reinCount=r?(r.reinigung_erledigt?1:0)+(r.desinfektion_erledigt?1:0):0;
       dcStatus.kuehl=(kuehlToday||[]).length>0;
       if(isWeekday) computeAndSaveScore(currentStore.id).catch(()=>{});
+    // Entsorgung heute Status
+    const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=id`).catch(()=>[]);
+    const disposalDone=(disposalToday||[]).length>0;
+    // Übergabe-Notiz von gestern laden
+    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+    const ydStr=yesterday.toISOString().split('T')[0];
+    const uebergabeGestern=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${ydStr}&select=notiz`).catch(()=>[]);
+    const uebergabeNotiz=uebergabeGestern?.[0]?.notiz||null;
     }catch(e){console.error(e);}
 
     if(isWeekday) gamificationHtml=await loadGamificationWidget(currentStore.id).catch(()=>'');
@@ -593,7 +601,7 @@ async function renderHome(){
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle'?`
 
     <!-- START BUTTON -->
-    <div onclick="goTo('dailycheck')" style="background:var(--green);border-radius:14px;padding:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:16px;">
+    <div onclick="goTo('dailycheck')" style="background:#E0521F;border-radius:14px;padding:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:16px;">
       <div>
         <div style="font-weight:600;color:#fff;font-size:16px;">☀️ Let's start the shift!</div>
         <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px;">Daily Check-up starten</div>
@@ -615,6 +623,10 @@ async function renderHome(){
 
     <!-- PHASE 2: WÄHREND DER SCHICHT -->
     <div class="section-lbl" style="margin-top:14px;">☕ Während der Schicht</div>
+    ${uebergabeNotiz?`<div style="background:#FFF7ED;border:1px solid #F97316;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12px;">
+      <div style="font-weight:500;color:#E0521F;margin-bottom:2px;">📋 Übergabe-Notiz von gestern</div>
+      <div style="color:var(--sub);">${uebergabeNotiz}</div>
+    </div>`:''}
     <div style="display:flex;gap:8px;margin-bottom:8px;">
       <div class="home-card" onclick="goTo('allergene')" style="flex:1;margin-bottom:0;">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
@@ -623,12 +635,12 @@ async function renderHome(){
         </div>
         <div style="font-size:11px;color:var(--muted);">Nachschlagen</div>
       </div>
-      <div class="home-card" onclick="goTo('disposal')" style="flex:1;margin-bottom:0;">
+      <div class="home-card" onclick="goTo('disposal')" style="flex:1;margin-bottom:0;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
-          <div class="hc-icon" style="width:28px;height:28px;"><svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></div>
+          <div class="hc-icon" style="width:28px;height:28px;"><svg width="14" height="14" viewBox="0 0 24 24" stroke="${disposalDone?'var(--green)':'var(--green)'}" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></div>
           <span style="font-weight:500;font-size:13px;">Entsorgung /<br>Food Waste</span>
         </div>
-        <div style="font-size:11px;color:var(--muted);">Restmengen</div>
+        <div style="font-size:11px;color:${disposalDone?'var(--green)':'var(--muted)'};">${disposalDone?'✓ erledigt':'Restmengen'}</div>
       </div>
     </div>
 
@@ -1835,13 +1847,19 @@ async function renderDailyCheck(){
     <div class="card" style="padding:14px;border:1.5px solid var(--green);overflow:visible;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Temperatur der heute gelieferten Speisen. Soll: über 65°C.</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Lieferant: <strong style="color:var(--sub);" data-no-translate>${FIXER_LIEFERANT}</strong></div>
-      <input id="wek-ware" type="text" placeholder="Angelieferte Ware (z.B. Curry, Bowl, Dal)" value="${wek?.ware||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;box-sizing:border-box;">
+      <div style="font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;">Angelieferte Waren — bitte antippen:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="wek-ware-chips">${
+        ['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'].map(w=>{
+          const sel=(wek?.ware||'').includes(w);
+          return `<div onclick="toggleWareChip(this,'${w}')" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
+        }).join('')
+      }</div>
       <div class="cl-item" style="padding:10px 0;" onclick="toggleWareOkUI()">
         <div class="check-box${wareOkDefault?' done':''}" id="wek-ware-ok-box" data-value="${wareOkDefault?'1':'0'}">${wareOkDefault?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Ware in Ordnung</span>
       </div>
       <div class="item-row" style="border-bottom:none;padding:8px 0 10px;">
-        <div class="item-name">Temperatur (Ware ist über 65°)</div>
+        <div class="item-name">🌡️ Temperatur eintragen (über 65° verpflichtend)</div>
         <input id="wek-temp" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${wek?.temperatur??''}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
       <div id="wek-massnahme-wrap" style="display:${(wek && wek.temperatur<65)?'block':'none'};margin-bottom:8px;">
@@ -1867,17 +1885,30 @@ async function renderDailyCheck(){
     <div class="section-lbl" style="color:var(--green);">❄️ Kühleinrichtungen</div>
     <div class="card" style="border:1.5px solid var(--green);">
       <div class="item-row">
-        <div class="item-name">Kleiner Kühlschrank (Soll: 6°C)</div>
-        <input id="kuehl-klein" type="number" step="0.1" value="${kuehl?.temp_klein??''}" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+        <div class="item-name">🧊 Kleiner Kühlschrank <span title="Speisen: 4–6°C · Getränke: 7–10°C" style="cursor:help;font-size:11px;color:var(--muted);margin-left:4px;">ℹ️</span></div>
+        <input id="kuehl-klein" type="number" step="0.1" value="${kuehl?.temp_klein??''}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
       <div class="item-row">
-        <div class="item-name">Großer Kühlschrank (Soll: 6°C)</div>
-        <input id="kuehl-gross" type="number" step="0.1" value="${kuehl?.temp_gross??''}" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+        <div class="item-name">🧊 Großer Kühlschrank <span title="Speisen: 4–6°C · Getränke: 7–10°C" style="cursor:help;font-size:11px;color:var(--muted);margin-left:4px;">ℹ️</span></div>
+        <input id="kuehl-gross" type="number" step="0.1" value="${kuehl?.temp_gross??''}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
     </div>
     <button class="submit-btn" style="margin-top:8px;" onclick="saveKuehleinrichtungen()">Kühltemperaturen speichern ✔</button>
   `;
   translateEl(el);
+}
+
+function toggleWareChip(el, ware){
+  const selected=el.style.borderColor==='var(--green)'||el.style.borderColor==='rgb(15, 110, 86)';
+  el.style.borderColor=selected?'var(--border)':'var(--green)';
+  el.style.background=selected?'var(--card)':'var(--green-light)';
+  el.style.color=selected?'var(--sub)':'var(--green)';
+}
+function getSelectedWaren(){
+  const chips=document.querySelectorAll('#wek-ware-chips div');
+  const sel=[];
+  chips.forEach(c=>{if(c.style.color==='var(--green)'||c.style.color==='rgb(15, 110, 86)')sel.push(c.textContent.trim());});
+  return sel.join(', ');
 }
 
 function toggleWareOkUI(){
@@ -1901,7 +1932,7 @@ async function saveWareneingang(){
   const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
   if(temp<65 && !massnahme){ showToast('Bitte Maßnahme bei Abweichung angeben'); return; }
   const lieferant=FIXER_LIEFERANT;
-  const ware=document.getElementById('wek-ware').value.trim();
+  const ware=getSelectedWaren()||'';
   const wareOk=document.getElementById('wek-ware-ok-box').dataset.value==='1';
   const today=new Date().toISOString().split('T')[0];
   try{
@@ -2005,7 +2036,7 @@ async function renderSchichtende(){
   const today=new Date().toISOString().split('T')[0];
 
   // Alle Daten parallel laden
-  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday] = await Promise.all([
+  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, ordersToday, kcSubToday] = await Promise.all([
     api('checklist_templates?list_type=eq.abschluss&select=id').catch(()=>[]),
     api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`).catch(()=>[]),
     api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=id`).catch(()=>[]),
@@ -2013,17 +2044,26 @@ async function renderSchichtende(){
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=id`).catch(()=>[]),
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=id`).catch(()=>[]),
-    api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[])
+    api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
+    api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=article_id`).catch(()=>[]),
+    api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=id`).catch(()=>[])
   ]);
 
   const clDoneIds=new Set((clDoneToday||[]).map(x=>x.template_id));
   const clTotal=(clTemplates||[]).length;
   const clDoneCount=(clTemplates||[]).filter(t=>clDoneIds.has(t.id)).length;
+  const sweetsDone=(ordersToday||[]).some(o=>articles.find(a=>a.id===o.article_id&&a.category==='Sweets'));
+  const transporterDone=(ordersToday||[]).some(o=>articles.find(a=>a.id===o.article_id&&TRANSPORTER_CATS.includes(a.category)));
+  const kcDone=(kcSubToday||[]).length>0;
+
   const schritte=[
     {id:'abschluss', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten erledigt`, done:clDoneCount===clTotal && clTotal>0, link:'check'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal'},
-    {id:'wochensalat', label:'Wochensalat gemeldet', sub:'Rest + Bedarf morgen', done:(wochensalatToday||[]).length>0, link:'order'},
+    {id:'morgige', label:'Morgige Mengen anpassen', sub:'Forecast & Wochensalat für morgen', done:(wochensalatToday||[]).length>0, link:'order'},
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang, Reinigung & Kühlung', done:(wekToday||[]).length>0 && (reinToday||[])[0]?.reinigung_erledigt && (reinToday||[])[0]?.desinfektion_erledigt && (kuehlToday||[]).length>0, link:'dailycheck'},
+    {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets'},
+    {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter'},
+    {id:'kc', label:'KC ausgefüllt', sub:'IST-Bestände der Webshop-Produkte', done:kcDone, link:'order', orderTab:'kc'},
     {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null}
   ];
 
@@ -2031,18 +2071,19 @@ async function renderSchichtende(){
   const alreadySubmitted=(uebergabeToday||[]).length>0 && allDone;
 
   let html=backToHomeHtml();
-  html+=`<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Bitte alle 5 Schritte erledigen, bevor du die Schicht abschließt.</div>`;
+  html+=`<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Schritt für Schritt durch den Schichtabschluss.</div>`;
 
   schritte.forEach((s,i)=>{
     const check=s.done
       ? `<div style="width:26px;height:26px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="14" height="14" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg></div>`
       : `<div style="width:26px;height:26px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:600;color:var(--muted);">${i+1}</div>`;
-    const linkBtn=s.link && !s.done ? `<button onclick="goTo('${s.link}')" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">Jetzt erledigen →</button>` : '';
-    html+=`<div class="card" style="padding:12px;border:1.5px solid ${s.done?'var(--green)':'var(--border)'};${s.id==='uebergabe'&&!s.done?'border-color:#BA7517;':''}">
+    const linkFn=s.orderTab?`goToReminder('order','${s.orderTab}')`:s.link?`goTo('${s.link}')`:null;
+    const linkBtn=linkFn&&!s.done?`<button onclick="${linkFn}" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">Jetzt erledigen →</button>`:s.done?'<span style="font-size:11px;color:var(--green);font-weight:500;">✓ erledigt</span>':'';
+    html+=`<div class="card" style="padding:12px;border:1.5px solid ${s.done?'var(--green)':'var(--border)'};background:${s.done?'#F8FDF9':'var(--card)'};${s.id==='uebergabe'&&!s.done?'border-color:#BA7517;':''}margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:10px;">
         ${check}
         <div style="flex:1;">
-          <div style="font-weight:500;${s.done?'color:var(--green);':''}">${s.label}</div>
+          <div style="font-weight:500;${s.done?'color:var(--muted);':''}">${s.label}</div>
           <div style="font-size:12px;color:var(--muted);">${s.sub}</div>
         </div>
         ${linkBtn}
