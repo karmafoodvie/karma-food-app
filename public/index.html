@@ -677,7 +677,6 @@ async function renderHome(){
         <div style="font-size:11px;color:${disposalDone?'var(--green)':'var(--muted)'};">${disposalDone?'✓ erledigt':'Restmengen'}</div>
       </div>
     </div>
-    ${gamificationHtml||''}
 
     <!-- PHASE 3: NACH DER SCHICHT -->
     <div class="section-lbl" style="margin-top:14px;">🌙 Nach der Schicht</div>
@@ -2659,6 +2658,13 @@ async function renderDisposal(){
 
   el.innerHTML=html;
   translateEl(el);
+
+  // Gamification Widget laden und anhängen
+  const dayIdx2=(new Date().getDay()+6)%7;
+  if(dayIdx2<5){
+    const gWidget=await loadGamificationWidget(currentStore.id).catch(()=>'');
+    if(gWidget) el.insertAdjacentHTML('beforeend', gWidget);
+  }
 }
 function showContainerInfo(){
   const rows=[['1/3 Behälter','6 Portionen'],['1/2 Behälter','10 Portionen'],['3/4 Behälter','15 Portionen'],['1 Behälter','20 Portionen']];
