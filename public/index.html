@@ -527,6 +527,8 @@ async function renderHome(){
   let remindersHtml='';
   let dcStatus={wek:false,reinCount:0,kuehl:false};
   let gamificationHtml='';
+  let disposalDone=false;
+  let uebergabeNotiz=null;
   if(currentStore?.id!=='zentrale'){
     const todayDate=new Date().toISOString().split('T')[0];
     const dayIdx=(new Date().getDay()+6)%7; // Mon=0 ... Sun=6
@@ -547,12 +549,12 @@ async function renderHome(){
       if(isWeekday) computeAndSaveScore(currentStore.id).catch(()=>{});
     // Entsorgung heute Status
     const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=id`).catch(()=>[]);
-    const disposalDone=(disposalToday||[]).length>0;
+    disposalDone=(disposalToday||[]).length>0;
     // Übergabe-Notiz von gestern laden
     const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
     const ydStr=yesterday.toISOString().split('T')[0];
     const uebergabeGestern=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${ydStr}&select=notiz`).catch(()=>[]);
-    const uebergabeNotiz=uebergabeGestern?.[0]?.notiz||null;
+    uebergabeNotiz=uebergabeGestern?.[0]?.notiz||null;
     }catch(e){console.error(e);}
 
     if(isWeekday) gamificationHtml=await loadGamificationWidget(currentStore.id).catch(()=>'');
