@@ -2055,7 +2055,12 @@ async function renderPack(){
     html+=`<th style="color:${activeColor};">∑</th></tr></thead><tbody>`;
     items.forEach(a=>{
       const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]||0),0);
-      html+=`<tr><td><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>`;
+      const verfuegbar=a.verfuegbar!==false;
+      html+=`<tr><td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        ${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+        <span>${a.name}</span>
+        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="font-size:10px;padding:2px 7px;border:none;border-radius:20px;cursor:pointer;background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};font-weight:500;white-space:nowrap;">${verfuegbar?'✅':'❌ nicht lieferbar'}</button>
+      </div></td>`;
       storeList.forEach(s=>{const v=(allOrd[a.id]||{})[s.id]||0;html+=`<td style="color:${v?'#1a1a18':'var(--border)'};">${v||'·'}</td>`;});
       html+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
     });
@@ -2090,7 +2095,12 @@ async function renderKCOverview(el, tabHtml, storeList){
 
   kcItems.forEach(a=>{
     const soll=a.min_stock||0;
-    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td><td style="color:var(--muted);">${soll}</td>`;
+    const verfuegbar=a.verfuegbar!==false;
+    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      ${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+      <span>${a.name}</span>
+      <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="font-size:10px;padding:2px 7px;border:none;border-radius:20px;cursor:pointer;background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};font-weight:500;white-space:nowrap;">${verfuegbar?'✅':'❌ nicht lieferbar'}</button>
+    </div></td><td style="color:var(--muted);">${soll}</td>`;
     storeList.forEach(s=>{
       const rec=(istMap[a.id]||{})[s.id];
       const ist=rec?.ist_bestand;
@@ -2113,6 +2123,17 @@ async function renderKCOverview(el, tabHtml, storeList){
 }
 function switchPackTab(t){activePackTab=t;renderPack();}
 window.switchPackTab=switchPackTab;
+
+async function toggleArticleVerfuegbarPack(id, current){
+  let hinweis=null;
+  if(current){ hinweis=prompt('Hinweis für die Stores (optional)\nz.B. "wird erst Donnerstag geliefert"','')||''; }
+  try{
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current,verfuegbar_hinweis:current?hinweis:null})});
+    articles=await api('articles?select=*&order=sort_order');
+    renderPack();
+    showToast(current?'❌ Als nicht lieferbar markiert':'✅ Wieder lieferbar');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
 
 
 // ---- MSG (Bestellstatus + Nachricht) ----
