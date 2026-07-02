@@ -1618,18 +1618,26 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
     }).join(' · ');
   }
 
-  function renderDishCard(name, zutaten, allergeneStr, isToday=false){
-    const codes = allergeneStr
-      ? [...new Set(allergeneStr.replace(/ALLERGENE[:\s]*/gi,'').split(/[,\s\-·]+/).map(c=>c.trim().toUpperCase()).filter(c=>c&&c.length<=2&&/^[A-R]$/.test(c)))]
-      : [];
+  function renderDishCard(name, zutaten, allergene, isToday=false){
+    // allergene can be {main:[], dressing:[]} or a plain string (from Supabase)
+    let mainCodes=[], dressingCodes=[];
+    if(typeof allergene==='object' && allergene!==null){
+      mainCodes=allergene.main||[];
+      dressingCodes=allergene.dressing||[];
+    } else if(typeof allergene==='string'){
+      // parse string: "A,G,L,C" or from Supabase array stored as string
+      mainCodes=allergene.split(/[,\s\-]+/).map(c=>c.trim().toUpperCase()).filter(c=>c&&/^[A-R]$/.test(c));
+    }
     const sections = parseZutatenSections(zutaten);
+    const hasAllergene = mainCodes.length>0 || dressingCodes.length>0;
     return `<div class="card" style="padding:14px;margin-bottom:10px;${isToday?'border-left:3px solid var(--green);':''}" data-gericht="${name.toLowerCase()}">
       <div style="font-size:15px;font-weight:700;margin-bottom:10px;">${name}</div>
-      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
-        <span style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;flex-shrink:0;">⚠️ ALLERGENE</span>
-        ${codes.length
-          ? `<span style="font-size:14px;font-weight:700;color:#92400E;letter-spacing:.08em;">${codes.join(', ')}</span>`
-          : `<span style="font-size:12px;color:var(--muted);">keine</span>`}
+      <div style="margin-bottom:10px;">
+        <span style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;">⚠️ ALLERGENE&nbsp;&nbsp;</span>
+        ${hasAllergene
+          ? `<strong style="font-size:14px;color:#92400E;letter-spacing:.06em;">${mainCodes.join(', ')}${dressingCodes.length?`<span style="font-size:11px;font-weight:400;color:#78350F;margin-left:8px;">· Dressing: <strong>${dressingCodes.join(', ')}</strong></span>`:''}
+</strong>`
+          : `<span style="font-size:12px;color:var(--muted);">–</span>`}
       </div>
       ${sections.length?`<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">🧂 ZUTATEN</div>
       ${sections.map(sec=>`
@@ -1645,8 +1653,17 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
       html+=`<div style="font-size:11px;font-weight:700;color:var(--green);letter-spacing:.05em;margin-bottom:8px;">📋 HEUTE</div>`;
       validDishes.forEach(dish=>{
         const override=(allergeneCache||[]).find(e=>e.gericht===dish.name);
-        const zutaten = override?.zutaten || dish.zutaten || '';
-        const allergene = override?.allergene_codes?.join(',') || dish.allergene || '';
+        // Zutaten: Supabase override takes priority if filled
+        const zutaten = (override?.zutaten?.trim()) || dish.zutaten || '';
+        // Allergene: SOMMER_MENU is the source of truth (has main+dressing)
+        // Only use Supabase codes if they're actually set AND non-empty
+        let allergene = dish.allergene || {main:[],dressing:[]};
+        if(override?.allergene_codes?.length){
+          allergene = {
+            main: override.allergene_codes,
+            dressing: dish.allergene?.dressing || []
+          };
+        }
         html += renderDishCard(dish.name, zutaten, allergene, true);
       });
     }
@@ -1655,7 +1672,10 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
   if((list||[]).length){
     if(todayMenu.length) html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin:14px 0 8px;">📂 ALLE GERICHTE</div>`;
     list.forEach(entry=>{
-      html+=renderDishCard(entry.gericht, entry.zutaten||'', (entry.allergene_codes||[]).join(','));
+      // Supabase stores codes as array, wrap in {main, dressing} structure
+      const codes = entry.allergene_codes||[];
+      const dressing = entry.dressing_allergene_codes||[];
+      html+=renderDishCard(entry.gericht, entry.zutaten||'', {main:codes, dressing});
     });
   } else if(!todayMenu.length){
     html='<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Gerichte angelegt.</div>';
