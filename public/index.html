@@ -359,6 +359,12 @@ async function checkPin(){
     else document.getElementById('pin-error').style.display='block';
   } catch { document.getElementById('pin-error').style.display='block'; }
 }
+window.addEventListener('popstate',(e)=>{
+  if(!currentStore) return; // not logged in, let browser handle it
+  const v=e.state?.view||'home';
+  goTo(v, true);
+});
+
 document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('pin-input').addEventListener('keydown',e=>{ if(e.key==='Enter') checkPin(); });
 });
@@ -401,8 +407,9 @@ async function loadAll(){
 }
 
 // ---- NAV ----
-function goTo(v){
+function goTo(v, noPush=false){
   currentView=v;
+  if(!noPush) history.pushState({view:v, storeId:currentStore?.id}, '', location.pathname);
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('show'));
   document.getElementById('v-'+v).classList.add('show');
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
@@ -643,13 +650,13 @@ async function renderHome(){
       </div>
     </div>
 
-    <!-- WISSENSDATENBANK BUTTON -->
+    <!-- MARKTAMTKONTROLLE BUTTON -->
     <div onclick="renderKontrolleOverlay()" style="border:0.5px solid var(--border);border-radius:14px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:10px;">
         <span style="font-size:20px;">📚</span>
         <div>
-          <div style="font-weight:500;font-size:14px;">Wissensdatenbank</div>
-          <div style="font-size:11px;color:var(--muted);">Marktamtkontrolle · Allergene · HACCP</div>
+          <div style="font-weight:500;font-size:14px;">Marktamtkontrolle</div>
+          <div style="font-size:11px;color:var(--muted);">Allergene · HACCP · Schulungen</div>
         </div>
       </div>
       <span style="color:var(--muted);font-size:18px;">→</span>
@@ -659,8 +666,6 @@ async function renderHome(){
     ${gamificationHtml||''}
     `:''}
     ${currentStore?.id!=='zentrale' && homeMode==='kontrolle'?`
-    <div style="font-size:16px;font-weight:600;padding:4px 0 4px;">Guten Tag 👋</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${today}</div>
     <div onclick="setHomeMode('alltag')" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--green);margin-bottom:12px;cursor:pointer;">← Zurück zum Tagesablauf</div>
     <div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);">
       <div style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:4px;">🛡️ Kontrollbesuch? Kein Stress.</div>
