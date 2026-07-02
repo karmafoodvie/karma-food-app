@@ -200,6 +200,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="toast" id="toast"></div>
 
+<script src="/menu_sommer.js"></script>
 <script>
 const SUPABASE_URL = 'https://fkliyqjxnttzyuzogrng.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Eu6-MQxkfyaxii2vpCR-IQ_uqS90NRf';
@@ -436,7 +437,27 @@ function goToReminder(tab, orderTab){
 window.goToReminder=goToReminder;
 
 // ---- HOME ----
-// ---- GAMIFICATION / SCORING ----
+// ---- SOMMER MENÜ ----
+// Aktuell laufende Woche manuell setzen (1-4). Organisation kann das in Supabase oder hier anpassen.
+let CURRENT_SOMMER_WOCHE = 1; // Heute ist Woche 1 Donnerstag
+
+const WEEKDAY_MENU_KEY = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'};
+
+function getTodayMenu(){
+  const wd = new Date().getDay(); // 0=So, 1=Mo...
+  const dayKey = WEEKDAY_MENU_KEY[wd];
+  if(!dayKey) return null; // Wochenende
+  const key = `w${CURRENT_SOMMER_WOCHE}_${dayKey}`;
+  return (typeof SOMMER_MENU !== 'undefined' && SOMMER_MENU[key]) ? SOMMER_MENU[key] : null;
+}
+
+function getTodayDishNames(){
+  const menu = getTodayMenu();
+  if(!menu) return [];
+  return menu.map(d=>d.name).filter(Boolean);
+}
+
+
 async function computeAndSaveScore(storeId){
   const today=new Date().toISOString().split('T')[0];
   try{
@@ -630,6 +651,16 @@ async function renderHome(){
       <div style="font-weight:500;color:#E0521F;margin-bottom:2px;">📋 Übergabe-Notiz von gestern</div>
       <div style="color:var(--sub);">${uebergabeNotiz}</div>
     </div>`:''}
+    ${(()=>{
+      const todayDishes=getTodayDishNames();
+      if(!todayDishes.length) return '';
+      return `<div class="card" style="padding:10px 12px;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px;">📋 HEUTIGES MENÜ</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          ${todayDishes.map(d=>`<div style="background:var(--green-light);color:var(--green);border-radius:20px;padding:4px 10px;font-size:12px;font-weight:500;">${d}</div>`).join('')}
+        </div>
+      </div>`;
+    })()}
     <div style="display:flex;gap:8px;margin-bottom:8px;">
       <div class="home-card" onclick="goTo('allergene')" style="flex:1;margin-bottom:0;">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
@@ -1852,12 +1883,14 @@ async function renderDailyCheck(){
     <div class="card" style="padding:14px;border:1.5px solid var(--green);overflow:visible;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Lieferant: <strong style="color:var(--sub);" data-no-translate>${FIXER_LIEFERANT}</strong></div>
       <div style="font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;">Angelieferte Waren — bitte antippen:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="wek-ware-chips">${
-        ['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'].map(w=>{
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="wek-ware-chips">${(()=>{
+        const menuDishes=getTodayDishNames();
+        const chips=menuDishes.length>0?menuDishes:['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'];
+        return chips.map(w=>{
           const sel=(wek?.ware||'').includes(w);
-          return `<div onclick="toggleWareChip(this,'${w}')" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
-        }).join('')
-      }</div>
+          return `<div onclick="toggleWareChip(this,'${w.replace(/'/g,"\\'")}')" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
+        }).join('');
+      })()}</div>
       <div class="cl-item" style="padding:10px 0;" onclick="toggleWareOkUI()">
         <div class="check-box${wareOkDefault?' done':''}" id="wek-ware-ok-box" data-value="${wareOkDefault?'1':'0'}">${wareOkDefault?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Ware in Ordnung</span>
