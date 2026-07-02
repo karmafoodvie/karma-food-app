@@ -2699,7 +2699,7 @@ window.updateLeftover=updateLeftover;
 // ---- KÜCHE (Wochenplan + Entsorgung) ----
 const WEEKDAYS=[{k:'mo',l:'Montag'},{k:'di',l:'Dienstag'},{k:'mi',l:'Mittwoch'},{k:'do',l:'Donnerstag'},{k:'fr',l:'Freitag'}];
 const MENU_SLOTS=[{k:'salat',l:'Salat'},{k:'gericht1',l:'Gericht 1'},{k:'gericht2',l:'Gericht 2'},{k:'gericht3',l:'Gericht 3'},{k:'reis',l:'Reis'}];
-let kitchenTab='plan';
+let kitchenTab='morgen';
 let weekOffset=0; // 0 = aktuelle Woche, -1 = letzte Woche, etc.
 function getWeekDates(offset){
   const now=new Date();
@@ -2717,7 +2717,12 @@ function getWeekDates(offset){
 function isoDate(d){return d.toISOString().split('T')[0];}
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
-  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='menu'?' active':''}" onclick="switchKitchenTab('menu')">📋 Wochenmenü</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">Wochenplan</button><button class="cl-tab${kitchenTab==='disposal'?' active':''}" onclick="switchKitchenTab('disposal')">Heute</button><button class="cl-tab${kitchenTab==='history'?' active':''}" onclick="switchKitchenTab('history')">Entsorgungsliste</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">Beilagen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">Forecast</button></div>`;
+  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='menu'?' active':''}" onclick="switchKitchenTab('menu')">📋 Wochenmenü</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">Wochenplan</button><button class="cl-tab${kitchenTab==='disposal'?' active':''}" onclick="switchKitchenTab('disposal')">Heute</button><button class="cl-tab${kitchenTab==='history'?' active':''}" onclick="switchKitchenTab('history')">Entsorgungsliste</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">Beilagen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">Forecast</button></div>`;
+
+  if(kitchenTab==='morgen'){
+    await renderMorgenKoch(el, html);
+    return;
+  }
 
   if(kitchenTab==='menu'){
     await renderMenuWoche(el, html);
@@ -2994,6 +2999,83 @@ function formatZutatenFuerKoch(zutaten, allergene){
 }
 
 let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
+
+async function renderMorgenKoch(el, tabHtml){
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const tomorrowWd = (['so','mo','di','mi','do','fr','sa'])[tomorrow.getDay()];
+  const DAY_NAME = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag',sa:'Samstag',so:'Sonntag'};
+
+  const stores = await api('stores?select=id,name&order=id');
+  const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
+
+  const forecasts = await api(`forecast_qty?forecast_date=eq.${tomorrowStr}&select=store_id,dish_name,qty,source,changed_at`).catch(()=>[]);
+  const fMap = {};
+  (forecasts||[]).forEach(f=>{
+    if(!fMap[f.dish_name]) fMap[f.dish_name]={};
+    fMap[f.dish_name][f.store_id]=f;
+  });
+
+  // Get tomorrow's menu dishes from SOMMER_MENU
+  const menuDishes = (typeof SOMMER_MENU!=='undefined'&&SOMMER_MENU[`w${CURRENT_SOMMER_WOCHE}_${tomorrowWd}`])||[];
+  const dishNames = menuDishes.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
+
+  // Last update time
+  const lastUpdate = forecasts.length ? forecasts.reduce((a,b)=>(!a||b.changed_at>a)?b.changed_at:a, null) : null;
+  const lastUpdateLabel = lastUpdate ? new Date(lastUpdate).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
+
+  let html = tabHtml;
+  html += `<div style="background:var(--green);border-radius:14px;padding:14px 16px;margin-bottom:12px;">
+    <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:2px;">Was muss ich morgen kochen?</div>
+    <div style="font-size:20px;font-weight:700;color:#fff;">${DAY_NAME[tomorrowWd]}, ${tomorrow.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
+    ${lastUpdateLabel?`<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:4px;">Zuletzt aktualisiert: ${lastUpdateLabel}</div>`:''}
+  </div>`;
+
+  if(!dishNames.length || !['mo','di','mi','do','fr'].includes(tomorrowWd)){
+    html+=`<div style="text-align:center;padding:2rem;color:var(--muted);">Kein Menü für morgen eingetragen.</div>`;
+    el.innerHTML=html; return;
+  }
+
+  dishNames.forEach(dish=>{
+    const storeData = fMap[dish]||{};
+    const total = storeList.reduce((sum,s)=>sum+(storeData[s.id]?.qty||0),0);
+    const hasData = total>0;
+    html+=`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden;">
+      <div style="background:${hasData?'#0F6E56':'var(--border)'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:16px;font-weight:700;color:#fff;">${dish}</div>
+        <div style="text-align:right;">
+          <div style="font-size:28px;font-weight:700;color:#fff;line-height:1;">${total>0?formatQty(total):'–'}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.7);">Behälter total</div>
+        </div>
+      </div>
+      <div style="padding:10px 14px;">
+        ${storeList.map(s=>{
+          const rec=storeData[s.id];
+          const qty=rec?.qty;
+          const changed=rec?.source==='manual';
+          const col=STORE_COLORS[s.id]||'#888';
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></div>
+              <span style="font-size:13px;" data-no-translate>${s.name.split(' ')[0]}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              ${changed?`<span style="font-size:10px;color:#185FA5;background:#E6F1FB;padding:1px 6px;border-radius:20px;">angepasst</span>`:''}
+              <span style="font-size:16px;font-weight:600;color:${qty?'var(--sub)':'var(--border)'};">${qty!=null?formatQty(qty):'–'}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+
+  html+=`<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 4px 16px;">Wenn ein Store die Menge ändert, wird diese Seite automatisch aktualisiert.</div>`;
+  html+=`<button onclick="renderKitchen()" style="width:100%;padding:10px;background:var(--green-light);color:var(--green);border:none;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;">🔄 Aktualisieren</button>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
 
 async function renderMenuWoche(el, tabHtml){
   let html = tabHtml;
