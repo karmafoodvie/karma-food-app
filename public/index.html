@@ -2717,7 +2717,7 @@ function getWeekDates(offset){
 function isoDate(d){return d.toISOString().split('T')[0];}
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
-  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='menu'?' active':''}" onclick="switchKitchenTab('menu')">📋 Wochenmenü</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">Wochenplan</button><button class="cl-tab${kitchenTab==='disposal'?' active':''}" onclick="switchKitchenTab('disposal')">Heute</button><button class="cl-tab${kitchenTab==='history'?' active':''}" onclick="switchKitchenTab('history')">Entsorgungsliste</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">Beilagen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">Forecast</button></div>`;
+  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='menu'?' active':''}" onclick="switchKitchenTab('menu')">🍽️ Diese Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -2730,57 +2730,34 @@ async function renderKitchen(){
   }
 
   if(kitchenTab==='plan'){
-    const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
-    const menuMap={};
-    (menu||[]).forEach(m=>{if(!menuMap[m.weekday])menuMap[m.weekday]={};menuMap[m.weekday][m.slot]=m.dish_name;});
+    const woche = CURRENT_SOMMER_WOCHE;
+    const DAYS_ORDER = ['mo','di','mi','do','fr'];
+    const DAYS_DE = {mo:'Mo',di:'Di',mi:'Mi',do:'Do',fr:'Fr'};
+    const DAYS_FULL = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
+    const todayWd = (['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
+    const SLOT_COLORS = {salat:'#15803D',gericht2:'#0F6E56',gericht3:'#185FA5'};
+    const SLOT_EMOJI = {salat:'🥗',gericht2:'🍲',gericht3:'🥘'};
 
-    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Gerichtsnamen pro Tag festlegen — gilt für die ganze Woche, bis geändert.</div>`;
-    WEEKDAYS.forEach(d=>{
-      html+=`<div class="section-lbl">${d.l}</div><div class="card">`;
-      MENU_SLOTS.forEach(s=>{
-        const val=(menuMap[d.k]||{})[s.k]||'';
-        html+=`<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);">
-          <span style="font-size:12px;color:var(--muted);width:70px;flex-shrink:0;">${s.l}</span>
-          <input type="text" value="${val}" onchange="updateMenu('${d.k}','${s.k}',this.value)" placeholder="Gerichtsname..." style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
-        </div>`;
-      });
-      html+='</div>';
+    html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} — Welches Gericht wird welchen Tag gekocht</div>`;
+
+    // Compact grid: one card per day
+    DAYS_ORDER.forEach(day=>{
+      const key=`w${woche}_${day}`;
+      const dishes=(typeof SOMMER_MENU!=='undefined'&&SOMMER_MENU[key])||[];
+      const isToday=day===todayWd;
+      html+=`<div style="border:${isToday?'2px solid var(--green)':'0.5px solid var(--border)'};border-radius:10px;margin-bottom:8px;overflow:hidden;">
+        <div style="background:${isToday?'var(--green)':'var(--border)'};padding:6px 12px;font-size:12px;font-weight:700;color:${isToday?'#fff':'var(--sub)'};">${DAYS_FULL[day]}${isToday?' 👈':''}</div>
+        <div style="padding:8px 12px;display:flex;flex-direction:column;gap:5px;">
+          ${dishes.filter(d=>d.name&&!d.name.startsWith('ÖL')).map(dish=>`
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:16px;">${SLOT_EMOJI[dish.slot]||'🍽️'}</span>
+              <span style="font-size:13px;font-weight:500;">${dish.name}</span>
+            </div>
+          `).join('')}
+          ${!dishes.length?`<span style="font-size:12px;color:var(--muted);">–</span>`:''}
+        </div>
+      </div>`;
     });
-  }else if(kitchenTab==='disposal'){
-    const stores=await api('stores?select=id,name&order=id');
-    const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
-    const today=new Date().toISOString().split('T')[0];
-    const todayWeekday=new Date().getDay();
-    const wdStr=WEEKDAY_STR[todayWeekday];
-    const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
-    const dayMenu=menu.filter(m=>m.weekday===wdStr && m.slot!=='salat');
-    const dishNames=[...new Set(dayMenu.map(m=>m.dish_name).filter(n=>n && n!=='Reis'))];
-    const reisEntry=dayMenu.find(m=>m.slot==='reis');
-    const allDishes=['Salat', ...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
-    const forecastToday=await api(`forecast_qty?forecast_date=eq.${today}&select=store_id,dish_name,qty,source`).catch(()=>[]);
-    const fMap={};
-    (forecastToday||[]).forEach(f=>{ if(!fMap[f.store_id])fMap[f.store_id]={}; fMap[f.store_id][f.dish_name]=f; });
-
-    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})} — geplante Menge in Behältern, die heute an die Filialen geschickt wird</div>`;
-    if(!wdStr){
-      html+=`<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:13px;">Am Wochenende gibt es keinen Speiseplan.</div>`;
-    }else{
-      html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
-        <th style="text-align:left;">Filiale</th>
-        ${allDishes.map(d=>`<th data-no-translate style="font-size:11px;">${d}</th>`).join('')}
-      </tr></thead><tbody>`;
-      storeList.forEach(st=>{
-        const cells=allDishes.map(dish=>{
-          const rec=(fMap[st.id]||{})[dish];
-          if(!rec) return '<td style="color:var(--border);">·</td>';
-          const manual=rec.source==='manual';
-          return `<td style="font-weight:${manual?'700':'400'};color:${manual?'#0369A1':'#1a1a18'};font-size:12px;">${formatQty(rec.qty)}${manual?'*':''}</td>`;
-        }).join('');
-        html+=`<tr><td data-no-translate style="color:${STORE_COLORS[st.id]||'#888'};font-size:12px;">${st.name.split(' ')[0]}</td>${cells}</tr>`;
-      });
-      html+='</tbody></table></div></div>';
-      html+=`<div style="font-size:10px;color:var(--muted);padding:2px 4px 8px;">* von Filiale angepasst</div>`;
-    }
   }else if(kitchenTab==='supply'){
     // BEILAGEN — Soll-Mengen aller Filialen für die ganze Woche, mit Gesamtsumme pro Artikel/Tag
     const stores=await api('stores?select=id,name&order=id');
@@ -3078,43 +3055,52 @@ async function renderMorgenKoch(el, tabHtml){
 }
 
 async function renderMenuWoche(el, tabHtml){
-  let html = tabHtml;
   const woche = CURRENT_SOMMER_WOCHE;
-  const DAYS_DE = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
   const DAYS_ORDER = ['mo','di','mi','do','fr'];
-  const SLOT_LABEL = {salat:'🥗 Salat/Bowl',gericht2:'🥘 Gericht 2',gericht3:'🍲 Gericht 3'};
+  const DAYS_DE = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
+  const SLOT_EMOJI = {salat:'🥗',gericht2:'🍲',gericht3:'🥘'};
+  const todayWd = (['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
 
-  // Load overrides from allergene_rezepturen
   const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
   const overrideMap = {};
-  (overrides||[]).forEach(e=>{ overrideMap[e.gericht] = e; });
+  (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
-  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Woche ${woche} — Sommer-Menü. Zutaten/Allergene bearbeiten und speichern, damit alle Stores die aktuellen Infos sehen.</div>`;
+  let html = tabHtml;
+  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} · Sommer-Menü — alle Gerichte mit Zutaten</div>`;
 
   DAYS_ORDER.forEach(day=>{
     const key = `w${woche}_${day}`;
-    const dishes = SOMMER_MENU[key]||[];
+    const dishes = (typeof SOMMER_MENU!=='undefined'&&SOMMER_MENU[key])||[];
     if(!dishes.length) return;
-    html += `<div class="section-lbl" style="margin-top:14px;">${DAYS_DE[day]}</div>`;
-    dishes.forEach(dish=>{
-      if(!dish.name||dish.name.startsWith('ÖL')) return;
+    const isToday = day===todayWd;
+    html += `<div style="font-size:12px;font-weight:700;color:${isToday?'var(--green)':'var(--sub)'};letter-spacing:.04em;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid ${isToday?'var(--green)':'var(--border)'};">${DAYS_DE[day]}${isToday?' 👈 HEUTE':''}</div>`;
+    dishes.filter(d=>d.name&&!d.name.startsWith('ÖL')).forEach(dish=>{
       const override = overrideMap[dish.name];
-      const zutaten = override?.zutaten || dish.zutaten || '';
-      const allergene = override?.allergene_codes?.join(',') || dish.allergene || '';
-      const editKey = `${key}_${dish.slot}`;
-      html += `<div class="card" style="padding:12px;margin-bottom:8px;">
-        <div style="font-weight:600;font-size:14px;color:var(--sub);margin-bottom:8px;">${SLOT_LABEL[dish.slot]||dish.slot} — ${dish.name}</div>
-        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;">ALLERGENE (Codes, kommagetrennt)</div>
-        <input id="all-${editKey}" value="${allergene}" placeholder="z.B. A,G,L" style="width:100%;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;box-sizing:border-box;font-family:inherit;">
-        <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;">ZUTATEN</div>
-        <textarea id="zut-${editKey}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;min-height:70px;resize:vertical;box-sizing:border-box;font-family:inherit;">${zutaten}</textarea>
-        <button onclick="saveMenuDish('${dish.name}','${editKey}')" style="margin-top:8px;background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:500;cursor:pointer;">💾 Speichern</button>
-        ${override?`<span style="font-size:10px;color:var(--green);margin-left:8px;">✓ angepasst am ${new Date(override.aktualisiert_am).toLocaleDateString('de-AT')}</span>`:''}
+      const zutaten = (override?.zutaten||dish.zutaten||'').replace(/\n/g,' ').trim();
+      const allergene = override?.allergene_codes||[];
+      const allergenStr = dish.allergene?.main?.length ? dish.allergene.main.join(', ') : (allergene.join(', ')||'');
+      const dressingStr = dish.allergene?.dressing?.length ? dish.allergene.dressing.join(', ') : '';
+      html += `<div style="border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;">
+        <div style="background:var(--green-light);padding:10px 14px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">${SLOT_EMOJI[dish.slot]||'🍽️'}</span>
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--green);">${dish.name}</div>
+            ${allergenStr?`<div style="font-size:11px;margin-top:2px;">⚠️ <strong style="color:#92400E;">${allergenStr}</strong>${dressingStr?` · Dressing: <strong style="color:#92400E;">${dressingStr}</strong>`:''}</div>`:'<div style="font-size:11px;color:var(--muted);">✅ Keine Allergene</div>'}
+          </div>
+        </div>
+        ${zutaten?`<div style="padding:8px 14px;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:4px;">🧂 ZUTATEN</div>
+          <div style="font-size:12px;color:var(--sub);line-height:1.6;">${zutaten.split(',').map(z=>z.trim()).filter(Boolean).map(z=>{
+            const up=z.toUpperCase();
+            const isAllergen=/(SESAM|KÄSE|JOGHURT|BUTTER|TEIGBLÄTTER|SOJA|TOFU|SELLERIE|SELLIERE|SENF|WEIZEN|MEHL)/.test(up);
+            return isAllergen?`<strong style="color:#92400E;">${z}</strong>`:z;
+          }).join(' · ')}</div>
+        </div>`:''}
       </div>`;
     });
   });
 
-  el.innerHTML = html;
+  el.innerHTML=html;
   translateEl(el);
 }
 
