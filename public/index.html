@@ -490,6 +490,46 @@ function getTodayDishNames(){
 }
 
 
+const GEMUESE_KEYWORDS = ['ZWIEBEL','TOMATEN','TOMATENPASSATA','PAPRIKA','ZUCCHINI','KAROTTEN','KAROTTE','BROKKOLI','SPINAT','MELANZANI','ERDÄPFEL','KARTOFFELN','KÜRBIS','FENCHEL','SELLERIE','LAUCH','KNOBLAUCH','MAIS','ERBSEN','BOHNEN','KOHL','WEISSKRAUT','ROTKRAUT','KICHERERBSEN','SÜSSKARTOFFELN','SÜSSKARTOFFEL','WEISSER RETTICH','KIDNEYBOHNEN','CHAMPIGNONS','PILZE','AUBERGINE','KOHLRABI','MANGOLD','CHINAKOHL','PORREE','BRECHBOHNEN','OKRA','CURRY BLÄTTER'];
+
+function splitZutaten(text){
+  if(!text) return {gemuese:[], rest:[]};
+  const items = text.split(',').map(s=>s.trim()).filter(Boolean);
+  const gemuese=[], rest=[];
+  items.forEach(item=>{
+    const up=item.toUpperCase();
+    if(GEMUESE_KEYWORDS.some(kw=>up.includes(kw))) gemuese.push(item);
+    else rest.push(item);
+  });
+  return {gemuese, rest};
+}
+
+function isVegan(allergenMain){
+  // Vegan = no Milch (G) and no Eier (C) and no Fisch (D) and no Krebstiere (B)
+  if(!allergenMain||!allergenMain.length) return true;
+  return !allergenMain.some(c=>['G','C','D','B','R'].includes(c.toUpperCase()));
+}
+
+function isGlutenfrei(allergenMain){
+  if(!allergenMain||!allergenMain.length) return true;
+  return !allergenMain.some(c=>c.toUpperCase()==='A');
+}
+
+async function saveGemuese(dishName, newGemuese){
+  try{
+    const existing=(await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}&select=*`).catch(()=>[]))[0];
+    const currentZutaten=existing?.zutaten||'';
+    const {rest}=splitZutaten(currentZutaten);
+    const merged=[...newGemuese.split(',').map(s=>s.trim()).filter(Boolean),...rest].join(', ');
+    if(existing){
+      await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}`,{method:'PATCH',body:JSON.stringify({zutaten:merged})});
+    } else {
+      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten:merged,allergene_codes:[]}])});
+    }
+    showToast(`✔ Gemüse für ${dishName} gespeichert`);
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+
 function getDishEmoji(name){
   if(!name) return '🍽️';
   const n=name.toUpperCase();
@@ -2075,45 +2115,37 @@ async function saveDailyCheckAll(){
 
 async function renderWaehrend(){
   const el=document.getElementById('v-waehrend');
-  const today=new Date().toISOString().split('T')[0];
-  const menu=await api(`weekly_menu?select=weekday,slot,dish_name`).catch(()=>[]);
   const todayWd=(['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
-  const todayDishes=(menu||[]).filter(m=>m.weekday===todayWd).map(m=>m.dish_name).filter(Boolean);
+  const todayDishes=getTodayDishNames();
 
   let html=backToHomeHtml();
-  html+=`<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Heute im Menü und Food Waste für heute eintragen.</div>`;
+  html+=`<div style="background:var(--green-light);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+    <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:4px;">☕ Daily Check-up erledigt!</div>
+    <div style="font-size:12px;color:var(--sub);">Hier sind die heutigen Gerichte — bei Fragen zu Zutaten oder Allergenen einfach nachschlagen.</div>
+  </div>`;
 
-  // Heutige Gerichte
   if(todayDishes.length){
-    html+=`<div class="section-lbl">☕ Heutige Gerichte</div>
-    <div class="card" style="padding:12px;">
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">`;
-    todayDishes.forEach(d=>{ html+=`<div style="background:var(--green-light);color:var(--green);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:500;">${d}</div>`; });
-    html+=`</div>
-      <div style="margin-top:10px;"><button onclick="goTo('allergene')" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;color:var(--green);">📋 Zutaten & Allergene nachschlagen →</button></div>
-    </div>`;
+    html+=`<div class="section-lbl">🍽️ Heutiges Menü</div>`;
+    todayDishes.forEach(d=>{
+      html+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--border);border-radius:10px;margin-bottom:6px;background:var(--card);">
+        <span style="font-size:22px;">${getDishEmoji(d)}</span>
+        <span style="font-size:14px;font-weight:500;color:#1a1a18;">${d}</span>
+      </div>`;
+    });
   }
 
-  html+=`<div class="section-lbl" style="margin-top:12px;">🗑️ Entsorgung / Food Waste</div>`;
-  // Inline-Disposal-Form
-  const dispToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=*`).catch(()=>[]);
-  const dispMap={};
-  (dispToday||[]).forEach(d=>{dispMap[d.slot]=d;});
-  const SLOTS=[{k:'salat',l:'Salat'},{k:'gericht1',l:'Gericht 1'},{k:'gericht2',l:'Gericht 2'},{k:'gericht3',l:'Gericht 3'},{k:'reis',l:'Reis'}];
-  html+=`<div class="card" style="padding:12px;">`;
-  SLOTS.forEach(s=>{
-    const rec=dispMap[s.k];
-    html+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);">
-      <span style="font-size:12px;flex:1;font-weight:500;">${s.l}</span>
-      <input type="time" id="disp-time-${s.k}" value="${rec?.sold_out_time?.slice(0,5)||''}" style="width:80px;border:1px solid var(--border);border-radius:6px;font-size:12px;padding:4px;">
-      <input type="number" id="disp-qty-${s.k}" placeholder="Rest" step="0.5" value="${rec?.leftover_qty??''}" style="width:60px;text-align:center;border:1px solid var(--border);border-radius:6px;font-size:12px;padding:4px;">
-    </div>`;
-  });
-  html+=`<div style="font-size:10px;color:var(--muted);margin-top:6px;">Zeit = ausverkauft um · Rest = übrig gebliebene Menge</div></div>`;
+  html+=`<div style="margin-top:12px;">
+    <button onclick="goTo('allergene')" style="width:100%;background:var(--card);border:0.5px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:13px;font-weight:500;color:var(--green);">
+      <span>📋 Zutaten & Allergene nachschlagen</span><span>→</span>
+    </button>
+  </div>
 
-  html+=`<button class="submit-btn" style="margin-top:16px;font-size:15px;padding:14px;" onclick="saveWaehrendAndNext()">
-    Entsorgung speichern & weiter 🌙 →
-  </button>`;
+  <div style="margin-top:8px;">
+    <button onclick="goTo('home')" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:12px 14px;font-size:14px;font-weight:600;cursor:pointer;">
+      ✓ Zur Startseite — guten Service! 🌟
+    </button>
+  </div>
+  <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;">Entsorgung bitte am Ende der Schicht eintragen</div>`;
 
   el.innerHTML=html;
   translateEl(el);
@@ -2646,12 +2678,16 @@ async function renderDisposal(){
     const rec=dispMap[s.k];
     const soldOut=rec?.sold_out_time ? rec.sold_out_time.slice(0,5) : '';
     html+=`<tr>
-      <td data-no-translate style="font-size:12px;">${dishName}<div style="font-size:10px;color:var(--muted);">${s.l}</div></td>
+      <td data-no-translate style="font-size:12px;">${getDishEmoji(dishName)} ${dishName}<div style="font-size:10px;color:var(--muted);">${s.l}</div></td>
       <td>
-        <input type="time" value="${soldOut}" onchange="updateSoldOutTime('${s.k}','${dishName}',this.value)" style="width:88px;padding:5px;border:1px solid ${soldOut?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;background:${soldOut?'#FEF2F2':'#fff'};color:${soldOut?'#991B1B':'#1a1a18'};">
+        <input type="time" value="${soldOut}"
+          onclick="if(!this.value){const n=new Date();this.value=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');updateSoldOutTime('${s.k}','${dishName}',this.value);}"
+          onchange="updateSoldOutTime('${s.k}','${dishName}',this.value)"
+          style="width:88px;padding:5px;border:1.5px solid ${soldOut?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;background:${soldOut?'#FEF2F2':'#fff'};color:${soldOut?'#991B1B':'#1a1a18'};">
+        ${soldOut?`<button onclick="clearSoldOutTime('${s.k}','${dishName}')" title="Zeit löschen" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;">✕</button>`:'<span style="font-size:10px;color:var(--muted);">antippen</span>'}
       </td>
       <td>
-        <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" onchange="updateLeftover('${s.k}','${dishName}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:center;">
+        <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" onchange="updateLeftover('${s.k}','${dishName}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center;">
       </td>
     </tr>`;
   });
@@ -2686,6 +2722,11 @@ function showContainerInfo(){
   document.body.appendChild(overlay);
 }
 window.showContainerInfo=showContainerInfo;
+async function clearSoldOutTime(slot, dishName){
+  await updateSoldOutTime(slot, dishName, null);
+  renderDisposal();
+}
+
 async function updateSoldOutTime(slot, dishName, value){
   const today=new Date().toISOString().split('T')[0];
   const v=value===''?null:value+':00';
@@ -2786,25 +2827,43 @@ async function renderKitchen(){
           const allergenMain = dish.allergene?.main||[];
           const allergenDressing = dish.allergene?.dressing||[];
           const hasZutaten = zutaten.length>0;
+          const vegan = isVegan(allergenMain);
+          const gf = isGlutenfrei(allergenMain);
+          const {gemuese, rest} = splitZutaten(zutaten);
           const detailId = `kp_${selectedWoche}_${day}_${i}`;
+          const gemueseId = `gem_${selectedWoche}_${day}_${i}`;
 
           html+=`<div style="${i>0?'border-top:0.5px solid var(--border);':''}">
             <div onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;">
-              <span style="font-size:20px;">${SLOT_EMOJI[dish.slot]||'🍽️'}</span>
+              <span style="font-size:20px;">${getDishEmoji(dish.name)}</span>
               <div style="flex:1;">
-                <div style="font-size:14px;font-weight:600;">${dish.name}</div>
-                ${allergenMain.length?`<div style="font-size:11px;margin-top:2px;">⚠️ <strong style="color:#92400E;">${allergenMain.join(', ')}${allergenDressing.length?' · Dressing: '+allergenDressing.join(', '):''}</strong></div>`:'<div style="font-size:11px;color:var(--muted);">✅ Keine Allergene</div>'}
+                <div style="font-size:14px;font-weight:600;color:#1a1a18;">${dish.name}</div>
+                <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
+                  ${allergenMain.length?`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}${allergenDressing.length?` · Dressing: ${allergenDressing.join(', ')}`:''}</span>`:''}
+                  ${vegan?'<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;">🌱 Vegan</span>':''}
+                  ${gf?'<span style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;">🟣 Glutenfrei</span>':''}
+                </div>
               </div>
-              ${hasZutaten?`<span style="color:var(--muted);font-size:14px;">▾</span>`:''}
+              <span style="color:var(--muted);font-size:14px;">›</span>
             </div>
-            ${hasZutaten?`<div id="${detailId}" style="display:none;padding:4px 14px 12px;border-top:0.5px solid var(--border);">
-              <div style="font-size:10px;font-weight:700;color:var(--muted);margin-bottom:5px;">🧂 ZUTATEN</div>
-              <div style="font-size:12px;color:var(--sub);line-height:1.8;">${zutaten.split(',').map(z=>z.trim()).filter(Boolean).map(z=>{
-                const up=z.toUpperCase();
-                const isA=/(SESAM|KÄSE|JOGHURT|BUTTER|TEIGBLÄTTER|SOJA|TOFU|SELLERIE|SELLIERE|SENF|WEIZEN|MEHL)/.test(up);
-                return isA?`<strong style="color:#92400E;">${z}</strong>`:z;
-              }).join(' · ')}</div>
-            </div>`:''}
+            <div id="${detailId}" style="display:none;background:#FAFAFA;border-top:0.5px solid var(--border);">
+              ${gemuese.length?`
+              <div style="padding:10px 14px 6px;">
+                <div style="font-size:10px;font-weight:700;color:#166534;letter-spacing:.04em;margin-bottom:6px;">🥕 GEMÜSE — anpassbar je nach Verfügbarkeit</div>
+                <textarea id="${gemueseId}" style="width:100%;padding:8px;border:1.5px solid #BBF7D0;border-radius:8px;font-size:12px;background:#F0FDF4;min-height:50px;resize:vertical;box-sizing:border-box;font-family:inherit;">${gemuese.join(', ')}</textarea>
+                <button onclick="saveGemuese('${dish.name.replace(/'/g,"\\'")}', document.getElementById('${gemueseId}').value)" style="margin-top:6px;background:#166534;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:500;cursor:pointer;">💾 Gemüse speichern</button>
+              </div>`:''}
+              ${rest.length?`
+              <div style="padding:${gemuese.length?'0':'10px'} 14px 10px;">
+                <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:5px;">🧂 GEWÜRZE & GRUNDZUTATEN</div>
+                <div style="font-size:12px;color:var(--sub);line-height:1.8;">${rest.map(z=>{
+                  const up=z.toUpperCase();
+                  const isA=/(SESAM|KÄSE|JOGHURT|BUTTER|TEIGBLÄTTER|SOJA|TOFU|SELLERIE|SELLIERE|SENF|WEIZEN|MEHL)/.test(up);
+                  return isA?`<strong style="color:#92400E;">${z}</strong>`:z;
+                }).join(' · ')}</div>
+              </div>`:''}
+              ${!gemuese.length&&!rest.length?'<div style="padding:10px 14px;font-size:12px;color:var(--muted);">Keine Zutaten hinterlegt</div>':''}
+            </div>
           </div>`;
         });
       }
@@ -3072,14 +3131,14 @@ async function renderMorgenKoch(el, tabHtml){
     const total = storeList.reduce((sum,s)=>sum+(storeData[s.id]?.qty||0),0);
     const hasData = total>0;
     html+=`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden;">
-      <div style="background:${hasData?'var(--green)':'#E5E5E2'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="background:${hasData?'var(--green-light)':'#F5F5F3'};border-bottom:2px solid ${hasData?'var(--green)':'var(--border)'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:28px;">${getDishEmoji(dish)}</span>
-          <div style="font-size:16px;font-weight:700;color:#fff;">${dish}</div>
+          <div style="font-size:16px;font-weight:700;color:#1a1a18;">${dish}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:32px;font-weight:700;color:#fff;line-height:1;">${total>0?formatQty(total):'–'}</div>
-          <div style="font-size:10px;color:rgba(255,255,255,0.7);">Behälter total</div>
+          <div style="font-size:32px;font-weight:700;color:${hasData?'var(--green)':'var(--muted)'};line-height:1;">${total>0?formatQty(total):'–'}</div>
+          <div style="font-size:10px;color:var(--muted);">Behälter total</div>
         </div>
       </div>
       <div style="padding:10px 14px;">
