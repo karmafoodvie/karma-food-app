@@ -3133,12 +3133,17 @@ async function renderDisposal(){
     return;
   }
 
-  const menu=await api(`weekly_menu?weekday=eq.${weekday}&select=slot,dish_name`).catch(()=>[]);
-  const menuMap={};
-  (menu||[]).forEach(m=>menuMap[m.slot]=m.dish_name);
   const disp=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=slot,dish_name,sold_out_time,leftover_qty`).catch(()=>[]);
   const dispMap={};
   (disp||[]).forEach(d=>dispMap[d.slot]=d);
+
+  // Tatsächliche Hauptgerichte aus dem aktuell laufenden Sommer-Menü (nicht aus der veralteten weekly_menu-Tabelle)
+  const sommerDishes=getSommerDishNamesForDay(weekday); // [Gericht A, Gericht B] dieser Woche
+  const daySlots=[
+    {k:'salat', l:'Salat', name:'Salat'},
+    ...sommerDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', l: `Gericht ${i+1}`, name})),
+    {k:'reis', l:'Reis', name:'Reis'}
+  ];
 
   let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
     <div style="font-size:12px;color:var(--muted);">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})} — Uhrzeit & Restmenge pro Gericht eintragen</div>
@@ -3148,8 +3153,8 @@ async function renderDisposal(){
   html+=`<div class="card"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Gericht</th><th>Ausverkauft</th><th>Rest (Port.)</th>
   </tr></thead><tbody>`;
-  MENU_SLOTS.forEach(s=>{
-    const dishName=menuMap[s.k]||s.l;
+  daySlots.forEach(s=>{
+    const dishName=s.name;
     const rec=dispMap[s.k];
     const soldOut=rec?.sold_out_time ? rec.sold_out_time.slice(0,5) : '';
     html+=`<tr>
@@ -3234,7 +3239,7 @@ window.updateLeftover=updateLeftover;
 
 // ---- KÜCHE (Wochenplan + Entsorgung) ----
 const WEEKDAYS=[{k:'mo',l:'Montag'},{k:'di',l:'Dienstag'},{k:'mi',l:'Mittwoch'},{k:'do',l:'Donnerstag'},{k:'fr',l:'Freitag'}];
-const MENU_SLOTS=[{k:'salat',l:'Salat'},{k:'gericht1',l:'Gericht 1'},{k:'gericht2',l:'Gericht 2'},{k:'gericht3',l:'Gericht 3'},{k:'reis',l:'Reis'}];
+const MENU_SLOTS=[{k:'salat',l:'Salat'},{k:'gericht2',l:'Gericht 2'},{k:'gericht3',l:'Gericht 3'},{k:'reis',l:'Reis'}];
 let kitchenTab='morgen';
 let weekOffset=0; // 0 = aktuelle Woche, -1 = letzte Woche, etc.
 function getWeekDates(offset){
