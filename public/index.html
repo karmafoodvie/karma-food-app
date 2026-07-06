@@ -174,6 +174,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-waehrend" class="view"></div>
     <div id="v-kontrolle" class="view"></div>
     <div id="v-guide" class="view"></div>
+    <div id="v-forecastReview" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -583,11 +584,11 @@ function goTo(v, noPush=false){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   const nb=document.getElementById('nav-'+v);
   if(nb) nb.classList.add('active');
-  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide'};
+  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -1006,6 +1007,13 @@ async function renderHome(){
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#0F6E56;">Store Guide verwalten</span>
         <span class="org-btn-sub">Globale und store-spezifische Infos & Anleitungen pflegen</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('forecastReview')" style="border-color:#0EA5E9;">
+      <span class="org-btn-icon">📊</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0EA5E9;">Prognose-Rückblick</span>
+        <span class="org-btn-sub">Vergangene Daten mit Wetter & Feiertagen abgleichen</span>
       </div>
     </button>
     <button class="org-btn" onclick="goTo('msg')" style="border-color:#6B7280;">
@@ -1474,6 +1482,127 @@ function isLasagneLocked(dateStr){
   cutoff.setDate(cutoff.getDate()-1); // Vortag, 12:00 Uhr
   return new Date()>cutoff;
 }
+
+// ---- PROGNOSE-RÜCKBLICK (Organisation) ----
+async function fetchHistoricalWeather(storeId, fromDate, toDate){
+  const cacheKey = `hist_${storeId}_${fromDate}_${toDate}`;
+  if(_weatherCache[cacheKey]) return _weatherCache[cacheKey];
+  const coords = STORE_COORDS[storeId];
+  if(!coords) return {};
+  try{
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_sum&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const map = {};
+    (data?.daily?.time||[]).forEach((d,i)=>{
+      map[d] = { tempMax: data.daily.temperature_2m_max?.[i], precipSum: data.daily.precipitation_sum?.[i] };
+    });
+    _weatherCache[cacheKey] = map;
+    return map;
+  }catch(e){ console.error('Historisches Wetter fehlgeschlagen', e); return {}; }
+}
+
+async function renderForecastReview(){
+  const el = document.getElementById('v-forecastReview');
+  el.innerHTML = backToHomeHtml() + `<div id="fr-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  translateEl(el);
+
+  const today = new Date();
+  const toDate = today.toISOString().split('T')[0];
+  const fromD = new Date(today); fromD.setDate(fromD.getDate()-60);
+  const fromDate = fromD.toISOString().split('T')[0];
+
+  const stores = await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
+
+  const formHtml = `
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-weight:600;margin-bottom:4px;">📊 Vergangene Daten analysieren</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Gleicht Entsorgungsdaten mit historischem Wetter & Feiertagen/Ferien ab — zeigt Tendenzen für die Forecast-Einstellungen.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <select id="fr-store" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+          <option value="">Alle Filialen</option>
+          ${storeList.map(s=>`<option value="${s.id}" data-no-translate>${s.name}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input id="fr-from" type="date" value="${fromDate}" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+        <input id="fr-to" type="date" value="${toDate}" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+      </div>
+      <button onclick="runForecastReview()" class="submit-btn" style="width:100%;">🔍 Analysieren</button>
+    </div>
+    <div id="fr-results"></div>
+  `;
+  document.getElementById('fr-content').innerHTML = formHtml;
+}
+
+async function runForecastReview(){
+  const storeId = document.getElementById('fr-store').value;
+  const fromDate = document.getElementById('fr-from').value;
+  const toDate = document.getElementById('fr-to').value;
+  const resultsEl = document.getElementById('fr-results');
+  resultsEl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:1rem;">Analysiere…</div>`;
+
+  const stores = await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
+  const targetStores = storeId ? storeList.filter(s=>s.id===storeId) : storeList;
+
+  const calendarEvents = await getCalendarEvents();
+  let allRows = [];
+
+  for(const store of targetStores){
+    const disp = await api(`disposal?store_id=eq.${store.id}&disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=disposal_date,dish_name,leftover_qty,sold_out_time`).catch(()=>[]);
+    if(!disp?.length) continue;
+    const weatherMap = await fetchHistoricalWeather(store.id, fromDate, toDate);
+    disp.forEach(d=>{
+      const w = weatherMap[d.disposal_date] || {};
+      const feiertag = calendarEvents.find(e=>e.event_type==='feiertag' && e.event_date===d.disposal_date && (!e.store_id||e.store_id===store.id));
+      const ferien = calendarEvents.find(e=>e.event_type==='ferien' && d.disposal_date>=e.event_date && d.disposal_date<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===store.id));
+      let category='normal';
+      if(feiertag) category='feiertag';
+      else if(ferien) category='ferien';
+      else if(w.tempMax>=22 && (w.precipSum??0)<1) category='sonnig';
+      else if((w.precipSum??0)>=5) category='regen';
+      allRows.push({store:store.id, date:d.disposal_date, dish:d.dish_name, leftover:d.leftover_qty||0, soldOutEarly:!!d.sold_out_time, category});
+    });
+  }
+
+  if(!allRows.length){
+    resultsEl.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Keine Entsorgungsdaten im gewählten Zeitraum gefunden.</div>`;
+    return;
+  }
+
+  const cats=['feiertag','ferien','regen','sonnig','normal'];
+  const catLabels={feiertag:'🎉 Feiertage',ferien:'🏖️ Ferien',regen:'🌧️ Regentage',sonnig:'☀️ Sonnige/warme Tage',normal:'⛅ Normale Tage'};
+  const normalRows=allRows.filter(r=>r.category==='normal');
+  const normalAvg=normalRows.length ? normalRows.reduce((s,r)=>s+r.leftover,0)/normalRows.length : null;
+
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${allRows.length} Einträge aus ${new Set(allRows.map(r=>r.date)).size} Tagen analysiert (${fromDate} bis ${toDate})</div>`;
+
+  cats.forEach(cat=>{
+    const rows=allRows.filter(r=>r.category===cat);
+    if(!rows.length) return;
+    const avgLeftover=rows.reduce((s,r)=>s+r.leftover,0)/rows.length;
+    const soldOutCount=rows.filter(r=>r.soldOutEarly).length;
+    const dayCount=new Set(rows.map(r=>r.date)).size;
+    const diffPct = normalAvg ? Math.round(((avgLeftover-normalAvg)/normalAvg)*100) : null;
+    const diffLabel = (cat!=='normal' && diffPct!=null) ? `<span style="font-size:11px;color:${diffPct>0?'#DC2626':'#15803D'};margin-left:6px;">(${diffPct>0?'+':''}${diffPct}% vs. normal)</span>` : '';
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+      <div style="font-weight:600;margin-bottom:4px;">${catLabels[cat]}</div>
+      <div style="font-size:12px;color:var(--sub);">${dayCount} Tage · ${rows.length} Einträge</div>
+      <div style="display:flex;gap:16px;margin-top:8px;align-items:baseline;">
+        <div><div style="font-size:20px;font-weight:700;color:var(--green);">${avgLeftover.toFixed(1)}${diffLabel}</div><div style="font-size:10px;color:var(--muted);">Ø Restmenge/Eintrag</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#DC2626;">${soldOutCount}</div><div style="font-size:10px;color:var(--muted);">früh ausverkauft</div></div>
+      </div>
+    </div>`;
+  });
+
+  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 4px;">📐 Referenz "Normale Tage": ${normalAvg!=null?normalAvg.toFixed(1):'–'} Ø Restmenge. Deutlich höhere Restmenge in einer Kategorie spricht für den hinterlegten Abschlag (forecast_settings) — deutlich mehr "früh ausverkauft" würde eher für einen Zuschlag statt Abschlag sprechen.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:0 4px 8px;">⚠️ Basis sind Restmenge & Ausverkauft-Zeitpunkt — es gibt keine exakt erfasste "verkaufte Menge", daher zeigt das Tendenzen, keine exakte Prognosegenauigkeit.</div>`;
+
+  resultsEl.innerHTML=html;
+}
+window.runForecastReview=runForecastReview;
 
 async function renderForecastOrderTab(el, tabHtml){
   const tab=ORDER_TABS.forecast;
