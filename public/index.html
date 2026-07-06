@@ -1512,14 +1512,17 @@ function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMa
   const history=salesHistoryByCategory?.[category]||[];
   const weekdayMatches=history.filter(h=>WEEKDAY_STR[new Date(h.sale_date+'T00:00:00').getDay()]===weekdayStr).slice(0,8);
   if(!weekdayMatches.length) return null;
-  const baseQty=weekdayMatches.reduce((s,h)=>s+h.qty,0)/weekdayMatches.length;
+  const baseQtyPortionen=weekdayMatches.reduce((s,h)=>s+h.qty,0)/weekdayMatches.length;
+  // sales_history ist in VERKAUFTEN PORTIONEN, die Forecast-Anzeige ist aber in BEHÄLTERN
+  // (gleiche Umrechnung wie im Entsorgung-Modul: 1 Behälter = 20 Portionen).
+  const baseQty=baseQtyPortionen/20;
 
   if(!dateStr || !weatherMap || !calendarEvents || !settings){
     return Math.round(baseQty*4)/4; // Fallback: alte Signatur ohne Wetter/Kalender
   }
   const {pct, reason} = getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings);
   const adjustedQty = Math.round((baseQty*(1+pct/100))*4)/4;
-  const baseLabel = `Basis: Ø ${Math.round(baseQty*4)/4} (${weekdayMatches.length}× ${weekdayStr}, Verkaufsdaten)`;
+  const baseLabel = `Basis: Ø ${Math.round(baseQty*4)/4} Behälter (${weekdayMatches.length}× ${weekdayStr}, Verkaufsdaten)`;
   return {qty: adjustedQty, reason: reason ? `${baseLabel} · ${reason}` : baseLabel};
 }
 function isLasagneLocked(dateStr){
