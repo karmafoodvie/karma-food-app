@@ -173,6 +173,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-schichtende" class="view"></div>
     <div id="v-waehrend" class="view"></div>
     <div id="v-kontrolle" class="view"></div>
+    <div id="v-guide" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -236,6 +237,133 @@ const ALLERGENE = [
 ];
 let homeMode='alltag';
 const FIXER_LIEFERANT='Michi – Karma Transporter';
+// ---- GUIDE ----
+const GUIDE_KATEGORIEN = [
+  {k:'abrechnung', emoji:'💰', label:'Abrechnung & Kasse'},
+  {k:'geraete', emoji:'⚙️', label:'Geräte & Technik'},
+  {k:'reinigung', emoji:'🧹', label:'Reinigung'},
+  {k:'notfall', emoji:'🚨', label:'Notfall & Kontakte'},
+  {k:'ablauf', emoji:'📋', label:'Abläufe & Regeln'},
+  {k:'sonstiges', emoji:'💡', label:'Sonstiges'},
+];
+
+async function renderGuide(){
+  const el=document.getElementById('v-guide');
+  const isOrg=currentStore?.id==='zentrale';
+  el.innerHTML=backToHomeHtml()+`<div id="guide-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  translateEl(el);
+
+  const entries = await api(`guide_eintraege?or=(store_id.is.null${isOrg?'':`%2Cstore_id.eq.${currentStore.id}`})&order=sort_order,erstellt_am`).catch(()=>[]);
+
+  let html='';
+  if(isOrg){
+    // Organisation: full management view
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:12px;color:var(--muted);">Einträge für alle Stores oder für einen bestimmten Store</div>
+      <button onclick="showGuideForm()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">+ Neu</button>
+    </div>
+    <div id="guide-form" style="display:none;"></div>`;
+
+    GUIDE_KATEGORIEN.forEach(kat=>{
+      const katEntries=(entries||[]).filter(e=>e.kategorie===kat.k);
+      html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:12px 0 4px;">${kat.emoji} ${kat.label.toUpperCase()}</div>`;
+      katEntries.forEach(e=>{
+        html+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
+            <div>
+              <div style="font-weight:500;font-size:13px;">${e.titel}</div>
+              ${e.store_id?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;padding:1px 6px;border-radius:20px;">nur ${e.store_id}</span>`:`<span style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 6px;border-radius:20px;">alle Stores</span>`}
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button onclick="editGuideEntry(${e.id},'${kat.k}','${e.store_id||''}','${e.titel.replace(/'/g,"\\'")}',\`${(e.inhalt||'').replace(/`/g,'\\`')}\`)" style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">✏️</button>
+              <button onclick="deleteGuideEntry(${e.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">🗑</button>
+            </div>
+          </div>
+          ${e.inhalt?`<div style="font-size:12px;color:var(--sub);margin-top:5px;white-space:pre-wrap;">${e.inhalt}</div>`:''}
+        </div>`;
+      });
+      if(!katEntries.length) html+=`<div style="font-size:12px;color:var(--border);padding:4px 0 8px;">Noch keine Einträge in dieser Kategorie.</div>`;
+    });
+  } else {
+    // Store view: grouped, expandable
+    html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Alles was du für deinen Store wissen musst.</div>`;
+    const storeEntries=(entries||[]).filter(e=>e.store_id===currentStore.id);
+    if(storeEntries.length){
+      html+=`<div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:10px;padding:8px 12px;margin-bottom:10px;">
+        <div style="font-size:10px;font-weight:700;color:#185FA5;margin-bottom:4px;">📍 NUR FÜR DIESEN STORE</div>
+        ${storeEntries.map(e=>`<details style="border-bottom:0.5px solid #B5D4F4;"><summary style="padding:8px 0;cursor:pointer;font-size:13px;font-weight:500;">${e.titel}</summary><div style="padding:6px 0 10px;font-size:12px;color:var(--sub);white-space:pre-wrap;">${e.inhalt||''}</div></details>`).join('')}
+      </div>`;
+    }
+    GUIDE_KATEGORIEN.forEach(kat=>{
+      const katEntries=(entries||[]).filter(e=>e.kategorie===kat.k&&!e.store_id);
+      if(!katEntries.length) return;
+      html+=`<div style="border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;">
+        <div style="background:#F5F5F3;padding:8px 12px;font-size:12px;font-weight:700;color:var(--sub);">${kat.emoji} ${kat.label}</div>
+        ${katEntries.map(e=>`<details style="border-top:0.5px solid var(--border);"><summary style="padding:10px 12px;cursor:pointer;font-size:13px;font-weight:500;list-style:none;display:flex;justify-content:space-between;align-items:center;">${e.titel}<span style="color:var(--muted);">›</span></summary><div style="padding:8px 12px 12px;font-size:12px;color:var(--sub);white-space:pre-wrap;">${e.inhalt||'(kein Inhalt)'}</div></details>`).join('')}
+      </div>`;
+    });
+    if(!(entries||[]).length) html+=`<div style="text-align:center;padding:2rem;color:var(--muted);">Noch keine Guide-Einträge vorhanden.</div>`;
+  }
+
+  document.getElementById('guide-content').innerHTML=html;
+  translateEl(el);
+}
+
+function showGuideForm(id=null, kat='', storeId='', titel='', inhalt=''){
+  const formEl=document.getElementById('guide-form');
+  if(!formEl) return;
+  const isEdit=!!id;
+  formEl.style.display='block';
+  formEl.innerHTML=`<div class="card" style="padding:14px;border:1.5px solid var(--green);margin-bottom:10px;">
+    <div style="font-weight:600;margin-bottom:10px;">${isEdit?'Eintrag bearbeiten':'Neuer Eintrag'}</div>
+    <select id="gf-kat" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:13px;">
+      ${GUIDE_KATEGORIEN.map(k=>`<option value="${k.k}" ${k.k===kat?'selected':''}>${k.emoji} ${k.label}</option>`).join('')}
+    </select>
+    <select id="gf-store" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:13px;">
+      <option value="" ${!storeId?'selected':''}>🌐 Alle Stores</option>
+      <option value="lb" ${storeId==='lb'?'selected':''}>Laurenzerberg</option>
+      <option value="boerse" ${storeId==='boerse'?'selected':''}>Börse</option>
+      <option value="1020" ${storeId==='1020'?'selected':''}>Ausstellungsstraße 1020</option>
+      <option value="3400" ${storeId==='3400'?'selected':''}>Stadtplatz 3400</option>
+    </select>
+    <input id="gf-titel" type="text" placeholder="Titel (z.B. Wie funktioniert der Geschirrspüler)" value="${titel}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:13px;box-sizing:border-box;">
+    <textarea id="gf-inhalt" placeholder="Erklärung / Anleitung (kann mehrzeilig sein)" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;min-height:100px;resize:vertical;box-sizing:border-box;font-family:inherit;">${inhalt}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="saveGuideEntry(${id||'null'})" class="submit-btn" style="flex:1;">💾 Speichern</button>
+      <button onclick="document.getElementById('guide-form').style.display='none'" style="padding:10px 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;font-size:13px;">Abbrechen</button>
+    </div>
+  </div>`;
+}
+
+function editGuideEntry(id, kat, storeId, titel, inhalt){
+  showGuideForm(id, kat, storeId, titel, inhalt);
+  document.getElementById('guide-form')?.scrollIntoView({behavior:'smooth'});
+}
+
+async function saveGuideEntry(id){
+  const kat=document.getElementById('gf-kat')?.value;
+  const storeId=document.getElementById('gf-store')?.value||null;
+  const titel=document.getElementById('gf-titel')?.value?.trim();
+  const inhalt=document.getElementById('gf-inhalt')?.value?.trim();
+  if(!titel){showToast('Bitte Titel eingeben');return;}
+  const payload={kategorie:kat,store_id:storeId||null,titel,inhalt:inhalt||null};
+  try{
+    if(id) await api(`guide_eintraege?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(payload)});
+    else await api('guide_eintraege',{method:'POST',body:JSON.stringify([payload])});
+    showToast('✔ Gespeichert');
+    renderGuide();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+
+async function deleteGuideEntry(id){
+  if(!confirm('Diesen Eintrag löschen?')) return;
+  try{
+    await api(`guide_eintraege?id=eq.${id}`,{method:'DELETE'});
+    showToast('Gelöscht');
+    renderGuide();
+  }catch(e){console.error(e);showToast('Fehler');}
+}
+
 function renderKontrolleView(){
   const el=document.getElementById('v-kontrolle');
   let html=`<div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);margin-bottom:8px;">
@@ -455,11 +583,11 @@ function goTo(v, noPush=false){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   const nb=document.getElementById('nav-'+v);
   if(nb) nb.classList.add('active');
-  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle'};
+  const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -470,8 +598,17 @@ window.goToReminder=goToReminder;
 
 // ---- HOME ----
 // ---- SOMMER MENÜ ----
-// Aktuell laufende Woche manuell setzen (1-4). Organisation kann das in Supabase oder hier anpassen.
-let CURRENT_SOMMER_WOCHE = 1; // Heute ist Woche 1 Donnerstag
+// Woche 1 startete Mo 29.06.2026. 4-Wochen-Zyklus läuft automatisch weiter, keine manuelle Pflege mehr nötig.
+// Läuft laut Ansage bis Ende August 2026, danach kommt ein neues (Herbst-)Menü — dann muss diese Logik neu aufgesetzt werden.
+const SOMMER_WOCHE_START = new Date(2026, 5, 29); // Monat 0-indiziert: 5 = Juni
+function getCurrentSommerWoche(){
+  const start = new Date(SOMMER_WOCHE_START); start.setHours(0,0,0,0);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const diffDays = Math.round((now - start) / 86400000);
+  if(diffDays < 0) return 1; // vor Start: zeige Woche 1
+  return (Math.floor(diffDays / 7) % 4) + 1;
+}
+let CURRENT_SOMMER_WOCHE = getCurrentSommerWoche();
 
 const WEEKDAY_MENU_KEY = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'};
 
@@ -777,6 +914,18 @@ async function renderHome(){
       </div>
     </div>
 
+    <!-- GUIDE BUTTON -->
+    <div onclick="goTo('guide')" style="margin-top:8px;border:0.5px solid var(--border);border-radius:12px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">📖</span>
+        <div>
+          <div style="font-size:13px;font-weight:500;">Guide</div>
+          <div style="font-size:10px;color:var(--muted);">Infos, Geräte & Abläufe</div>
+        </div>
+      </div>
+      <span style="color:var(--muted);">→</span>
+    </div>
+
     `:''}
     ${currentStore?.id==='zentrale'?`
     <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Wähle einen Bereich:</div>
@@ -850,6 +999,13 @@ async function renderHome(){
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#0F6E56;">Schulungen verwalten</span>
         <span class="org-btn-sub">Themen pflegen, Schulungen eintragen, Status je Filiale</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('guide')" style="border-color:#0F6E56;">
+      <span class="org-btn-icon">📖</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0F6E56;">Store Guide verwalten</span>
+        <span class="org-btn-sub">Globale und store-spezifische Infos & Anleitungen pflegen</span>
       </div>
     </button>
     <button class="org-btn" onclick="goTo('msg')" style="border-color:#6B7280;">
