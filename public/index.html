@@ -3361,6 +3361,11 @@ async function renderKitchen(){
     });
     const anyAdjusted=(weekForecasts||[]).some(f=>f.source==='manual');
 
+    // Wetter (Referenz Wien-Innenstadt, gilt näherungsweise für alle Filialen) + Feiertage/Ferien — auch die Küche soll das auf einen Blick sehen
+    const kitchenCalendarEvents = await getCalendarEvents();
+    const kitchenWeatherMap = await fetchWeatherForStore('lb', fromDate, toDate);
+    const zeroSettings = {weather_sunny_pct:0, weather_rain_pct:0, feiertag_pct:0, ferien_pct:0};
+
     if(anyAdjusted){
       html+=`<div style="background:#F0F9FF;border:1px solid #7DD3FC;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#0369A1;display:flex;align-items:center;gap:6px;">
         <span>ℹ️</span><span>Mindestens eine Filiale hat diese Woche eine Menge angepasst</span>
@@ -3379,6 +3384,10 @@ async function renderKitchen(){
       const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
       html+=`<div class="section-lbl" style="${isToday?'color:#0EA5E9;font-weight:700;':''}">${WEEKDAY_NAMES[wd]} · ${dateLabel}${isToday?' — heute':''}${hasLasagne?' · 🥗 grüner Salat automatisch':''}</div>`;
+      const {reason:kitchenDayReason}=getDayModifiers(dateStr, 'lb', kitchenWeatherMap, kitchenCalendarEvents, zeroSettings);
+      if(kitchenDayReason){
+        html+=`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${kitchenDayReason}</div>`;
+      }
       html+=`<div class="card" style="${isToday?'border:1.5px solid #0EA5E9;':''}"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
         <th style="text-align:left;">Filiale</th>
         ${allDishes.map(d=>`<th data-no-translate style="font-size:11px;">${d}</th>`).join('')}
@@ -3511,11 +3520,20 @@ async function renderMorgenKoch(el, tabHtml){
   const lastUpdate = forecasts.length ? forecasts.reduce((a,b)=>(!a||b.changed_at>a)?b.changed_at:a, null) : null;
   const lastUpdateLabel = lastUpdate ? new Date(lastUpdate).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : null;
 
+  // Wetter (Referenz Wien-Innenstadt) + Feiertage/Ferien für morgen — Küche soll das auch ohne Umweg wissen
+  const [morgenWeatherMap, morgenCalendarEvents] = await Promise.all([
+    fetchWeatherForStore('lb', tomorrowStr, tomorrowStr),
+    getCalendarEvents()
+  ]);
+  const zeroSettings = {weather_sunny_pct:0, weather_rain_pct:0, feiertag_pct:0, ferien_pct:0};
+  const {reason:morgenReason} = getDayModifiers(tomorrowStr, 'lb', morgenWeatherMap, morgenCalendarEvents, zeroSettings);
+
   let html = tabHtml;
   html += `<div style="background:var(--green);border-radius:14px;padding:14px 16px;margin-bottom:12px;">
     <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:2px;">Was muss ich morgen kochen?</div>
     <div style="font-size:22px;font-weight:700;color:#fff;">${DAY_NAME[tomorrowWd]}</div>
     <div style="font-size:14px;color:rgba(255,255,255,0.85);margin-top:2px;">${tomorrow.toLocaleDateString('de-AT',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    ${morgenReason?`<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:6px;">${morgenReason}</div>`:''}
     ${lastUpdateLabel?`<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:6px;">Zuletzt aktualisiert: ${lastUpdateLabel}</div>`:''}
   </div>`;
 
