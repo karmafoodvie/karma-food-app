@@ -176,6 +176,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-guide" class="view"></div>
     <div id="v-forecastReview" class="view"></div>
     <div id="v-oeffnungHilfe" class="view"></div>
+    <div id="v-reinigungHilfe" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -210,7 +211,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="toast" id="toast"></div>
 
-<script src="/menu_sommer.js"></script>
+<script src="/menu_data.js"></script>
 <script>
 const SUPABASE_URL = 'https://fkliyqjxnttzyuzogrng.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Eu6-MQxkfyaxii2vpCR-IQ_uqS90NRf';
@@ -221,9 +222,9 @@ const KC_CATS = ['Webshop-Produkte'];
 const SWEETS_CATS = ['Sweets'];
 const CATS = [...TRANSPORTER_CATS, ...KC_CATS, ...SWEETS_CATS];
 const WEEKDAY_NAMES = {1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
-const WEEKDAY_STR = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'}; // Mapping zu weekly_menu.weekday (String-Format)
-const CL_TYPES = ['reinigung','abschluss']; // 'oeffnung' bleibt als Daten bestehen, ist aber kein Pflicht-Tab mehr — siehe renderOeffnungHelp()
-const ALL_CL_TYPES = ['oeffnung','reinigung','abschluss']; // für das Laden der Templates/Fortschritts, inkl. optionaler Öffnungshilfe
+const WEEKDAY_STR = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'}; // Kurzform-Schlüssel für Wochentage, u.a. für MENU_DATA-Keys (w1_mo, w1_di, ...)
+const CL_TYPES = ['abschluss']; // 'oeffnung' & 'reinigung' bleiben als Daten bestehen, sind aber keine Pflicht-Tabs mehr — siehe renderOeffnungHelp()/renderReinigungHelp()
+const ALL_CL_TYPES = ['oeffnung','reinigung','abschluss']; // für das Laden der Templates/Fortschritts, inkl. optionaler Hilfe-Checklisten
 const CL_LABELS = {oeffnung:'Öffnung',reinigung:'Reinigung',abschluss:'Abschluss'};
 const ALLERGENE = [
   {code:'A', label:'Glutenhaltiges Getreide'},
@@ -499,6 +500,14 @@ async function api(path, opts={}) {
   return t ? JSON.parse(t) : null;
 }
 
+// Gemeinsamer Helfer für das wiederkehrende Muster "gibt es für heute schon einen Eintrag in Tabelle X?"
+// (Wareneingang, Entsorgung, Wochensalat, Kühlung, Übergabe-Notiz etc. folgen alle demselben Schema)
+async function hasTodayEntry(table, dateCol, storeId=currentStore?.id){
+  const today=new Date().toISOString().split('T')[0];
+  const rows=await api(`${table}?store_id=eq.${storeId}&${dateCol}=eq.${today}&select=id&limit=1`).catch(()=>[]);
+  return (rows||[]).length>0;
+}
+
 // ---- LOGIN ----
 async function initLogin() {
   try {
@@ -613,11 +622,11 @@ function goTo(v, noPush=false){
   const navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)'};
+  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -630,15 +639,18 @@ window.goToReminder=goToReminder;
 // ---- SOMMER MENÜ ----
 // Woche 1 startete Mo 29.06.2026. 4-Wochen-Zyklus läuft automatisch weiter, keine manuelle Pflege mehr nötig.
 // Läuft laut Ansage bis Ende August 2026, danach kommt ein neues (Herbst-)Menü — dann muss diese Logik neu aufgesetzt werden.
-const SOMMER_WOCHE_START = new Date(2026, 5, 29); // Monat 0-indiziert: 5 = Juni
-function getCurrentSommerWoche(){
-  const start = new Date(SOMMER_WOCHE_START); start.setHours(0,0,0,0);
+const MENU_WOCHE_START = new Date(2026, 5, 29); // Monat 0-indiziert: 5 = Juni
+function getCurrentMenuWoche(){
+  const start = new Date(MENU_WOCHE_START); start.setHours(0,0,0,0);
   const now = new Date(); now.setHours(0,0,0,0);
   const diffDays = Math.round((now - start) / 86400000);
   if(diffDays < 0) return 1; // vor Start: zeige Woche 1
   return (Math.floor(diffDays / 7) % 4) + 1;
 }
-let CURRENT_SOMMER_WOCHE = getCurrentSommerWoche();
+let CURRENT_MENU_WOCHE = getCurrentMenuWoche();
+// Reis ist immer als Beilage bei Curry/Dal/Special dabei, hat keinen eigenen wechselnden Namen —
+// deshalb reicht eine feste Konstante statt einer Datenbank-Abfrage (ersetzt die alte weekly_menu-Tabelle).
+const REIS_DISH_NAME = 'Reis';
 
 const WEEKDAY_MENU_KEY = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'};
 
@@ -646,8 +658,8 @@ function getTodayMenu(){
   const wd = new Date().getDay(); // 0=So, 1=Mo...
   const dayKey = WEEKDAY_MENU_KEY[wd];
   if(!dayKey) return null; // Wochenende
-  const key = `w${CURRENT_SOMMER_WOCHE}_${dayKey}`;
-  return (typeof SOMMER_MENU !== 'undefined' && SOMMER_MENU[key]) ? SOMMER_MENU[key] : null;
+  const key = `w${CURRENT_MENU_WOCHE}_${dayKey}`;
+  return (typeof MENU_DATA !== 'undefined' && MENU_DATA[key]) ? MENU_DATA[key] : null;
 }
 
 function getTodayDishNames(){
@@ -853,6 +865,18 @@ async function renderHome(){
       if(!transporterDone) reminders.push({icon:'🚚',color:'#F97316',text:'Transporter-Bestellung noch nicht abgeschickt',tab:'order',orderTab:'transporter'});
       if(isKCDay&&!kcDone) reminders.push({icon:'📦',color:'#A855F7',text:'KC-Bestellung (heute Bestelltag) noch offen',tab:'order',orderTab:'kc'});
       if(!sweetsDone) reminders.push({icon:'🍰',color:'#EC4899',text:'Sweets-Bestellung für morgen noch offen',tab:'order',orderTab:'sweets'});
+
+      // Freitags-Reminder: Forecast für die kommende Woche checken, bevors ins Wochenende geht
+      if(dayIdx===4){ // Freitag
+        const nextMonday=new Date(); nextMonday.setDate(nextMonday.getDate()+3);
+        const nextFriday=new Date(); nextFriday.setDate(nextFriday.getDate()+7);
+        const nextWeekFrom=nextMonday.toISOString().split('T')[0];
+        const nextWeekTo=nextFriday.toISOString().split('T')[0];
+        const nextWeekForecast=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${nextWeekFrom}&forecast_date=lte.${nextWeekTo}&select=id&limit=1`).catch(()=>[]);
+        if(!(nextWeekForecast||[]).length){
+          reminders.push({icon:'📅',color:'#0EA5E9',text:'Forecast für nächste Woche noch nicht angeschaut',tab:'order',orderTab:'forecast'});
+        }
+      }
     }catch(e){console.error(e);}
 
     if(isWeekday){
@@ -943,6 +967,9 @@ async function renderHome(){
         <div style="font-size:13px;font-weight:500;">🗑️ Entsorgung /<br>Food Waste</div>
         <div style="font-size:10px;color:${disposalDone?'var(--green)':'var(--muted)'};margin-top:2px;">${disposalDone?'✓ erledigt':'Restmengen eintragen'}</div>
       </div>
+    </div>
+    <div onclick="goTo('reinigungHilfe')" style="text-align:center;margin:-2px 0 8px;">
+      <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe bei der Reinigung? Checkliste ansehen</span>
     </div>
 
     <!-- PHASE 3: NACH DER SCHICHT -->
@@ -1085,6 +1112,18 @@ async function renderOeffnungHelp(){
   el.innerHTML = backToHomeHtml() + `
     <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#185FA5;">
       ℹ️ Optionale Hilfe zum Öffnen — kein Pflichtschritt, blockiert den Schichtabschluss nicht. Nur falls du sie brauchst.
+    </div>
+    <div id="cl-body"></div>`;
+  translateEl(el);
+  renderClBody();
+}
+
+async function renderReinigungHelp(){
+  const el=document.getElementById('v-reinigungHilfe');
+  activeCl='reinigung';
+  el.innerHTML = backToHomeHtml() + `
+    <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#185FA5;">
+      ℹ️ Optionale Reinigungs-Checkliste — kein Pflichtschritt, blockiert den Schichtabschluss nicht. Nur falls du sie brauchst.
     </div>
     <div id="cl-body"></div>`;
   translateEl(el);
@@ -1437,7 +1476,6 @@ async function updateKuecheQty(input){
 window.updateKuecheQty=updateKuecheQty;
 
 // ---- FORECAST (Hauptspeisen-Portionsmengen pro Filiale & Tag) ----
-const FORECAST_DISHES=['Curry','Dal','Reis','Biryani','Gulasch','Lasagne']; // Hauptspeisen-Pool, tatsächliche Auswahl kommt aus weekly_menu
 
 // Ungefähre Koordinaten pro Filiale, für die Wettervorhersage
 const STORE_COORDS = {
@@ -1488,12 +1526,43 @@ async function fetchWeatherForStore(storeId, fromDate, toDate){
   }catch(e){ console.error('Wetter-Abruf fehlgeschlagen', e); return {}; }
 }
 
+// Berechnet alle gesetzlichen österreichischen Feiertage für ein Jahr per Formel (Gauss-Osterformel) —
+// so müssen Feiertage nie wieder händisch per SQL nachgetragen werden (Ferien bleiben manuell, da nicht berechenbar).
+function getAustrianHolidays(year){
+  // Oster-Sonntag nach Gauss'scher Osterformel
+  const a=year%19, b=Math.floor(year/100), c=year%100, d=Math.floor(b/4), e=b%4;
+  const f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7, m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31), day=((h+l-7*m+114)%31)+1;
+  const easter=new Date(year, month-1, day);
+  const plusDays=n=>{ const d2=new Date(easter); d2.setDate(d2.getDate()+n); return d2; };
+  const iso=d2=>d2.toISOString().split('T')[0];
+  return [
+    {event_date:`${year}-01-01`, label:'Neujahr'},
+    {event_date:`${year}-01-06`, label:'Heilige Drei Könige'},
+    {event_date:iso(plusDays(1)), label:'Ostermontag'},
+    {event_date:`${year}-05-01`, label:'Staatsfeiertag'},
+    {event_date:iso(plusDays(39)), label:'Christi Himmelfahrt'},
+    {event_date:iso(plusDays(50)), label:'Pfingstmontag'},
+    {event_date:iso(plusDays(60)), label:'Fronleichnam'},
+    {event_date:`${year}-08-15`, label:'Maria Himmelfahrt'},
+    {event_date:`${year}-10-26`, label:'Nationalfeiertag'},
+    {event_date:`${year}-11-01`, label:'Allerheiligen'},
+    {event_date:`${year}-12-08`, label:'Maria Empfängnis'},
+    {event_date:`${year}-12-25`, label:'Christtag'},
+    {event_date:`${year}-12-26`, label:'Stefanitag'},
+  ].map(h=>({...h, event_type:'feiertag', end_date:null, store_id:null}));
+}
+
 async function getCalendarEvents(){
   if(_calendarEventsCache) return _calendarEventsCache;
   const stored=cacheGet('cal_events');
   if(stored){ _calendarEventsCache=stored; return stored; }
   const events = await api('calendar_events?select=event_date,end_date,event_type,label,store_id').catch(()=>[]);
-  _calendarEventsCache = events||[];
+  const thisYear=new Date().getFullYear();
+  // Feiertage für letztes/aktuelles/nächste 2 Jahre berechnen — deckt Rückblick & Vorschau ab, ohne DB-Pflege
+  const computedHolidays=[thisYear-1, thisYear, thisYear+1, thisYear+2].flatMap(getAustrianHolidays);
+  _calendarEventsCache = [...(events||[]), ...computedHolidays];
   cacheSet('cal_events', _calendarEventsCache);
   return _calendarEventsCache;
 }
@@ -1606,10 +1675,10 @@ function isLasagneLocked(dateStr){
   cutoff.setDate(cutoff.getDate()-1); // Vortag, 12:00 Uhr
   return new Date()>cutoff;
 }
-// Liest die tatsächlichen Hauptgerichte (ohne Salat) für einen Wochentag aus dem rotierenden Sommer-Menü,
+// Liest die tatsächlichen Hauptgerichte (ohne Salat) für einen Wochentag aus dem rotierenden Menü,
 // statt aus der statischen weekly_menu-Tabelle — sonst sind Forecast-Spalten (z.B. "Lasagne") veraltet/falsch.
-function getSommerDishNamesForDay(wdStr){
-  const entries = (typeof SOMMER_MENU!=='undefined' && SOMMER_MENU[`w${CURRENT_SOMMER_WOCHE}_${wdStr}`]) || [];
+function getMenuDishNamesForDay(wdStr){
+  const entries = (typeof MENU_DATA!=='undefined' && MENU_DATA[`w${CURRENT_MENU_WOCHE}_${wdStr}`]) || [];
   return [...new Set(entries.filter(e=>e.slot!=='salat').map(e=>e.name).filter(Boolean))];
 }
 
@@ -1759,7 +1828,6 @@ async function renderForecastOrderTab(el, tabHtml){
     <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen</div></div>
   </div>`;
 
-  const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source`).catch(()=>[]);
   const fMap={}; (weekForecasts||[]).forEach(f=>{if(!fMap[f.forecast_date])fMap[f.forecast_date]={};fMap[f.forecast_date][f.dish_name]=f;});
@@ -1783,9 +1851,8 @@ async function renderForecastOrderTab(el, tabHtml){
   const suggestionJobs=[]; // {wd, dish}
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
-    const dishNames=getSommerDishNamesForDay(wdStr);
-    const reisEntry=menu.find(m=>m.weekday===wdStr && m.slot==='reis');
-    const allDishes=['Salat', ...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
+    const dishNames=getMenuDishNamesForDay(wdStr);
+    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
     const dateStr=weekDates[wd];
     allDishes.forEach(dish=>{
       if(!(fMap[dateStr]||{})[dish]) suggestionJobs.push({dateStr, dish, wdStr});
@@ -1826,13 +1893,12 @@ async function renderForecastOrderTab(el, tabHtml){
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
-    const dishNames=getSommerDishNamesForDay(wdStr); // [Gericht2-Name, Gericht3-Name] aus dem aktuell laufenden Sommer-Menü
-    const reisEntry=menu.find(m=>m.weekday===wdStr && m.slot==='reis');
+    const dishNames=getMenuDishNamesForDay(wdStr); // [Gericht2-Name, Gericht3-Name] aus dem aktuell laufenden Menü
     const isToday=wd===todayWeekday;
     const dateStr=weekDates[wd];
     const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
     const g2=dishNames[0]||null, g3=dishNames[1]||null;
-    const reisName=reisEntry?.dish_name;
+    const reisName=REIS_DISH_NAME;
     const rowLasagne=[g2,g3].some(n=>n && n.includes('Lasagne'));
     if(rowLasagne) anyLasagne=true;
     const lasagneLock=rowLasagne && isLasagneLocked(dateStr);
@@ -1942,8 +2008,16 @@ async function submitOrder(){
 
 // ---- CHECKLIST ----
 function renderCheck(){
+  const el=document.getElementById('v-check');
+  if(CL_TYPES.length<=1){
+    // Nur noch ein Pflicht-Typ (Abschluss) — kein Tab-Balken nötig, direkt anzeigen
+    activeCl=CL_TYPES[0];
+    el.innerHTML=`<div class="section-lbl" style="margin-bottom:6px;">📋 ${CL_LABELS[activeCl]}</div><div id="cl-body"></div>`;
+    renderClBody();
+    return;
+  }
   const tabHtml=CL_TYPES.map(t=>`<button class="cl-tab${t===activeCl?' active':''}" onclick="switchCl('${t}')">${CL_LABELS[t]}</button>`).join('');
-  document.getElementById('v-check').innerHTML=`<div class="cl-tabs">${tabHtml}</div><div id="cl-body"></div>`;
+  el.innerHTML=`<div class="cl-tabs">${tabHtml}</div><div id="cl-body"></div>`;
   renderClBody();
 }
 function switchCl(t){activeCl=t;document.querySelectorAll('.cl-tab').forEach((b,i)=>b.classList.toggle('active',CL_TYPES[i]===t));renderClBody();}
@@ -2190,7 +2264,7 @@ async function deleteAllergenEntry(id){
 let allergeneCache=[];
 async function loadAllergeneCheatsheet(){
   allergeneCache=await api('allergene_rezepturen?select=*&order=gericht.asc').catch(()=>[]);
-  // Heute's Menü aus SOMMER_MENU oben anzeigen
+  // Heute's Menü aus MENU_DATA oben anzeigen
   const todayMenu=getTodayMenu()||[];
   renderAllergeneCheatlist(allergeneCache, todayMenu);
 }
@@ -2283,7 +2357,7 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
         const override=(allergeneCache||[]).find(e=>e.gericht===dish.name);
         // Zutaten: Supabase override takes priority if filled
         const zutaten = (override?.zutaten?.trim()) || dish.zutaten || '';
-        // Allergene: SOMMER_MENU is the source of truth (has main+dressing)
+        // Allergene: MENU_DATA is the source of truth (has main+dressing)
         // Only use Supabase codes if they're actually set AND non-empty
         let allergene = dish.allergene || {main:[],dressing:[]};
         if(override?.allergene_codes?.length){
@@ -2724,29 +2798,6 @@ async function renderWaehrend(){
 
   el.innerHTML=html;
   translateEl(el);
-}
-
-async function saveWaehrendAndNext(){
-  const today=new Date().toISOString().split('T')[0];
-  const menu=await api(`weekly_menu?select=weekday,slot,dish_name`).catch(()=>[]);
-  const todayWd=(['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
-  const menuMap={};
-  (menu||[]).filter(m=>m.weekday===todayWd).forEach(m=>{menuMap[m.slot]=m.dish_name;});
-  const SLOTS=['salat','gericht1','gericht2','gericht3','reis'];
-  const rows=[];
-  SLOTS.forEach(slot=>{
-    const timeEl=document.getElementById(`disp-time-${slot}`);
-    const qtyEl=document.getElementById(`disp-qty-${slot}`);
-    const t=timeEl?.value||null;
-    const q=qtyEl?.value!==''?parseFloat(qtyEl?.value):null;
-    if(t||q!==null) rows.push({store_id:currentStore.id,disposal_date:today,slot,dish_name:menuMap[slot]||null,sold_out_time:t||null,leftover_qty:q});
-  });
-  try{
-    await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}`,{method:'DELETE'});
-    if(rows.length) await api('disposal',{method:'POST',body:JSON.stringify(rows)});
-    showToast('✔ Entsorgung gespeichert!');
-    goTo('schichtende');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
 function toggleWareChip(el, ware){
@@ -3242,12 +3293,12 @@ async function renderDisposal(){
   const dispMap={};
   (disp||[]).forEach(d=>dispMap[d.slot]=d);
 
-  // Tatsächliche Hauptgerichte aus dem aktuell laufenden Sommer-Menü (nicht aus der veralteten weekly_menu-Tabelle)
-  const sommerDishes=getSommerDishNamesForDay(weekday); // [Gericht A, Gericht B] dieser Woche
+  // Tatsächliche Hauptgerichte aus dem aktuell laufenden Menü
+  const menuDishes=getMenuDishNamesForDay(weekday); // [Gericht A, Gericht B] dieser Woche
   const daySlots=[
     {k:'salat', l:'Salat', name:'Salat'},
-    ...sommerDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', l: `Gericht ${i+1}`, name})),
-    {k:'reis', l:'Reis', name:'Reis'}
+    ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', l: `Gericht ${i+1}`, name})),
+    {k:'reis', l:'Reis', name:REIS_DISH_NAME}
   ];
 
   let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -3381,7 +3432,7 @@ async function renderKitchen(){
     const DAYS_FULL = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
     const SLOT_EMOJI = {salat:'🥗',gericht2:'🍲',gericht3:'🥘'};
     const todayWd = (['so','mo','di','mi','do','fr','sa'])[new Date().getDay()];
-    const selectedWoche = window.kochplanWoche || CURRENT_SOMMER_WOCHE;
+    const selectedWoche = window.kochplanWoche || CURRENT_MENU_WOCHE;
 
     const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
     const overrideMap = {};
@@ -3398,8 +3449,8 @@ async function renderKitchen(){
 
     DAYS_ORDER.forEach(day=>{
       const key=`w${selectedWoche}_${day}`;
-      const dishes=(typeof SOMMER_MENU!=='undefined'&&SOMMER_MENU[key])||[];
-      const isToday=day===todayWd && selectedWoche===CURRENT_SOMMER_WOCHE;
+      const dishes=(typeof MENU_DATA!=='undefined'&&MENU_DATA[key])||[];
+      const isToday=day===todayWd && selectedWoche===CURRENT_MENU_WOCHE;
       html+=`<div style="border:${isToday?'2px solid var(--green)':'0.5px solid var(--border)'};border-radius:12px;margin-bottom:10px;overflow:hidden;">
         <div style="background:${isToday?'var(--green)':'#F5F5F3'};padding:8px 14px;font-size:13px;font-weight:700;color:${isToday?'#fff':'var(--sub)'};">${DAYS_FULL[day]}${isToday?' 👈 Heute':''}</div>`;
 
@@ -3539,7 +3590,6 @@ async function renderKitchen(){
 
     html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Portionsmengen pro Filiale für die Küchen-Produktion</div>`;
 
-    const menu=await api('weekly_menu?select=weekday,slot,dish_name').catch(()=>[]);
     const weekForecasts=await api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source`).catch(()=>[]);
     const fMap={}; // fMap[date][store_id][dish] = rec
     (weekForecasts||[]).forEach(f=>{
@@ -3562,10 +3612,9 @@ async function renderKitchen(){
 
     for(let wd=1; wd<=5; wd++){
       const wdStr=WEEKDAY_STR[wd];
-      const dishNames=getSommerDishNamesForDay(wdStr); // aus dem aktuell laufenden Sommer-Menü, nicht der statischen weekly_menu
-      const reisEntry=menu.find(m=>m.weekday===wdStr && m.slot==='reis');
+      const dishNames=getMenuDishNamesForDay(wdStr); // aus dem aktuell laufenden Menü
       const hasLasagne=dishNames.some(n=>n.includes('Lasagne'));
-      const allDishes=['Salat', ...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
+      const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
       const isToday=wd===todayWeekday;
       const dateStr=weekDates[wd];
       const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
@@ -3699,8 +3748,8 @@ async function renderMorgenKoch(el, tabHtml){
     fMap[f.dish_name][f.store_id]=f;
   });
 
-  // Get tomorrow's menu dishes from SOMMER_MENU
-  const menuDishes = (typeof SOMMER_MENU!=='undefined'&&SOMMER_MENU[`w${CURRENT_SOMMER_WOCHE}_${tomorrowWd}`])||[];
+  // Get tomorrow's menu dishes from MENU_DATA
+  const menuDishes = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${tomorrowWd}`])||[];
   const dishNames = menuDishes.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
 
   // Last update time
@@ -3773,7 +3822,7 @@ async function renderMorgenKoch(el, tabHtml){
 }
 
 async function renderMenuWoche(el, tabHtml){
-  const woche = CURRENT_SOMMER_WOCHE;
+  const woche = CURRENT_MENU_WOCHE;
   const DAYS_ORDER = ['mo','di','mi','do','fr'];
   const DAYS_DE = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
   const SLOT_EMOJI = {salat:'🥗',gericht2:'🍲',gericht3:'🥘'};
@@ -3784,11 +3833,11 @@ async function renderMenuWoche(el, tabHtml){
   (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
   let html = tabHtml;
-  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} · Sommer-Menü — alle Gerichte mit Zutaten</div>`;
+  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} · aktuelles Menü — alle Gerichte mit Zutaten</div>`;
 
   DAYS_ORDER.forEach(day=>{
     const key = `w${woche}_${day}`;
-    const dishes = (typeof SOMMER_MENU!=='undefined'&&SOMMER_MENU[key])||[];
+    const dishes = (typeof MENU_DATA!=='undefined'&&MENU_DATA[key])||[];
     if(!dishes.length) return;
     const isToday = day===todayWd;
     html += `<div style="font-size:12px;font-weight:700;color:${isToday?'var(--green)':'var(--sub)'};letter-spacing:.04em;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid ${isToday?'var(--green)':'var(--border)'};">${DAYS_DE[day]}${isToday?' 👈 HEUTE':''}</div>`;
@@ -3836,15 +3885,7 @@ async function saveMenuDish(dishName, editKey){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 window.changeWeek=changeWeek;
-async function updateMenu(weekday,slot,dishName){
-  try{
-    await api(`weekly_menu?weekday=eq.${weekday}&slot=eq.${slot}`,{method:'DELETE'});
-    await api('weekly_menu',{method:'POST',body:JSON.stringify([{weekday,slot,dish_name:dishName}])});
-    showToast('✓ Gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
-}
 window.switchKitchenTab=switchKitchenTab;
-window.updateMenu=updateMenu;
 
 // ---- SWEETS LISTE KÜCHE ----
 async function renderSweets(){
