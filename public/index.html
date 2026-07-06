@@ -188,6 +188,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="nav-btn" onclick="goTo('order')" id="nav-order">
       <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Bestellen
     </button>
+    <button class="nav-btn" onclick="goToReminder('order','forecast')" id="nav-forecast">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Forecast
+    </button>
     <button class="nav-btn" onclick="goTo('check')" id="nav-check">
       <svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Checkliste
     </button>
@@ -541,6 +544,7 @@ async function loginAs(store){
   av.style.background=col+'30'; av.style.color=col;
   if(store.id==='zentrale'){
     document.getElementById('nav-order').style.display='none';
+    document.getElementById('nav-forecast').style.display='none';
     document.getElementById('nav-check').style.display='none';
     document.getElementById('nav-disposal').style.display='none';
     document.getElementById('nav-kontrolle').style.display='none';
@@ -582,7 +586,8 @@ function goTo(v, noPush=false){
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('show'));
   document.getElementById('v-'+v).classList.add('show');
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
-  const nb=document.getElementById('nav-'+v);
+  const navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
+  const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
   const subs={home:currentStore?.name,order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick'};
   const subEl=document.getElementById('tb-sub');
@@ -1445,42 +1450,46 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
   return {pct, reason: reasons.join(' · ')};
 }
 
-async function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMap, calendarEvents, settings){
-  // Heuristik: Schnitt der letzten Wochen für diesen Wochentag/Filiale/Gericht aus disposal.
-  // leftover_qty hoch -> zu viel produziert; sold_out_time früh -> zu wenig. Ohne produzierte Menge in der DB
-  // nutzen wir leftover_qty als Korrektursignal auf den letzten manuellen/vorherigen forecast-Wert.
-  const recentForecasts=await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dishName)}&order=forecast_date.desc&limit=8&select=forecast_date,qty`).catch(()=>[]);
-  if(!recentForecasts?.length) return null;
-  const oldestDate=recentForecasts[recentForecasts.length-1].forecast_date;
-  const newestDate=recentForecasts[0].forecast_date;
-  const disp=await api(`disposal?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dishName)}&disposal_date=gte.${oldestDate}&disposal_date=lte.${newestDate}&select=disposal_date,leftover_qty,sold_out_time`).catch(()=>[]);
-  const dispMap={}; (disp||[]).forEach(d=>dispMap[d.disposal_date]=d);
+// Ordnet einen (ggf. beschreibenden) Gerichtnamen der generischen Verkaufs-Kategorie zu,
+// mit der auch sales_history befüllt ist (aus dem Odoo-Export abgeleitet).
+function mapDishNameToCategory(dishName){
+  const n=(dishName||'').toLowerCase();
+  if(n==='reis') return 'Reis';
+  if(n.includes('curry')) return 'Curry';
+  if(n.includes('dal')) return 'Dal';
+  if(n.includes('biryani')) return 'Biryani';
+  if(n.includes('lasagne')) return 'Lasagne';
+  if(n.includes('salat')) return 'Salat';
+  return 'Special'; // rotierendes Sondergericht (Meatballs, Aloo Gobi, Gulasch etc.)
+}
 
-  let total=0, count=0;
-  recentForecasts.forEach(f=>{
-    const d=dispMap[f.forecast_date];
-    let adj=f.qty;
-    if(d){
-      if(d.leftover_qty && d.leftover_qty>0) adj=f.qty - d.leftover_qty*0.5; // viel übrig -> etwas reduzieren
-      if(d.sold_out_time) adj=f.qty * 1.1; // früh ausverkauft -> leicht erhöhen
-    }
-    total+=adj; count++;
-  });
-  const baseQty = count ? total/count : null;
-  if(baseQty==null) return null;
+async function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMap, calendarEvents, settings){
+  // Basis: Ø der letzten Vorkommen dieses Wochentags aus der echten Verkaufshistorie (sales_history),
+  // aus dem Odoo-Kassensystem abgeleitet — nicht mehr aus der (kaum genutzten) forecast_qty-Historie.
+  const category=mapDishNameToCategory(dishName);
+  const history=await api(`sales_history?store_id=eq.${storeId}&dish_category=eq.${encodeURIComponent(category)}&order=sale_date.desc&limit=200&select=sale_date,qty`).catch(()=>[]);
+  const weekdayMatches=(history||[]).filter(h=>WEEKDAY_STR[new Date(h.sale_date+'T00:00:00').getDay()]===weekdayStr).slice(0,8);
+  if(!weekdayMatches.length) return null;
+  const baseQty=weekdayMatches.reduce((s,h)=>s+h.qty,0)/weekdayMatches.length;
 
   if(!dateStr || !weatherMap || !calendarEvents || !settings){
     return Math.round(baseQty*4)/4; // Fallback: alte Signatur ohne Wetter/Kalender
   }
   const {pct, reason} = getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings);
   const adjustedQty = Math.round((baseQty*(1+pct/100))*4)/4;
-  const baseLabel = `Basis: Ø ${Math.round(baseQty*4)/4}`;
+  const baseLabel = `Basis: Ø ${Math.round(baseQty*4)/4} (${weekdayMatches.length}× ${weekdayStr}, Verkaufsdaten)`;
   return {qty: adjustedQty, reason: reason ? `${baseLabel} · ${reason}` : baseLabel};
 }
 function isLasagneLocked(dateStr){
   const cutoff=new Date(dateStr+'T12:00:00');
   cutoff.setDate(cutoff.getDate()-1); // Vortag, 12:00 Uhr
   return new Date()>cutoff;
+}
+// Liest die tatsächlichen Hauptgerichte (ohne Salat) für einen Wochentag aus dem rotierenden Sommer-Menü,
+// statt aus der statischen weekly_menu-Tabelle — sonst sind Forecast-Spalten (z.B. "Lasagne") veraltet/falsch.
+function getSommerDishNamesForDay(wdStr){
+  const entries = (typeof SOMMER_MENU!=='undefined' && SOMMER_MENU[`w${CURRENT_SOMMER_WOCHE}_${wdStr}`]) || [];
+  return [...new Set(entries.filter(e=>e.slot!=='salat').map(e=>e.name).filter(Boolean))];
 }
 
 // ---- PROGNOSE-RÜCKBLICK (Organisation) ----
@@ -1551,54 +1560,64 @@ async function runForecastReview(){
   let allRows = [];
 
   for(const store of targetStores){
-    const disp = await api(`disposal?store_id=eq.${store.id}&disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=disposal_date,dish_name,leftover_qty,sold_out_time`).catch(()=>[]);
-    if(!disp?.length) continue;
+    const sales = await api(`sales_history?store_id=eq.${store.id}&sale_date=gte.${fromDate}&sale_date=lte.${toDate}&select=sale_date,dish_category,qty,revenue`).catch(()=>[]);
+    if(!sales?.length) continue;
     const weatherMap = await fetchHistoricalWeather(store.id, fromDate, toDate);
-    disp.forEach(d=>{
-      const w = weatherMap[d.disposal_date] || {};
-      const feiertag = calendarEvents.find(e=>e.event_type==='feiertag' && e.event_date===d.disposal_date && (!e.store_id||e.store_id===store.id));
-      const ferien = calendarEvents.find(e=>e.event_type==='ferien' && d.disposal_date>=e.event_date && d.disposal_date<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===store.id));
-      let category='normal';
-      if(feiertag) category='feiertag';
-      else if(ferien) category='ferien';
-      else if(w.tempMax>=22 && (w.precipSum??0)<1) category='sonnig';
-      else if((w.precipSum??0)>=5) category='regen';
-      allRows.push({store:store.id, date:d.disposal_date, dish:d.dish_name, leftover:d.leftover_qty||0, soldOutEarly:!!d.sold_out_time, category});
+
+    // Baseline pro (Kategorie, Wochentag) über den ganzen Zeitraum — Vergleichsbasis für die Abweichung
+    const baselineSum={}, baselineCount={};
+    sales.forEach(s=>{
+      const wd=new Date(s.sale_date+'T00:00:00').getDay();
+      const key=`${s.dish_category}_${wd}`;
+      baselineSum[key]=(baselineSum[key]||0)+s.qty;
+      baselineCount[key]=(baselineCount[key]||0)+1;
+    });
+
+    sales.forEach(s=>{
+      const wd=new Date(s.sale_date+'T00:00:00').getDay();
+      const key=`${s.dish_category}_${wd}`;
+      const baseline=baselineSum[key]/baselineCount[key];
+      if(!baseline) return;
+      const w = weatherMap[s.sale_date] || {};
+      const feiertag = calendarEvents.find(e=>e.event_type==='feiertag' && e.event_date===s.sale_date && (!e.store_id||e.store_id===store.id));
+      const ferien = calendarEvents.find(e=>e.event_type==='ferien' && s.sale_date>=e.event_date && s.sale_date<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===store.id));
+      let cat='normal';
+      if(feiertag) cat='feiertag';
+      else if(ferien) cat='ferien';
+      else if(w.tempMax>=22 && (w.precipSum??0)<1) cat='sonnig';
+      else if((w.precipSum??0)>=5) cat='regen';
+      allRows.push({store:store.id, date:s.sale_date, category:s.dish_category, qty:s.qty, revenue:s.revenue, baseline, deviationPct:((s.qty-baseline)/baseline)*100, weatherCal:cat});
     });
   }
 
   if(!allRows.length){
-    resultsEl.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Keine Entsorgungsdaten im gewählten Zeitraum gefunden.</div>`;
+    resultsEl.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--muted);">Keine Verkaufsdaten im gewählten Zeitraum gefunden. (Prüfe, ob die sales_history-Tabelle importiert wurde.)</div>`;
     return;
   }
 
   const cats=['feiertag','ferien','regen','sonnig','normal'];
   const catLabels={feiertag:'🎉 Feiertage',ferien:'🏖️ Ferien',regen:'🌧️ Regentage',sonnig:'☀️ Sonnige/warme Tage',normal:'⛅ Normale Tage'};
-  const normalRows=allRows.filter(r=>r.category==='normal');
-  const normalAvg=normalRows.length ? normalRows.reduce((s,r)=>s+r.leftover,0)/normalRows.length : null;
 
-  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${allRows.length} Einträge aus ${new Set(allRows.map(r=>r.date)).size} Tagen analysiert (${fromDate} bis ${toDate})</div>`;
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${allRows.length} Verkaufs-Einträge aus ${new Set(allRows.map(r=>r.date)).size} Tagen analysiert (${fromDate} bis ${toDate}) — Basis: echte verkaufte Mengen aus Odoo</div>`;
 
   cats.forEach(cat=>{
-    const rows=allRows.filter(r=>r.category===cat);
+    const rows=allRows.filter(r=>r.weatherCal===cat);
     if(!rows.length) return;
-    const avgLeftover=rows.reduce((s,r)=>s+r.leftover,0)/rows.length;
-    const soldOutCount=rows.filter(r=>r.soldOutEarly).length;
+    const avgDeviation=rows.reduce((s,r)=>s+r.deviationPct,0)/rows.length;
+    const totalRevenue=rows.reduce((s,r)=>s+r.revenue,0);
     const dayCount=new Set(rows.map(r=>r.date)).size;
-    const diffPct = normalAvg ? Math.round(((avgLeftover-normalAvg)/normalAvg)*100) : null;
-    const diffLabel = (cat!=='normal' && diffPct!=null) ? `<span style="font-size:11px;color:${diffPct>0?'#DC2626':'#15803D'};margin-left:6px;">(${diffPct>0?'+':''}${diffPct}% vs. normal)</span>` : '';
+    const devColor = avgDeviation>3?'#15803D':(avgDeviation<-3?'#DC2626':'var(--sub)');
     html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
       <div style="font-weight:600;margin-bottom:4px;">${catLabels[cat]}</div>
-      <div style="font-size:12px;color:var(--sub);">${dayCount} Tage · ${rows.length} Einträge</div>
+      <div style="font-size:12px;color:var(--sub);">${dayCount} Tage · ${rows.length} Gericht-Einträge</div>
       <div style="display:flex;gap:16px;margin-top:8px;align-items:baseline;">
-        <div><div style="font-size:20px;font-weight:700;color:var(--green);">${avgLeftover.toFixed(1)}${diffLabel}</div><div style="font-size:10px;color:var(--muted);">Ø Restmenge/Eintrag</div></div>
-        <div><div style="font-size:20px;font-weight:700;color:#DC2626;">${soldOutCount}</div><div style="font-size:10px;color:var(--muted);">früh ausverkauft</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:${devColor};">${avgDeviation>0?'+':''}${avgDeviation.toFixed(0)}%</div><div style="font-size:10px;color:var(--muted);">Ø Abweichung vs. normaler Wochentag</div></div>
+        <div><div style="font-size:16px;font-weight:700;color:var(--green);">${totalRevenue.toFixed(0)} €</div><div style="font-size:10px;color:var(--muted);">Umsatz gesamt</div></div>
       </div>
     </div>`;
   });
 
-  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 4px;">📐 Referenz "Normale Tage": ${normalAvg!=null?normalAvg.toFixed(1):'–'} Ø Restmenge. Deutlich höhere Restmenge in einer Kategorie spricht für den hinterlegten Abschlag (forecast_settings) — deutlich mehr "früh ausverkauft" würde eher für einen Zuschlag statt Abschlag sprechen.</div>`;
-  html+=`<div style="font-size:11px;color:var(--muted);padding:0 4px 8px;">⚠️ Basis sind Restmenge & Ausverkauft-Zeitpunkt — es gibt keine exakt erfasste "verkaufte Menge", daher zeigt das Tendenzen, keine exakte Prognosegenauigkeit.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 4px;">📐 "Abweichung vs. normaler Wochentag" vergleicht z.B. einen Feiertags-Montag mit dem Ø aller anderen Montage im Zeitraum — nicht mit dem Wochendurchschnitt insgesamt. Passe die Prozentwerte in forecast_settings an diese echten Werte an, statt die Start-Schätzung zu behalten.</div>`;
 
   resultsEl.innerHTML=html;
 }
@@ -1638,9 +1657,8 @@ async function renderForecastOrderTab(el, tabHtml){
   const suggestionJobs=[]; // {wd, dish}
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
-    const dayMenu=menu.filter(m=>m.weekday===wdStr && m.slot!=='salat');
-    const dishNames=[...new Set(dayMenu.map(m=>m.dish_name).filter(n=>n && n!=='Reis'))];
-    const reisEntry=dayMenu.find(m=>m.slot==='reis');
+    const dishNames=getSommerDishNamesForDay(wdStr);
+    const reisEntry=menu.find(m=>m.weekday===wdStr && m.slot==='reis');
     const allDishes=[...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
     const dateStr=weekDates[wd];
     allDishes.forEach(dish=>{
@@ -1653,10 +1671,9 @@ async function renderForecastOrderTab(el, tabHtml){
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
-    const dayMenu=menu.filter(m=>m.weekday===wdStr && m.slot!=='salat'); // Salat separat behandelt
-    const dishNames=[...new Set(dayMenu.map(m=>m.dish_name).filter(n=>n && n!=='Reis'))]; // Reis separat unten mit anzeigen
-    const reisEntry=dayMenu.find(m=>m.slot==='reis');
-    const hasLasagne=dayMenu.some(m=>m.dish_name==='Lasagne');
+    const dishNames=getSommerDishNamesForDay(wdStr); // aus dem aktuell laufenden Sommer-Menü, nicht der statischen weekly_menu
+    const reisEntry=menu.find(m=>m.weekday===wdStr && m.slot==='reis');
+    const hasLasagne=dishNames.some(n=>n.includes('Lasagne'));
     const isToday=wd===todayWeekday;
     const dateStr=weekDates[wd];
     const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
@@ -1689,7 +1706,7 @@ async function renderForecastOrderTab(el, tabHtml){
         const autoVal=autoSuggestion?.qty ?? autoSuggestion; // Kompatibilität falls einfacher Zahlenwert
         const val=rec ? rec.qty : autoVal;
         const isSuggestion=!rec && autoVal!=null;
-        if(dish==='Lasagne' && isLasagneLocked(dateStr)){
+        if(dish.includes('Lasagne') && isLasagneLocked(dateStr)){
           return `<td style="padding:4px;"><div title="Gesperrt — Lasagne wird bereits produziert" style="width:54px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div></td>`;
         }
         return `<td style="padding:4px;"><input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${dish}" data-date="${dateStr}"
@@ -1748,7 +1765,13 @@ async function submitWochensalat(){
 }
 window.submitWochensalat=submitWochensalat;
 
-function switchOrderTab(t){activeOrderTab=t;renderOrder();}
+function switchOrderTab(t){
+  activeOrderTab=t;
+  renderOrder();
+  document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+  const nb=document.getElementById(t==='forecast'?'nav-forecast':'nav-order');
+  if(nb) nb.classList.add('active');
+}
 window.switchOrderTab=switchOrderTab;
 function adj(id,d){
   orderQtys[id]=Math.max(0,(orderQtys[id]||0)+d);
@@ -3374,10 +3397,9 @@ async function renderKitchen(){
 
     for(let wd=1; wd<=5; wd++){
       const wdStr=WEEKDAY_STR[wd];
-      const dayMenu=menu.filter(m=>m.weekday===wdStr && m.slot!=='salat');
-      const dishNames=[...new Set(dayMenu.map(m=>m.dish_name).filter(n=>n && n!=='Reis'))];
-      const reisEntry=dayMenu.find(m=>m.slot==='reis');
-      const hasLasagne=dayMenu.some(m=>m.dish_name==='Lasagne');
+      const dishNames=getSommerDishNamesForDay(wdStr); // aus dem aktuell laufenden Sommer-Menü, nicht der statischen weekly_menu
+      const reisEntry=menu.find(m=>m.weekday===wdStr && m.slot==='reis');
+      const hasLasagne=dishNames.some(n=>n.includes('Lasagne'));
       const allDishes=['Salat', ...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
       const isToday=wd===todayWeekday;
       const dateStr=weekDates[wd];
