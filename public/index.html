@@ -467,10 +467,10 @@ async function setLang(l) {
 
 // ---- API ----
 async function api(path, opts={}) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: {'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
     mode:'cors', ...opts
-  });
+  }, 10000); // 10s Timeout — verhindert unendliches Hängenbleiben bei Netzwerkproblemen/Stoßzeit
   if (!res.ok) throw new Error(await res.text());
   const t = await res.text();
   return t ? JSON.parse(t) : null;
@@ -1374,15 +1374,30 @@ const STORE_COORDS = {
 let _weatherCache = {}; // storeId -> {dateStr -> {tempMax, precipProb}}
 let _calendarEventsCache = null; // alle calendar_events, einmal pro Sitzung geladen
 let _forecastSettingsCache = {}; // storeId -> settings row
+let _salesHistoryCache = {}; // storeId -> {category -> [{sale_date, qty}, ...]}
+
+// Bricht Anfragen (Supabase & externe wie Wetter) nach einer festen Zeit ab, statt die Seite bei einer
+// langsamen/gestörten Verbindung (Mittagsstoßzeit, schlechtes WLAN) unbegrenzt hängen zu lassen.
+// WICHTIG: options (headers, method, body...) werden durchgereicht — sonst gehen z.B. Auth-Header verloren.
+function fetchWithTimeout(url, options={}, ms=8000){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), ms);
+  return fetch(url, {...options, signal: controller.signal}).finally(()=>clearTimeout(timer));
+}
+// Liest/schreibt sessionStorage defensiv — falls nicht verfügbar (Privatmodus o.ä.), einfach ignorieren statt crashen
+function cacheGet(key){ try{ const v=sessionStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function cacheSet(key, val){ try{ sessionStorage.setItem(key, JSON.stringify(val)); }catch(e){ /* z.B. Speicher voll — kein Problem, nur kein Caching */ } }
 
 async function fetchWeatherForStore(storeId, fromDate, toDate){
-  const cacheKey = `${storeId}_${fromDate}_${toDate}`;
+  const cacheKey = `wx_${storeId}_${fromDate}_${toDate}`;
   if(_weatherCache[cacheKey]) return _weatherCache[cacheKey];
+  const stored=cacheGet(cacheKey);
+  if(stored){ _weatherCache[cacheKey]=stored; return stored; }
   const coords = STORE_COORDS[storeId];
   if(!coords) return {};
   try{
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_probability_max&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, 5000);
     const data = await res.json();
     const map = {};
     (data?.daily?.time||[]).forEach((d,i)=>{
@@ -1392,24 +1407,50 @@ async function fetchWeatherForStore(storeId, fromDate, toDate){
       };
     });
     _weatherCache[cacheKey] = map;
+    cacheSet(cacheKey, map);
     return map;
   }catch(e){ console.error('Wetter-Abruf fehlgeschlagen', e); return {}; }
 }
 
 async function getCalendarEvents(){
   if(_calendarEventsCache) return _calendarEventsCache;
+  const stored=cacheGet('cal_events');
+  if(stored){ _calendarEventsCache=stored; return stored; }
   const events = await api('calendar_events?select=event_date,end_date,event_type,label,store_id').catch(()=>[]);
   _calendarEventsCache = events||[];
+  cacheSet('cal_events', _calendarEventsCache);
   return _calendarEventsCache;
 }
 
 async function getForecastSettings(storeId){
   if(_forecastSettingsCache[storeId]) return _forecastSettingsCache[storeId];
+  const cacheKey=`fc_settings_${storeId}`;
+  const stored=cacheGet(cacheKey);
+  if(stored){ _forecastSettingsCache[storeId]=stored; return stored; }
   const rows = await api(`forecast_settings?store_id=eq.${storeId}&select=*`).catch(()=>[]);
   const defaults = {weather_sunny_pct:10, weather_rain_pct:-8, feiertag_pct:-25, ferien_pct:-10};
   const settings = rows?.[0] ? {...defaults, ...rows[0]} : defaults;
   _forecastSettingsCache[storeId] = settings;
+  cacheSet(cacheKey, settings);
   return settings;
+}
+
+// Holt die GESAMTE Verkaufshistorie einer Filiale in EINER Anfrage (statt einer eigenen Anfrage pro
+// Gericht/Tag) — wichtig für Stabilität bei vielen gleichzeitigen Zugriffen / schlechter Verbindung.
+async function getSalesHistoryForStore(storeId){
+  if(_salesHistoryCache[storeId]) return _salesHistoryCache[storeId];
+  const cacheKey=`sales_hist_${storeId}`;
+  const stored=cacheGet(cacheKey);
+  if(stored){ _salesHistoryCache[storeId]=stored; return stored; }
+  const rows = await api(`sales_history?store_id=eq.${storeId}&order=sale_date.desc&limit=3000&select=sale_date,dish_category,qty`).catch(()=>[]);
+  const byCategory={};
+  (rows||[]).forEach(r=>{
+    if(!byCategory[r.dish_category]) byCategory[r.dish_category]=[];
+    byCategory[r.dish_category].push(r);
+  });
+  _salesHistoryCache[storeId]=byCategory;
+  cacheSet(cacheKey, byCategory);
+  return byCategory;
 }
 
 // Ermittelt Wetter- und Kalender-Zuschläge/Abschläge für einen Tag, inkl. lesbarer Begründung
@@ -1463,12 +1504,13 @@ function mapDishNameToCategory(dishName){
   return 'Special'; // rotierendes Sondergericht (Meatballs, Aloo Gobi, Gulasch etc.)
 }
 
-async function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMap, calendarEvents, settings){
+function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMap, calendarEvents, settings, salesHistoryByCategory){
   // Basis: Ø der letzten Vorkommen dieses Wochentags aus der echten Verkaufshistorie (sales_history),
-  // aus dem Odoo-Kassensystem abgeleitet — nicht mehr aus der (kaum genutzten) forecast_qty-Historie.
+  // aus dem Odoo-Kassensystem abgeleitet. salesHistoryByCategory wird EINMAL pro Seitenaufruf geladen
+  // (nicht pro Zelle) — wichtig für Stabilität bei vielen Zellen/schlechter Verbindung.
   const category=mapDishNameToCategory(dishName);
-  const history=await api(`sales_history?store_id=eq.${storeId}&dish_category=eq.${encodeURIComponent(category)}&order=sale_date.desc&limit=200&select=sale_date,qty`).catch(()=>[]);
-  const weekdayMatches=(history||[]).filter(h=>WEEKDAY_STR[new Date(h.sale_date+'T00:00:00').getDay()]===weekdayStr).slice(0,8);
+  const history=salesHistoryByCategory?.[category]||[];
+  const weekdayMatches=history.filter(h=>WEEKDAY_STR[new Date(h.sale_date+'T00:00:00').getDay()]===weekdayStr).slice(0,8);
   if(!weekdayMatches.length) return null;
   const baseQty=weekdayMatches.reduce((s,h)=>s+h.qty,0)/weekdayMatches.length;
 
@@ -1496,17 +1538,20 @@ function getSommerDishNamesForDay(wdStr){
 async function fetchHistoricalWeather(storeId, fromDate, toDate){
   const cacheKey = `hist_${storeId}_${fromDate}_${toDate}`;
   if(_weatherCache[cacheKey]) return _weatherCache[cacheKey];
+  const stored=cacheGet(cacheKey);
+  if(stored){ _weatherCache[cacheKey]=stored; return stored; }
   const coords = STORE_COORDS[storeId];
   if(!coords) return {};
   try{
     const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_sum&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, 8000);
     const data = await res.json();
     const map = {};
     (data?.daily?.time||[]).forEach((d,i)=>{
       map[d] = { tempMax: data.daily.temperature_2m_max?.[i], precipSum: data.daily.precipitation_sum?.[i] };
     });
     _weatherCache[cacheKey] = map;
+    cacheSet(cacheKey, map);
     return map;
   }catch(e){ console.error('Historisches Wetter fehlgeschlagen', e); return {}; }
 }
@@ -1640,11 +1685,13 @@ async function renderForecastOrderTab(el, tabHtml){
   const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source`).catch(()=>[]);
   const fMap={}; (weekForecasts||[]).forEach(f=>{if(!fMap[f.forecast_date])fMap[f.forecast_date]={};fMap[f.forecast_date][f.dish_name]=f;});
 
-  // Wetter, Feiertage/Ferien & Filial-Einstellungen laden — Grundlage für die Vorschlags-Begründung
-  const [weatherMap, calendarEvents, fcSettings] = await Promise.all([
+  // Wetter, Feiertage/Ferien, Filial-Einstellungen & GESAMTE Verkaufshistorie einmal laden
+  // (statt pro Zelle einzeln nachzufragen — wichtig bei vielen Zellen/schlechter Verbindung)
+  const [weatherMap, calendarEvents, fcSettings, salesHistory] = await Promise.all([
     fetchWeatherForStore(currentStore.id, fromDate, toDate),
     getCalendarEvents(),
-    getForecastSettings(currentStore.id)
+    getForecastSettings(currentStore.id),
+    getSalesHistoryForStore(currentStore.id)
   ]);
   const dayReasonMap={}; // dateStr -> "☀️ 26°C · kein Feiertag" (rein informativ, pro Tag einmal)
   for(let wd=1; wd<=5; wd++){
@@ -1653,21 +1700,25 @@ async function renderForecastOrderTab(el, tabHtml){
     dayReasonMap[dateStr]=reason;
   }
 
-  // Auto-Vorschläge für alle leeren Zellen vorab parallel berechnen (statt pro Zelle sequenziell zu warten)
+  // Auto-Vorschläge für alle leeren Zellen berechnen — rein synchron/lokal (keine Netzwerk-Anfrage mehr pro Zelle)
   const suggestionJobs=[]; // {wd, dish}
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
     const dishNames=getSommerDishNamesForDay(wdStr);
     const reisEntry=menu.find(m=>m.weekday===wdStr && m.slot==='reis');
-    const allDishes=[...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
+    const allDishes=['Salat', ...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
     const dateStr=weekDates[wd];
     allDishes.forEach(dish=>{
       if(!(fMap[dateStr]||{})[dish]) suggestionJobs.push({dateStr, dish, wdStr});
     });
   }
-  const suggestionResults=await Promise.all(suggestionJobs.map(j=>computeAutoSuggestion(currentStore.id, j.dish, j.wdStr, j.dateStr, weatherMap, calendarEvents, fcSettings)));
   const suggestionMap={}; // suggestionMap[dateStr][dish] = {qty, reason} or null
-  suggestionJobs.forEach((j,i)=>{ if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={}; suggestionMap[j.dateStr][j.dish]=suggestionResults[i]; });
+  suggestionJobs.forEach(j=>{
+    const result=computeAutoSuggestion(currentStore.id, j.dish, j.wdStr, j.dateStr, weatherMap, calendarEvents, fcSettings, salesHistory);
+    if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={};
+    suggestionMap[j.dateStr][j.dish]=result;
+  });
+
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
