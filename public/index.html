@@ -1349,7 +1349,95 @@ window.updateKuecheQty=updateKuecheQty;
 
 // ---- FORECAST (Hauptspeisen-Portionsmengen pro Filiale & Tag) ----
 const FORECAST_DISHES=['Curry','Dal','Reis','Biryani','Gulasch','Lasagne']; // Hauptspeisen-Pool, tatsächliche Auswahl kommt aus weekly_menu
-async function computeAutoSuggestion(storeId, dishName, weekdayStr){
+
+// Ungefähre Koordinaten pro Filiale, für die Wettervorhersage
+const STORE_COORDS = {
+  lb:      {lat:48.2108, lon:16.3796},
+  boerse:  {lat:48.2165, lon:16.3699},
+  '1020':  {lat:48.2132, lon:16.4058},
+  '3400':  {lat:48.3079, lon:16.3272},
+};
+
+let _weatherCache = {}; // storeId -> {dateStr -> {tempMax, precipProb}}
+let _calendarEventsCache = null; // alle calendar_events, einmal pro Sitzung geladen
+let _forecastSettingsCache = {}; // storeId -> settings row
+
+async function fetchWeatherForStore(storeId, fromDate, toDate){
+  const cacheKey = `${storeId}_${fromDate}_${toDate}`;
+  if(_weatherCache[cacheKey]) return _weatherCache[cacheKey];
+  const coords = STORE_COORDS[storeId];
+  if(!coords) return {};
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_probability_max&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const map = {};
+    (data?.daily?.time||[]).forEach((d,i)=>{
+      map[d] = {
+        tempMax: data.daily.temperature_2m_max?.[i],
+        precipProb: data.daily.precipitation_probability_max?.[i]
+      };
+    });
+    _weatherCache[cacheKey] = map;
+    return map;
+  }catch(e){ console.error('Wetter-Abruf fehlgeschlagen', e); return {}; }
+}
+
+async function getCalendarEvents(){
+  if(_calendarEventsCache) return _calendarEventsCache;
+  const events = await api('calendar_events?select=event_date,end_date,event_type,label,store_id').catch(()=>[]);
+  _calendarEventsCache = events||[];
+  return _calendarEventsCache;
+}
+
+async function getForecastSettings(storeId){
+  if(_forecastSettingsCache[storeId]) return _forecastSettingsCache[storeId];
+  const rows = await api(`forecast_settings?store_id=eq.${storeId}&select=*`).catch(()=>[]);
+  const defaults = {weather_sunny_pct:10, weather_rain_pct:-8, feiertag_pct:-25, ferien_pct:-10};
+  const settings = rows?.[0] ? {...defaults, ...rows[0]} : defaults;
+  _forecastSettingsCache[storeId] = settings;
+  return settings;
+}
+
+// Ermittelt Wetter- und Kalender-Zuschläge/Abschläge für einen Tag, inkl. lesbarer Begründung
+function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings){
+  let pct = 0;
+  const reasons = [];
+
+  const w = weatherMap[dateStr];
+  if(w && w.tempMax!=null){
+    if(w.tempMax>=22 && (w.precipProb??0)<=30){
+      pct += settings.weather_sunny_pct;
+      reasons.push(`☀️ ${Math.round(w.tempMax)}°C`);
+    } else if((w.precipProb??0)>=60){
+      pct += settings.weather_rain_pct;
+      reasons.push(`🌧️ ${Math.round(w.precipProb)}% Regen`);
+    } else {
+      reasons.push(`⛅ ${Math.round(w.tempMax)}°C`);
+    }
+  }
+
+  const feiertag = calendarEvents.find(e=>e.event_type==='feiertag' && e.event_date===dateStr && (!e.store_id||e.store_id===storeId));
+  if(feiertag){
+    pct += settings.feiertag_pct;
+    reasons.push(`🎉 ${feiertag.label}`);
+  }
+
+  const ferien = calendarEvents.find(e=>e.event_type==='ferien' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
+  if(ferien && !feiertag){
+    pct += settings.ferien_pct;
+    reasons.push(`🏖️ ${ferien.label}`);
+  }
+
+  const sondertag = calendarEvents.find(e=>e.event_type==='sondertag' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
+  if(sondertag){
+    reasons.push(`📌 ${sondertag.label}`);
+  }
+
+  return {pct, reason: reasons.join(' · ')};
+}
+
+async function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMap, calendarEvents, settings){
   // Heuristik: Schnitt der letzten Wochen für diesen Wochentag/Filiale/Gericht aus disposal.
   // leftover_qty hoch -> zu viel produziert; sold_out_time früh -> zu wenig. Ohne produzierte Menge in der DB
   // nutzen wir leftover_qty als Korrektursignal auf den letzten manuellen/vorherigen forecast-Wert.
@@ -1370,7 +1458,16 @@ async function computeAutoSuggestion(storeId, dishName, weekdayStr){
     }
     total+=adj; count++;
   });
-  return count ? Math.round((total/count)*4)/4 : null; // auf Viertel runden
+  const baseQty = count ? total/count : null;
+  if(baseQty==null) return null;
+
+  if(!dateStr || !weatherMap || !calendarEvents || !settings){
+    return Math.round(baseQty*4)/4; // Fallback: alte Signatur ohne Wetter/Kalender
+  }
+  const {pct, reason} = getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings);
+  const adjustedQty = Math.round((baseQty*(1+pct/100))*4)/4;
+  const baseLabel = `Basis: Ø ${Math.round(baseQty*4)/4}`;
+  return {qty: adjustedQty, reason: reason ? `${baseLabel} · ${reason}` : baseLabel};
 }
 function isLasagneLocked(dateStr){
   const cutoff=new Date(dateStr+'T12:00:00');
@@ -1395,6 +1492,19 @@ async function renderForecastOrderTab(el, tabHtml){
   const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source`).catch(()=>[]);
   const fMap={}; (weekForecasts||[]).forEach(f=>{if(!fMap[f.forecast_date])fMap[f.forecast_date]={};fMap[f.forecast_date][f.dish_name]=f;});
 
+  // Wetter, Feiertage/Ferien & Filial-Einstellungen laden — Grundlage für die Vorschlags-Begründung
+  const [weatherMap, calendarEvents, fcSettings] = await Promise.all([
+    fetchWeatherForStore(currentStore.id, fromDate, toDate),
+    getCalendarEvents(),
+    getForecastSettings(currentStore.id)
+  ]);
+  const dayReasonMap={}; // dateStr -> "☀️ 26°C · kein Feiertag" (rein informativ, pro Tag einmal)
+  for(let wd=1; wd<=5; wd++){
+    const dateStr=weekDates[wd];
+    const {reason}=getDayModifiers(dateStr, currentStore.id, weatherMap, calendarEvents, fcSettings);
+    dayReasonMap[dateStr]=reason;
+  }
+
   // Auto-Vorschläge für alle leeren Zellen vorab parallel berechnen (statt pro Zelle sequenziell zu warten)
   const suggestionJobs=[]; // {wd, dish}
   for(let wd=1; wd<=5; wd++){
@@ -1408,8 +1518,8 @@ async function renderForecastOrderTab(el, tabHtml){
       if(!(fMap[dateStr]||{})[dish]) suggestionJobs.push({dateStr, dish, wdStr});
     });
   }
-  const suggestionResults=await Promise.all(suggestionJobs.map(j=>computeAutoSuggestion(currentStore.id, j.dish, j.wdStr)));
-  const suggestionMap={}; // suggestionMap[dateStr][dish] = value or null
+  const suggestionResults=await Promise.all(suggestionJobs.map(j=>computeAutoSuggestion(currentStore.id, j.dish, j.wdStr, j.dateStr, weatherMap, calendarEvents, fcSettings)));
+  const suggestionMap={}; // suggestionMap[dateStr][dish] = {qty, reason} or null
   suggestionJobs.forEach((j,i)=>{ if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={}; suggestionMap[j.dateStr][j.dish]=suggestionResults[i]; });
 
   for(let wd=1; wd<=5; wd++){
@@ -1424,6 +1534,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const allDishes=[...dishNames, ...(reisEntry?[reisEntry.dish_name]:[])].filter(Boolean);
 
     html+=`<div class="section-lbl" style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd]} · ${dateLabel}${isToday?' — heute':''}</div>
+    ${dayReasonMap[dateStr]?`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${dayReasonMap[dateStr]}</div>`:''}
     <div class="card" style="${isToday?`border:1.5px solid ${tab.color};`:''}"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
       <th style="text-align:left;color:#A21CAF;">Salat</th>
       ${allDishes.map(d=>`<th data-no-translate>${d}</th>`).join('')}
@@ -1431,7 +1542,8 @@ async function renderForecastOrderTab(el, tabHtml){
       <td style="padding:4px;">${(()=>{
         const rec=(fMap[dateStr]||{})['Salat'];
         const manual=rec?.source==='manual';
-        const autoVal=(suggestionMap[dateStr]||{})['Salat'];
+        const autoSuggestion=(suggestionMap[dateStr]||{})['Salat'];
+        const autoVal=autoSuggestion?.qty ?? autoSuggestion; // Kompatibilität falls einfacher Zahlenwert
         const val=rec ? rec.qty : autoVal;
         const isSuggestion=!rec && autoVal!=null;
         return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
@@ -1444,7 +1556,8 @@ async function renderForecastOrderTab(el, tabHtml){
       ${allDishes.map(dish=>{
         const rec=(fMap[dateStr]||{})[dish];
         const manual=rec?.source==='manual';
-        const autoVal=(suggestionMap[dateStr]||{})[dish];
+        const autoSuggestion=(suggestionMap[dateStr]||{})[dish];
+        const autoVal=autoSuggestion?.qty ?? autoSuggestion; // Kompatibilität falls einfacher Zahlenwert
         const val=rec ? rec.qty : autoVal;
         const isSuggestion=!rec && autoVal!=null;
         if(dish==='Lasagne' && isLasagneLocked(dateStr)){
@@ -1469,7 +1582,7 @@ async function renderForecastOrderTab(el, tabHtml){
     }
   }
 
-  html+=`<div style="font-size:11px;color:var(--muted);padding:10px 2px 4px;">Werte mit "Vorschlag" sind aus den letzten Entsorgungsdaten berechnet. Jeder Wert kann direkt überschrieben werden — die Küche sieht eure Anpassung.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:10px 2px 4px;">Werte mit "Vorschlag" sind aus den letzten Entsorgungsdaten berechnet und berücksichtigen Wetter, Feiertage & Ferien (siehe Hinweis unter dem Datum). Jeder Wert kann direkt überschrieben werden — die Küche sieht eure Anpassung.</div>`;
 
   el.innerHTML=html;
   translateEl(el);
