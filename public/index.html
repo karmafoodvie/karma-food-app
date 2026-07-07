@@ -188,6 +188,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-forecastReview" class="view"></div>
     <div id="v-oeffnungHilfe" class="view"></div>
     <div id="v-reinigungHilfe" class="view"></div>
+    <div id="v-hygieneSchulung" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -429,10 +430,14 @@ function renderKontrolleView(){
 // Keep old overlay function as alias (used by some older links)
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
+// Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
+const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
+const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
+
 const KONTROLLE_PUNKTE = [
   {icon:'🥜', titel:'Allergene', oneliner:'Was ist drin? Hier nachschauen.', text:'Die 14 gesetzlich gekennzeichneten Stoffe (z.B. Gluten, Nüsse, Milch, Soja), die bei manchen Gästen heftige bis lebensgefährliche Reaktionen auslösen können. Zu jedem Gericht muss bekannt sein, welche Allergene enthalten sind — schriftlich oder mündlich, aber dann muss wirklich jemand Bescheid wissen, der gerade da ist.', target:'allergene'},
   {icon:'🐭', titel:'Schädlinge im Griff', oneliner:'Liegt in der grünen Mappe im Store.', text:'Mäuse, Schaben, Motten & Co. Die Kontrolle der Fallen/Köder in Küche und Lager wird auf Papier dokumentiert — die grüne Mappe liegt direkt im Store. Bei einer Kontrolle einfach zeigen.', target:null, badgeText:'📁 Mappe'},
-  {icon:'🎓', titel:'Hygiene-Schulungen', oneliner:'Wer wurde wann geschult?', text:'Händewaschen, Kopfbedeckung, nicht krank arbeiten und mehr. Mindestens 1x im Jahr (plus bei neuen Mitarbeitenden) nachweisbar schulen — mit Datum, nicht nur „haben wir mal erklärt".', target:'schulung'},
+  {icon:'🎓', titel:'Hygiene-Schulungen', oneliner:'Wer wurde wann geschult?', text:'Händewaschen, Kopfbedeckung, nicht krank arbeiten und mehr. Mindestens 1x im Jahr (plus bei neuen Mitarbeitenden) nachweisbar schulen — mit Datum, nicht nur „haben wir mal erklärt".', target:'hygieneSchulung'},
   {icon:'🧽', titel:'Sauber & desinfiziert', oneliner:'Reinigungsprotokoll bei Schichtende.', text:'Nicht nur „sieht sauber aus": Es muss klar sein, was, wann, wie und mit welchem Mittel gereinigt wird — und ob danach zusätzlich desinfiziert wurde. Reines Putzen tötet Keime nicht zuverlässig ab. Du findest und bestätigst das bei „Schicht abschließen" unter Reinigung & Desinfektion.', target:'schichtende'},
   {icon:'🔧', titel:'Kaputt & gemeldet?', oneliner:'Schaden melden →', text:'Z.B. ein fehlendes Handwaschbecken oder ein kaputtes Gerät. Muss erkannt, gemeldet und behoben werden — am besten mit Datum, wann\'s gemeldet und wann\'s repariert wurde.', target:'maengel'},
   {icon:'🌡️', titel:'Temperatur-Listen', oneliner:'Wareneingang & Kühlschrank im Daily Check-up.', text:'Kühlschranktemperatur und Temperatur bei der Lieferung — jeden Tag mit echtem Messwert aufschreiben, nicht geschätzt oder einfach abgehakt. Du findest und bestätigst das im Daily Check-up unter „Wareneingangskontrolle" und „Kühleinrichtungen".', target:'dailycheck'}
@@ -662,11 +667,11 @@ function goTo(v, noPush=false){
   const navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)'};
+  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -2476,10 +2481,26 @@ async function renderSchulung(){
   const isOrg=currentStore?.id==='zentrale';
   if(isOrg){
     el.innerHTML = `
-      <div class="section-lbl">Status-Übersicht — alle Filialen</div>
-      <div id="schulungMatrixAdmin"></div>
-      <div class="card" style="padding:14px;margin-top:14px;">
-        <div style="font-weight:500;margin-bottom:10px;">Neues Thema anlegen</div>
+      <div class="section-lbl">👤 Mitarbeitende verwalten</div>
+      <div class="card" style="padding:14px;">
+        <select id="mit-store-select" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;" data-no-translate onchange="refreshMitarbeitendeListe()"></select>
+        <div id="mitarbeitendeListe"></div>
+        <div style="display:flex;gap:6px;margin-top:10px;">
+          <input id="mit-name" type="text" placeholder="Name" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
+          <input id="mit-eintritt" type="date" style="padding:10px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
+        </div>
+        <button class="submit-btn" style="margin-top:8px;" onclick="addMitarbeiter()">+ Hinzufügen</button>
+      </div>
+
+      <div class="section-lbl" style="margin-top:14px;">✅ Wer ist geschult? — pro Person</div>
+      <div class="card" style="padding:14px;">
+        <select id="status-thema-select" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;" onchange="refreshMitarbeiterStatus()"></select>
+        <select id="status-store-select" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;" data-no-translate onchange="refreshMitarbeiterStatus()"></select>
+      </div>
+      <div id="mitarbeiterStatusListe"></div>
+
+      <div class="section-lbl" style="margin-top:14px;">📅 Neues Thema anlegen</div>
+      <div class="card" style="padding:14px;">
         <input id="sch-titel" type="text" placeholder="Thema (z.B. Temperaturmessung)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
         <textarea id="sch-erklaerung" placeholder="Warum ist das wichtig? (kurze Erklärung für Mitarbeitende)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;min-height:60px;box-sizing:border-box;"></textarea>
         <input id="sch-intervall" type="number" value="12" min="1" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;box-sizing:border-box;">
@@ -2488,26 +2509,27 @@ async function renderSchulung(){
       </div>
       <div id="schulungThemenListAdmin"></div>
 
-      <div class="card" style="padding:14px;margin-top:14px;">
-        <div style="font-weight:500;margin-bottom:10px;">Schulung eintragen</div>
+      <div class="section-lbl" style="margin-top:14px;">✍️ Schulung eintragen</div>
+      <div class="card" style="padding:14px;">
         <select id="sch-thema-select" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;"></select>
-        <select id="sch-store-select" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;" data-no-translate></select>
+        <select id="sch-store-select" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;" data-no-translate onchange="refreshSchTeilnehmerCheckboxes()"></select>
         <input id="sch-datum" type="date" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
-        <input id="sch-durchgefuehrt" type="text" placeholder="Durchgeführt von" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
-        <input id="sch-teilnehmer" type="text" placeholder="Teilnehmer (Namen, mit Komma getrennt)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;">
-        <div class="cl-item" style="padding:8px 0;" onclick="toggleSchUnterschrieben()">
-          <div class="check-box" id="sch-unterschrieben-box" data-value="0"></div>
-          <span class="cl-text">✍️ Unterschriften der Teilnehmer eingeholt (Papier/Anwesenheitsliste)</span>
-        </div>
+        <input id="sch-durchgefuehrt" type="text" placeholder="Durchgeführt von" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;">
+        <div style="font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;">Wer hat teilgenommen & unterschrieben?</div>
+        <div id="sch-teilnehmer-checkboxes" style="margin-bottom:10px;"></div>
         <button class="submit-btn" onclick="saveSchulungEntry()">Eintragen</button>
       </div>
       <div id="schulungHistorieAdmin"></div>
     `;
     document.getElementById('sch-datum').value=new Date().toISOString().split('T')[0];
     translateEl(el);
-    document.getElementById('schulungMatrixAdmin').innerHTML=await buildSchulungMatrixHtml();
+    await refreshMitarbeitendeStoreDropdown();
+    await refreshMitarbeitendeListe();
     await refreshSchulungThemenAdmin();
     await fillSchulungDropdowns();
+    await fillStatusDropdowns();
+    await refreshSchTeilnehmerCheckboxes();
+    await refreshMitarbeiterStatus();
     await refreshSchulungHistorie();
   } else {
     el.innerHTML = `<div id="schulungStatusStore"></div>`;
@@ -2562,6 +2584,166 @@ async function fillSchulungDropdowns(){
   if(themaSel) themaSel.innerHTML=(themen||[]).length?(themen.map(t=>`<option value="${t.id}">${t.titel}</option>`).join('')):'<option value="">— erst ein Thema anlegen —</option>';
   if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
+
+// ---- HYGIENE-SCHULUNG (pro Person, Selbst-Eintragung durch Mitarbeitende) ----
+let hygieneSelectedStores = new Set();
+let hygieneSelectedInhalte = new Set();
+const CHECK_SVG='<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>';
+
+async function renderHygieneSchulung(){
+  const el=document.getElementById('v-hygieneSchulung');
+  const isOrg=currentStore?.id==='zentrale';
+  hygieneSelectedStores=new Set();
+  hygieneSelectedInhalte=new Set();
+
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
+
+  let html=backToHomeHtml();
+
+  if(!isOrg){
+    html+=`
+    <div style="background:var(--green-light);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--sub);">
+      🎓 Nach jeder Hygiene-Schulung trägt sich bitte <strong>jede teilnehmende Person selbst</strong> hier ein.
+    </div>
+    <div class="card" style="padding:14px;">
+      <div style="font-weight:500;margin-bottom:8px;">Dein Name</div>
+      <input id="hs-name" type="text" placeholder="Vor- und Nachname" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+
+      <div style="font-weight:500;margin-bottom:8px;">Du arbeitest in (mehrere möglich)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+        ${storeList.map(s=>`<div onclick="toggleHsChip(this,'store','${s.id}')" data-no-translate style="padding:6px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--sub);">${s.name}</div>`).join('')}
+      </div>
+
+      <div style="font-weight:500;margin-bottom:8px;">Datum</div>
+      <input id="hs-datum" type="date" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+
+      <div style="font-weight:500;margin-bottom:8px;">Durchgeführt von</div>
+      <select id="hs-trainer" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+        <option value="">— auswählen —</option>
+        ${HYGIENE_TRAINER.map(t=>`<option value="${t}">${t}</option>`).join('')}
+      </select>
+
+      <div style="font-weight:500;margin-bottom:8px;">Inhalte, die behandelt wurden</div>
+      <div style="margin-bottom:6px;">
+        ${HYGIENE_INHALTE.map((txt,i)=>`
+          <div class="cl-item" onclick="toggleHsChip(this,'inhalt','${i}')">
+            <div class="check-box"></div>
+            <span class="cl-text">${txt}</span>
+          </div>`).join('')}
+      </div>
+
+      <button class="submit-btn" onclick="saveHygieneSchulung()">✔ Schulung eintragen</button>
+    </div>
+    <div id="hs-my-history" style="margin-top:16px;"></div>
+    `;
+  } else {
+    html+=`<div class="section-lbl">🎓 Hygiene-Schulungen — wer, wann, was</div><div id="hs-org-list"></div>`;
+  }
+
+  el.innerHTML=html;
+  translateEl(el);
+  if(!isOrg){
+    document.getElementById('hs-datum').value=new Date().toISOString().split('T')[0];
+    await loadMyHygieneHistory();
+  } else {
+    await loadHygieneOrgList(storeList);
+  }
+}
+
+function toggleHsChip(el, kind, val){
+  const set = kind==='store'?hygieneSelectedStores:hygieneSelectedInhalte;
+  const selected = set.has(val);
+  if(selected) set.delete(val); else set.add(val);
+  if(kind==='store'){
+    el.style.borderColor = selected?'var(--border)':'var(--green)';
+    el.style.background = selected?'var(--card)':'var(--green-light)';
+    el.style.color = selected?'var(--sub)':'var(--green)';
+  } else {
+    const box = el.querySelector('.check-box');
+    box.classList.toggle('done', !selected);
+    box.innerHTML = !selected ? CHECK_SVG : '';
+  }
+}
+window.toggleHsChip=toggleHsChip;
+
+async function saveHygieneSchulung(){
+  const name=document.getElementById('hs-name')?.value.trim();
+  const datum=document.getElementById('hs-datum')?.value;
+  const trainer=document.getElementById('hs-trainer')?.value;
+  if(!name){ showToast('Bitte Namen eingeben'); return; }
+  if(!hygieneSelectedStores.size){ showToast('Bitte mindestens eine Filiale wählen'); return; }
+  if(!datum){ showToast('Bitte Datum wählen'); return; }
+  if(!trainer){ showToast('Bitte auswählen, wer die Schulung durchgeführt hat'); return; }
+  if(!hygieneSelectedInhalte.size){ showToast('Bitte mindestens einen Inhalt anhaken'); return; }
+  const storesStr=[...hygieneSelectedStores].join(',');
+  const inhalteStr=[...hygieneSelectedInhalte].sort((a,b)=>a-b).map(i=>HYGIENE_INHALTE[i]).join(', ');
+  try{
+    await api('hygiene_schulungen',{method:'POST',body:JSON.stringify([{name,stores:storesStr,datum,durchgefuehrt_von:trainer,inhalte:inhalteStr}])});
+    showToast('✔ Danke, Schulung eingetragen!');
+    renderHygieneSchulung();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveHygieneSchulung=saveHygieneSchulung;
+
+async function loadMyHygieneHistory(){
+  const wrap=document.getElementById('hs-my-history');
+  if(!wrap) return;
+  const entries=await api(`hygiene_schulungen?stores=ilike.*${currentStore.id}*&select=*&order=datum.desc&limit=10`).catch(()=>[]);
+  if(!entries?.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML=`<div class="section-lbl">Zuletzt eingetragen (${currentStore.name})</div>` + entries.map(e=>`
+    <div class="card" style="padding:10px 12px;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;"><strong data-no-translate>${e.name}</strong><span style="font-size:11px;color:var(--muted);">${new Date(e.datum).toLocaleDateString('de-AT')}</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">von ${e.durchgefuehrt_von}</div>
+    </div>`).join('');
+}
+
+async function loadHygieneOrgList(storeList){
+  const wrap=document.getElementById('hs-org-list');
+  if(!wrap) return;
+  const entries=await api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]);
+  const storeMap=Object.fromEntries((storeList||[]).map(s=>[s.id,s.name]));
+  const byName={};
+  (entries||[]).forEach(e=>{
+    if(!byName[e.name] || new Date(e.datum)>new Date(byName[e.name].datum)) byName[e.name]=e;
+  });
+  const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
+  const names=Object.keys(byName).sort();
+
+  let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Person</th><th>Zuletzt</th><th>Status</th></tr></thead><tbody>`;
+  if(!names.length){
+    html+=`<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:14px;">Noch keine Einträge</td></tr>`;
+  }
+  names.forEach(n=>{
+    const e=byName[n];
+    const overdue=new Date(e.datum)<cutoff;
+    html+=`<tr><td style="text-align:left;" data-no-translate>${n}</td><td>${new Date(e.datum).toLocaleDateString('de-AT')}</td><td>${overdue?'<span class="badge badge-warn">fällig</span>':'<span class="badge badge-ok">aktuell</span>'}</td></tr>`;
+  });
+  html+='</tbody></table></div></div>';
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">Alle Einträge</div>`;
+  html+=(entries||[]).map(e=>{
+    const storeNames=(e.stores||'').split(',').filter(Boolean).map(id=>storeMap[id.trim()]||id.trim()).join(', ');
+    return `<div class="card" style="padding:12px;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <strong data-no-translate>${e.name}</strong>
+        <span style="font-size:11px;color:var(--muted);">${new Date(e.datum).toLocaleDateString('de-AT')}</span>
+      </div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px;" data-no-translate>${storeNames} · durchgeführt von ${e.durchgefuehrt_von}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">${e.inhalte}</div>
+      <div style="margin-top:8px;"><button onclick="deleteHygieneEntry(${e.id})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#DC2626;cursor:pointer;">Löschen</button></div>
+    </div>`;
+  }).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Einträge.</div>';
+
+  wrap.innerHTML=html;
+}
+
+async function deleteHygieneEntry(id){
+  if(!confirm('Eintrag wirklich löschen?')) return;
+  try{ await api(`hygiene_schulungen?id=eq.${id}`,{method:'DELETE'}); }catch(e){console.error(e);return;}
+  renderHygieneSchulung();
+}
+window.deleteHygieneEntry=deleteHygieneEntry;
 
 function toggleSchUnterschrieben(){
   const box=document.getElementById('sch-unterschrieben-box');
