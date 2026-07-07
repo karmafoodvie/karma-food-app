@@ -888,34 +888,32 @@ async function renderHome(){
       }catch(e){console.error(e);}
     }
 
-    // Monatlicher Reinigungs-Reminder: Kaffeemaschine, Eismaschine, Bain Maries entkalken
+    // Monatlicher Reinigungs-Reminder: nur in den letzten Tagen des Monats zeigen, damit es nicht wochenlang stört
     try{
-      const monthKey=new Date().toISOString().slice(0,7); // 'YYYY-MM'
-      const monthlyDone=await api(`monthly_cleaning_done?store_id=eq.${currentStore.id}&month_key=eq.${monthKey}&select=id`).catch(()=>[]);
-      if(!(monthlyDone||[]).length){
-        monthlyCleaningHtml=`<div style="background:#FFF7ED;border:1px solid #F97316;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:16px;">🧽</span>
-            <span style="font-size:13px;font-weight:600;color:#E0521F;">Monatliche Tiefenreinigung fällig</span>
-          </div>
-          <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">☕ Kaffeemaschine reinigen · 🍧 Eismaschine reinigen · 🍲 Bain Maries entkalken</div>
-          <button onclick="markMonthlyCleaningDone()" style="width:100%;background:#F97316;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;">✓ Erledigt für diesen Monat</button>
-        </div>`;
+      const now=new Date();
+      const lastDayOfMonth=new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+      if(now.getDate() >= lastDayOfMonth-6){ // letzte ca. 7 Tage des Monats
+        const monthKey=now.toISOString().slice(0,7); // 'YYYY-MM'
+        const monthlyDone=await api(`monthly_cleaning_done?store_id=eq.${currentStore.id}&month_key=eq.${monthKey}&select=id`).catch(()=>[]);
+        if(!(monthlyDone||[]).length){
+          monthlyCleaningHtml=`<div style="background:#F0FDFA;border:1px solid #5EEAD4;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="font-size:16px;">🧽</span>
+              <span style="font-size:13px;font-weight:600;color:#0F766E;">Monatliche Tiefenreinigung fällig</span>
+            </div>
+            <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">☕ Kaffeemaschine reinigen · 🍧 Eismaschine reinigen · 🍲 Bain Maries entkalken</div>
+            <button onclick="markMonthlyCleaningDone()" style="width:100%;background:#0D9488;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;">✓ Erledigt für diesen Monat</button>
+          </div>`;
+        }
       }
     }catch(e){console.error(e);}
 
+    // Kompakte, kleine Reminder-Liste statt großer bunter Kästen — wird direkt unter "Let's start the shift" eingeblendet
     if(reminders.length){
-      remindersHtml=reminders.map(r=>`
-        <div onclick="goToReminder('${r.tab}'${r.orderTab?`,'${r.orderTab}'`:''})" style="display:flex;align-items:center;gap:10px;background:${r.color}10;border:1px solid ${r.color}40;border-radius:10px;padding:10px 14px;margin-bottom:8px;cursor:pointer;">
-          <span style="font-size:16px;">${r.icon}</span>
-          <span style="flex:1;font-size:13px;color:${r.color};font-weight:500;">${r.text}</span>
-          <span style="color:${r.color};">→</span>
-        </div>`).join('');
+      remindersHtml=`<div style="margin:2px 0 8px;">${reminders.map(r=>`
+        <div onclick="goToReminder('${r.tab}'${r.orderTab?`,'${r.orderTab}'`:''})" style="font-size:11.5px;color:#DC2626;padding:2px 0;cursor:pointer;text-decoration:underline;">${r.icon} ${r.text}</div>`).join('')}</div>`;
     }else{
-      remindersHtml=`<div style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:10px 14px;margin-bottom:8px;">
-        <span style="font-size:16px;">✓</span>
-        <span style="font-size:13px;color:#166534;font-weight:500;">Alles erledigt für heute</span>
-      </div>`;
+      remindersHtml='';
     }
   }
 
@@ -2692,11 +2690,11 @@ async function renderDailyCheck(){
     <div class="section-lbl" style="color:var(--green);">🧽 Reinigungs- & Kontrollprotokoll</div>
     <div class="card" style="border:1.5px solid var(--green);">
       <div style="padding:14px 14px 4px;font-size:11px;color:var(--muted);line-height:1.6;">Vorreinigen → Hauptreinigen → Desinfizieren → Nachspülen → Trocknen</div>
-      <div class="cl-item" onclick="toggleReinigungField('reinigung_erledigt')">
+      <div class="cl-item" onclick="toggleReinigungField('reinigung_erledigt', this)">
         <div class="check-box${reinig?.reinigung_erledigt?' done':''}">${reinig?.reinigung_erledigt?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Reinigung erledigt</span>
       </div>
-      <div class="cl-item" onclick="toggleReinigungField('desinfektion_erledigt')">
+      <div class="cl-item" onclick="toggleReinigungField('desinfektion_erledigt', this)">
         <div class="check-box${reinig?.desinfektion_erledigt?' done':''}">${reinig?.desinfektion_erledigt?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Desinfektion erledigt</span>
       </div>
@@ -2844,7 +2842,7 @@ async function saveWareneingang(){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
-async function toggleReinigungField(field){
+async function toggleReinigungField(field, itemEl){
   const today=new Date().toISOString().split('T')[0];
   const cur=(await api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]))[0]||{};
   const updated={reinigung_erledigt:!!cur.reinigung_erledigt, desinfektion_erledigt:!!cur.desinfektion_erledigt};
@@ -2853,7 +2851,14 @@ async function toggleReinigungField(field){
     await api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
     await api('reinigungsprotokoll',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,...updated,mitarbeiter:currentStore.name}])});
     showToast('✔ Gespeichert');
-    renderDailyCheck();
+    // WICHTIG: nur die Checkbox lokal aktualisieren, NICHT die ganze Seite neu laden —
+    // sonst gehen noch nicht gespeicherte Eingaben (z.B. die Temperatur) verloren.
+    const box=itemEl?.querySelector('.check-box');
+    if(box){
+      const nowChecked=updated[field];
+      box.classList.toggle('done', nowChecked);
+      box.innerHTML=nowChecked?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':'';
+    }
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
@@ -3301,7 +3306,8 @@ async function renderDisposal(){
     {k:'reis', l:'Reis', name:REIS_DISH_NAME}
   ];
 
-  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+  let html=backToHomeHtml();
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
     <div style="font-size:12px;color:var(--muted);">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})} — Uhrzeit & Restmenge pro Gericht eintragen</div>
     <button onclick="showContainerInfo()" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--green);background:#fff;color:var(--green);font-size:13px;font-weight:600;cursor:pointer;line-height:1;">i</button>
   </div>`;
@@ -3312,10 +3318,11 @@ async function renderDisposal(){
   daySlots.forEach(s=>{
     const dishName=s.name;
     const rec=dispMap[s.k];
+    const isDone=rec?.leftover_qty!=null; // Restmenge wurde eingetragen -> Zeile gilt als erledigt
     const soldOut=rec?.sold_out_time ? rec.sold_out_time.slice(0,5) : '';
     const dishNameSafe=escForInlineHandler(dishName);
-    html+=`<tr>
-      <td data-no-translate style="font-size:12px;">${getDishEmoji(dishName)} ${dishName}<div style="font-size:10px;color:var(--muted);">${s.l}</div></td>
+    html+=`<tr style="${isDone?'background:#F0FDF4;':''}">
+      <td data-no-translate style="font-size:12px;">${isDone?'<span style="color:var(--green);margin-right:2px;">✓</span>':''}${getDishEmoji(dishName)} ${dishName}<div style="font-size:10px;color:var(--muted);">${s.l}</div></td>
       <td>
         <input type="time" value="${soldOut}"
           onclick="if(!this.value){const n=new Date();this.value=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');updateSoldOutTime('${s.k}','${dishNameSafe}',this.value);}"
@@ -3324,7 +3331,7 @@ async function renderDisposal(){
         ${soldOut?`<button onclick="clearSoldOutTime('${s.k}','${dishNameSafe}')" title="Zeit löschen" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;">✕</button>`:'<span style="font-size:10px;color:var(--muted);">antippen</span>'}
       </td>
       <td>
-        <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center;">
+        <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid ${isDone?'var(--green)':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;">
       </td>
     </tr>`;
   });
