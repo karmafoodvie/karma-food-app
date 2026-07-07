@@ -2618,14 +2618,17 @@ async function renderHygieneSchulung(){
 
   let html=backToHomeHtml();
 
-  if(!isOrg){
-    html+=`
-    <div style="background:var(--green-light);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--sub);">
-      🎓 Hygiene-Schulungen — Nachweis für Kontrollen (Marktamt)
-    </div>
-    <div class="section-lbl">Zuletzt geschult in dieser Filiale</div>
-    <div id="hs-latest-person" class="card" style="padding:14px;"></div>
+  html+=`
+  <div style="background:var(--green-light);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--sub);">
+    🎓 Hygiene-Schulungen — Nachweis für Kontrollen (Marktamt)
+  </div>`;
 
+  if(!isOrg){
+    html+=`<div class="section-lbl">Zuletzt geschult in dieser Filiale</div>
+    <div id="hs-latest-person" class="card" style="padding:14px;"></div>`;
+  }
+
+  html+=`
     <button class="submit-btn" style="margin-top:14px;background:var(--green);" onclick="toggleHsForm()">➕ Schulung eintragen</button>
 
     <div id="hs-form-wrap" style="display:none;margin-top:12px;">
@@ -2659,21 +2662,16 @@ async function renderHygieneSchulung(){
         <button class="submit-btn" onclick="saveHygieneSchulung()">✔ Schulung protokollieren</button>
       </div>
     </div>
-    <div id="hs-my-history" style="margin-top:16px;"></div>
-    `;
-  } else {
-    html+=`<div class="section-lbl">🎓 Hygiene-Schulungen — wer, wann, was</div><div id="hs-org-list"></div>`;
-  }
+
+    <div class="section-lbl" style="margin-top:16px;">🎓 Übersicht — alle Filialen</div>
+    <div id="hs-org-list"></div>
+  `;
 
   el.innerHTML=html;
   translateEl(el);
-  if(!isOrg){
-    document.getElementById('hs-datum').value=new Date().toISOString().split('T')[0];
-    await loadLatestHygienePerson();
-    await loadMyHygieneHistory();
-  } else {
-    await loadHygieneOrgList(storeList);
-  }
+  document.getElementById('hs-datum').value=new Date().toISOString().split('T')[0];
+  if(!isOrg) await loadLatestHygienePerson();
+  await loadHygieneOrgList(storeList, isOrg?null:currentStore.id);
 }
 
 function toggleHsForm(){
@@ -2749,7 +2747,7 @@ async function loadMyHygieneHistory(){
 
 let hsOrgData = {byName:{}, storeMap:{}}; // Cache für die Client-seitige Filterung
 
-async function loadHygieneOrgList(storeList){
+async function loadHygieneOrgList(storeList, defaultStoreFilter){
   const wrap=document.getElementById('hs-org-list');
   if(!wrap) return;
   const entries=await api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]);
@@ -2764,7 +2762,7 @@ async function loadHygieneOrgList(storeList){
   let html=`<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
     <select id="hs-filter-store" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;" data-no-translate>
       <option value="">Alle Standorte</option>
-      ${storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+      ${storeList.map(s=>`<option value="${s.id}" ${defaultStoreFilter===s.id?'selected':''}>${s.name}</option>`).join('')}
     </select>
     <select id="hs-filter-person" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;" data-no-translate>
       <option value="">Alle Mitarbeitenden</option>
