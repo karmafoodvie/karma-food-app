@@ -972,7 +972,7 @@ async function renderHome(){
       </div>
     </div>
     <div onclick="goTo('oeffnungHilfe')" style="text-align:center;margin:-4px 0 10px;">
-      <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe beim Öffnen? Checkliste ansehen</span>
+      <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe beim Eröffnen des Stores? Checkliste ansehen</span>
     </div>
 
     <!-- PHASE 2: WÄHREND DER SCHICHT -->
@@ -1031,6 +1031,7 @@ async function renderHome(){
         ${transporterDone?'<span class="badge badge-ok" style="font-size:10px;">Transporter ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Transporter</span>'}
         ${isKCDay?(kcDone?'<span class="badge badge-ok" style="font-size:10px;">KC ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">KC</span>'):''}
         ${disposalDone?'<span class="badge badge-ok" style="font-size:10px;">Entsorgung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Entsorgung</span>'}
+        ${dcStatus.reinCount===2?'<span class="badge badge-ok" style="font-size:10px;">Reinigung & Desinfektion ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Reinigung & Desinfektion</span>'}
       </div>
     </div>
 
@@ -1152,7 +1153,7 @@ async function renderOeffnungHelp(){
   activeCl='oeffnung';
   el.innerHTML = backToHomeHtml() + `
     <div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#185FA5;">
-      ℹ️ Optionale Hilfe zum Öffnen — kein Pflichtschritt, blockiert den Schichtabschluss nicht. Nur falls du sie brauchst.
+      ℹ️ Optionale Hilfe zum Eröffnen des Stores — kein Pflichtschritt, blockiert den Schichtabschluss nicht. Nur falls du sie brauchst.
     </div>
     <div id="cl-body"></div>`;
   translateEl(el);
@@ -2597,7 +2598,10 @@ async function renderHygieneSchulung(){
   hygieneSelectedInhalte=new Set();
 
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
-  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
+  // Kitchen bewusst NICHT ausgeschlossen — anders als bei Bestellungen/Forecast arbeiten dort auch
+  // Menschen, die eine Hygiene-Schulung brauchen. Nur Neustiftgasse (geschlossen) und die reine
+  // Produktionsküche-Doppel-ID "kloster2" bleiben raus.
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kloster2'&&s.id!=='1070');
 
   let html=backToHomeHtml();
 
