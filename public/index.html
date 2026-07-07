@@ -823,11 +823,13 @@ async function renderHome(){
   let gamificationHtml='';
   let disposalDone=false;
   let uebergabeNotiz=null;
+  let isKCDay=false;
+  let transporterDone=false, kcDone=false, sweetsDone=false;
   if(currentStore?.id!=='zentrale'){
     const todayDate=new Date().toISOString().split('T')[0];
     const dayIdx=(new Date().getDay()+6)%7; // Mon=0 ... Sun=6
     const isWeekday=dayIdx<5;
-    const isKCDay=dayIdx===1||dayIdx===3; // Dienstag oder Donnerstag
+    isKCDay=dayIdx===1||dayIdx===3; // Dienstag oder Donnerstag
     const reminders=[];
 
     try{
@@ -859,12 +861,9 @@ async function renderHome(){
         api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=id`).catch(()=>[])
       ]);
       const orderedIds=new Set((ordersToday||[]).map(o=>o.article_id));
-      const transporterDone=articles.some(a=>TRANSPORTER_CATS.includes(a.category)&&orderedIds.has(a.id));
-      const kcDone=(kcSubToday||[]).length>0;
-      const sweetsDone=articles.some(a=>SWEETS_CATS.includes(a.category)&&orderedIds.has(a.id));
-      if(!transporterDone) reminders.push({icon:'🚚',color:'#F97316',text:'Transporter-Bestellung noch nicht abgeschickt',tab:'order',orderTab:'transporter'});
-      if(isKCDay&&!kcDone) reminders.push({icon:'📦',color:'#A855F7',text:'KC-Bestellung (heute Bestelltag) noch offen',tab:'order',orderTab:'kc'});
-      if(!sweetsDone) reminders.push({icon:'🍰',color:'#EC4899',text:'Sweets-Bestellung für morgen noch offen',tab:'order',orderTab:'sweets'});
+      transporterDone=articles.some(a=>TRANSPORTER_CATS.includes(a.category)&&orderedIds.has(a.id));
+      kcDone=(kcSubToday||[]).length>0;
+      sweetsDone=articles.some(a=>SWEETS_CATS.includes(a.category)&&orderedIds.has(a.id));
 
       // Freitags-Reminder: Forecast für die kommende Woche checken, bevors ins Wochenende geht
       if(dayIdx===4){ // Freitag
@@ -878,15 +877,6 @@ async function renderHome(){
         }
       }
     }catch(e){console.error(e);}
-
-    if(isWeekday){
-      try{
-        const disp=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=slot`).catch(()=>[]);
-        const filledSlots=new Set((disp||[]).map(d=>d.slot));
-        const missing=MENU_SLOTS.filter(s=>!filledSlots.has(s.k)).length;
-        if(missing>0) reminders.push({icon:'🍲',color:'#DC2626',text:`Entsorgung: ${missing} Gericht${missing>1?'e':''} noch nicht eingetragen`,tab:'disposal'});
-      }catch(e){console.error(e);}
-    }
 
     // Monatlicher Reinigungs-Reminder: nur in den letzten Tagen des Monats zeigen, damit es nicht wochenlang stört
     try{
@@ -919,7 +909,6 @@ async function renderHome(){
 
   el.innerHTML=`
     <div style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
-    ${currentStore?.id!=='zentrale' ? remindersHtml : ''}
     ${monthlyCleaningHtml}
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle'?`
 
@@ -972,12 +961,21 @@ async function renderHome(){
 
     <!-- PHASE 3: NACH DER SCHICHT -->
     <div class="section-lbl" style="margin-top:6px;margin-bottom:4px;">🌙 Nach der Schicht</div>
-    <div onclick="goTo('schichtende')" style="background:var(--green);border-radius:12px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:6px;">
-      <div>
-        <div style="font-weight:600;color:#fff;font-size:14px;">Schicht abschließen</div>
-        <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px;">🍰 Sweets · 🚚 Transporter · 📦 KC</div>
+    ${remindersHtml}
+    <div onclick="goTo('schichtende')" style="background:#E0521F;border-radius:12px;padding:10px 14px;cursor:pointer;margin-bottom:6px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-weight:600;color:#fff;font-size:14px;">🌙 Let's wrap up the shift!</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px;">Schicht abschließen</div>
+        </div>
+        <span style="color:#fff;font-size:18px;">→</span>
       </div>
-      <span style="color:#fff;font-size:18px;">→</span>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
+        ${sweetsDone?'<span class="badge badge-ok" style="font-size:10px;">Sweets ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Sweets</span>'}
+        ${transporterDone?'<span class="badge badge-ok" style="font-size:10px;">Transporter ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Transporter</span>'}
+        ${isKCDay?(kcDone?'<span class="badge badge-ok" style="font-size:10px;">KC ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">KC</span>'):''}
+        ${disposalDone?'<span class="badge badge-ok" style="font-size:10px;">Entsorgung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Entsorgung</span>'}
+      </div>
     </div>
     <div style="display:flex;gap:5px;">
       <div onclick="goToReminder('order','sweets')" style="flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:7px 6px;cursor:pointer;text-align:center;">
