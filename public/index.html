@@ -3477,24 +3477,37 @@ async function renderKCOverview(el, tabHtml, storeList){
     if(!lastUpdateByStore[d.store_id]||d.updated_date>lastUpdateByStore[d.store_id])
       lastUpdateByStore[d.store_id]=d.updated_date;
   });
-  html+=`<div style="font-size:12px;color:var(--muted);margin:8px 0 6px;">📦 KC — Bestellung je Filiale (SOLL − IST)</div>`;
-  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
-    <th style="text-align:left;min-width:130px;">Artikel</th>
-    <th style="color:var(--muted);font-size:11px;">SOLL</th>`;
-  storeList.forEach(s=>{
-    const d=lastUpdateByStore[s.id];
-    const isToday=d===today;
-    const label=d?new Date(d).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'nie';
-    html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>
-      ${s.name.split(' ')[0]}
-      <div style="font-size:9px;font-weight:${isToday?'600':'400'};color:${isToday?'#0F6E56':'#A32D2D'};margin-top:2px;">${label}</div>
-    </th>`;
-  });
-  html+=`</tr></thead><tbody>`;
+
+  // Nur Artikel mit echtem Nachbestell-Bedarf (SOLL > IST) in mind. einer Filiale direkt zeigen —
+  // der Rest (kein Bedarf oder noch keine IST-Daten) wandert in eine einklappbare Sektion darunter.
+  const needsAction=[], noAction=[];
   kcItems.forEach(a=>{
     const soll=a.min_stock||0;
+    const hasBedarf=storeList.some(s=>{
+      const ist=(istMap[a.id]||{})[s.id]?.ist_bestand;
+      return ist!=null && (soll-ist)>0;
+    });
+    (hasBedarf?needsAction:noAction).push(a);
+  });
+
+  const renderHeader=()=>{
+    let h=`<th style="text-align:left;min-width:130px;">Artikel</th><th style="color:var(--muted);font-size:11px;">SOLL</th>`;
+    storeList.forEach(s=>{
+      const d=lastUpdateByStore[s.id];
+      const isToday=d===today;
+      const label=d?new Date(d).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'nie';
+      h+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>
+        ${s.name.split(' ')[0]}
+        <div style="font-size:9px;font-weight:${isToday?'600':'400'};color:${isToday?'#0F6E56':'#A32D2D'};margin-top:2px;">${label}</div>
+      </th>`;
+    });
+    return h;
+  };
+
+  const renderRow=(a)=>{
+    const soll=a.min_stock||0;
     const verfuegbar=a.verfuegbar!==false;
-    html+=`<tr${!verfuegbar?' style="opacity:0.45;"':''}><td style="font-size:12px;">
+    let r=`<tr${!verfuegbar?' style="opacity:0.45;"':''}><td style="font-size:12px;">
       <div style="display:flex;align-items:center;gap:5px;">
         <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar — klicken zum Umschalten'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
         ${a.image_url?`<img src="${a.image_url}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
@@ -3506,17 +3519,37 @@ async function renderKCOverview(el, tabHtml, storeList){
       const ist=rec?.ist_bestand;
       const isToday=rec?.updated_date===today;
       if(ist===undefined||ist===null){
-        html+=`<td style="color:var(--border);">·</td>`;
+        r+=`<td style="color:var(--border);">·</td>`;
       } else {
         const b=soll-ist;
         const col=b<0?'#A32D2D':b>0?'#3B6D11':'var(--muted)';
-        html+=`<td style="font-weight:${b!==0?'600':'400'};color:${col};background:${isToday?'#E1F5EE':'transparent'};font-size:13px;">${b>0?'+'+b:b}</td>`;
+        r+=`<td style="font-weight:${b!==0?'600':'400'};color:${col};background:${isToday?'#E1F5EE':'transparent'};font-size:13px;">${b>0?'+'+b:b}</td>`;
       }
     });
-    html+='</tr>';
-  });
-  html+='</tbody></table></div></div>';
-  html+=`<div style="font-size:10px;color:var(--muted);padding:4px 2px;">+ = nachbestellen · − = Überbestand · 🟢 heute ausgefüllt</div>`;
+    r+='</tr>';
+    return r;
+  };
+
+  html+=`<div style="font-size:12px;color:var(--muted);margin:8px 0 6px;">📦 KC — Bestellung je Filiale (SOLL − IST)</div>`;
+
+  if(needsAction.length){
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>${renderHeader()}</tr></thead><tbody>`;
+    needsAction.forEach(a=>{ html+=renderRow(a); });
+    html+='</tbody></table></div></div>';
+  } else {
+    html+=`<div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:13px;background:var(--green-light);border-radius:10px;">✓ Aktuell überall genug Bestand — kein Nachbestell-Bedarf</div>`;
+  }
+
+  html+=`<div style="font-size:10px;color:var(--muted);padding:8px 2px 4px;">+ = nachbestellen · − = Überbestand · 🟢 heute ausgefüllt</div>`;
+
+  if(noAction.length){
+    html+=`<details style="margin-top:10px;">
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Kein Bedarf / noch keine Daten (${noAction.length}) — trotzdem anzeigen</summary>
+      <div class="card" style="margin-top:6px;"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>${renderHeader()}</tr></thead><tbody>`;
+    noAction.forEach(a=>{ html+=renderRow(a); });
+    html+='</tbody></table></div></div></details>';
+  }
+
   el.innerHTML=html;
   translateEl(el);
 }
