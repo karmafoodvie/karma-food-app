@@ -453,6 +453,7 @@ let currentView = 'home';
 let articles = [];
 let templates = {};
 let orderQtys = {};
+let orderEingepackt = {}; // article_id -> true, wenn Organisation es fuer heute bereits eingepackt hat (Artikel verschwindet dann aus der Store-Bestellliste)
 let activeCl = 'oeffnung';
 let schichtendeReturnFlag = false; // true = Nutzer kam von "Schicht abschließen" her, nach dem Speichern soll's dahin zurückgehen
 let guideJumpTarget = null; // Titel-Stichwort, zu dem im Guide direkt gesprungen werden soll
@@ -656,9 +657,10 @@ async function loadAll(){
   const tmpl=await api('checklist_templates?select=*&order=sort_order');
   templates={};
   ALL_CL_TYPES.forEach(t=>templates[t]=tmpl.filter(x=>x.list_type===t));
-  const ord=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=article_id,quantity`);
+  const ord=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=article_id,quantity,eingepackt`);
   orderQtys={};
-  (ord||[]).forEach(o=>orderQtys[o.article_id]=o.quantity);
+  orderEingepackt={};
+  (ord||[]).forEach(o=>{orderQtys[o.article_id]=o.quantity; if(o.eingepackt) orderEingepackt[o.article_id]=true;});
   const done=await api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`);
   clDone={};
   (done||[]).forEach(d=>clDone[d.template_id]=true);
@@ -1250,7 +1252,7 @@ function renderOrderSection(cats, label, color, icon){
     <div style="font-size:10px;color:var(--muted);">zuständig für diese Lieferung</div></div>
   </div>`;
   cats.forEach(cat=>{
-    const items=articles.filter(a=>a.category===cat);
+    const items=articles.filter(a=>a.category===cat && !(!isOrg && orderEingepackt[a.id]));
     if(!items.length) return;
     html+=`<div class="section-lbl">${cat}</div><div class="card">`;
     items.forEach(a=>{
@@ -1336,11 +1338,15 @@ async function renderKCOrderTab(el, tabHtml){
   </div>`;
 
   const today=new Date().toISOString().split('T')[0];
-  const kcItems=articles.filter(a=>a.category==='Webshop-Produkte');
+  const kcItemsAll=articles.filter(a=>a.category==='Webshop-Produkte');
   const istData=await api(`kc_stock?store_id=eq.${currentStore.id}&select=article_id,ist_bestand,updated_date`).catch(()=>[]);
   const istMap={};
   (istData||[]).forEach(d=>istMap[d.article_id]=d);
   const isOrg=currentStore?.id==='zentrale';
+  // Bereits von der Organisation eingepackte Artikel blendet die Store-Ansicht komplett aus
+  const packedRows=isOrg?[]:await api(`kc_packed?store_id=eq.${currentStore.id}&packed_date=eq.${today}&select=article_id`).catch(()=>[]);
+  const packedIds=new Set((packedRows||[]).map(p=>p.article_id));
+  const kcItems=isOrg?kcItemsAll:kcItemsAll.filter(a=>!packedIds.has(a.id));
 
   html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table">
     <thead><tr><th style="text-align:left;">Artikel</th><th>IST</th><th>SOLL</th><th>Bestellung</th><th>Lieferbar</th></tr></thead><tbody>`;
@@ -1366,6 +1372,9 @@ async function renderKCOrderTab(el, tabHtml){
   });
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Negative Bestellung = Überbestand. Grün hinterlegtes Feld = heute aktualisiert (Datum darunter = letzte Eingabe).</div>`;
+  if(!isOrg && packedIds.size>0){
+    html+=`<div style="font-size:11px;color:#3B6D11;background:var(--green-light);border-radius:8px;padding:6px 10px;margin-top:4px;">✓ ${packedIds.size} Artikel wurden von der Organisation bereits eingepackt und sind hier ausgeblendet.</div>`;
+  }
 
   html+=`<div style="margin-top:16px;">
     <p style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Sonderbestellung / Anmerkung</p>
@@ -3406,6 +3415,15 @@ async function submitSchichtende(){
 }
 
 // ---- PACK ----
+async function toggleOrderEingepackt(articleId, storeId, currentPacked){
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    await api(`orders?article_id=eq.${articleId}&store_id=eq.${storeId}&order_date=eq.${today}`,{method:'PATCH',body:JSON.stringify({eingepackt:!currentPacked})});
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.toggleOrderEingepackt=toggleOrderEingepackt;
+
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -3423,31 +3441,37 @@ async function renderPack(){
   }
 
   const today=new Date().toISOString().split('T')[0];
-  const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`);
+  const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity,eingepackt`);
   const specRaw=await api(`special_orders?order_date=eq.${today}&select=store_id,note`).catch(()=>[]);
   const allOrd={};
-  allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o.quantity;});
+  allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
 
-  html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">🚚 Transporter · ${new Date().toLocaleDateString('de-AT')}</div>`;
+  html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">🚚 Transporter · ${new Date().toLocaleDateString('de-AT')} — Zahl antippen = als eingepackt markieren</div>`;
 
   let hasAny=false;
   TRANSPORTER_CATS.forEach(cat=>{
-    const items=articles.filter(a=>a.category===cat&&storeList.some(s=>(allOrd[a.id]||{})[s.id]>0));
+    const items=articles.filter(a=>a.category===cat&&storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0));
     if(!items.length) return;
     hasAny=true;
     html+=`<div class="section-lbl">${cat}</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th>Artikel</th>`;
     storeList.forEach(s=>html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
     html+=`<th style="color:${activeColor};">∑</th></tr></thead><tbody>`;
     items.forEach(a=>{
-      const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]||0),0);
+      const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
       html+=`<tr><td><div style="display:flex;align-items:center;gap:6px;">
         <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
         ${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
         <span>${a.name}</span>
       </div></td>`;
-      storeList.forEach(s=>{const v=(allOrd[a.id]||{})[s.id]||0;html+=`<td style="color:${v?'#1a1a18':'var(--border)'};">${v||'·'}</td>`;});
+      storeList.forEach(s=>{
+        const rec=(allOrd[a.id]||{})[s.id];
+        const v=rec?.quantity||0;
+        const packed=!!rec?.eingepackt;
+        if(!v){ html+=`<td style="color:var(--border);">·</td>`; return; }
+        html+=`<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed})" style="cursor:pointer;display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};">${v}${packed?' ✓':''}</span></td>`;
+      });
       html+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
     });
     html+='</tbody></table></div></div>';
@@ -3465,6 +3489,18 @@ async function renderPack(){
   translateEl(el);
 }
 
+async function toggleKcPacked(articleId, storeId, currentlyPacked){
+  try{
+    if(currentlyPacked){
+      await api(`kc_packed?article_id=eq.${articleId}&store_id=eq.${storeId}&packed_date=eq.${new Date().toISOString().split('T')[0]}`,{method:'DELETE'});
+    } else {
+      await api('kc_packed',{method:'POST',body:JSON.stringify([{article_id:articleId,store_id:storeId,packed_date:new Date().toISOString().split('T')[0]}])});
+    }
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.toggleKcPacked=toggleKcPacked;
+
 async function renderKCOverview(el, tabHtml, storeList){
   let html=tabHtml;
   const today=new Date().toISOString().split('T')[0];
@@ -3477,6 +3513,8 @@ async function renderKCOverview(el, tabHtml, storeList){
     if(!lastUpdateByStore[d.store_id]||d.updated_date>lastUpdateByStore[d.store_id])
       lastUpdateByStore[d.store_id]=d.updated_date;
   });
+  const packedRows=await api(`kc_packed?packed_date=eq.${today}&select=store_id,article_id`).catch(()=>[]);
+  const packedSet=new Set((packedRows||[]).map(p=>p.article_id+'|'+p.store_id));
 
   // Nur Artikel mit echtem Nachbestell-Bedarf (SOLL > IST) in mind. einer Filiale direkt zeigen —
   // der Rest (kein Bedarf oder noch keine IST-Daten) wandert in eine einklappbare Sektion darunter.
@@ -3523,14 +3561,19 @@ async function renderKCOverview(el, tabHtml, storeList){
       } else {
         const b=soll-ist;
         const col=b<0?'#A32D2D':b>0?'#3B6D11':'var(--muted)';
-        r+=`<td style="font-weight:${b!==0?'600':'400'};color:${col};background:${isToday?'#E1F5EE':'transparent'};font-size:13px;">${b>0?'+'+b:b}</td>`;
+        if(b>0){
+          const packed=packedSet.has(a.id+'|'+s.id);
+          r+=`<td><span onclick="toggleKcPacked(${a.id},'${s.id}',${packed})" style="cursor:pointer;display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':col};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};">+${b}${packed?' ✓':''}</span></td>`;
+        } else {
+          r+=`<td style="font-weight:${b!==0?'600':'400'};color:${col};background:${isToday?'#E1F5EE':'transparent'};font-size:13px;">${b}</td>`;
+        }
       }
     });
     r+='</tr>';
     return r;
   };
 
-  html+=`<div style="font-size:12px;color:var(--muted);margin:8px 0 6px;">📦 KC — Bestellung je Filiale (SOLL − IST)</div>`;
+  html+=`<div style="font-size:12px;color:var(--muted);margin:8px 0 6px;">📦 KC — Bestellung je Filiale (SOLL − IST) · grüne Zahl antippen = eingepackt</div>`;
 
   if(needsAction.length){
     html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>${renderHeader()}</tr></thead><tbody>`;
