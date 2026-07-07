@@ -2776,16 +2776,31 @@ async function loadHygieneOrgList(storeList){
   const names=Object.keys(byName).sort();
 
   html+=`<div class="section-lbl" style="margin-top:16px;">Pro Person</div>`;
-  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Person</th><th>Zuletzt</th><th>Status</th></tr></thead><tbody>`;
   if(!names.length){
-    html+=`<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:14px;">Noch keine Einträge</td></tr>`;
+    html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Einträge</div>`;
+  } else {
+    html+=names.map(n=>{
+      const e=byName[n];
+      const overdue=new Date(e.datum)<cutoff;
+      const storeNames=(e.stores||'').split(',').filter(Boolean).map(id=>storeMap[id.trim()]||id.trim()).join(', ');
+      return `<details class="card" style="padding:0;margin-bottom:6px;">
+        <summary style="padding:12px 14px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          <span data-no-translate style="font-weight:500;">${n}</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;color:var(--muted);">${new Date(e.datum).toLocaleDateString('de-AT')}</span>
+            ${overdue?'<span class="badge badge-warn">fällig</span>':'<span class="badge badge-ok">aktuell</span>'}
+            <span style="color:var(--muted);">›</span>
+          </span>
+        </summary>
+        <div style="padding:0 14px 12px;font-size:12px;color:var(--sub);border-top:0.5px solid var(--border);">
+          <div style="margin-top:8px;" data-no-translate><strong>Filiale(n):</strong> ${storeNames}</div>
+          <div style="margin-top:4px;"><strong>Durchgeführt von:</strong> ${e.durchgefuehrt_von}</div>
+          <div style="margin-top:4px;"><strong>Letzte Aktualisierung:</strong> ${new Date(e.datum).toLocaleDateString('de-AT')}</div>
+          <div style="margin-top:6px;"><strong>Schulungsmodalitäten (Inhalte):</strong><br>${e.inhalte}</div>
+        </div>
+      </details>`;
+    }).join('');
   }
-  names.forEach(n=>{
-    const e=byName[n];
-    const overdue=new Date(e.datum)<cutoff;
-    html+=`<tr><td style="text-align:left;" data-no-translate>${n}</td><td>${new Date(e.datum).toLocaleDateString('de-AT')}</td><td>${overdue?'<span class="badge badge-warn">fällig</span>':'<span class="badge badge-ok">aktuell</span>'}</td></tr>`;
-  });
-  html+='</tbody></table></div></div>';
 
   html+=`<div class="section-lbl" style="margin-top:16px;">Alle Einträge</div>`;
   html+=(entries||[]).map(e=>{
