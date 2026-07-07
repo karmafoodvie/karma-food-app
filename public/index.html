@@ -433,7 +433,7 @@ const KONTROLLE_PUNKTE = [
   {icon:'🥜', titel:'Allergene', oneliner:'Was ist drin? Hier nachschauen.', text:'Die 14 gesetzlich gekennzeichneten Stoffe (z.B. Gluten, Nüsse, Milch, Soja), die bei manchen Gästen heftige bis lebensgefährliche Reaktionen auslösen können. Zu jedem Gericht muss bekannt sein, welche Allergene enthalten sind — schriftlich oder mündlich, aber dann muss wirklich jemand Bescheid wissen, der gerade da ist.', target:'allergene'},
   {icon:'🐭', titel:'Schädlinge im Griff', oneliner:'Liegt in der grünen Mappe im Store.', text:'Mäuse, Schaben, Motten & Co. Die Kontrolle der Fallen/Köder in Küche und Lager wird auf Papier dokumentiert — die grüne Mappe liegt direkt im Store. Bei einer Kontrolle einfach zeigen.', target:null, badgeText:'📁 Mappe'},
   {icon:'🎓', titel:'Hygiene-Schulungen', oneliner:'Wer wurde wann geschult?', text:'Händewaschen, Kopfbedeckung, nicht krank arbeiten und mehr. Mindestens 1x im Jahr (plus bei neuen Mitarbeitenden) nachweisbar schulen — mit Datum, nicht nur „haben wir mal erklärt".', target:'schulung'},
-  {icon:'🧽', titel:'Sauber & desinfiziert', oneliner:'Reinigungsprotokoll im Daily Check-up.', text:'Nicht nur „sieht sauber aus": Es muss klar sein, was, wann, wie und mit welchem Mittel gereinigt wird — und ob danach zusätzlich desinfiziert wurde. Reines Putzen tötet Keime nicht zuverlässig ab. Du findest und bestätigst das im Daily Check-up unter Reinigungs- & Kontrollprotokoll.', target:'dailycheck'},
+  {icon:'🧽', titel:'Sauber & desinfiziert', oneliner:'Reinigungsprotokoll bei Schichtende.', text:'Nicht nur „sieht sauber aus": Es muss klar sein, was, wann, wie und mit welchem Mittel gereinigt wird — und ob danach zusätzlich desinfiziert wurde. Reines Putzen tötet Keime nicht zuverlässig ab. Du findest und bestätigst das bei „Schicht abschließen" unter Reinigung & Desinfektion.', target:'schichtende'},
   {icon:'🔧', titel:'Kaputt & gemeldet?', oneliner:'Schaden melden →', text:'Z.B. ein fehlendes Handwaschbecken oder ein kaputtes Gerät. Muss erkannt, gemeldet und behoben werden — am besten mit Datum, wann\'s gemeldet und wann\'s repariert wurde.', target:'maengel'},
   {icon:'🌡️', titel:'Temperatur-Listen', oneliner:'Wareneingang & Kühlschrank im Daily Check-up.', text:'Kühlschranktemperatur und Temperatur bei der Lieferung — jeden Tag mit echtem Messwert aufschreiben, nicht geschätzt oder einfach abgehakt. Du findest und bestätigst das im Daily Check-up unter „Wareneingangskontrolle" und „Kühleinrichtungen".', target:'dailycheck'}
 ];
@@ -2495,6 +2495,10 @@ async function renderSchulung(){
         <input id="sch-datum" type="date" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
         <input id="sch-durchgefuehrt" type="text" placeholder="Durchgeführt von" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
         <input id="sch-teilnehmer" type="text" placeholder="Teilnehmer (Namen, mit Komma getrennt)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;">
+        <div class="cl-item" style="padding:8px 0;" onclick="toggleSchUnterschrieben()">
+          <div class="check-box" id="sch-unterschrieben-box" data-value="0"></div>
+          <span class="cl-text">✍️ Unterschriften der Teilnehmer eingeholt (Papier/Anwesenheitsliste)</span>
+        </div>
         <button class="submit-btn" onclick="saveSchulungEntry()">Eintragen</button>
       </div>
       <div id="schulungHistorieAdmin"></div>
@@ -2559,18 +2563,30 @@ async function fillSchulungDropdowns(){
   if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
 
+function toggleSchUnterschrieben(){
+  const box=document.getElementById('sch-unterschrieben-box');
+  const next=!(box.dataset.value==='1');
+  box.dataset.value=next?'1':'0';
+  box.classList.toggle('done', next);
+  box.innerHTML=next?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':'';
+}
+window.toggleSchUnterschrieben=toggleSchUnterschrieben;
+
 async function saveSchulungEntry(){
   const thema_id=document.getElementById('sch-thema-select').value;
   const store_id=document.getElementById('sch-store-select').value;
   const datum=document.getElementById('sch-datum').value;
   const durchgefuehrt_von=document.getElementById('sch-durchgefuehrt').value.trim();
   const teilnehmer=document.getElementById('sch-teilnehmer').value.trim();
+  const unterschrieben=document.getElementById('sch-unterschrieben-box')?.dataset.value==='1';
   if(!thema_id||!store_id||!datum){ alert('Bitte Thema, Filiale und Datum ausfüllen.'); return; }
   try{
-    await api('schulungen',{method:'POST',body:JSON.stringify([{thema_id:parseInt(thema_id),store_id,datum,durchgefuehrt_von,teilnehmer}])});
+    await api('schulungen',{method:'POST',body:JSON.stringify([{thema_id:parseInt(thema_id),store_id,datum,durchgefuehrt_von,teilnehmer,unterschrieben}])});
   }catch(e){ console.error(e); alert('Fehler beim Speichern.'); return; }
   document.getElementById('sch-durchgefuehrt').value='';
   document.getElementById('sch-teilnehmer').value='';
+  const box=document.getElementById('sch-unterschrieben-box');
+  if(box){ box.dataset.value='0'; box.classList.remove('done'); box.innerHTML=''; }
   refreshSchulungHistorie();
 }
 
@@ -2592,6 +2608,7 @@ async function refreshSchulungHistorie(){
       </div>
       <div style="font-size:12px;color:var(--sub);margin-top:4px;" data-no-translate>${storeMap[e.store_id]||e.store_id}${e.durchgefuehrt_von?' · von '+e.durchgefuehrt_von:''}</div>
       ${e.teilnehmer?`<div style="font-size:12px;color:var(--muted);margin-top:2px;">Teilnehmer: ${e.teilnehmer}</div>`:''}
+      <div style="margin-top:4px;">${e.unterschrieben?'<span class="badge badge-ok" style="font-size:10px;">✍️ unterschrieben</span>':'<span class="badge badge-warn" style="font-size:10px;">keine Unterschrift hinterlegt</span>'}</div>
       <div style="margin-top:8px;"><button onclick="deleteSchulungEntry(${e.id})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#DC2626;cursor:pointer;">Löschen</button></div>
     </div>
   `).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Schulungen eingetragen.</div>';
@@ -2626,7 +2643,7 @@ async function loadSchulungStatusStore(){
           <strong>${t.titel}</strong>
           ${pillHtml}
         </div>
-        ${last?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">zuletzt: ${new Date(last.datum).toLocaleDateString('de-AT')}</div>`:''}
+        ${last?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">zuletzt: ${new Date(last.datum).toLocaleDateString('de-AT')}${last.unterschrieben?' · ✍️ unterschrieben':''}</div>`:''}
         ${t.erklaerung?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${t.erklaerung}</div>`:''}
       </div>
     `;
