@@ -2923,12 +2923,14 @@ async function renderDailyCheck(){
     <div class="section-lbl" style="color:var(--green);">🌡️ Wareneingangskontrolle</div>
     <div class="card" style="padding:14px;border:1.5px solid var(--green);overflow:visible;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Lieferant: <strong style="color:var(--sub);" data-no-translate>${FIXER_LIEFERANT}</strong></div>
-      <div style="font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;">Angelieferte Waren — bitte antippen:</div>
+      <div style="font-size:12px;font-weight:500;color:var(--sub);margin-bottom:6px;">Angelieferte Waren — falls mal was ausnahmsweise fehlt, antippen zum Abwählen:</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="wek-ware-chips">${(()=>{
         const menuDishes=getTodayDishNames();
         const chips=menuDishes.length>0?menuDishes:['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'];
         return chips.map(w=>{
-          const sel=(wek?.ware||'').includes(w);
+          // Standardmäßig ausgewählt, solange heute noch kein Eintrag existiert — die Waren kommen quasi immer 100% an,
+          // also nur abwählen, wenn ausnahmsweise mal was fehlt, statt jedes Mal alles einzeln antippen zu müssen.
+          const sel=wek ? (wek.ware||'').includes(w) : true;
           return `<div onclick="toggleWareChip(this,'${w.replace(/'/g,"\\'")}')" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
         }).join('');
       })()}</div>
