@@ -43,6 +43,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 #lang-menu{display:none;position:absolute;right:0;top:36px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:999;min-width:150px;overflow:hidden;}
 #lang-menu button{display:block;width:100%;padding:10px 14px;border:none;background:transparent;text-align:left;font-size:13px;cursor:pointer;color:#1a1a18;}
 #lang-menu button:hover{background:#f5f5f3;}
+.size-btn{background:rgba(255,255,255,0.15);border:none;color:#fff;padding:5px 9px;border-radius:6px;font-size:14px;cursor:pointer;position:relative;}
+#size-menu{display:none;position:absolute;right:0;top:36px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:999;min-width:130px;overflow:hidden;}
+#size-menu button{display:block;width:100%;padding:10px 14px;border:none;background:transparent;text-align:left;font-size:13px;cursor:pointer;color:#1a1a18;}
+#size-menu button:hover{background:#f5f5f3;}
+#size-menu button.active{color:var(--green);font-weight:600;}
 
 /* CONTENT */
 #content{flex:1;overflow-y:auto;padding:12px 12px 80px;}
@@ -145,6 +150,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="tb-sub" id="tb-sub"></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;position:relative;">
+      <button class="size-btn" onclick="toggleSizeMenu()" title="Textgröße">🔍</button>
+      <div id="size-menu">
+        <button onclick="setUiSize('klein')" id="size-btn-klein">Klein</button>
+        <button onclick="setUiSize('mittel')" id="size-btn-mittel">Mittel</button>
+        <button onclick="setUiSize('gross')" id="size-btn-gross">Groß</button>
+      </div>
       <button class="lang-btn" onclick="toggleLangMenu()">🌐</button>
       <div id="lang-menu">
         <button onclick="setLang('de')">🇦🇹 Deutsch</button>
@@ -433,6 +444,7 @@ let articles = [];
 let templates = {};
 let orderQtys = {};
 let activeCl = 'oeffnung';
+let schichtendeReturnFlag = false; // true = Nutzer kam von "Schicht abschließen" her, nach dem Speichern soll's dahin zurückgehen
 let guideJumpTarget = null; // Titel-Stichwort, zu dem im Guide direkt gesprungen werden soll
 function goToGuideEntry(keyword){ guideJumpTarget=keyword; goTo('guide'); }
 window.goToGuideEntry=goToGuideEntry;
@@ -452,6 +464,33 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.lang-btn') && !e.target.closest('#lang-menu'))
     document.getElementById('lang-menu').style.display = 'none';
 });
+
+// ---- TEXTGRÖSSE / ZOOM ----
+const UI_SIZES = {klein: 0.85, mittel: 1, gross: 1.2};
+function toggleSizeMenu(){
+  const m = document.getElementById('size-menu');
+  m.style.display = m.style.display === 'block' ? 'none' : 'block';
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.size-btn') && !e.target.closest('#size-menu'))
+    document.getElementById('size-menu').style.display = 'none';
+});
+function setUiSize(size){
+  if(!UI_SIZES[size]) return;
+  document.body.style.zoom = UI_SIZES[size];
+  localStorage.setItem('kf_ui_size', size);
+  document.querySelectorAll('#size-menu button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('size-btn-'+size)?.classList.add('active');
+  document.getElementById('size-menu').style.display='none';
+}
+function applySavedUiSize(){
+  const saved = localStorage.getItem('kf_ui_size') || 'mittel';
+  document.body.style.zoom = UI_SIZES[saved] || 1;
+  document.querySelectorAll('#size-menu button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('size-btn-'+saved)?.classList.add('active');
+}
+window.toggleSizeMenu=toggleSizeMenu;
+window.setUiSize=setUiSize;
 async function tx(text) {
   if (lang === 'de' || !text || text.length < 2) return text;
   const key = lang+'::'+text;
@@ -564,6 +603,7 @@ window.addEventListener('popstate',(e)=>{
 
 document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('pin-input').addEventListener('keydown',e=>{ if(e.key==='Enter') checkPin(); });
+  applySavedUiSize(); // Zoom-Einstellung gilt auch schon auf dem Login-Screen
 });
 async function loginAs(store){
   currentStore=store;
@@ -931,7 +971,6 @@ async function renderHome(){
         <span style="font-weight:500;font-size:13px;">Daily Check-up</span>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
           ${dcStatus.wek?'<span class="badge badge-ok" style="font-size:10px;">Wareneingang ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Wareneingang</span>'}
-          ${dcStatus.reinCount===2?'<span class="badge badge-ok" style="font-size:10px;">Reinigung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Reinigung</span>'}
           ${dcStatus.kuehl?'<span class="badge badge-ok" style="font-size:10px;">Kühlung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Kühlung</span>'}
         </div>
       </div>
@@ -941,14 +980,25 @@ async function renderHome(){
     <div class="section-lbl" style="margin-top:6px;margin-bottom:4px;">☕ Während der Schicht</div>
     ${uebergabeNotiz?`<div style="background:#FFF7ED;border:1px solid #F97316;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11px;"><strong style="color:#E0521F;">📋 Übergabe gestern:</strong> ${uebergabeNotiz}</div>`:''}
     ${(()=>{
-      const todayDishes=getTodayDishNames();
-      if(!todayDishes.length) return '';
-      return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${todayDishes.map(d=>{
-        const cat=mapDishNameToCategory(d);
-        return `<div style="flex:1;min-width:88px;background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;">
-          <div style="font-size:20px;">${getDishEmoji(d)}</div>
-          <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
-          <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d}</div>
+      const todayMenu=getTodayMenu()||[];
+      if(!todayMenu.length) return '';
+      return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${todayMenu.map((d,i)=>{
+        const cat=mapDishNameToCategory(d.name);
+        const mainCodes=d.allergene?.main||[];
+        const dressingCodes=d.allergene?.dressing||[];
+        const badges=[
+          ...mainCodes.map(c=>`<span class="badge badge-ok" style="font-size:9px;">${c}</span>`),
+          ...dressingCodes.map(c=>`<span class="badge" style="font-size:9px;background:#FEF3C7;color:#92400E;">${c} Dressing</span>`)
+        ].join(' ');
+        return `<div style="flex:1;min-width:88px;display:flex;flex-direction:column;">
+          <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
+            <div style="font-size:20px;">${getDishEmoji(d.name)}</div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
+            <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
+          </div>
+          <div id="dish-allergen-${i}" style="display:none;background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
+            <div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;">${badges||'<span style="font-size:9px;color:var(--muted);">keine Allergene angegeben</span>'}</div>
+          </div>
         </div>`;
       }).join('')}</div>`;
     })()}
@@ -1132,6 +1182,12 @@ async function renderReinigungHelp(){
   translateEl(el);
   renderClBody();
 }
+
+function toggleDishAllergeneCard(i){
+  const el=document.getElementById('dish-allergen-'+i);
+  if(el) el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+window.toggleDishAllergeneCard=toggleDishAllergeneCard;
 
 async function markMonthlyCleaningDone(){
   const monthKey=new Date().toISOString().slice(0,7);
@@ -1331,7 +1387,7 @@ async function submitKCNote(){
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
     }
     showToast('✓ KC gespeichert!');
-    goTo('home');
+    if(schichtendeReturnFlag){ schichtendeReturnFlag=false; goTo('schichtende'); } else { goTo('home'); }
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
 }
 window.submitKCNote=submitKCNote;
@@ -2001,7 +2057,9 @@ async function submitOrder(){
     }
     if(btn){ btn.textContent='✓ Gespeichert!'; btn.style.background='#15803D'; btn.style.opacity='1'; }
     showToast('✓ '+tab.title+' erfolgreich abgeschickt!');
-    setTimeout(()=>goTo('home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
+    const goBackToSchichtende=schichtendeReturnFlag;
+    schichtendeReturnFlag=false;
+    setTimeout(()=>goTo(goBackToSchichtende?'schichtende':'home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
   }catch(e){
     console.error(e);
     showToast('❌ Fehler beim Speichern — bitte nochmal versuchen');
@@ -2674,7 +2732,7 @@ async function renderDailyCheck(){
   const kleinDefault = kuehl?.temp_klein ?? kuehlPrev?.temp_klein ?? '';
   const grossDefault = kuehl?.temp_gross ?? kuehlPrev?.temp_gross ?? '';
   el.innerHTML = backToHomeHtml()+`
-    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Alle drei Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Beide Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
 
     <div class="section-lbl" style="color:var(--green);">🌡️ Wareneingangskontrolle</div>
     <div class="card" style="padding:14px;border:1.5px solid var(--green);overflow:visible;">
@@ -2698,19 +2756,6 @@ async function renderDailyCheck(){
       </div>
       <div id="wek-massnahme-wrap" style="display:${(tempDefault!=='' && tempDefault<65)?'block':'none'};margin-top:6px;">
         <input id="wek-massnahme" type="text" placeholder="Maßnahme bei Abweichung (Pflicht)" value="${wek?.massnahme||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
-      </div>
-    </div>
-
-    <div class="section-lbl" style="color:var(--green);">🧽 Reinigungs- & Kontrollprotokoll</div>
-    <div class="card" style="border:1.5px solid var(--green);">
-      <div style="padding:14px 14px 4px;font-size:11px;color:var(--muted);line-height:1.6;">Vorreinigen → Hauptreinigen → Desinfizieren → Nachspülen → Trocknen</div>
-      <div class="cl-item" onclick="toggleReinigungField('reinigung_erledigt', this)">
-        <div class="check-box${reinig?.reinigung_erledigt?' done':''}">${reinig?.reinigung_erledigt?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
-        <span class="cl-text">Reinigung erledigt</span>
-      </div>
-      <div class="cl-item" onclick="toggleReinigungField('desinfektion_erledigt', this)">
-        <div class="check-box${reinig?.desinfektion_erledigt?' done':''}">${reinig?.desinfektion_erledigt?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
-        <span class="cl-text">Desinfektion erledigt</span>
       </div>
     </div>
 
@@ -2865,14 +2910,11 @@ async function toggleReinigungField(field, itemEl){
     await api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
     await api('reinigungsprotokoll',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,...updated,mitarbeiter:currentStore.name}])});
     showToast('✔ Gespeichert');
-    // WICHTIG: nur die Checkbox lokal aktualisieren, NICHT die ganze Seite neu laden —
-    // sonst gehen noch nicht gespeicherte Eingaben (z.B. die Temperatur) verloren.
-    const box=itemEl?.querySelector('.check-box');
-    if(box){
-      const nowChecked=updated[field];
-      box.classList.toggle('done', nowChecked);
-      box.innerHTML=nowChecked?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':'';
-    }
+    // Diese Funktion lebt nur noch auf der Schichtende-Seite. Ein voller Reload ist hier sicher —
+    // wir sichern nur einen evtl. noch nicht gespeicherten Übergabe-Notiz-Entwurf davor.
+    const notizDraft=document.getElementById('uebergabe-text')?.value||'';
+    await renderSchichtende();
+    if(notizDraft){ const ta=document.getElementById('uebergabe-text'); if(ta && !ta.value) ta.value=notizDraft; }
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
@@ -2981,32 +3023,37 @@ async function renderSchichtende(){
   const forecastDone=(forecastTomorrow||[]).length>0;
 
   const schritte=[
-    {id:'abschluss', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten erledigt`, done:clDoneCount===clTotal && clTotal>0, link:'check'},
-    {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal'},
-    {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast'},
-    {id:'wochensalat', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen', done:(wochensalatToday||[]).length>0, link:'order', orderTab:'kueche'},
-    {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang, Reinigung & Kühlung', done:(wekToday||[]).length>0 && (reinToday||[])[0]?.reinigung_erledigt && (reinToday||[])[0]?.desinfektion_erledigt && (kuehlToday||[]).length>0, link:'dailycheck'},
-    {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets'},
-    {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter'},
-    {id:'kc', label:'KC ausgefüllt', sub:'IST-Bestände der Webshop-Produkte', done:kcDone, link:'order', orderTab:'kc'},
-    {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null}
+    {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
+    {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
+    {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
+    {id:'wochensalat', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen', done:(wochensalatToday||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
+    {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
+    {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
+    {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
+    {id:'kc', label:'KC ausgefüllt', sub:'IST-Bestände der Webshop-Produkte', done:kcDone, link:'order', orderTab:'kc', group:'bestellungen'},
+    {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null, group:'sonstiges'},
+    {id:'abschluss', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten — optionale Hilfe`, done:clDoneCount===clTotal && clTotal>0, link:'check', group:'sonstiges', optional:true}
   ];
+  const GROUP_LABELS={kueche:'🍽️ Küche & Tagesablauf', bestellungen:'📦 Bestellungen', sonstiges:'📋 Sonstiges'};
 
   const SCHRITT_META={
-    abschluss: {emoji:'📋', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten`, link:'check'},
+    abschluss: {emoji:'💡', label:'Abschluss-Checkliste (optionale Hilfe)', sub:`${clDoneCount} von ${clTotal} Punkten — kein Pflichtschritt`, link:'check'},
     entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
     forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', link:'order', orderTab:'forecast'},
     wochensalat: {emoji:'🥗', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen', link:'order', orderTab:'kueche'},
-    dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Reinigung · Kühlung', link:'dailycheck'},
+    dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
+    reinigung_protokoll: {emoji:'🧽', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', link:null},
     sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Bestellung für morgen', link:'order', orderTab:'sweets'},
     transporter:{emoji:'🚚', label:'Transporter bestellt', sub:'Verpackungen & Reinigung', link:'order', orderTab:'transporter'},
     kc:         {emoji:'📦', label:'KC ausgefüllt', sub:'IST-Bestände Webshop', link:'order', orderTab:'kc'},
     uebergabe:  {emoji:'✍️', label:'Übergabe-Notiz', sub:'Hinweis für nächste Schicht', link:null}
   };
 
+  const requiredSteps=schritte.filter(s=>!s.optional);
   const open=schritte.filter(s=>!s.done);
   const done=schritte.filter(s=>s.done);
-  const allDone=open.length===0;
+  const requiredOpen=requiredSteps.filter(s=>!s.done);
+  const allDone=requiredOpen.length===0; // optionale Schritte (Abschluss-Checkliste) blockieren den Abschluss nicht
   const alreadySubmitted=(uebergabeToday||[]).length>0 && allDone;
 
   let html=backToHomeHtml();
@@ -3017,25 +3064,58 @@ async function renderSchichtende(){
       <div style="font-weight:600;color:var(--green);font-size:16px;">Schicht abgeschlossen!</div>
       <div style="font-size:12px;color:var(--sub);margin-top:4px;">Zusammenfassung wurde an Tini geschickt.</div>
     </div>`;
+  } else {
+    // Fortschrittsanzeige + spielerische, motivierende Ansage statt nackter Liste
+    const pct=requiredSteps.length?Math.round((requiredSteps.length-requiredOpen.length)/requiredSteps.length*100):100;
+    const encouragement = pct===0?'Los geht\'s! 💪' : pct<50?'Weiter so! 🔥' : pct<100?'Fast geschafft! 🎉' : 'Alles bereit! ✨';
+    html+=`<div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+        <span style="font-size:14px;font-weight:600;">${encouragement}</span>
+        <span style="font-size:12px;color:var(--muted);">${requiredSteps.length-requiredOpen.length} von ${requiredSteps.length}</span>
+      </div>
+      <div class="progress-bar" style="margin-bottom:0;"><div class="progress-fill" style="width:${pct}%;"></div></div>
+    </div>`;
   }
 
-  // OFFENE SCHRITTE
+  // OFFENE SCHRITTE — nach Themen gruppiert, damit es nicht wie eine riesige Liste wirkt
   if(open.length>0){
-    html+=`<div style="font-size:13px;font-weight:500;color:var(--sub);margin-bottom:10px;">📌 Noch zu erledigen (${open.length})</div>`;
-    open.forEach(s=>{
-      const m=SCHRITT_META[s.id];
-      const linkFn=m.orderTab?`goToReminder('order','${m.orderTab}')`:m.link?`goTo('${m.link}')`:null;
-      html+=`<div class="card" style="padding:14px;margin-bottom:8px;border:1.5px solid var(--border);${s.id==='uebergabe'?'border-color:#BA7517;':''}">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <span style="font-size:24px;flex-shrink:0;">${m.emoji}</span>
-          <div style="flex:1;">
-            <div style="font-weight:600;font-size:14px;">${m.label}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:1px;">${m.sub}</div>
+    const GROUP_ORDER=['kueche','bestellungen','sonstiges'];
+    GROUP_ORDER.forEach(g=>{
+      const groupSteps=open.filter(s=>s.group===g && !s.optional);
+      if(!groupSteps.length) return;
+      html+=`<div class="section-lbl" style="margin-top:10px;">${GROUP_LABELS[g]}</div>`;
+      groupSteps.forEach(s=>{
+        const m=SCHRITT_META[s.id];
+        const returnableTabs=['sweets','transporter','kc'];
+        const setFlag=(m.orderTab && returnableTabs.includes(m.orderTab))?'schichtendeReturnFlag=true;':'';
+        const linkFn=m.orderTab?`${setFlag}goToReminder('order','${m.orderTab}')`:m.link?`goTo('${m.link}')`:null;
+        const isReinigung=s.id==='reinigung_protokoll';
+        html+=`<div class="card" style="padding:14px;margin-bottom:8px;border:1.5px solid var(--border);${s.id==='uebergabe'?'border-color:#BA7517;':''}">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span style="font-size:24px;flex-shrink:0;">${m.emoji}</span>
+            <div style="flex:1;">
+              <div style="font-weight:600;font-size:14px;">${m.label}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:1px;">${m.sub}</div>
+            </div>
+            ${linkFn?`<button onclick="${linkFn}" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">→</button>`:''}
           </div>
-          ${linkFn?`<button onclick="${linkFn}" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">→</button>`:''}
-        </div>
-        ${s.id==='uebergabe'?`<textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen?" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea><button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>`:''}
-      </div>`;
+          ${s.id==='uebergabe'?`<textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen?" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea><button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>`:''}
+          ${isReinigung?(()=>{
+            const r=(reinToday||[])[0];
+            return `<div style="margin-top:10px;border-top:0.5px solid var(--border);padding-top:8px;">
+              <div style="font-size:10.5px;color:var(--muted);margin-bottom:6px;">Vorreinigen → Hauptreinigen → Desinfizieren → Nachspülen → Trocknen</div>
+              <div class="cl-item" onclick="toggleReinigungField('reinigung_erledigt', this)">
+                <div class="check-box${r?.reinigung_erledigt?' done':''}">${r?.reinigung_erledigt?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+                <span class="cl-text">Reinigung erledigt</span>
+              </div>
+              <div class="cl-item" onclick="toggleReinigungField('desinfektion_erledigt', this)">
+                <div class="check-box${r?.desinfektion_erledigt?' done':''}">${r?.desinfektion_erledigt?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+                <span class="cl-text">Desinfektion erledigt</span>
+              </div>
+            </div>`;
+          })():''}
+        </div>`;
+      });
     });
 
     if(!alreadySubmitted && allDone){
@@ -3071,6 +3151,25 @@ async function renderSchichtende(){
         ${uebergabeToday[0].notiz}
       </div>`;
     }
+  }
+
+  // OPTIONALE SCHRITTE — separat & dezent, ganz unten, blockiert nichts
+  const optionalOpen=open.filter(s=>s.optional);
+  if(optionalOpen.length>0){
+    html+=`<div style="margin-top:20px;">`;
+    optionalOpen.forEach(s=>{
+      const m=SCHRITT_META[s.id];
+      const linkFn=m.link?`goTo('${m.link}')`:null;
+      html+=`<div onclick="${linkFn}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px dashed var(--border);border-radius:10px;cursor:pointer;opacity:0.75;">
+        <span style="font-size:16px;">${m.emoji}</span>
+        <div style="flex:1;">
+          <div style="font-size:12.5px;font-weight:500;color:var(--sub);">${m.label}</div>
+          <div style="font-size:10.5px;color:var(--muted);">${m.sub}</div>
+        </div>
+        <span style="color:var(--muted);">→</span>
+      </div>`;
+    });
+    html+=`</div>`;
   }
 
   el.innerHTML=html;
