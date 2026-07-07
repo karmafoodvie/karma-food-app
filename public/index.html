@@ -2747,76 +2747,102 @@ async function loadMyHygieneHistory(){
     </div>`).join('');
 }
 
+let hsOrgData = {byName:{}, storeMap:{}}; // Cache für die Client-seitige Filterung
+
 async function loadHygieneOrgList(storeList){
   const wrap=document.getElementById('hs-org-list');
   if(!wrap) return;
   const entries=await api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]);
   const storeMap=Object.fromEntries((storeList||[]).map(s=>[s.id,s.name]));
-  const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
-
-  // Pro Standort die zuletzt geschulte Person — wichtig für Kontrollen vor Ort, deshalb ganz oben
-  let html=`<div class="section-lbl">Pro Standort — zuletzt geschult</div>`;
-  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Filiale</th><th style="text-align:left;">Person</th><th>Zuletzt</th><th>Status</th></tr></thead><tbody>`;
-  storeList.forEach(s=>{
-    const forStore=(entries||[]).filter(e=>(e.stores||'').split(',').map(x=>x.trim()).includes(s.id));
-    const last=forStore[0]; // bereits nach datum.desc sortiert
-    if(!last){
-      html+=`<tr><td style="text-align:left;" data-no-translate>${s.name}</td><td colspan="3" style="color:var(--muted);">noch keine Schulung</td></tr>`;
-      return;
-    }
-    const overdue=new Date(last.datum)<cutoff;
-    html+=`<tr><td style="text-align:left;" data-no-translate>${s.name}</td><td style="text-align:left;" data-no-translate>${last.name}</td><td>${new Date(last.datum).toLocaleDateString('de-AT')}</td><td>${overdue?'<span class="badge badge-warn">fällig</span>':'<span class="badge badge-ok">aktuell</span>'}</td></tr>`;
-  });
-  html+='</tbody></table></div></div>';
-
   const byName={};
   (entries||[]).forEach(e=>{
     if(!byName[e.name] || new Date(e.datum)>new Date(byName[e.name].datum)) byName[e.name]=e;
   });
+  hsOrgData={byName, storeMap};
   const names=Object.keys(byName).sort();
 
-  html+=`<div class="section-lbl" style="margin-top:16px;">Pro Person</div>`;
-  if(!names.length){
-    html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Einträge</div>`;
-  } else {
-    html+=names.map(n=>{
-      const e=byName[n];
-      const overdue=new Date(e.datum)<cutoff;
-      const storeNames=(e.stores||'').split(',').filter(Boolean).map(id=>storeMap[id.trim()]||id.trim()).join(', ');
-      return `<details class="card" style="padding:0;margin-bottom:6px;">
-        <summary style="padding:12px 14px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
-          <span data-no-translate style="font-weight:500;">${n}</span>
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:11px;color:var(--muted);">${new Date(e.datum).toLocaleDateString('de-AT')}</span>
-            ${overdue?'<span class="badge badge-warn">fällig</span>':'<span class="badge badge-ok">aktuell</span>'}
-            <span style="color:var(--muted);">›</span>
-          </span>
-        </summary>
-        <div style="padding:0 14px 12px;font-size:12px;color:var(--sub);border-top:0.5px solid var(--border);">
-          <div style="margin-top:8px;" data-no-translate><strong>Filiale(n):</strong> ${storeNames}</div>
-          <div style="margin-top:4px;"><strong>Durchgeführt von:</strong> ${e.durchgefuehrt_von}</div>
-          <div style="margin-top:4px;"><strong>Letzte Aktualisierung:</strong> ${new Date(e.datum).toLocaleDateString('de-AT')}</div>
-          <div style="margin-top:6px;"><strong>Schulungsmodalitäten (Inhalte):</strong><br>${e.inhalte}</div>
-        </div>
-      </details>`;
-    }).join('');
-  }
-
-  html+=`<div class="section-lbl" style="margin-top:16px;">Alle Einträge</div>`;
-  html+=(entries||[]).map(e=>{
-    const storeNames=(e.stores||'').split(',').filter(Boolean).map(id=>storeMap[id.trim()]||id.trim()).join(', ');
-    return `<div class="card" style="padding:12px;margin-bottom:6px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <strong data-no-translate>${e.name}</strong>
-        <span style="font-size:11px;color:var(--muted);">${new Date(e.datum).toLocaleDateString('de-AT')}</span>
-      </div>
-      <div style="font-size:12px;color:var(--sub);margin-top:4px;" data-no-translate>${storeNames} · durchgeführt von ${e.durchgefuehrt_von}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px;">${e.inhalte}</div>
-      <div style="margin-top:8px;"><button onclick="deleteHygieneEntry(${e.id})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#DC2626;cursor:pointer;">Löschen</button></div>
-    </div>`;
-  }).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Einträge.</div>';
+  let html=`<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+    <select id="hs-filter-store" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;" data-no-translate>
+      <option value="">Alle Standorte</option>
+      ${storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+    </select>
+    <select id="hs-filter-person" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;" data-no-translate>
+      <option value="">Alle Mitarbeitenden</option>
+      ${names.map(n=>`<option value="${n}">${n}</option>`).join('')}
+    </select>
+    <select id="hs-filter-status" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">
+      <option value="">Alle Status</option>
+      <option value="ausstaendig">Nur ausständige</option>
+    </select>
+  </div>
+  <div id="hs-table-body"></div>
+  <div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">Eine Schulung gilt genau 1 Jahr — danach automatisch "ausständig".</div>`;
 
   wrap.innerHTML=html;
+  renderHsFilteredTable();
+  checkAndNotifyOverdueHygiene(byName).catch(e=>console.error(e));
+}
+
+function renderHsFilteredTable(){
+  const {byName, storeMap}=hsOrgData;
+  const storeFilter=document.getElementById('hs-filter-store')?.value||'';
+  const personFilter=document.getElementById('hs-filter-person')?.value||'';
+  const statusFilter=document.getElementById('hs-filter-status')?.value||'';
+  const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12); // Schulung ist genau 1 Jahr gültig
+
+  let names=Object.keys(byName).sort();
+  if(personFilter) names=names.filter(n=>n===personFilter);
+  if(storeFilter) names=names.filter(n=>(byName[n].stores||'').split(',').map(x=>x.trim()).includes(storeFilter));
+  if(statusFilter==='ausstaendig') names=names.filter(n=>new Date(byName[n].datum)<cutoff);
+
+  const wrap=document.getElementById('hs-table-body');
+  if(!wrap) return;
+  if(!names.length){
+    wrap.innerHTML=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Keine Einträge für diese Auswahl</div>`;
+    return;
+  }
+  let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
+    <thead><tr><th style="text-align:left;">Person</th><th style="text-align:left;">Filiale(n)</th><th>Zuletzt</th><th>Von</th><th>Status</th></tr></thead><tbody>`;
+  names.forEach(n=>{
+    const e=byName[n];
+    const overdue=new Date(e.datum)<cutoff;
+    const storeNames=(e.stores||'').split(',').filter(Boolean).map(id=>storeMap[id.trim()]||id.trim()).join(', ');
+    html+=`<tr><td style="text-align:left;font-weight:500;font-size:12px;" data-no-translate>${n}</td><td style="text-align:left;font-size:11px;" data-no-translate>${storeNames}</td><td style="font-size:12px;">${new Date(e.datum).toLocaleDateString('de-AT')}</td><td style="font-size:11px;" data-no-translate>${e.durchgefuehrt_von}</td><td>${overdue?'<span class="badge badge-warn">ausständig</span>':'<span class="badge badge-ok">aktuell</span>'}</td></tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  wrap.innerHTML=html;
+}
+window.renderHsFilteredTable=renderHsFilteredTable;
+
+async function checkAndNotifyOverdueHygiene(byName){
+  const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
+  const overdueNames=Object.keys(byName).filter(n=>new Date(byName[n].datum)<cutoff);
+  if(!overdueNames.length) return;
+  // Nicht jedes Mal beim Öffnen der Seite erneut mailen — nur wenn seit der letzten Erinnerung
+  // für diese Person mind. 30 Tage vergangen sind (oder noch nie erinnert wurde).
+  const notified=await api('hygiene_notifications?select=name,notified_at').catch(()=>[]);
+  const notifiedMap=Object.fromEntries((notified||[]).map(x=>[x.name,x.notified_at]));
+  const toNotify=overdueNames.filter(n=>{
+    const last=notifiedMap[n];
+    if(!last) return true;
+    const daysSince=(Date.now()-new Date(last).getTime())/86400000;
+    return daysSince>30;
+  });
+  if(!toNotify.length) return;
+  try{
+    await emailjs.send('service_xla195w','template_9uiq1wf',{
+      name: 'Hygiene-Schulung fällig',
+      time: new Date().toLocaleString('de-AT'),
+      message: `Folgende Personen sind mit ihrer Hygiene-Schulung überfällig (älter als 12 Monate):\n\n${toNotify.map(n=>`- ${n} (zuletzt: ${new Date(byName[n].datum).toLocaleDateString('de-AT')})`).join('\n')}\n\nBitte neue Schulung einplanen.`,
+      title: 'Hygiene-Schulung fällig',
+      to_email: 'tini@karmafood.at'
+    });
+    const today=new Date().toISOString().split('T')[0];
+    for(const n of toNotify){
+      await api(`hygiene_notifications?name=eq.${encodeURIComponent(n)}`,{method:'DELETE'});
+      await api('hygiene_notifications',{method:'POST',body:JSON.stringify([{name:n, notified_at:today}])});
+    }
+  }catch(e){console.error('Hygiene-Erinnerungs-Mail fehlgeschlagen', e);}
 }
 
 async function deleteHygieneEntry(id){
