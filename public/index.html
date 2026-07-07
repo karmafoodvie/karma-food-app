@@ -2648,15 +2648,24 @@ async function renderDailyCheck(){
     return;
   }
   const today=new Date().toISOString().split('T')[0];
-  const [wekRows,reinRows,kuehlRows]=await Promise.all([
+  const [wekRows,reinRows,kuehlRows,wekPrevRows,kuehlPrevRows]=await Promise.all([
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
-    api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[])
+    api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
+    api(`wareneingang?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temperatur&order=datum.desc&limit=1`).catch(()=>[]),
+    api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temp_klein,temp_gross&order=datum.desc&limit=1`).catch(()=>[])
   ]);
   const wek=(wekRows||[])[0];
   const wareOkDefault=!wek || wek.ware_ok!==false;
   const reinig=(reinRows||[])[0];
   const kuehl=(kuehlRows||[])[0];
+  // Vorbelegung mit dem letzten vorherigen Wert, falls heute noch nichts eingetragen wurde —
+  // soll nicht jeden Tag leer sein, sondern überschreibbar mit sinnvollem Startwert dastehen.
+  const wekPrev=(wekPrevRows||[])[0];
+  const kuehlPrev=(kuehlPrevRows||[])[0];
+  const tempDefault = wek?.temperatur ?? wekPrev?.temperatur ?? '';
+  const kleinDefault = kuehl?.temp_klein ?? kuehlPrev?.temp_klein ?? '';
+  const grossDefault = kuehl?.temp_gross ?? kuehlPrev?.temp_gross ?? '';
   el.innerHTML = backToHomeHtml()+`
     <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Alle drei Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
 
@@ -2678,9 +2687,9 @@ async function renderDailyCheck(){
       </div>
       <div class="item-row" style="border-bottom:none;padding:8px 0 4px;">
         <div class="item-name">🌡️ Temperatur eintragen (über 65° verpflichtend)</div>
-        <input id="wek-temp" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${wek?.temperatur??''}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+        <input id="wek-temp" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${tempDefault}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
-      <div id="wek-massnahme-wrap" style="display:${(wek && wek.temperatur<65)?'block':'none'};margin-top:6px;">
+      <div id="wek-massnahme-wrap" style="display:${(tempDefault!=='' && tempDefault<65)?'block':'none'};margin-top:6px;">
         <input id="wek-massnahme" type="text" placeholder="Maßnahme bei Abweichung (Pflicht)" value="${wek?.massnahme||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
       </div>
     </div>
@@ -2705,11 +2714,11 @@ async function renderDailyCheck(){
       </div>
       <div class="item-row">
         <div class="item-name">🧊 Kleiner Kühlschrank</div>
-        <input id="kuehl-klein" type="number" step="0.1" value="${kuehl?.temp_klein??''}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+        <input id="kuehl-klein" type="number" step="0.1" value="${kleinDefault}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
       <div class="item-row">
         <div class="item-name">🧊 Großer Kühlschrank</div>
-        <input id="kuehl-gross" type="number" step="0.1" value="${kuehl?.temp_gross??''}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+        <input id="kuehl-gross" type="number" step="0.1" value="${grossDefault}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
     </div>
 
