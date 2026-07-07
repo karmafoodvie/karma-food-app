@@ -1338,15 +1338,11 @@ async function renderKCOrderTab(el, tabHtml){
   </div>`;
 
   const today=new Date().toISOString().split('T')[0];
-  const kcItemsAll=articles.filter(a=>a.category==='Webshop-Produkte');
+  const kcItems=articles.filter(a=>a.category==='Webshop-Produkte');
   const istData=await api(`kc_stock?store_id=eq.${currentStore.id}&select=article_id,ist_bestand,updated_date`).catch(()=>[]);
   const istMap={};
   (istData||[]).forEach(d=>istMap[d.article_id]=d);
   const isOrg=currentStore?.id==='zentrale';
-  // Bereits von der Organisation eingepackte Artikel blendet die Store-Ansicht komplett aus
-  const packedRows=isOrg?[]:await api(`kc_packed?store_id=eq.${currentStore.id}&packed_date=eq.${today}&select=article_id`).catch(()=>[]);
-  const packedIds=new Set((packedRows||[]).map(p=>p.article_id));
-  const kcItems=isOrg?kcItemsAll:kcItemsAll.filter(a=>!packedIds.has(a.id));
 
   html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table">
     <thead><tr><th style="text-align:left;">Artikel</th><th>IST</th><th>SOLL</th><th>Bestellung</th><th>Lieferbar</th></tr></thead><tbody>`;
@@ -1372,9 +1368,6 @@ async function renderKCOrderTab(el, tabHtml){
   });
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Negative Bestellung = Überbestand. Grün hinterlegtes Feld = heute aktualisiert (Datum darunter = letzte Eingabe).</div>`;
-  if(!isOrg && packedIds.size>0){
-    html+=`<div style="font-size:11px;color:#3B6D11;background:var(--green-light);border-radius:8px;padding:6px 10px;margin-top:4px;">✓ ${packedIds.size} Artikel wurden von der Organisation bereits eingepackt und sind hier ausgeblendet.</div>`;
-  }
 
   html+=`<div style="margin-top:16px;">
     <p style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Sonderbestellung / Anmerkung</p>
@@ -3489,13 +3482,15 @@ async function renderPack(){
   translateEl(el);
 }
 
-async function toggleKcPacked(articleId, storeId, currentlyPacked){
+async function toggleKcPacked(articleId, storeId, soll){
+  // "Eingepackt" heißt: die Filiale hat nach der Lieferung wieder SOLL-Bestand — wir schreiben das
+  // direkt in den IST-Bestand, statt den Bedarf nur zu verstecken. Der Bedarf verschwindet dadurch
+  // ganz natürlich aus der Berechnung (SOLL − IST = 0), keine separate Versteck-Logik nötig.
+  const today=new Date().toISOString().split('T')[0];
   try{
-    if(currentlyPacked){
-      await api(`kc_packed?article_id=eq.${articleId}&store_id=eq.${storeId}&packed_date=eq.${new Date().toISOString().split('T')[0]}`,{method:'DELETE'});
-    } else {
-      await api('kc_packed',{method:'POST',body:JSON.stringify([{article_id:articleId,store_id:storeId,packed_date:new Date().toISOString().split('T')[0]}])});
-    }
+    await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
+    await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:storeId,article_id:articleId,ist_bestand:soll,updated_date:today}])});
+    showToast('✔ Eingepackt — IST-Bestand auf SOLL gesetzt');
     renderPack();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
@@ -3508,13 +3503,6 @@ async function renderKCOverview(el, tabHtml, storeList){
   const allIst=await api(`kc_stock?select=store_id,article_id,ist_bestand,updated_date`).catch(()=>[]);
   const istMap={};
   (allIst||[]).forEach(d=>{if(!istMap[d.article_id])istMap[d.article_id]={};istMap[d.article_id][d.store_id]=d;});
-  const lastUpdateByStore={};
-  (allIst||[]).forEach(d=>{
-    if(!lastUpdateByStore[d.store_id]||d.updated_date>lastUpdateByStore[d.store_id])
-      lastUpdateByStore[d.store_id]=d.updated_date;
-  });
-  const packedRows=await api(`kc_packed?packed_date=eq.${today}&select=store_id,article_id`).catch(()=>[]);
-  const packedSet=new Set((packedRows||[]).map(p=>p.article_id+'|'+p.store_id));
 
   // Nur Artikel mit echtem Nachbestell-Bedarf (SOLL > IST) in mind. einer Filiale direkt zeigen —
   // der Rest (kein Bedarf oder noch keine IST-Daten) wandert in eine einklappbare Sektion darunter.
@@ -3528,52 +3516,46 @@ async function renderKCOverview(el, tabHtml, storeList){
     (hasBedarf?needsAction:noAction).push(a);
   });
 
+  const activeColor='#A855F7'; // gleiche Rolle wie activeColor bei Transporter, nur in KC-Lila
+
+  // Gleicher Tabellenaufbau wie bei Transporter: Artikel | Filialen | ∑ — für einheitliche Optik
   const renderHeader=()=>{
-    let h=`<th style="text-align:left;min-width:130px;">Artikel</th><th style="color:var(--muted);font-size:11px;">SOLL</th>`;
-    storeList.forEach(s=>{
-      const d=lastUpdateByStore[s.id];
-      const isToday=d===today;
-      const label=d?new Date(d).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'nie';
-      h+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>
-        ${s.name.split(' ')[0]}
-        <div style="font-size:9px;font-weight:${isToday?'600':'400'};color:${isToday?'#0F6E56':'#A32D2D'};margin-top:2px;">${label}</div>
-      </th>`;
-    });
+    let h=`<th style="text-align:left;">Artikel</th>`;
+    storeList.forEach(s=>h+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
+    h+=`<th style="color:${activeColor};">∑</th>`;
     return h;
   };
 
   const renderRow=(a)=>{
     const soll=a.min_stock||0;
     const verfuegbar=a.verfuegbar!==false;
-    let r=`<tr${!verfuegbar?' style="opacity:0.45;"':''}><td style="font-size:12px;">
-      <div style="display:flex;align-items:center;gap:5px;">
-        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar — klicken zum Umschalten'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
-        ${a.image_url?`<img src="${a.image_url}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
-        <span>${a.name}</span>
-      </div>
-    </td><td style="color:var(--muted);font-size:12px;">${soll}</td>`;
+    let totalBedarf=0;
+    let r=`<tr><td><div style="display:flex;align-items:center;gap:6px;">
+      <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
+      ${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+      <span>${a.name}</span>
+    </div></td>`;
     storeList.forEach(s=>{
       const rec=(istMap[a.id]||{})[s.id];
       const ist=rec?.ist_bestand;
-      const isToday=rec?.updated_date===today;
       if(ist===undefined||ist===null){
         r+=`<td style="color:var(--border);">·</td>`;
+        return;
+      }
+      const b=soll-ist;
+      if(b>0){
+        totalBedarf+=b;
+        r+=`<td><span onclick="toggleKcPacked(${a.id},'${s.id}',${soll})" style="cursor:pointer;display:inline-block;padding:2px 7px;border-radius:6px;font-weight:600;color:#3B6D11;">+${b}</span></td>`;
       } else {
-        const b=soll-ist;
-        const col=b<0?'#A32D2D':b>0?'#3B6D11':'var(--muted)';
-        if(b>0){
-          const packed=packedSet.has(a.id+'|'+s.id);
-          r+=`<td><span onclick="toggleKcPacked(${a.id},'${s.id}',${packed})" style="cursor:pointer;display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':col};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};">+${b}${packed?' ✓':''}</span></td>`;
-        } else {
-          r+=`<td style="font-weight:${b!==0?'600':'400'};color:${col};background:${isToday?'#E1F5EE':'transparent'};font-size:13px;">${b}</td>`;
-        }
+        const col=b<0?'#A32D2D':'var(--muted)';
+        r+=`<td style="color:${col};">${b}</td>`;
       }
     });
-    r+='</tr>';
+    r+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${totalBedarf||'·'}</td></tr>`;
     return r;
   };
 
-  html+=`<div style="font-size:12px;color:var(--muted);margin:8px 0 6px;">📦 KC — Bestellung je Filiale (SOLL − IST) · grüne Zahl antippen = eingepackt</div>`;
+  html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">📦 KC · ${new Date().toLocaleDateString('de-AT')} — grüne Zahl antippen = eingepackt (setzt IST auf SOLL)</div>`;
 
   if(needsAction.length){
     html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>${renderHeader()}</tr></thead><tbody>`;
@@ -3583,7 +3565,7 @@ async function renderKCOverview(el, tabHtml, storeList){
     html+=`<div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:13px;background:var(--green-light);border-radius:10px;">✓ Aktuell überall genug Bestand — kein Nachbestell-Bedarf</div>`;
   }
 
-  html+=`<div style="font-size:10px;color:var(--muted);padding:8px 2px 4px;">+ = nachbestellen · − = Überbestand · 🟢 heute ausgefüllt</div>`;
+  html+=`<div style="font-size:10px;color:var(--muted);padding:8px 2px 4px;">+X = Nachbestellbedarf (SOLL − IST) · Zahl antippen setzt IST auf SOLL, also "eingepackt & geliefert"</div>`;
 
   if(noAction.length){
     html+=`<details style="margin-top:10px;">
