@@ -555,13 +555,16 @@ async function hasTodayEntry(table, dateCol, storeId=currentStore?.id){
 // ---- LOGIN ----
 async function initLogin() {
   try {
-    const stores = (await api('stores?select=id,name&order=id')).filter(s=>s.id!=='1070');
+    const stores = (await api('stores?select=id,name,image_url&order=id')).filter(s=>s.id!=='1070');
     const list = document.getElementById('store-list');
     if (!stores?.length) { list.innerHTML='<p style="color:red;font-size:12px;">Verbindungsfehler</p>'; return; }
     list.innerHTML = stores.map(s => {
       const col = STORE_COLORS[s.id]||'#888';
+      const thumb = s.image_url
+        ? `<img src="${s.image_url}" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">`
+        : `<span class="store-dot" style="background:${col};"></span>`;
       return `<button class="store-btn" onclick="pickStore('${s.id}','${s.name.replace(/'/g,"\\'")}')" data-no-translate>
-        <span class="store-dot" style="background:${col};"></span>${s.name}
+        ${thumb}${s.name}
       </button>`;
     }).join('');
     const saved = localStorage.getItem('kf_store');
