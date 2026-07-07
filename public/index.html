@@ -25,6 +25,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-sub{color:#9FE1CB;font-size:14px;letter-spacing:0.3px;}
 .login-card{background:#fff;border-radius:18px;padding:1.5rem;width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,0.35);position:relative;z-index:1;}
 .store-btn{padding:12px 16px;border:2px solid var(--border);border-radius:10px;background:#fff;font-size:14px;color:#1a1a18;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:border-color .15s;}
+.store-btn-photo{position:relative;height:88px;border-radius:12px;overflow:hidden;background-size:cover;background-position:center;border:none;cursor:pointer;display:flex;align-items:flex-end;padding:0;width:100%;}
+.store-btn-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.15) 55%, transparent 100%);}
+.store-btn-photo-label{position:relative;z-index:1;padding:10px 14px;color:#fff;font-family:'Boldonse',sans-serif;font-weight:400;font-size:15px;letter-spacing:0.3px;text-shadow:0 2px 8px rgba(0,0,0,0.35);}
 .store-btn:active{border-color:var(--brand);}
 .store-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
 .pin-input{width:100%;padding:12px;border:1.5px solid var(--border);border-radius:10px;font-size:18px;text-align:center;letter-spacing:4px;outline:none;}
@@ -560,11 +563,13 @@ async function initLogin() {
     if (!stores?.length) { list.innerHTML='<p style="color:red;font-size:12px;">Verbindungsfehler</p>'; return; }
     list.innerHTML = stores.map(s => {
       const col = STORE_COLORS[s.id]||'#888';
-      const thumb = s.image_url
-        ? `<img src="${s.image_url}" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">`
-        : `<span class="store-dot" style="background:${col};"></span>`;
+      if(s.image_url){
+        return `<button class="store-btn-photo" onclick="pickStore('${s.id}','${s.name.replace(/'/g,"\\'")}')" data-no-translate style="background-image:url('${s.image_url}');">
+          <span class="store-btn-photo-label">${s.name}</span>
+        </button>`;
+      }
       return `<button class="store-btn" onclick="pickStore('${s.id}','${s.name.replace(/'/g,"\\'")}')" data-no-translate>
-        ${thumb}${s.name}
+        <span class="store-dot" style="background:${col};"></span>${s.name}
       </button>`;
     }).join('');
     const saved = localStorage.getItem('kf_store');
