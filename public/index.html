@@ -2621,36 +2621,43 @@ async function renderHygieneSchulung(){
   if(!isOrg){
     html+=`
     <div style="background:var(--green-light);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--sub);">
-      🎓 Nach jeder Hygiene-Schulung trägt sich bitte <strong>jede teilnehmende Person selbst</strong> hier ein.
+      🎓 Hygiene-Schulungen — Nachweis für Kontrollen (Marktamt)
     </div>
-    <div class="card" style="padding:14px;">
-      <div style="font-weight:500;margin-bottom:8px;">Dein Name</div>
-      <input id="hs-name" type="text" placeholder="Vor- und Nachname" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+    <div class="section-lbl">Zuletzt geschult in dieser Filiale</div>
+    <div id="hs-latest-person" class="card" style="padding:14px;"></div>
 
-      <div style="font-weight:500;margin-bottom:8px;">Du arbeitest in (mehrere möglich)</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
-        ${storeList.map(s=>`<div onclick="toggleHsChip(this,'store','${s.id}')" data-no-translate style="padding:6px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--sub);">${s.name}</div>`).join('')}
+    <button class="submit-btn" style="margin-top:14px;background:var(--green);" onclick="toggleHsForm()">➕ Schulung eintragen</button>
+
+    <div id="hs-form-wrap" style="display:none;margin-top:12px;">
+      <div class="card" style="padding:14px;">
+        <div style="font-weight:500;margin-bottom:8px;">Name der geschulten Person</div>
+        <input id="hs-name" type="text" placeholder="Vor- und Nachname" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+
+        <div style="font-weight:500;margin-bottom:8px;">Arbeitet in (mehrere möglich)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+          ${storeList.map(s=>`<div onclick="toggleHsChip(this,'store','${s.id}')" data-no-translate style="padding:6px 12px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--sub);">${s.name}</div>`).join('')}
+        </div>
+
+        <div style="font-weight:500;margin-bottom:8px;">Datum</div>
+        <input id="hs-datum" type="date" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+
+        <div style="font-weight:500;margin-bottom:8px;">Durchgeführt von</div>
+        <select id="hs-trainer" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+          <option value="">— auswählen —</option>
+          ${HYGIENE_TRAINER.map(t=>`<option value="${t}">${t}</option>`).join('')}
+        </select>
+
+        <div style="font-weight:500;margin-bottom:8px;">Inhalte, die behandelt wurden</div>
+        <div style="margin-bottom:6px;">
+          ${HYGIENE_INHALTE.map((txt,i)=>`
+            <div class="cl-item" onclick="toggleHsChip(this,'inhalt','${i}')">
+              <div class="check-box"></div>
+              <span class="cl-text">${txt}</span>
+            </div>`).join('')}
+        </div>
+
+        <button class="submit-btn" onclick="saveHygieneSchulung()">✔ Schulung protokollieren</button>
       </div>
-
-      <div style="font-weight:500;margin-bottom:8px;">Datum</div>
-      <input id="hs-datum" type="date" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
-
-      <div style="font-weight:500;margin-bottom:8px;">Durchgeführt von</div>
-      <select id="hs-trainer" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
-        <option value="">— auswählen —</option>
-        ${HYGIENE_TRAINER.map(t=>`<option value="${t}">${t}</option>`).join('')}
-      </select>
-
-      <div style="font-weight:500;margin-bottom:8px;">Inhalte, die behandelt wurden</div>
-      <div style="margin-bottom:6px;">
-        ${HYGIENE_INHALTE.map((txt,i)=>`
-          <div class="cl-item" onclick="toggleHsChip(this,'inhalt','${i}')">
-            <div class="check-box"></div>
-            <span class="cl-text">${txt}</span>
-          </div>`).join('')}
-      </div>
-
-      <button class="submit-btn" onclick="saveHygieneSchulung()">✔ Schulung eintragen</button>
     </div>
     <div id="hs-my-history" style="margin-top:16px;"></div>
     `;
@@ -2662,10 +2669,35 @@ async function renderHygieneSchulung(){
   translateEl(el);
   if(!isOrg){
     document.getElementById('hs-datum').value=new Date().toISOString().split('T')[0];
+    await loadLatestHygienePerson();
     await loadMyHygieneHistory();
   } else {
     await loadHygieneOrgList(storeList);
   }
+}
+
+function toggleHsForm(){
+  const wrap=document.getElementById('hs-form-wrap');
+  if(wrap) wrap.style.display = wrap.style.display==='none' ? 'block' : 'none';
+}
+window.toggleHsForm=toggleHsForm;
+
+async function loadLatestHygienePerson(){
+  const wrap=document.getElementById('hs-latest-person');
+  if(!wrap) return;
+  const entries=await api(`hygiene_schulungen?stores=ilike.*${currentStore.id}*&select=*&order=datum.desc&limit=1`).catch(()=>[]);
+  const last=entries?.[0];
+  if(!last){
+    wrap.innerHTML=`<span style="color:var(--muted);font-size:13px;">Noch keine Schulung für diese Filiale eingetragen.</span>`;
+    return;
+  }
+  const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
+  const overdue=new Date(last.datum)<cutoff;
+  wrap.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline;">
+    <strong data-no-translate style="font-size:15px;">${last.name}</strong>
+    ${overdue?'<span class="badge badge-warn">fällig</span>':'<span class="badge badge-ok">aktuell</span>'}
+  </div>
+  <div style="font-size:12px;color:var(--sub);margin-top:4px;">${new Date(last.datum).toLocaleDateString('de-AT')} · durchgeführt von ${last.durchgefuehrt_von}</div>`;
 }
 
 function toggleHsChip(el, kind, val){
@@ -2697,7 +2729,7 @@ async function saveHygieneSchulung(){
   const inhalteStr=[...hygieneSelectedInhalte].sort((a,b)=>a-b).map(i=>HYGIENE_INHALTE[i]).join(', ');
   try{
     await api('hygiene_schulungen',{method:'POST',body:JSON.stringify([{name,stores:storesStr,datum,durchgefuehrt_von:trainer,inhalte:inhalteStr}])});
-    showToast('✔ Danke, Schulung eingetragen!');
+    showToast('✔ Schulung protokolliert');
     renderHygieneSchulung();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
@@ -2720,14 +2752,31 @@ async function loadHygieneOrgList(storeList){
   if(!wrap) return;
   const entries=await api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]);
   const storeMap=Object.fromEntries((storeList||[]).map(s=>[s.id,s.name]));
+  const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
+
+  // Pro Standort die zuletzt geschulte Person — wichtig für Kontrollen vor Ort, deshalb ganz oben
+  let html=`<div class="section-lbl">Pro Standort — zuletzt geschult</div>`;
+  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Filiale</th><th style="text-align:left;">Person</th><th>Zuletzt</th><th>Status</th></tr></thead><tbody>`;
+  storeList.forEach(s=>{
+    const forStore=(entries||[]).filter(e=>(e.stores||'').split(',').map(x=>x.trim()).includes(s.id));
+    const last=forStore[0]; // bereits nach datum.desc sortiert
+    if(!last){
+      html+=`<tr><td style="text-align:left;" data-no-translate>${s.name}</td><td colspan="3" style="color:var(--muted);">noch keine Schulung</td></tr>`;
+      return;
+    }
+    const overdue=new Date(last.datum)<cutoff;
+    html+=`<tr><td style="text-align:left;" data-no-translate>${s.name}</td><td style="text-align:left;" data-no-translate>${last.name}</td><td>${new Date(last.datum).toLocaleDateString('de-AT')}</td><td>${overdue?'<span class="badge badge-warn">fällig</span>':'<span class="badge badge-ok">aktuell</span>'}</td></tr>`;
+  });
+  html+='</tbody></table></div></div>';
+
   const byName={};
   (entries||[]).forEach(e=>{
     if(!byName[e.name] || new Date(e.datum)>new Date(byName[e.name].datum)) byName[e.name]=e;
   });
-  const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
   const names=Object.keys(byName).sort();
 
-  let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Person</th><th>Zuletzt</th><th>Status</th></tr></thead><tbody>`;
+  html+=`<div class="section-lbl" style="margin-top:16px;">Pro Person</div>`;
+  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Person</th><th>Zuletzt</th><th>Status</th></tr></thead><tbody>`;
   if(!names.length){
     html+=`<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:14px;">Noch keine Einträge</td></tr>`;
   }
