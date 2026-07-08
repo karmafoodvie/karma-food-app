@@ -3758,13 +3758,14 @@ async function renderPack(){
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
   const el=document.getElementById('v-pack');
 
-  let html=`
-    <div class="pack-tabs">
-      <button class="pack-tab" onclick="switchPackTab('transporter')" style="border-color:${activePackTab==='transporter'?'#F97316':'var(--border)'};background:${activePackTab==='transporter'?'#FFF7ED':'var(--card)'};color:${activePackTab==='transporter'?'#F97316':'#1a1a18'};font-weight:${activePackTab==='transporter'?'600':'400'};">🚚 Transporter</button>
-      <button class="pack-tab" onclick="switchPackTab('kc')" style="border-color:${activePackTab==='kc'?'#A855F7':'var(--border)'};background:${activePackTab==='kc'?'#FAF5FF':'var(--card)'};color:${activePackTab==='kc'?'#A855F7':'#1a1a18'};font-weight:${activePackTab==='kc'?'600':'400'};">📦 KC</button>
-    </div>`;
-
+  // Kein Tab-Umschalter mehr nötig — Transporter und KC haben jetzt eigene Reiter unten in der Navigation
+  // (Michi/Ines), daher jede Ansicht komplett isoliert, ohne Vermischung.
   if(activePackTab==='kc'){
+    let html=`<div class="section-banner" style="background:#A855F712;border-left-color:#A855F7;">
+      <span style="font-size:18px;">📦</span>
+      <div><div style="font-size:12px;font-weight:600;color:#A855F7;">KC — Webshop-Produkte</div>
+      <div style="font-size:10px;color:var(--muted);">Bestellung je Filiale (SOLL − IST)</div></div>
+    </div>`;
     await renderKCOverview(el, html, storeList);
     return;
   }
@@ -3776,14 +3777,20 @@ async function renderPack(){
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
 
-  html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">🚚 Transporter · ${new Date().toLocaleDateString('de-AT')} — Zahl antippen = als eingepackt markieren</div>`;
+  let html=`<div class="section-banner" style="background:${activeColor}12;border-left-color:${activeColor};">
+    <span style="font-size:18px;">🚚</span>
+    <div><div style="font-size:12px;font-weight:600;color:${activeColor};">Transporter — ${new Date().toLocaleDateString('de-AT')}</div>
+    <div style="font-size:10px;color:var(--muted);">Zahl antippen = als eingepackt markieren</div></div>
+  </div>`;
+
+  html+=`<div class="section-lbl">📦 Bestellungen heute</div>`;
 
   let hasAny=false;
   TRANSPORTER_CATS.forEach(cat=>{
     const items=articles.filter(a=>a.category===cat&&storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0));
     if(!items.length) return;
     hasAny=true;
-    html+=`<div class="section-lbl">${cat}</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th>Artikel</th>`;
+    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th>Artikel</th>`;
     storeList.forEach(s=>html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
     html+=`<th style="color:${activeColor};">∑</th></tr></thead><tbody>`;
     items.forEach(a=>{
@@ -3808,18 +3815,18 @@ async function renderPack(){
 
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
   if(specs.length){
-    html+=`<div class="section-lbl">Sonderbestellungen</div><div class="card">`;
+    html+=`<div class="section-lbl">📝 Sonderbestellungen</div><div class="card">`;
     specs.forEach(s=>{const store=stores.find(x=>x.id===s.store_id);const col=STORE_COLORS[s.store_id]||'#888';html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;"><span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;margin-top:3px;"></span><div><div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div><div style="font-size:13px;color:var(--sub);">${s.note}</div></div></div>`;});
     html+='</div>';
   }
-  if(!hasAny&&!specs.length) html+='<div style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
+  if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
 
   // Samosa-Verteilung — eigene Tabelle, da hier auch Kitchen selbst eine Menge bekommt
-  html+=`<div class="section-lbl" style="margin-top:16px;">🥟 Samosa-Verteilung (Lieferantenbestellung)</div>`;
+  html+=`<div class="section-lbl" style="margin-top:20px;">🥟 Samosa-Verteilung <span style="font-weight:400;color:var(--muted);">(Lieferantenbestellung)</span></div>`;
   html+=await renderSamosaTableHtml();
 
   // Beilagen (Küchen-Vorbereitung) auch hier zeigen — Michi packt das ja mit ein, muss also wissen was dazugehört
-  html+=`<div class="section-lbl" style="margin-top:16px;">🥗 Beilagen aus der Küche (mit einpacken)</div>`;
+  html+=`<div class="section-lbl" style="margin-top:20px;">🥗 Beilagen aus der Küche <span style="font-weight:400;color:var(--muted);">(mit einpacken)</span></div>`;
   html+=await renderBeilagenTableHtml();
 
   el.innerHTML=html;
@@ -3899,7 +3906,7 @@ async function renderKCOverview(el, tabHtml, storeList){
     return r;
   };
 
-  html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">📦 KC · ${new Date().toLocaleDateString('de-AT')} — grüne Zahl antippen = eingepackt (setzt IST auf SOLL)</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Grüne Zahl antippen = eingepackt (setzt IST auf SOLL)</div>`;
 
   if(needsAction.length){
     html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>${renderHeader()}</tr></thead><tbody>`;
