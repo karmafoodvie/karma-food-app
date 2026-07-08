@@ -304,7 +304,7 @@ const GUIDE_KATEGORIEN = [
 async function renderGuide(){
   const el=document.getElementById('v-guide');
   const isOrg=currentStore?.id==='zentrale';
-  el.innerHTML=backToHomeHtml()+`<div id="guide-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('📖','Store Guide','Infos, Geräte & Abläufe','#0F6E56')+`<div id="guide-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
 
   const entries = await api(`guide_eintraege?or=(store_id.is.null${isOrg?'':`%2Cstore_id.eq.${currentStore.id}`})&order=sort_order,erstellt_am`).catch(()=>[]);
@@ -438,10 +438,7 @@ async function deleteGuideEntry(id){
 
 function renderKontrolleView(){
   const el=document.getElementById('v-kontrolle');
-  let html=`<div class="card" style="padding:16px;background:var(--green-light);border-color:var(--green);margin-bottom:8px;">
-    <div style="font-size:15px;font-weight:600;color:var(--green);margin-bottom:4px;">🛡️ Kontrollbesuch? Kein Stress.</div>
-    <div style="font-size:13px;color:var(--sub);">Hier findest du in Sekunden alles, was du zeigen musst.</div>
-  </div>`;
+  let html=pageHeaderHtml('🛡️','Kontrollbesuch? Kein Stress.','Hier findest du in Sekunden alles, was du zeigen musst.','#DC2626');
   KONTROLLE_PUNKTE.forEach(p=>{
     html+=`<div class="card" style="padding:0;margin-bottom:6px;">
       <div style="display:flex;align-items:center;gap:10px;padding:14px;${p.target?'cursor:pointer;':''}" ${p.target?`onclick="goTo('${p.target}')"`:''}>
@@ -1735,7 +1732,7 @@ async function fetchHistoricalWeather(storeId, fromDate, toDate){
 
 async function renderForecastReview(){
   const el = document.getElementById('v-forecastReview');
-  el.innerHTML = backToHomeHtml() + `<div id="fr-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  el.innerHTML = backToHomeHtml() + pageHeaderHtml('📊','Prognose-Rückblick','Vergangene Daten mit Wetter & Feiertagen abgleichen','#0EA5E9') + `<div id="fr-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
 
   const today = new Date();
@@ -2163,6 +2160,7 @@ async function toggleCl(templateId){
 function renderManagement(){
   const el=document.getElementById('v-management');
   el.innerHTML=`
+    ${pageHeaderHtml('🗂️','Management','Alles, was Organisation braucht — an einem Ort','#2B3A67')}
     <button class="org-btn" onclick="goTo('orgForecast')" style="border-color:#2B3A67;">
       <span class="org-btn-icon">🧭</span>
       <div class="org-btn-text">
@@ -2307,7 +2305,7 @@ window.editOrgRoleName=editOrgRoleName;
 
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
-  el.innerHTML=backToHomeHtml()+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
 
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
@@ -2328,9 +2326,7 @@ async function renderOrgForecast(){
   });
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
-  let html=`<div style="background:var(--green-light);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--sub);">
-    🧭 <strong>Operations</strong> — Mengen für alle Filialen direkt anpassen. Änderungen sind sofort für Küche & Store sichtbar.
-  </div>`;
+  let html='';
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
@@ -2390,6 +2386,7 @@ async function renderBroadcast(){
   const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
 
   let html=backToHomeHtml();
+  html+=pageHeaderHtml('📣','Nachricht an Stores','An alle Filialen oder eine bestimmte — poppt beim nächsten Öffnen auf.','#2B3A67');
   html+=`<div class="card" style="padding:14px;">
     <div style="font-weight:500;margin-bottom:8px;">An wen?</div>
     <select id="bc-target" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
@@ -2866,10 +2863,7 @@ async function renderHygieneSchulung(){
 
   let html=backToHomeHtml();
 
-  html+=`
-  <div style="background:var(--green-light);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--sub);">
-    🎓 Hygiene-Schulungen — Nachweis für Kontrollen (Marktamt)
-  </div>`;
+  html+=pageHeaderHtml('🎓','Hygiene-Schulungen','Nachweis für Kontrollen (Marktamt)','#0F6E56');
 
   if(!isOrg){
     html+=`<div class="section-lbl">Zuletzt geschult in dieser Filiale</div>
@@ -3234,6 +3228,17 @@ function backToHomeHtml(){
   return `<div onclick="goTo('home')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
     <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     Zurück zur Übersicht
+  </div>`;
+}
+
+// Einheitlicher großer Kopfbereich für Hauptseiten — überall dieselbe Optik (Icon, große Überschrift,
+// Untertitel), statt dass jede Seite ihr eigenes Intro-Design hat.
+function pageHeaderHtml(icon, title, subtitle, color){
+  color = color || 'var(--green)';
+  return `<div style="background:${color};border-radius:14px;padding:16px 18px;margin-bottom:16px;">
+    <div style="font-size:26px;margin-bottom:4px;">${icon}</div>
+    <div style="font-size:20px;font-weight:700;color:#fff;line-height:1.2;">${title}</div>
+    ${subtitle?`<div style="font-size:12.5px;color:rgba(255,255,255,0.85);margin-top:4px;">${subtitle}</div>`:''}
   </div>`;
 }
 
@@ -3761,11 +3766,7 @@ async function renderPack(){
   // Kein Tab-Umschalter mehr nötig — Transporter und KC haben jetzt eigene Reiter unten in der Navigation
   // (Michi/Ines), daher jede Ansicht komplett isoliert, ohne Vermischung.
   if(activePackTab==='kc'){
-    let html=`<div class="section-banner" style="background:#A855F712;border-left-color:#A855F7;">
-      <span style="font-size:18px;">📦</span>
-      <div><div style="font-size:12px;font-weight:600;color:#A855F7;">KC — Webshop-Produkte</div>
-      <div style="font-size:10px;color:var(--muted);">Bestellung je Filiale (SOLL − IST)</div></div>
-    </div>`;
+    let html=pageHeaderHtml('📦','KC — Webshop-Produkte','Bestellung je Filiale (SOLL − IST)','#A855F7');
     await renderKCOverview(el, html, storeList);
     return;
   }
@@ -3777,11 +3778,7 @@ async function renderPack(){
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
 
-  let html=`<div class="section-banner" style="background:${activeColor}12;border-left-color:${activeColor};">
-    <span style="font-size:18px;">🚚</span>
-    <div><div style="font-size:12px;font-weight:600;color:${activeColor};">Transporter — ${new Date().toLocaleDateString('de-AT')}</div>
-    <div style="font-size:10px;color:var(--muted);">Zahl antippen = als eingepackt markieren</div></div>
-  </div>`;
+  let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')} — Zahl antippen = als eingepackt markieren`,'#F97316');
 
   html+=`<div class="section-lbl">📦 Bestellungen heute</div>`;
 
