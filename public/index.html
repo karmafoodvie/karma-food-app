@@ -489,6 +489,9 @@ window.goToGuideEntry=goToGuideEntry;
 let clDone = {};
 let stockData = {};
 let activePackTab = 'transporter';
+let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen'
+function switchTransporterSubTab(t){ transporterSubTab=t; renderPack(); }
+window.switchTransporterSubTab=switchTransporterSubTab;
 function goToPackTab(tab){ activePackTab=tab; goTo('pack'); }
 let lang = localStorage.getItem('kf_lang') || 'de';
 const tCache = {};
@@ -3772,15 +3775,36 @@ async function renderPack(){
   }
 
   const today=new Date().toISOString().split('T')[0];
+  let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
+
+  // Drei eigene Tabs, damit z.B. Samosas & Beilagen nicht untergehen, wenn gerade keine Bestellungen da sind
+  html+=`<div class="pack-tabs" style="margin-bottom:12px;">
+    <button class="pack-tab" onclick="switchTransporterSubTab('bestellliste')" style="border-color:${transporterSubTab==='bestellliste'?'#F97316':'var(--border)'};background:${transporterSubTab==='bestellliste'?'#FFF7ED':'var(--card)'};color:${transporterSubTab==='bestellliste'?'#F97316':'#1a1a18'};font-weight:${transporterSubTab==='bestellliste'?'600':'400'};">📦 Bestellliste</button>
+    <button class="pack-tab" onclick="switchTransporterSubTab('samosas')" style="border-color:${transporterSubTab==='samosas'?'#F97316':'var(--border)'};background:${transporterSubTab==='samosas'?'#FFF7ED':'var(--card)'};color:${transporterSubTab==='samosas'?'#F97316':'#1a1a18'};font-weight:${transporterSubTab==='samosas'?'600':'400'};">🥟 Samosas</button>
+    <button class="pack-tab" onclick="switchTransporterSubTab('beilagen')" style="border-color:${transporterSubTab==='beilagen'?'#F97316':'var(--border)'};background:${transporterSubTab==='beilagen'?'#FFF7ED':'var(--card)'};color:${transporterSubTab==='beilagen'?'#F97316':'#1a1a18'};font-weight:${transporterSubTab==='beilagen'?'600':'400'};">🥗 Beilagen</button>
+  </div>`;
+
+  if(transporterSubTab==='samosas'){
+    html+=await renderSamosaTableHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+  if(transporterSubTab==='beilagen'){
+    html+=await renderBeilagenTableHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
+  // --- Bestellliste (Standard-Tab) ---
   const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity,eingepackt`);
   const specRaw=await api(`special_orders?order_date=eq.${today}&select=store_id,note`).catch(()=>[]);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
 
-  let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')} — Zahl antippen = als eingepackt markieren`,'#F97316');
-
-  html+=`<div class="section-lbl">📦 Bestellungen heute</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Zahl antippen = als eingepackt markieren</div>`;
 
   let hasAny=false;
   TRANSPORTER_CATS.forEach(cat=>{
@@ -3817,14 +3841,6 @@ async function renderPack(){
     html+='</div>';
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
-
-  // Samosa-Verteilung — eigene Tabelle, da hier auch Kitchen selbst eine Menge bekommt
-  html+=`<div class="section-lbl" style="margin-top:20px;">🥟 Samosa-Verteilung <span style="font-weight:400;color:var(--muted);">(Lieferantenbestellung)</span></div>`;
-  html+=await renderSamosaTableHtml();
-
-  // Beilagen (Küchen-Vorbereitung) auch hier zeigen — Michi packt das ja mit ein, muss also wissen was dazugehört
-  html+=`<div class="section-lbl" style="margin-top:20px;">🥗 Beilagen aus der Küche <span style="font-weight:400;color:var(--muted);">(mit einpacken)</span></div>`;
-  html+=await renderBeilagenTableHtml();
 
   el.innerHTML=html;
   translateEl(el);
