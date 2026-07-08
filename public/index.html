@@ -192,6 +192,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-oeffnungHilfe" class="view"></div>
     <div id="v-reinigungHilfe" class="view"></div>
     <div id="v-hygieneSchulung" class="view"></div>
+    <div id="v-orgForecast" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -680,11 +681,11 @@ function goTo(v, noPush=false){
   const navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung'};
+  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -2156,37 +2157,15 @@ async function toggleCl(templateId){
 function renderOrg(){
   const el=document.getElementById('v-org');
   el.innerHTML=`
-    <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Wähle einen Bereich:</div>
+    <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
 
-    <button class="org-btn" onclick="goToPackTab('transporter')" style="border-color:#F97316;">
-      <span class="org-btn-icon">🚚</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#F97316;">Bestellliste — Transporter</span>
-        <span class="org-btn-sub">Alle Filial-Bestellungen für den Transporter · Verantwortlich: Transporter</span>
-      </div>
-    </button>
-
-    <button class="org-btn" onclick="goToPackTab('kc')" style="border-color:#A855F7;">
-      <span class="org-btn-icon">📦</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#A855F7;">Bestellliste — KC</span>
-        <span class="org-btn-sub">IST/SOLL/Bestellung — Lager Shop · Verantwortlich: Ines</span>
-      </div>
-    </button>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Weitere Bereiche:</div>
 
     <button class="org-btn" onclick="goTo('sweets')" style="border-color:#EC4899;">
       <span class="org-btn-icon">🍰</span>
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#EC4899;">Sweets</span>
-        <span class="org-btn-sub">Gesamtübersicht aller Filial-Bestellungen für morgen · Verantwortlich: Kitchen Crewmember</span>
-      </div>
-    </button>
-
-    <button class="org-btn" onclick="goTo('kitchen')" style="border-color:#DC2626;">
-      <span class="org-btn-icon">🍲</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#DC2626;">Küche</span>
-        <span class="org-btn-sub">Wochenplan, Mengen, Beilagen & Forecast aller Filialen · Verantwortlich: Küchenchef</span>
+        <span class="org-btn-sub">Gesamtübersicht aller Filial-Bestellungen für morgen</span>
       </div>
     </button>
 
@@ -2241,7 +2220,123 @@ function renderOrg(){
       </div>
     </button>`;
   translateEl(el);
+  loadOrgRolesRow();
 }
+window.renderOrg=renderOrg;
+
+async function loadOrgRolesRow(){
+  const wrap=document.getElementById('org-roles-row');
+  if(!wrap) return;
+  const roles=await api('org_roles?select=*').catch(()=>[]);
+  const ROLE_TARGETS={kueche:()=>goTo('kitchen'), operations:()=>goTo('orgForecast'), kc:()=>goToPackTab('kc'), transporter:()=>goToPackTab('transporter')};
+  const order=['kueche','operations','kc','transporter'];
+  const byKey=Object.fromEntries((roles||[]).map(r=>[r.role_key,r]));
+  wrap.innerHTML=order.filter(k=>byKey[k]).map(k=>{
+    const r=byKey[k];
+    return `<div style="position:relative;">
+      <button class="store-btn-color" onclick="orgRoleNav('${k}')" data-no-translate style="background:${r.color};">
+        <span class="store-btn-color-label">${r.person_name} <span style="font-weight:400;opacity:0.85;">(${r.label})</span></span>
+      </button>
+      <button onclick="editOrgRoleName(event,'${k}','${r.person_name.replace(/'/g,"\\'")}')" title="Namen ändern" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.25);border:none;border-radius:50%;width:26px;height:26px;color:#fff;cursor:pointer;font-size:12px;">✏️</button>
+    </div>`;
+  }).join('');
+}
+
+function orgRoleNav(key){
+  const targets={kueche:()=>goTo('kitchen'), operations:()=>goTo('orgForecast'), kc:()=>goToPackTab('kc'), transporter:()=>goToPackTab('transporter')};
+  targets[key]?.();
+}
+window.orgRoleNav=orgRoleNav;
+
+async function editOrgRoleName(ev, key, currentName){
+  ev.stopPropagation();
+  const name=prompt('Neuer Name für diesen Bereich:', currentName);
+  if(!name || !name.trim() || name.trim()===currentName) return;
+  try{
+    await api(`org_roles?role_key=eq.${key}`,{method:'PATCH',body:JSON.stringify({person_name:name.trim()})});
+    loadOrgRolesRow();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.editOrgRoleName=editOrgRoleName;
+
+async function renderOrgForecast(){
+  const el=document.getElementById('v-orgForecast');
+  el.innerHTML=backToHomeHtml()+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  translateEl(el);
+
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
+  const weekDates=getWeekdayDates();
+  const fromDate=weekDates[1], toDate=weekDates[5];
+
+  const [allForecasts, calendarEvents, refWeather]=await Promise.all([
+    api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source`).catch(()=>[]),
+    getCalendarEvents(),
+    fetchWeatherForStore('lb', fromDate, toDate)
+  ]);
+  const fMap={};
+  (allForecasts||[]).forEach(f=>{
+    if(!fMap[f.forecast_date])fMap[f.forecast_date]={};
+    if(!fMap[f.forecast_date][f.store_id])fMap[f.forecast_date][f.store_id]={};
+    fMap[f.forecast_date][f.store_id][f.dish_name]=f;
+  });
+  const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
+
+  let html=`<div style="background:var(--green-light);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--sub);">
+    🧭 <strong>Operations</strong> — Mengen für alle Filialen direkt anpassen. Änderungen sind sofort für Küche & Store sichtbar.
+  </div>`;
+
+  for(let wd=1; wd<=5; wd++){
+    const wdStr=WEEKDAY_STR[wd];
+    const dateStr=weekDates[wd];
+    const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+    const dishNames=getMenuDishNamesForDay(wdStr);
+    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    const {reason}=getDayModifiers(dateStr, 'lb', refWeather, calendarEvents, zeroSettings);
+    const isToday=new Date().toISOString().split('T')[0]===dateStr;
+
+    html+=`<div class="section-lbl" style="${isToday?'color:#2B3A67;font-weight:700;':''}">${dateLabel}${isToday?' — heute':''}</div>`;
+    if(reason) html+=`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${reason}</div>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Filiale</th>
+      ${allDishes.map(d=>`<th data-no-translate style="font-size:10.5px;">${d}</th>`).join('')}
+    </tr></thead><tbody>`;
+    storeList.forEach(s=>{
+      html+=`<tr><td style="text-align:left;font-size:11.5px;" data-no-translate>${s.name.split(' ')[0]}</td>`;
+      allDishes.forEach(dish=>{
+        const rec=((fMap[dateStr]||{})[s.id]||{})[dish];
+        const manual=rec?.source==='manual';
+        html+=`<td><input type="number" step="0.25" value="${rec?.qty??''}" placeholder="–" data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
+          onchange="updateForecastQtyOrg(this)"
+          style="width:44px;text-align:center;border:1.5px solid ${manual?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':'#fff'};"></td>`;
+      });
+      html+='</tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Orange = manuell angepasst (von einem Store oder von dir hier). Änderungen wirken sich sofort auf Store- und Küchen-Ansicht aus.</div>`;
+
+  document.getElementById('orgfc-content').innerHTML=html;
+  translateEl(el);
+}
+
+async function updateForecastQtyOrg(inputEl){
+  const storeId=inputEl.dataset.store;
+  const dish=inputEl.dataset.dish;
+  const dateStr=inputEl.dataset.date;
+  const qty=inputEl.value===''?null:parseFloat(inputEl.value);
+  try{
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'});
+    if(qty!=null){
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,source:'manual'}])});
+    }
+    inputEl.style.borderColor='#F97316';
+    inputEl.style.background='#FFF7ED';
+    showToast('✔ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.updateForecastQtyOrg=updateForecastQtyOrg;
 
 // ---- ALLERGENE & ZUTATEN ----
 async function renderAllergene(){
