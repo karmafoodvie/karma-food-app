@@ -3984,6 +3984,33 @@ async function renderPack(){
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
 
+  // Alle Transporter-Artikel — auch ohne heutige Bestellung, damit Lieferbarkeit VORAB gemeldet werden
+  // kann (z.B. wenn Servietten leer sind, bevor überhaupt eine Filiale sie nachbestellt hat).
+  // Gleiches Prinzip wie bei KC: erst die Artikel ohne Bestand-Daten aussortieren, aber jederzeit einsehbar.
+  const notOrderedToday=[];
+  TRANSPORTER_CATS.forEach(cat=>{
+    articles.filter(a=>a.category===cat && !storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0)).forEach(a=>notOrderedToday.push(a));
+  });
+  if(notOrderedToday.length){
+    html+=`<details style="margin-top:10px;">
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Alle Artikel — Lieferbarkeit verwalten (${notOrderedToday.length})</summary>
+      <div class="card" style="margin-top:6px;">`;
+    notOrderedToday.forEach(a=>{
+      const verfuegbar=a.verfuegbar!==false;
+      html+=`<div class="item-row">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;">
+          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          <div>
+            <div class="item-name">${a.name}</div>
+            ${(!verfuegbar && a.verfuegbar_hinweis)?`<div style="font-size:11px;color:#DC2626;">${a.verfuegbar_hinweis}</div>`:''}
+          </div>
+        </div>
+        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+      </div>`;
+    });
+    html+='</div></details>';
+  }
+
   el.innerHTML=html;
   translateEl(el);
 }
