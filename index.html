@@ -697,6 +697,7 @@ function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store
 async function loadAll(){
   const today=new Date().toISOString().split('T')[0];
   articles=await api('articles?select=*&order=sort_order');
+  await autoReactivateExpiredArticles();
   const tmpl=await api('checklist_templates?select=*&order=sort_order');
   templates={};
   ALL_CL_TYPES.forEach(t=>templates[t]=tmpl.filter(x=>x.list_type===t));
@@ -1178,7 +1179,7 @@ function renderVerfuegbarkeit(){
           ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
-            ${(!verfuegbar && a.verfuegbar_hinweis)?`<div style="font-size:11px;color:#DC2626;">${a.verfuegbar_hinweis}</div>`:''}
+            ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
         <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
@@ -1190,15 +1191,96 @@ function renderVerfuegbarkeit(){
   translateEl(el);
 }
 
+function verfuegbarLabel(a){
+  const parts=[];
+  if(a.verfuegbar_bis) parts.push('bis '+new Date(a.verfuegbar_bis+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}));
+  if(a.verfuegbar_hinweis) parts.push(a.verfuegbar_hinweis);
+  return parts.length?parts.join(' — '):'aktuell nicht verfügbar';
+}
+
+// Modal beim Melden von "Nicht lieferbar": Bis auf weiteres / bis zu einem Datum + optionale Notiz.
+// Wird von toggleArticleVerfuegbar & toggleArticleVerfuegbarPack gemeinsam genutzt.
+function showVerfuegbarModal(id, onSaved){
+  closeVerfModal();
+  const todayStr=new Date().toISOString().split('T')[0];
+  const overlay=document.createElement('div');
+  overlay.id='verf-modal-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML=`
+    <div style="background:var(--card,#fff);border-radius:14px;padding:20px;max-width:360px;width:100%;">
+      <div style="font-size:15px;font-weight:600;margin-bottom:14px;">❌ Als nicht lieferbar markieren</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+          <input type="radio" name="verf-mode" value="unbestimmt" checked onchange="toggleVerfDateInput(false)"> Bis auf weiteres
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+          <input type="radio" name="verf-mode" value="datum" onchange="toggleVerfDateInput(true)"> Bis zu einem bestimmten Datum
+        </label>
+        <input type="date" id="verf-date-input" min="${todayStr}" style="display:none;margin-left:26px;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+      </div>
+      <textarea id="verf-note-input" placeholder="Notiz (optional) — z.B. Grund oder Hinweis für die Stores" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button onclick="closeVerfModal()" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+        <button onclick="saveVerfModal(${id})" style="flex:1;padding:9px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:500;cursor:pointer;">Speichern</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  window._verfModalOnSaved=onSaved;
+}
+window.showVerfuegbarModal=showVerfuegbarModal;
+
+function toggleVerfDateInput(show){
+  const el=document.getElementById('verf-date-input');
+  if(el){ el.style.display=show?'block':'none'; if(show) el.focus(); }
+}
+window.toggleVerfDateInput=toggleVerfDateInput;
+
+function closeVerfModal(){
+  const el=document.getElementById('verf-modal-overlay');
+  if(el) el.remove();
+  window._verfModalOnSaved=null;
+}
+window.closeVerfModal=closeVerfModal;
+
+async function saveVerfModal(id){
+  const mode=document.querySelector('input[name="verf-mode"]:checked')?.value||'unbestimmt';
+  const dateVal=mode==='datum'?(document.getElementById('verf-date-input')?.value||null):null;
+  if(mode==='datum' && !dateVal){ showToast('Bitte ein Datum wählen'); return; }
+  const note=document.getElementById('verf-note-input')?.value?.trim()||'';
+  try{
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:false, verfuegbar_hinweis:note||null, verfuegbar_bis:dateVal})});
+    articles=await api('articles?select=*&order=sort_order');
+    const cb=window._verfModalOnSaved;
+    closeVerfModal();
+    if(cb) cb();
+    showToast('❌ Als nicht lieferbar markiert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveVerfModal=saveVerfModal;
+
+// Artikel automatisch wieder auf "lieferbar" setzen, wenn das gewählte Bis-Datum verstrichen ist.
+async function autoReactivateExpiredArticles(){
+  const today=new Date().toISOString().split('T')[0];
+  const expired=articles.filter(a=>a.verfuegbar===false && a.verfuegbar_bis && a.verfuegbar_bis<today);
+  if(!expired.length) return;
+  try{
+    for(const a of expired){
+      await api(`articles?id=eq.${a.id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:true, verfuegbar_hinweis:null, verfuegbar_bis:null})});
+    }
+    articles=await api('articles?select=*&order=sort_order');
+  }catch(e){console.error(e);}
+}
+
 async function toggleArticleVerfuegbar(id, current){
-  let hinweis=null;
+  const refresh=()=>{ if(currentView==='verfuegbarkeit') renderVerfuegbarkeit(); else renderOrder(); };
   if(current){
-    hinweis=prompt('Hinweis für die Stores (optional)\nz.B. "wird erst Donnerstag geliefert"','')||'';
+    showVerfuegbarModal(id, refresh);
+    return;
   }
   try{
-    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current, verfuegbar_hinweis: current?hinweis:null})});
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:true, verfuegbar_hinweis:null, verfuegbar_bis:null})});
     articles=await api('articles?select=*&order=sort_order');
-    if(currentView==='verfuegbarkeit') renderVerfuegbarkeit(); else renderOrder();
+    refresh();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
@@ -1235,7 +1317,7 @@ function renderOrderSection(cats, label, color, icon){
           <div>
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
-            ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${a.verfuegbar_hinweis?a.verfuegbar_hinweis:'aktuell nicht verfügbar'}</div>`:''}
+            ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
         ${isOrg?`
@@ -1428,7 +1510,7 @@ async function renderKCOrderTab(el, tabHtml){
       <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
       <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" title="${verfuegbar?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">${verfuegbar?'❌':'✅'}</button>`}</td>
     </tr>
-    ${!isOrg && !verfuegbar && a.verfuegbar_hinweis?`<tr><td colspan="5" style="font-size:10px;color:#DC2626;padding-top:0;">↳ ${a.verfuegbar_hinweis}</td></tr>`:''}`;
+    ${!isOrg && !verfuegbar?`<tr><td colspan="5" style="font-size:10px;color:#DC2626;padding-top:0;">↳ ${verfuegbarLabel(a)}</td></tr>`:''}`;
   });
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Negative Bestellung = Überbestand. Grün hinterlegtes Feld = heute aktualisiert (Datum darunter = letzte Eingabe).</div>`;
@@ -4002,7 +4084,7 @@ async function renderPack(){
           ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
-            ${(!verfuegbar && a.verfuegbar_hinweis)?`<div style="font-size:11px;color:#DC2626;">${a.verfuegbar_hinweis}</div>`:''}
+            ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
         <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
@@ -4116,13 +4198,15 @@ function switchPackTab(t){activePackTab=t;renderPack();}
 window.switchPackTab=switchPackTab;
 
 async function toggleArticleVerfuegbarPack(id, current){
-  let hinweis=null;
-  if(current){ hinweis=prompt('Hinweis für die Stores (optional)\nz.B. "wird erst Donnerstag geliefert"','')||''; }
+  if(current){
+    showVerfuegbarModal(id, ()=>{ renderPack(); });
+    return;
+  }
   try{
-    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current,verfuegbar_hinweis:current?hinweis:null})});
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:true,verfuegbar_hinweis:null,verfuegbar_bis:null})});
     articles=await api('articles?select=*&order=sort_order');
     renderPack();
-    showToast(current?'❌ Als nicht lieferbar markiert':'✅ Wieder lieferbar');
+    showToast('✅ Wieder lieferbar');
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
@@ -4340,29 +4424,30 @@ async function renderSamosaTableHtml(){
   const valMap={}; // valMap[date][store_id] = rec
   (todayVals||[]).forEach(d=>{ if(!valMap[d.supply_date])valMap[d.supply_date]={}; valMap[d.supply_date][d.store_id]=d; });
 
-  if(!baseline?.length){
-    return `<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Samosa-Basiswerte hinterlegt.</div>`;
-  }
-
   let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Standort</th>
     ${[1,2,3,4].map(wd=>`<th style="${wd===todayWeekday?'color:#F97316;font-weight:700;':''}">${WD_LABEL[wd]}${wd===todayWeekday?' (heute)':''}</th>`).join('')}
   </tr></thead><tbody>`;
 
   const dayTotals={1:0,2:0,3:0,4:0};
+  // dayValues[wd] = [{storeName, val}] — für die Kopier-Textzusammenfassung unten
+  const dayValues={1:[],2:[],3:[],4:[]};
   storeList.forEach(s=>{
     html+=`<tr><td data-no-translate style="text-align:left;font-size:12px;color:${STORE_COLORS[s.id]||'#888'};">${s.name.split(' ')[0]}</td>`;
     [1,2,3,4].forEach(wd=>{
       const b=baseline.find(x=>x.store_id===s.id && x.weekday===wd);
-      if(!b){ html+='<td style="color:var(--border);">·</td>'; return; }
       const dateStr=weekDates[wd];
       const rec=(valMap[dateStr]||{})[s.id];
-      const val=rec?rec.qty:b.base_qty;
+      // Auch ohne hinterlegten Basiswert ein Eingabefeld anzeigen (z.B. für Filialen, die aktuell
+      // keine Samosas bekommen, aber künftig vielleicht welche brauchen) — Standard dann 0.
+      const val=rec?rec.qty:(b?b.base_qty:0);
       dayTotals[wd]+=parseInt(val)||0;
+      if(parseInt(val)>0) dayValues[wd].push({name:s.name.split(' ')[0], val:parseInt(val)});
       const adjusted=!!rec?.is_adjusted;
+      const isOptional=!b; // kein Standard-Liefertag für diese Filiale — dezenter dargestellt
       html+=`<td><input type="number" step="1" value="${val}" data-store="${s.id}" data-weekday="${wd}" data-date="${dateStr}"
         onchange="updateSamosaQty(this)"
-        style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:3px 1px;background:${adjusted?'#FFF7ED':'#fff'};"></td>`;
+        style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:3px 1px;background:${adjusted?'#FFF7ED':isOptional?'transparent':'#fff'};color:${isOptional&&!val?'var(--muted)':'inherit'};"></td>`;
     });
     html+='</tr>';
   });
@@ -4370,9 +4455,41 @@ async function renderSamosaTableHtml(){
     ${[1,2,3,4].map(wd=>`<td style="color:#3B6D11;font-size:13px;">${dayTotals[wd]}</td>`).join('')}
   </tr>`;
   html+='</tbody></table></div></div>';
-  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen (z.B. wenn die Lieferantenbestellung mal abweicht). Orange = angepasst.</div>`;
+  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = angepasst. Leere/graue Felder = aktuell kein Standard-Liefertag, aber jederzeit eintragbar.</div>`;
+
+  // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp
+  let summary=`🥟 Samosas Woche (Mo–Do):\n`;
+  [1,2,3,4].forEach(wd=>{
+    if(!dayValues[wd].length) return;
+    summary+=`${WD_LABEL[wd]}: `+dayValues[wd].map(v=>`${v.name} ${v.val}`).join(', ')+`\n`;
+  });
+  const summaryEsc=summary.replace(/`/g,'\\`').replace(/</g,'&lt;');
+  html+=`<div style="margin-top:14px;">
+    <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">📋 Für den Produzenten</div>
+    <textarea id="samosa-copy-text" readonly style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:13px;min-height:110px;resize:vertical;font-family:inherit;box-sizing:border-box;background:var(--card);">${summary}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button onclick="copySamosaText()" style="flex:1;padding:9px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:13px;font-weight:500;cursor:pointer;">📋 Kopieren</button>
+      <button id="samosa-share-btn" onclick="shareSamosaText()" style="display:${(typeof navigator!=='undefined'&&navigator.share)?'block':'none'};flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">📤 Teilen</button>
+    </div>
+  </div>`;
   return html;
 }
+
+function copySamosaText(){
+  const el=document.getElementById('samosa-copy-text');
+  if(!el) return;
+  navigator.clipboard?.writeText(el.value).then(()=>showToast('✔ In Zwischenablage kopiert')).catch(()=>{
+    el.select(); document.execCommand('copy'); showToast('✔ Kopiert');
+  });
+}
+window.copySamosaText=copySamosaText;
+
+function shareSamosaText(){
+  const el=document.getElementById('samosa-copy-text');
+  if(!el) return;
+  if(navigator.share){ navigator.share({text:el.value}).catch(()=>{}); }
+}
+window.shareSamosaText=shareSamosaText;
 
 async function updateSamosaQty(input){
   const storeId=input.dataset.store;
