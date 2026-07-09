@@ -1389,13 +1389,14 @@ function formatQty(n){
   // kein bekannter Bruch -> normale Zahl, Punkt durch Komma falls Nachkommastellen
   return num % 1 === 0 ? `${num}` : num.toString().replace('.',',');
 }
-function getWeekdayDates(){
-  // Liefert {1:'YYYY-MM-DD', ..., 5:'YYYY-MM-DD'} für Mo-Fr der AKTUELLEN Kalenderwoche
+function getWeekdayDates(weekOffsetParam=0){
+  // Liefert {1:'YYYY-MM-DD', ..., 5:'YYYY-MM-DD'} für Mo-Fr — Standard ist die aktuelle Kalenderwoche,
+  // weekOffsetParam verschiebt in Wochenschritten (z.B. +1 = nächste Woche, -1 = letzte Woche).
   const now=new Date();
   const dow=now.getDay(); // 0=So..6=Sa
   const diffToMonday=dow===0?-6:1-dow;
   const monday=new Date(now);
-  monday.setDate(now.getDate()+diffToMonday);
+  monday.setDate(now.getDate()+diffToMonday+weekOffsetParam*7);
   const dates={};
   for(let i=0;i<5;i++){
     const d=new Date(monday);
@@ -1403,6 +1404,14 @@ function getWeekdayDates(){
     dates[i+1]=d.toISOString().split('T')[0];
   }
   return dates;
+}
+// ISO-Kalenderwochennummer für eine gegebene Woche (fuer die Anzeige "KW 28")
+function getIsoWeekNumber(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate()+3-((d.getDay()+6)%7));
+  const week1=new Date(d.getFullYear(),0,4);
+  return 1+Math.round(((d-week1)/86400000-3+((week1.getDay()+6)%7))/7);
 }
 async function renderKuecheOrderTab(el, tabHtml){
   const tab=ORDER_TABS.kueche;
@@ -1854,13 +1863,30 @@ async function renderForecastOrderTab(el, tabHtml){
   const tab=ORDER_TABS.forecast;
   let html=tabHtml;
   const todayWeekday=new Date().getDay();
-  const weekDates=getWeekdayDates();
+  const weekDates=getWeekdayDates(forecastWeekOffset);
+  const todayStr=new Date().toISOString().split('T')[0];
+  const isHistoric=weekDates[5] < todayStr; // ganze Woche liegt in der Vergangenheit -> nur zur Nachverfolgung, nicht mehr editierbar
+  const kwNum=getIsoWeekNumber(weekDates[1]);
+  const kwLabel=`${new Date(weekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(weekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}`;
 
   html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
     <span style="font-size:18px;">${tab.icon}</span>
     <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
     <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen</div></div>
   </div>`;
+
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <button onclick="changeForecastWeek(-1)" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;">← Vorherige</button>
+    <div style="text-align:center;">
+      <div style="font-size:13px;font-weight:600;">KW ${kwNum}${forecastWeekOffset===0?' (diese Woche)':''}</div>
+      <div style="font-size:10.5px;color:var(--muted);">${kwLabel}${isHistoric?' · Historie':''}</div>
+    </div>
+    <button onclick="changeForecastWeek(1)" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;">Nächste →</button>
+  </div>`;
+
+  if(isHistoric){
+    html+=`<div style="background:#F3F4F6;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:var(--muted);">📖 Historie — diese Woche liegt in der Vergangenheit, nur zur Nachverfolgung, nicht mehr veränderbar.</div>`;
+  }
 
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source`).catch(()=>[]);
@@ -1923,6 +1949,10 @@ async function renderForecastOrderTab(el, tabHtml){
     const isSuggestion=!rec && autoVal!=null;
     const isLasagne=dish.includes('Lasagne');
     const groesse=rec?.groesse||'gross';
+    if(isHistoric){
+      // Historie: nur Anzeige, nicht mehr veraenderbar
+      return `<div style="width:48px;margin:0 auto;text-align:center;font-size:13px;font-weight:600;color:${manual?'#F97316':'#1a1a18'};">${val!=null?formatQty(val):'–'}</div>`;
+    }
     if(lockedNote){
       return `<div title="${lockedNote}" style="width:48px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div>`;
     }
@@ -4145,6 +4175,9 @@ const WEEKDAYS=[{k:'mo',l:'Montag'},{k:'di',l:'Dienstag'},{k:'mi',l:'Mittwoch'},
 const MENU_SLOTS=[{k:'salat',l:'Salat'},{k:'gericht2',l:'Gericht 2'},{k:'gericht3',l:'Gericht 3'},{k:'reis',l:'Reis'}];
 let kitchenTab='morgen';
 let weekOffset=0; // 0 = aktuelle Woche, -1 = letzte Woche, etc.
+let forecastWeekOffset=0; // dasselbe Prinzip fuer den Store-Forecast-Tab: 0=aktuelle Woche, +1=naechste, -1=letzte (Historie)
+function changeForecastWeek(d){ forecastWeekOffset+=d; renderOrder(); }
+window.changeForecastWeek=changeForecastWeek;
 function getWeekDates(offset){
   const now=new Date();
   const monday=new Date(now);
