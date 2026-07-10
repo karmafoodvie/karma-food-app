@@ -275,11 +275,14 @@ const VARIANT_GROUPS = {
   bareballs:{label:'Barebells', prefix:/^bareballs?\s*/i, match:n=>/^bareballs?\b/i.test(n)}
 };
 let variantRows = {}; // {groupKey: [{articleId:number|null}, ...]}
+let lasagneExtraSizes = {}; // {cellKey('date|dish'): Set(groesse)} — manuell aufgeklappte, noch leere Größen-Zeilen im Forecast
 // Küchen-Liefermengen (Dressing, Raita, etc.) sind freie Textnamen in kitchen_supply_baseline,
 // nicht mit der articles-Tabelle verknüpft — Bilder daher über diese Zuordnung, sobald vorhanden.
 const KITCHEN_SUPPLY_IMAGES = {
   // 'Dressing': '/images/kitchen-supply/dressing.jpg',
 };
+// Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
+const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D'};
 const WEEKDAY_NAMES = {1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
 const WEEKDAY_STR = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'}; // Kurzform-Schlüssel für Wochentage, u.a. für MENU_DATA-Keys (w1_mo, w1_di, ...)
 const CL_TYPES = ['abschluss']; // 'oeffnung' & 'reinigung' bleiben als Daten bestehen, sind aber keine Pflicht-Tabs mehr — siehe renderOeffnungHelp()/renderReinigungHelp()
@@ -710,6 +713,7 @@ async function loadAll(){
   orderQtys={};
   orderEingepackt={};
   variantRows={};
+  lasagneExtraSizes={};
   (ord||[]).forEach(o=>{orderQtys[o.article_id]=o.quantity; if(o.eingepackt) orderEingepackt[o.article_id]=true;});
   const done=await api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`);
   clDone={};
@@ -1639,40 +1643,50 @@ async function renderKuecheOrderTab(el, tabHtml){
     const renderDayItems=(wd)=>{
       const items=baseline.filter(b=>b.weekday===wd);
       const dateStr=weekDates[wd];
-      let h='';
+      let h=`<table class="pack-table" style="width:100%;"><thead><tr>
+        <th style="text-align:left;">Artikel</th>
+        <th style="text-align:right;">Menge</th>
+      </tr></thead><tbody>`;
       items.forEach(b=>{
         const rec=(valMap[dateStr]||{})[b.article_name];
         const val=rec ? rec.qty : b.base_qty;
         const adjusted=rec?.is_adjusted;
         const img=KITCHEN_SUPPLY_IMAGES[b.article_name];
-        h+=`<div class="item-row">
-          <div style="display:flex;align-items:center;gap:10px;flex:1;">
-            ${img?`<img src="${img}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
-            <div><div class="item-name">${b.article_name}${adjusted?' <span style="color:#F97316;font-size:10px;font-weight:600;">· angepasst</span>':''}</div><div class="item-unit">${b.unit}</div></div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
+        const color=ARTICLE_COLORS[b.article_name]||'#1a1a18';
+        h+=`<tr>
+          <td style="padding:10px 6px;text-align:left;vertical-align:middle;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${img?`<img src="${img}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+              <div>
+                <div data-no-translate style="font-size:14px;font-weight:600;color:${color};">${b.article_name}${adjusted?' <span style="color:#F97316;font-size:10px;font-weight:600;">· angepasst</span>':''}</div>
+                <div style="font-size:10.5px;color:var(--muted);">${b.unit}</div>
+              </div>
+            </div>
+          </td>
+          <td style="padding:10px 6px;text-align:right;">
             <input type="number" step="0.01" value="${val}" data-article="${b.article_name}" data-base="${b.base_qty}" data-date="${dateStr}"
-              onchange="updateKuecheQty(this)"
-              style="width:64px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 4px;background:${adjusted?'#FFF7ED':'#fff'};">
-          </div>
-        </div>`;
+              onchange="updateKuecheQty(this)" inputmode="decimal"
+              style="width:72px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:8px;font-size:15px;padding:9px 4px;background:${adjusted?'#FFF7ED':'#fff'};">
+          </td>
+        </tr>`;
       });
+      h+='</tbody></table>';
       return h;
     };
 
     const focusDateStr=weekDates[focusWd];
     const focusDateLabel=new Date(focusDateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
     html+=`<div class="section-lbl" style="color:${tab.color};font-weight:700;">${WEEKDAY_NAMES[focusWd]} · ${focusDateLabel}${isTodayFocus?' — heute':' — nächster Liefertag'}</div>
-    <div class="card" style="border:1.5px solid ${tab.color};">${renderDayItems(focusWd)}</div>`;
+    <div class="card" style="border:1.5px solid ${tab.color};overflow-x:auto;">${renderDayItems(focusWd)}</div>`;
 
     const otherDays=daysWithItems.filter(wd=>wd!==focusWd);
     if(otherDays.length){
       html+=`<details style="margin-top:10px;">
-        <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Restliche Woche anzeigen (${otherDays.length} Tage)</summary>`;
+        <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Andere Tage anzeigen (${otherDays.length})</summary>`;
       otherDays.forEach(wd=>{
         const dateStr=weekDates[wd];
         const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-        html+=`<div class="section-lbl">${WEEKDAY_NAMES[wd]} · ${dateLabel}</div><div class="card">${renderDayItems(wd)}</div>`;
+        html+=`<div class="section-lbl">${WEEKDAY_NAMES[wd]} · ${dateLabel}</div><div class="card" style="overflow-x:auto;">${renderDayItems(wd)}</div>`;
       });
       html+='</details>';
     }
@@ -2106,8 +2120,17 @@ async function renderForecastOrderTab(el, tabHtml){
   }
 
   const fromDate=weekDates[1], toDate=weekDates[5];
-  const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source`).catch(()=>[]);
-  const fMap={}; (weekForecasts||[]).forEach(f=>{if(!fMap[f.forecast_date])fMap[f.forecast_date]={};fMap[f.forecast_date][f.dish_name]=f;});
+  const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source,groesse`).catch(()=>[]);
+  // fRecordsMap: mehrere Datensätze pro Tag/Gericht möglich (z.B. Lasagne 2x Groß + 1x Klein).
+  // fMap bleibt zur Kompatibilität der erste Datensatz je Zelle (für alle Nicht-Lasagne-Gerichte reicht das).
+  const fRecordsMap={};
+  (weekForecasts||[]).forEach(f=>{
+    if(!fRecordsMap[f.forecast_date])fRecordsMap[f.forecast_date]={};
+    if(!fRecordsMap[f.forecast_date][f.dish_name])fRecordsMap[f.forecast_date][f.dish_name]=[];
+    fRecordsMap[f.forecast_date][f.dish_name].push(f);
+  });
+  const fMap={};
+  Object.keys(fRecordsMap).forEach(d=>{ fMap[d]={}; Object.keys(fRecordsMap[d]).forEach(dish=>{ fMap[d][dish]=fRecordsMap[d][dish][0]; }); });
 
   // Wetter, Feiertage/Ferien, Filial-Einstellungen & GESAMTE Verkaufshistorie einmal laden
   // (statt pro Zelle einzeln nachzufragen — wichtig bei vielen Zellen/schlechter Verbindung)
@@ -2157,6 +2180,7 @@ async function renderForecastOrderTab(el, tabHtml){
   });
 
   // Kompaktes Eingabefeld für eine Zelle (Tag × Gericht)
+  const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'klein',l:'Kl.·8'}];
   function cellInput(dateStr, dish, lockedNote){
     const rec=(fMap[dateStr]||{})[dish];
     const manual=rec?.source==='manual';
@@ -2165,7 +2189,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const val=rec ? rec.qty : autoVal;
     const isSuggestion=!rec && autoVal!=null;
     const isLasagne=dish.includes('Lasagne');
-    const groesse=rec?.groesse||'gross';
+    if(isLasagne) return lasagneCellInput(dateStr, dish, lockedNote, autoVal);
     if(isHistoric){
       // Historie: nur Anzeige, nicht mehr veraenderbar
       return `<div style="width:48px;margin:0 auto;text-align:center;font-size:13px;font-weight:600;color:${manual?'#F97316':'#1a1a18'};">${val!=null?formatQty(val):'–'}</div>`;
@@ -2176,14 +2200,46 @@ async function renderForecastOrderTab(el, tabHtml){
     const numberInput=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}"
       onchange="updateForecastQty(this)"
       style="width:48px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
-    if(!isLasagne) return numberInput;
-    // "1" bedeutet standardmäßig 1 Großer (18 Stück) — Größenauswahl nur nötig, wenn Mittel/Klein gebraucht wird
-    const sizeSelect=`<select data-dish="${escAttr(dish)}" data-date="${dateStr}" onchange="updateForecastGroesse(this)" title="Behälter-Größe" style="width:50px;margin-top:2px;font-size:8px;border:1px solid var(--border);border-radius:5px;padding:1px;background:#fff;color:var(--sub);">
-      <option value="gross" ${groesse==='gross'?'selected':''}>Groß·18</option>
-      <option value="mittel" ${groesse==='mittel'?'selected':''}>Mit.·12</option>
-      <option value="klein" ${groesse==='klein'?'selected':''}>Kl.·8</option>
-    </select>`;
-    return `<div style="display:flex;flex-direction:column;align-items:center;">${numberInput}${sizeSelect}</div>`;
+    return numberInput;
+  }
+
+  // Lasagne kann in mehreren Behälter-Größen gleichzeitig gebraucht werden (z.B. 2x Groß + 1x Klein) —
+  // eigene Darstellung mit einer Zeile pro verwendeter Größe + "+ Größe"-Button für weitere.
+  function lasagneCellInput(dateStr, dish, lockedNote, autoVal){
+    const records=(fRecordsMap[dateStr]||{})[dish]||[];
+    if(isHistoric){
+      if(!records.length) return `<div style="width:56px;margin:0 auto;text-align:center;font-size:13px;color:var(--border);">–</div>`;
+      return `<div style="font-size:10px;text-align:center;line-height:1.5;">${records.map(r=>`${formatQty(r.qty)}× ${(LASAGNE_SIZES.find(s=>s.k===r.groesse)||LASAGNE_SIZES[0]).l.split('·')[0]}`).join('<br>')}</div>`;
+    }
+    if(lockedNote){
+      if(!records.length) return `<div title="${lockedNote}" style="width:56px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:10px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 –</div>`;
+      return `<div title="${lockedNote}" style="font-size:9.5px;text-align:center;background:#F3F4F6;border-radius:6px;padding:3px 2px;line-height:1.5;">🔒 ${records.map(r=>`${formatQty(r.qty)}×${(LASAGNE_SIZES.find(s=>s.k===r.groesse)||LASAGNE_SIZES[0]).l.split('·')[0]}`).join(', ')}</div>`;
+    }
+    const cellKey=dateStr+'|'+dish;
+    if(!lasagneExtraSizes[cellKey]) lasagneExtraSizes[cellKey]=new Set();
+    const shownSizes=records.length?records.map(r=>r.groesse):['gross'];
+    const revealedOrder=LASAGNE_SIZES.map(s=>s.k).filter(k=>shownSizes.includes(k)||lasagneExtraSizes[cellKey].has(k));
+    let h='<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">';
+    revealedOrder.forEach(sizeKey=>{
+      const rec=records.find(r=>r.groesse===sizeKey);
+      const isDefaultEmptyRow=sizeKey==='gross' && !rec && revealedOrder.length===1;
+      const val=rec ? rec.qty : (isDefaultEmptyRow ? autoVal : null);
+      const isSuggestion=isDefaultEmptyRow && autoVal!=null;
+      const manual=rec?.source==='manual';
+      const sizeLabel=(LASAGNE_SIZES.find(s=>s.k===sizeKey)||LASAGNE_SIZES[0]).l;
+      h+=`<div style="display:flex;align-items:center;gap:3px;">
+        <input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}"
+          onchange="updateForecastQtyGroesse(this)"
+          style="width:38px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">
+        <span style="font-size:7.5px;color:var(--sub);white-space:nowrap;">${sizeLabel}</span>
+      </div>`;
+    });
+    const remaining=LASAGNE_SIZES.filter(s=>!revealedOrder.includes(s.k));
+    if(remaining.length){
+      h+=`<button onclick="addLasagneSize('${escAttr(cellKey)}','${remaining[0].k}')" style="font-size:8px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:5px;padding:1px 4px;cursor:pointer;">+ Größe</button>`;
+    }
+    h+='</div>';
+    return h;
   }
 
   let anyLasagne=false;
@@ -2254,18 +2310,34 @@ async function updateForecastQty(input){
 }
 window.updateForecastQty=updateForecastQty;
 
-async function updateForecastGroesse(select){
-  const dateStr=select.dataset.date;
-  const dishName=select.dataset.dish;
-  const groesse=select.value;
+async function updateForecastQtyGroesse(input){
+  const dateStr=input.dataset.date;
+  const dishName=input.dataset.dish;
+  const groesse=input.dataset.groesse;
+  const newQty=parseFloat(input.value);
   try{
-    const existing=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&select=qty`).catch(()=>[]);
-    if(!existing?.length){ showToast('Bitte zuerst eine Menge eintragen'); select.value='gross'; return; }
-    await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'PATCH',body:JSON.stringify({groesse})});
-    showToast('✓ Größe gespeichert — Küche wird informiert');
+    // Nur den Datensatz DIESER Größe löschen/ersetzen — Geschwister-Größen (z.B. Groß bleibt,
+    // während Klein geändert wird) dürfen dabei nicht verloren gehen.
+    await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${groesse}`,{method:'DELETE'});
+    if(!isNaN(newQty) && newQty>0){
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{
+        store_id:currentStore.id, forecast_date:dateStr, dish_name:dishName, qty:newQty, groesse,
+        source:'manual', changed_by:currentStore.name, changed_at:new Date().toISOString()
+      }])});
+    }
+    showToast('✓ Angepasst — Küche wird informiert');
+    renderOrder();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
-window.updateForecastGroesse=updateForecastGroesse;
+window.updateForecastQtyGroesse=updateForecastQtyGroesse;
+
+function addLasagneSize(cellKey, sizeKey){
+  if(!lasagneExtraSizes[cellKey]) lasagneExtraSizes[cellKey]=new Set();
+  lasagneExtraSizes[cellKey].add(sizeKey);
+  renderOrder();
+}
+window.addLasagneSize=addLasagneSize;
+
 async function submitWochensalat(){
   const today=new Date().toISOString().split('T')[0];
   const rest=parseFloat(document.getElementById('wsalat-rest').value);
@@ -4580,8 +4652,6 @@ async function renderBeilagenTableHtml(){
           <th style="font-weight:700;">Gesamt</th>
         </tr></thead><tbody>`;
 
-        const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D'};
-
         articleNames.forEach(name=>{
           const unit=dayItems.find(b=>b.article_name===name)?.unit||'';
           let sum=0;
@@ -4730,12 +4800,13 @@ async function renderKitchen(){
 
     html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Portionsmengen pro Filiale für die Küchen-Produktion</div>`;
 
-    const weekForecasts=await api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source`).catch(()=>[]);
-    const fMap={}; // fMap[date][store_id][dish] = rec
+    const weekForecasts=await api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source,groesse`).catch(()=>[]);
+    const fMap={}; // fMap[date][store_id][dish] = [rec, ...] (mehrere bei Lasagne mit mehreren Größen)
     (weekForecasts||[]).forEach(f=>{
       if(!fMap[f.forecast_date])fMap[f.forecast_date]={};
       if(!fMap[f.forecast_date][f.store_id])fMap[f.forecast_date][f.store_id]={};
-      fMap[f.forecast_date][f.store_id][f.dish_name]=f;
+      if(!fMap[f.forecast_date][f.store_id][f.dish_name])fMap[f.forecast_date][f.store_id][f.dish_name]=[];
+      fMap[f.forecast_date][f.store_id][f.dish_name].push(f);
     });
     const anyAdjusted=(weekForecasts||[]).some(f=>f.source==='manual');
 
@@ -4771,10 +4842,13 @@ async function renderKitchen(){
 
       storeList.forEach(st=>{
         const cells=allDishes.map(dish=>{
-          const rec=(fMap[dateStr]?.[st.id]||{})[dish];
-          if(!rec) return '<td style="color:var(--border);">·</td>';
-          const manual=rec.source==='manual';
-          return `<td style="font-weight:${manual?'700':'400'};color:${manual?'#0369A1':'#1a1a18'};font-size:12px;">${formatQty(rec.qty)}${manual?'*':''}</td>`;
+          const recs=(fMap[dateStr]?.[st.id]||{})[dish];
+          if(!recs||!recs.length) return '<td style="color:var(--border);">·</td>';
+          const total=recs.reduce((a,r)=>a+(r.qty||0),0);
+          const manual=recs.some(r=>r.source==='manual');
+          const isLasagneDish=dish.includes('Lasagne');
+          const breakdown=(isLasagneDish && recs.length>1)?`<div style="font-size:8.5px;color:var(--muted);">${recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join(' + ')}</div>`:'';
+          return `<td style="font-weight:${manual?'700':'400'};color:${manual?'#0369A1':'#1a1a18'};font-size:12px;">${formatQty(total)}${manual?'*':''}${breakdown}</td>`;
         }).join('');
         html+=`<tr>
           <td data-no-translate style="color:${STORE_COLORS[st.id]||'#888'};font-size:12px;">${st.name.split(' ')[0]}</td>
@@ -4885,7 +4959,8 @@ async function renderMorgenKoch(el, tabHtml){
   const fMap = {};
   (forecasts||[]).forEach(f=>{
     if(!fMap[f.dish_name]) fMap[f.dish_name]={};
-    fMap[f.dish_name][f.store_id]=f;
+    if(!fMap[f.dish_name][f.store_id]) fMap[f.dish_name][f.store_id]=[];
+    fMap[f.dish_name][f.store_id].push(f);
   });
 
   // Get tomorrow's menu dishes from MENU_DATA
@@ -4922,7 +4997,7 @@ async function renderMorgenKoch(el, tabHtml){
   dishNames.forEach(dish=>{
     const storeData = fMap[dish]||{};
     const isLasagne=dish.includes('Lasagne');
-    const total = storeList.reduce((sum,s)=>sum+(storeData[s.id]?.qty||0),0);
+    const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
     const hasData = total>0;
     html+=`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden;">
         <div style="background:${hasData?'var(--green-light)':'#F5F5F3'};border-bottom:2px solid ${hasData?'var(--green)':'var(--border)'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
@@ -4937,10 +5012,11 @@ async function renderMorgenKoch(el, tabHtml){
       </div>
       <div style="padding:10px 14px;">
         ${storeList.map(s=>{
-          const rec=storeData[s.id];
-          const qty=rec?.qty;
-          const changed=rec?.source==='manual';
+          const recs=storeData[s.id]||[];
+          const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
+          const changed=recs.some(r=>r.source==='manual');
           const col=STORE_COLORS[s.id]||'#888';
+          const sizeLabel=isLasagne&&recs.length?recs.map(r=>`${formatQty(r.qty)}× ${GROESSE_LABEL[r.groesse||'gross']}`).join(' + '):null;
           return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;">
               <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></div>
@@ -4948,8 +5024,8 @@ async function renderMorgenKoch(el, tabHtml){
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
               ${changed?`<span style="font-size:10px;color:#185FA5;background:#E6F1FB;padding:1px 6px;border-radius:20px;">angepasst</span>`:''}
-              ${isLasagne&&qty!=null?`<span style="font-size:9.5px;color:var(--muted);">${GROESSE_LABEL[rec?.groesse||'gross']}</span>`:''}
-              <span style="font-size:18px;font-weight:700;color:${qty?'#1a1a18':'var(--border)'};">${qty!=null?formatQty(qty):'–'}</span>
+              ${sizeLabel?`<span style="font-size:9.5px;color:var(--muted);">${sizeLabel}</span>`:''}
+              <span style="font-size:18px;font-weight:700;color:${qty?'#1a1a18':'var(--border)'};">${qty?formatQty(qty):'–'}</span>
             </div>
           </div>`;
         }).join('')}
