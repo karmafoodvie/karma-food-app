@@ -1611,35 +1611,37 @@ function getIsoWeekNumber(dateStr){
 // Transporter/Organisation, aber gefiltert auf currentStore.id). Freitags sammelt die Organisation
 // alle Filialen-Werte und schickt sie gesammelt an den Produzenten (Indian Heritage) weiter.
 async function renderStoreSamosaHtml(weekDates){
-  const WD_LABEL={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag'};
+  const WD_SHORT={1:'Mo',2:'Di',3:'Mi',4:'Do'};
   const todayWeekday=new Date().getDay();
   const baseline=await api(`samosa_baseline?store_id=eq.${currentStore.id}&select=weekday,base_qty`).catch(()=>[]);
   const todayVals=await api(`samosa_today?store_id=eq.${currentStore.id}&supply_date=gte.${weekDates[1]}&supply_date=lte.${weekDates[4]}&select=supply_date,qty,is_adjusted`).catch(()=>[]);
   const valMap={}; (todayVals||[]).forEach(d=>{valMap[d.supply_date]=d;});
 
   let html=`<div class="section-lbl" style="color:#F97316;">🥟 Samosas — diese Woche</div>
-  <div class="card"><table class="pack-table" style="width:100%;"><thead><tr>
-    <th style="text-align:left;">Tag</th><th style="text-align:right;">Menge</th>
-  </tr></thead><tbody>`;
-  [1,2,3,4].forEach(wd=>{
-    const b=baseline.find(x=>x.weekday===wd);
-    const dateStr=weekDates[wd];
-    const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-    const rec=valMap[dateStr];
-    const val=rec?rec.qty:(b?b.base_qty:0);
-    const adjusted=!!rec?.is_adjusted;
-    const isToday=wd===todayWeekday;
-    html+=`<tr${isToday?` style="background:#FFF7ED;"`:''}>
-      <td style="padding:10px 6px;text-align:left;font-weight:${isToday?'700':'500'};color:${isToday?'#F97316':'#1a1a18'};font-size:13px;">${WD_LABEL[wd]} · ${dateLabel}${isToday?' — heute':''}</td>
-      <td style="padding:10px 6px;text-align:right;">
+  <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Artikel</th>
+    ${[1,2,3,4].map(wd=>{
+      const dateStr=weekDates[wd];
+      const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      const isToday=wd===todayWeekday;
+      return `<th style="${isToday?'color:#F97316;font-weight:700;':''}">${WD_SHORT[wd]}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍':''}</div></th>`;
+    }).join('')}
+  </tr></thead><tbody><tr>
+    <td style="font-size:13px;font-weight:600;color:#C2410C;white-space:nowrap;">Samosas<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Stk</div></td>
+    ${[1,2,3,4].map(wd=>{
+      const b=baseline.find(x=>x.weekday===wd);
+      const dateStr=weekDates[wd];
+      const rec=valMap[dateStr];
+      const val=rec?rec.qty:(b?b.base_qty:0);
+      const adjusted=!!rec?.is_adjusted;
+      return `<td style="padding:6px 3px;">
         <input type="number" step="1" value="${val}" data-store="${currentStore.id}" data-weekday="${wd}" data-date="${dateStr}"
           onchange="updateSamosaQty(this)" inputmode="numeric"
-          style="width:64px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:8px;font-size:15px;padding:9px 4px;background:${adjusted?'#FFF7ED':'#fff'};">
-      </td>
-    </tr>`;
-  });
-  html+='</tbody></table></div>';
-  html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Werte werden freitags von der Organisation gesammelt und an den Produzenten weitergegeben — bei Bedarf jederzeit anpassbar.</div>`;
+          style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':'#fff'};">
+      </td>`;
+    }).join('')}
+  </tr></tbody></table></div></div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte werden freitags von der Organisation gesammelt und an den Produzenten weitergegeben — bei Bedarf jederzeit anpassbar.</div>`;
   return html;
 }
 
@@ -1662,8 +1664,14 @@ async function renderKuecheOrderTab(el, tabHtml){
   (weekVals||[]).forEach(d=>{if(!valMap[d.supply_date])valMap[d.supply_date]={};valMap[d.supply_date][d.article_name]=d;});
 
   const daysWithItems=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
+  const today=new Date().toISOString().split('T')[0];
+  const todayRest=await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]);
+  const restRec=(todayRest||[])[0]||{};
+  // Wochensalat-Meldung ist eine tägliche Aufgabe unabhängig von den sonstigen Beilagen — die
+  // heutige Spalte muss also immer existieren, auch wenn an einem Tag sonst nichts geliefert wird.
+  const displayDays=[...new Set([...daysWithItems, ...((todayWeekday>=1&&todayWeekday<=5)?[todayWeekday]:[])])].sort((a,b)=>a-b);
 
-  if(!daysWithItems.length){
+  if(!displayDays.length){
     html+=`<div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);font-size:13px;">Für diese Filiale ist keine Küchen-Lieferung hinterlegt.</div>`;
   } else {
     // Kompakte Wochentabelle: 1 Zeile pro Artikel, 1 Spalte pro Liefertag — jede Zelle einzeln
@@ -1672,7 +1680,7 @@ async function renderKuecheOrderTab(el, tabHtml){
     const articleNames=[...new Set(baseline.map(b=>b.article_name))];
     let matrixHtml=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Artikel</th>
-      ${daysWithItems.map(wd=>{
+      ${displayDays.map(wd=>{
         const dateStr=weekDates[wd];
         const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
         const isToday=wd===todayWeekday;
@@ -1683,7 +1691,7 @@ async function renderKuecheOrderTab(el, tabHtml){
     articleNames.forEach(name=>{
       const unit=baseline.find(b=>b.article_name===name)?.unit||'';
       const color=ARTICLE_COLORS[name]||'#1a1a18';
-      const cells=daysWithItems.map(wd=>{
+      const cells=displayDays.map(wd=>{
         const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
         if(!b) return `<td style="color:var(--border);">·</td>`;
         const dateStr=weekDates[wd];
@@ -1701,6 +1709,26 @@ async function renderKuecheOrderTab(el, tabHtml){
         ${cells}
       </tr>`;
     });
+
+    // Wochensalat — tägliche Schichtende-Meldung (Rest + Bedarf für morgen), als eigene Zeile
+    // direkt in derselben Tabelle statt als separater Block. Nur die heutige Spalte ist relevant.
+    if(displayDays.includes(todayWeekday)){
+      const wsCells=displayDays.map(wd=>{
+        if(wd!==todayWeekday) return `<td style="color:var(--border);">·</td>`;
+        return `<td style="padding:4px 3px;">
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+            <input type="number" step="0.25" value="${restRec.rest_qty??''}" placeholder="Rest" id="wsalat-rest" onchange="submitWochensalat()" inputmode="decimal"
+              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
+            <input type="number" step="0.25" value="${restRec.needed_qty??''}" placeholder="Morgen" id="wsalat-needed" onchange="submitWochensalat()" inputmode="decimal"
+              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
+          </div>
+        </td>`;
+      }).join('');
+      matrixHtml+=`<tr>
+        <td data-no-translate style="font-size:13px;font-weight:600;color:#A21CAF;white-space:nowrap;">Wochensalat<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Rest / Bedarf morgen</div></td>
+        ${wsCells}
+      </tr>`;
+    }
     matrixHtml+='</tbody></table></div></div>';
     html+=matrixHtml;
     html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
@@ -1709,23 +1737,6 @@ async function renderKuecheOrderTab(el, tabHtml){
   // Samosas — eigene, kleine Wochentabelle nur für diese Filiale (Mo–Do), damit die Mengen
   // direkt hier gepflegt werden können, statt separat per WhatsApp durchgegeben zu werden.
   html+=await renderStoreSamosaHtml(weekDates);
-
-  // Wochensalat — Restbestand-Meldung (Schichtende), täglich auszufüllen
-  const today=new Date().toISOString().split('T')[0];
-  const todayRest=await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]);
-  const restRec=(todayRest||[])[0]||{};
-  html+=`<div class="section-lbl" style="color:#A21CAF;">🥗 Wochensalat — Meldung Schichtende (heute)</div>
-  <div class="card" style="border:1.5px solid #A21CAF;">
-    <div class="item-row">
-      <div class="item-name">Rest jetzt im Kühlschrank</div>
-      <input type="number" step="0.25" value="${restRec.rest_qty??''}" placeholder="–" id="wsalat-rest" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
-    </div>
-    <div class="item-row">
-      <div class="item-name">Bedarf für morgen</div>
-      <input type="number" step="0.25" value="${restRec.needed_qty??''}" placeholder="–" id="wsalat-needed" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
-    </div>
-  </div>
-  <button class="submit-btn" style="background:#A21CAF;margin-top:8px;" onclick="submitWochensalat()">Wochensalat-Meldung speichern ✓</button>`;
 
   el.innerHTML=html;
   translateEl(el);
