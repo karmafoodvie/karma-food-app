@@ -268,6 +268,21 @@ const TRANSPORTER_CATS = ['Verpackungen','Alltag','Food & Drinks','Reinigung'];
 const KC_CATS = ['Webshop-Produkte'];
 const SWEETS_CATS = ['Sweets'];
 const CATS = [...TRANSPORTER_CATS, ...KC_CATS, ...SWEETS_CATS];
+// Sorten-Gruppen: Artikel, die per Name-Prefix zusammengehören (z.B. mehrere Pona-Sorten), werden
+// in der Bestell-Ansicht als EIN Button mit Sorten-Dropdown + Menge dargestellt, statt einer Zeile pro Sorte.
+const VARIANT_GROUPS = {
+  pona:{label:'Pona', prefix:/^pona\s*/i, match:n=>/^pona\b/i.test(n)},
+  bareballs:{label:'Barebells', prefix:/^bareballs?\s*/i, match:n=>/^bareballs?\b/i.test(n)}
+};
+let variantRows = {}; // {groupKey: [{articleId:number|null}, ...]}
+let lasagneExtraSizes = {}; // {cellKey('date|dish'): Set(groesse)} — manuell aufgeklappte, noch leere Größen-Zeilen im Forecast
+// Küchen-Liefermengen (Dressing, Raita, etc.) sind freie Textnamen in kitchen_supply_baseline,
+// nicht mit der articles-Tabelle verknüpft — Bilder daher über diese Zuordnung, sobald vorhanden.
+const KITCHEN_SUPPLY_IMAGES = {
+  // 'Dressing': '/images/kitchen-supply/dressing.jpg',
+};
+// Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
+const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D'};
 const WEEKDAY_NAMES = {1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
 const WEEKDAY_STR = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'}; // Kurzform-Schlüssel für Wochentage, u.a. für MENU_DATA-Keys (w1_mo, w1_di, ...)
 const CL_TYPES = ['abschluss']; // 'oeffnung' & 'reinigung' bleiben als Daten bestehen, sind aber keine Pflicht-Tabs mehr — siehe renderOeffnungHelp()/renderReinigungHelp()
@@ -690,12 +705,15 @@ function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store
 async function loadAll(){
   const today=new Date().toISOString().split('T')[0];
   articles=await api('articles?select=*&order=sort_order');
+  await autoReactivateExpiredArticles();
   const tmpl=await api('checklist_templates?select=*&order=sort_order');
   templates={};
   ALL_CL_TYPES.forEach(t=>templates[t]=tmpl.filter(x=>x.list_type===t));
   const ord=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=article_id,quantity,eingepackt`);
   orderQtys={};
   orderEingepackt={};
+  variantRows={};
+  lasagneExtraSizes={};
   (ord||[]).forEach(o=>{orderQtys[o.article_id]=o.quantity; if(o.eingepackt) orderEingepackt[o.article_id]=true;});
   const done=await api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`);
   clDone={};
@@ -1170,7 +1188,7 @@ function renderVerfuegbarkeit(){
           ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
-            ${(!verfuegbar && a.verfuegbar_hinweis)?`<div style="font-size:11px;color:#DC2626;">${a.verfuegbar_hinweis}</div>`:''}
+            ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
         <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
@@ -1182,15 +1200,96 @@ function renderVerfuegbarkeit(){
   translateEl(el);
 }
 
+function verfuegbarLabel(a){
+  const parts=[];
+  if(a.verfuegbar_bis) parts.push('bis '+new Date(a.verfuegbar_bis+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}));
+  if(a.verfuegbar_hinweis) parts.push(a.verfuegbar_hinweis);
+  return parts.length?parts.join(' — '):'aktuell nicht verfügbar';
+}
+
+// Modal beim Melden von "Nicht lieferbar": Bis auf weiteres / bis zu einem Datum + optionale Notiz.
+// Wird von toggleArticleVerfuegbar & toggleArticleVerfuegbarPack gemeinsam genutzt.
+function showVerfuegbarModal(id, onSaved){
+  closeVerfModal();
+  const todayStr=new Date().toISOString().split('T')[0];
+  const overlay=document.createElement('div');
+  overlay.id='verf-modal-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML=`
+    <div style="background:var(--card,#fff);border-radius:14px;padding:20px;max-width:360px;width:100%;">
+      <div style="font-size:15px;font-weight:600;margin-bottom:14px;">❌ Als nicht lieferbar markieren</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+          <input type="radio" name="verf-mode" value="unbestimmt" checked onchange="toggleVerfDateInput(false)"> Bis auf weiteres
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+          <input type="radio" name="verf-mode" value="datum" onchange="toggleVerfDateInput(true)"> Bis zu einem bestimmten Datum
+        </label>
+        <input type="date" id="verf-date-input" min="${todayStr}" style="display:none;margin-left:26px;padding:7px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+      </div>
+      <textarea id="verf-note-input" placeholder="Notiz (optional) — z.B. Grund oder Hinweis für die Stores" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button onclick="closeVerfModal()" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+        <button onclick="saveVerfModal(${id})" style="flex:1;padding:9px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:500;cursor:pointer;">Speichern</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  window._verfModalOnSaved=onSaved;
+}
+window.showVerfuegbarModal=showVerfuegbarModal;
+
+function toggleVerfDateInput(show){
+  const el=document.getElementById('verf-date-input');
+  if(el){ el.style.display=show?'block':'none'; if(show) el.focus(); }
+}
+window.toggleVerfDateInput=toggleVerfDateInput;
+
+function closeVerfModal(){
+  const el=document.getElementById('verf-modal-overlay');
+  if(el) el.remove();
+  window._verfModalOnSaved=null;
+}
+window.closeVerfModal=closeVerfModal;
+
+async function saveVerfModal(id){
+  const mode=document.querySelector('input[name="verf-mode"]:checked')?.value||'unbestimmt';
+  const dateVal=mode==='datum'?(document.getElementById('verf-date-input')?.value||null):null;
+  if(mode==='datum' && !dateVal){ showToast('Bitte ein Datum wählen'); return; }
+  const note=document.getElementById('verf-note-input')?.value?.trim()||'';
+  try{
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:false, verfuegbar_hinweis:note||null, verfuegbar_bis:dateVal})});
+    articles=await api('articles?select=*&order=sort_order');
+    const cb=window._verfModalOnSaved;
+    closeVerfModal();
+    if(cb) cb();
+    showToast('❌ Als nicht lieferbar markiert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveVerfModal=saveVerfModal;
+
+// Artikel automatisch wieder auf "lieferbar" setzen, wenn das gewählte Bis-Datum verstrichen ist.
+async function autoReactivateExpiredArticles(){
+  const today=new Date().toISOString().split('T')[0];
+  const expired=articles.filter(a=>a.verfuegbar===false && a.verfuegbar_bis && a.verfuegbar_bis<today);
+  if(!expired.length) return;
+  try{
+    for(const a of expired){
+      await api(`articles?id=eq.${a.id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:true, verfuegbar_hinweis:null, verfuegbar_bis:null})});
+    }
+    articles=await api('articles?select=*&order=sort_order');
+  }catch(e){console.error(e);}
+}
+
 async function toggleArticleVerfuegbar(id, current){
-  let hinweis=null;
+  const refresh=()=>{ if(currentView==='verfuegbarkeit') renderVerfuegbarkeit(); else renderOrder(); };
   if(current){
-    hinweis=prompt('Hinweis für die Stores (optional)\nz.B. "wird erst Donnerstag geliefert"','')||'';
+    showVerfuegbarModal(id, refresh);
+    return;
   }
   try{
-    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current, verfuegbar_hinweis: current?hinweis:null})});
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:true, verfuegbar_hinweis:null, verfuegbar_bis:null})});
     articles=await api('articles?select=*&order=sort_order');
-    if(currentView==='verfuegbarkeit') renderVerfuegbarkeit(); else renderOrder();
+    refresh();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
@@ -1207,7 +1306,18 @@ function renderOrderSection(cats, label, color, icon){
     const items=articles.filter(a=>a.category===cat && !(!isOrg && orderEingepackt[a.id]));
     if(!items.length) return;
     html+=`<div class="section-lbl">${cat}</div><div class="card">`;
+    const handledGroups=new Set();
     items.forEach(a=>{
+      if(!isOrg){
+        const gKey=Object.keys(VARIANT_GROUPS).find(k=>VARIANT_GROUPS[k].match(a.name));
+        if(gKey){
+          if(handledGroups.has(gKey)) return; // Gruppe wurde schon (beim ersten Treffer) komplett gerendert
+          handledGroups.add(gKey);
+          const groupItems=items.filter(x=>VARIANT_GROUPS[gKey].match(x.name));
+          html+=renderVariantGroupRow(gKey, groupItems);
+          return;
+        }
+      }
       const v=orderQtys[a.id]||0;
       const verfuegbar=a.verfuegbar!==false;
       html+=`<div class="item-row">
@@ -1216,16 +1326,19 @@ function renderOrderSection(cats, label, color, icon){
           <div>
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
-            ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${a.verfuegbar_hinweis?a.verfuegbar_hinweis:'aktuell nicht verfügbar'}</div>`:''}
+            ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
         ${isOrg?`
           <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
         `:`
-        <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
-          <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
-          <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
-          <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
+            <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
+            <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
+            <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
+          </div>
+          <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" title="${verfuegbar?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;flex-shrink:0;line-height:1;">${verfuegbar?'❌':'✅'}</button>
         </div>
         `}
       </div>`;
@@ -1234,6 +1347,91 @@ function renderOrderSection(cats, label, color, icon){
   });
   return html;
 }
+
+// Rendert eine Sorten-Gruppe (Pona, Barebells) als 1 Button/Card mit Dropdown + Menge je gewählter Sorte,
+// plus "+ weitere Sorte hinzufügen". Der Bestell-Datensatz bleibt unverändert (weiterhin 1 Zeile pro
+// tatsächlicher Sorte in orderQtys/orders) — es ändert sich nur die Eingabe-Darstellung für die Filiale.
+function renderVariantGroupRow(groupKey, groupItems){
+  const g=VARIANT_GROUPS[groupKey];
+  if(!variantRows[groupKey]){
+    const preset=groupItems.filter(a=>(orderQtys[a.id]||0)>0);
+    variantRows[groupKey]=preset.length?preset.map(a=>({articleId:a.id})):[{articleId:null}];
+  }
+  const rows=variantRows[groupKey];
+  const chosenIds=new Set(rows.map(r=>r.articleId).filter(Boolean));
+  const allUnavailable=groupItems.every(a=>a.verfuegbar===false);
+  const rowsHtml=rows.map((r,i)=>{
+    const opts=groupItems.map(a=>{
+      const flavor=a.name.replace(g.prefix,'').trim()||a.name;
+      const verf=a.verfuegbar!==false;
+      const disabled=(chosenIds.has(a.id)&&a.id!==r.articleId)||!verf;
+      return `<option value="${a.id}" ${a.id===r.articleId?'selected':''} ${disabled?'disabled':''}>${flavor}${!verf?' (nicht lieferbar)':''}</option>`;
+    }).join('');
+    const v=r.articleId?(orderQtys[r.articleId]||0):0;
+    const selArt=r.articleId?groupItems.find(x=>x.id===r.articleId):null;
+    const selVerf=selArt?selArt.verfuegbar!==false:true;
+    return `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+      <select onchange="variantSelect('${groupKey}',${i},this.value)" style="flex:1;padding:7px 8px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--card);color:inherit;min-width:0;">
+        <option value="">Sorte wählen…</option>
+        ${opts}
+      </select>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;${(!r.articleId||!selVerf)?'opacity:0.3;pointer-events:none;':''}">
+        <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},-1)">−</button>
+        <span class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}">${v}</span>
+        <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},1)">+</button>
+      </div>
+      ${r.articleId?`<button onclick="toggleArticleVerfuegbar(${r.articleId},${selVerf})" title="${selVerf?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;line-height:1;">${selVerf?'❌':'✅'}</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
+      ${rows.length>1?`<button onclick="variantRemove('${groupKey}',${i})" style="background:none;border:none;color:#DC2626;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;">✕</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
+    </div>`;
+  }).join('');
+  const canAddMore=rows.length<groupItems.length;
+  return `<div class="item-row" style="flex-direction:column;align-items:stretch;gap:0;${allUnavailable?'opacity:0.35;pointer-events:none;':''}">
+    <div style="display:flex;align-items:center;gap:10px;">
+      ${groupItems[0].image_url?`<img src="${groupItems[0].image_url}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+      <div class="item-name">${g.label}</div>
+    </div>
+    ${rowsHtml}
+    ${canAddMore?`<button onclick="variantAddRow('${groupKey}')" style="margin-top:8px;align-self:flex-start;background:none;border:1px dashed var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted);cursor:pointer;">+ weitere Sorte hinzufügen</button>`:''}
+  </div>`;
+}
+
+function variantSelect(groupKey,i,val){
+  const newId=val?parseInt(val):null;
+  const row=variantRows[groupKey][i];
+  const oldId=row.articleId;
+  if(oldId!==newId){
+    const oldQty=oldId?(orderQtys[oldId]||0):0;
+    if(oldId) orderQtys[oldId]=0;
+    if(newId) orderQtys[newId]=oldQty;
+    row.articleId=newId;
+  }
+  renderOrder();
+}
+window.variantSelect=variantSelect;
+
+function variantAdj(groupKey,i,d){
+  const row=variantRows[groupKey] && variantRows[groupKey][i];
+  if(!row || !row.articleId) return;
+  orderQtys[row.articleId]=Math.max(0,(orderQtys[row.articleId]||0)+d);
+  const el=document.getElementById('vq-'+groupKey+'-'+i);
+  if(el){el.textContent=orderQtys[row.articleId];el.className='qty-val'+(orderQtys[row.articleId]>0?' has-val':'');}
+}
+window.variantAdj=variantAdj;
+
+function variantAddRow(groupKey){
+  variantRows[groupKey].push({articleId:null});
+  renderOrder();
+}
+window.variantAddRow=variantAddRow;
+
+function variantRemove(groupKey,i){
+  const row=variantRows[groupKey][i];
+  if(row && row.articleId) orderQtys[row.articleId]=0;
+  variantRows[groupKey].splice(i,1);
+  if(!variantRows[groupKey].length) variantRows[groupKey]=[{articleId:null}];
+  renderOrder();
+}
+window.variantRemove=variantRemove;
 const ORDER_TABS={
   transporter:{label:'🚚 Transporter',cats:TRANSPORTER_CATS,color:'#F97316',title:'Transporter',icon:'🚚'},
   kc:{label:'📦 KC',cats:KC_CATS,color:'#A855F7',title:'KC — Kitchen Collective',icon:'📦'},
@@ -1319,9 +1517,9 @@ async function renderKCOrderTab(el, tabHtml){
       </td>
       <td style="color:var(--muted);">${soll}</td>
       <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
-      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:(verfuegbar?'<span class="badge badge-ok">ja</span>':`<span class="badge badge-warn" title="${a.verfuegbar_hinweis||'aktuell nicht verfügbar'}">nein</span>`)}</td>
+      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" title="${verfuegbar?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">${verfuegbar?'❌':'✅'}</button>`}</td>
     </tr>
-    ${!isOrg && !verfuegbar && a.verfuegbar_hinweis?`<tr><td colspan="5" style="font-size:10px;color:#DC2626;padding-top:0;">↳ ${a.verfuegbar_hinweis}</td></tr>`:''}`;
+    ${!isOrg && !verfuegbar?`<tr><td colspan="5" style="font-size:10px;color:#DC2626;padding-top:0;">↳ ${verfuegbarLabel(a)}</td></tr>`:''}`;
   });
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Negative Bestellung = Überbestand. Grün hinterlegtes Feld = heute aktualisiert (Datum darunter = letzte Eingabe).</div>`;
@@ -1431,33 +1629,66 @@ async function renderKuecheOrderTab(el, tabHtml){
   const valMap={}; // valMap[date][article_name] = rec
   (weekVals||[]).forEach(d=>{if(!valMap[d.supply_date])valMap[d.supply_date]={};valMap[d.supply_date][d.article_name]=d;});
 
-  if(!baseline?.length){
+  const daysWithItems=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
+
+  if(!daysWithItems.length){
     html+=`<div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);font-size:13px;">Für diese Filiale ist keine Küchen-Lieferung hinterlegt.</div>`;
   } else {
-    for(let wd=1; wd<=5; wd++){
+    // Fokus-Tag: heute, falls es dafür Artikel gibt — sonst der nächste kommende Liefertag.
+    // So ist auf einen Blick (ohne Scrollen) klar, was als Nächstes gebraucht wird.
+    let focusWd=daysWithItems.find(wd=>wd===todayWeekday);
+    if(!focusWd) focusWd=daysWithItems.find(wd=>wd>todayWeekday) || daysWithItems[0];
+    const isTodayFocus=focusWd===todayWeekday;
+
+    const renderDayItems=(wd)=>{
       const items=baseline.filter(b=>b.weekday===wd);
-      if(!items.length) continue;
-      const isToday=wd===todayWeekday;
       const dateStr=weekDates[wd];
-      const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-      html+=`<div class="section-lbl" style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd]} · ${dateLabel}${isToday?' — heute':''}</div>
-      <div class="card" style="${isToday?`border:1.5px solid ${tab.color};`:''}">`;
+      let h=`<table class="pack-table" style="width:100%;"><thead><tr>
+        <th style="text-align:left;">Artikel</th>
+        <th style="text-align:right;">Menge</th>
+      </tr></thead><tbody>`;
       items.forEach(b=>{
         const rec=(valMap[dateStr]||{})[b.article_name];
         const val=rec ? rec.qty : b.base_qty;
         const adjusted=rec?.is_adjusted;
-        html+=`<div class="item-row">
-          <div style="display:flex;align-items:center;gap:10px;flex:1;">
-            <div><div class="item-name">${b.article_name}${adjusted?' <span style="color:#F97316;font-size:10px;font-weight:600;">· angepasst</span>':''}</div><div class="item-unit">${b.unit}</div></div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
+        const img=KITCHEN_SUPPLY_IMAGES[b.article_name];
+        const color=ARTICLE_COLORS[b.article_name]||'#1a1a18';
+        h+=`<tr>
+          <td style="padding:10px 6px;text-align:left;vertical-align:middle;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${img?`<img src="${img}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+              <div>
+                <div data-no-translate style="font-size:14px;font-weight:600;color:${color};">${b.article_name}${adjusted?' <span style="color:#F97316;font-size:10px;font-weight:600;">· angepasst</span>':''}</div>
+                <div style="font-size:10.5px;color:var(--muted);">${b.unit}</div>
+              </div>
+            </div>
+          </td>
+          <td style="padding:10px 6px;text-align:right;">
             <input type="number" step="0.01" value="${val}" data-article="${b.article_name}" data-base="${b.base_qty}" data-date="${dateStr}"
-              onchange="updateKuecheQty(this)"
-              style="width:64px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 4px;background:${adjusted?'#FFF7ED':'#fff'};">
-          </div>
-        </div>`;
+              onchange="updateKuecheQty(this)" inputmode="decimal"
+              style="width:72px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:8px;font-size:15px;padding:9px 4px;background:${adjusted?'#FFF7ED':'#fff'};">
+          </td>
+        </tr>`;
       });
-      html+='</div>';
+      h+='</tbody></table>';
+      return h;
+    };
+
+    const focusDateStr=weekDates[focusWd];
+    const focusDateLabel=new Date(focusDateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+    html+=`<div class="section-lbl" style="color:${tab.color};font-weight:700;">${WEEKDAY_NAMES[focusWd]} · ${focusDateLabel}${isTodayFocus?' — heute':' — nächster Liefertag'}</div>
+    <div class="card" style="border:1.5px solid ${tab.color};overflow-x:auto;">${renderDayItems(focusWd)}</div>`;
+
+    const otherDays=daysWithItems.filter(wd=>wd!==focusWd);
+    if(otherDays.length){
+      html+=`<details style="margin-top:10px;">
+        <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Andere Tage anzeigen (${otherDays.length})</summary>`;
+      otherDays.forEach(wd=>{
+        const dateStr=weekDates[wd];
+        const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        html+=`<div class="section-lbl">${WEEKDAY_NAMES[wd]} · ${dateLabel}</div><div class="card" style="overflow-x:auto;">${renderDayItems(wd)}</div>`;
+      });
+      html+='</details>';
     }
     html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Werte sind die Grundmengen laut Plan für die jeweilige Woche. Jeder Tag kann einzeln angepasst werden — Änderungen werden gespeichert und an die Küche gemeldet.</div>`;
   }
@@ -1889,8 +2120,17 @@ async function renderForecastOrderTab(el, tabHtml){
   }
 
   const fromDate=weekDates[1], toDate=weekDates[5];
-  const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source`).catch(()=>[]);
-  const fMap={}; (weekForecasts||[]).forEach(f=>{if(!fMap[f.forecast_date])fMap[f.forecast_date]={};fMap[f.forecast_date][f.dish_name]=f;});
+  const weekForecasts=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,source,groesse`).catch(()=>[]);
+  // fRecordsMap: mehrere Datensätze pro Tag/Gericht möglich (z.B. Lasagne 2x Groß + 1x Klein).
+  // fMap bleibt zur Kompatibilität der erste Datensatz je Zelle (für alle Nicht-Lasagne-Gerichte reicht das).
+  const fRecordsMap={};
+  (weekForecasts||[]).forEach(f=>{
+    if(!fRecordsMap[f.forecast_date])fRecordsMap[f.forecast_date]={};
+    if(!fRecordsMap[f.forecast_date][f.dish_name])fRecordsMap[f.forecast_date][f.dish_name]=[];
+    fRecordsMap[f.forecast_date][f.dish_name].push(f);
+  });
+  const fMap={};
+  Object.keys(fRecordsMap).forEach(d=>{ fMap[d]={}; Object.keys(fRecordsMap[d]).forEach(dish=>{ fMap[d][dish]=fRecordsMap[d][dish][0]; }); });
 
   // Wetter, Feiertage/Ferien, Filial-Einstellungen & GESAMTE Verkaufshistorie einmal laden
   // (statt pro Zelle einzeln nachzufragen — wichtig bei vielen Zellen/schlechter Verbindung)
@@ -1940,6 +2180,7 @@ async function renderForecastOrderTab(el, tabHtml){
   });
 
   // Kompaktes Eingabefeld für eine Zelle (Tag × Gericht)
+  const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'klein',l:'Kl.·8'}];
   function cellInput(dateStr, dish, lockedNote){
     const rec=(fMap[dateStr]||{})[dish];
     const manual=rec?.source==='manual';
@@ -1948,7 +2189,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const val=rec ? rec.qty : autoVal;
     const isSuggestion=!rec && autoVal!=null;
     const isLasagne=dish.includes('Lasagne');
-    const groesse=rec?.groesse||'gross';
+    if(isLasagne) return lasagneCellInput(dateStr, dish, lockedNote, autoVal);
     if(isHistoric){
       // Historie: nur Anzeige, nicht mehr veraenderbar
       return `<div style="width:48px;margin:0 auto;text-align:center;font-size:13px;font-weight:600;color:${manual?'#F97316':'#1a1a18'};">${val!=null?formatQty(val):'–'}</div>`;
@@ -1959,14 +2200,46 @@ async function renderForecastOrderTab(el, tabHtml){
     const numberInput=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}"
       onchange="updateForecastQty(this)"
       style="width:48px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
-    if(!isLasagne) return numberInput;
-    // "1" bedeutet standardmäßig 1 Großer (18 Stück) — Größenauswahl nur nötig, wenn Mittel/Klein gebraucht wird
-    const sizeSelect=`<select data-dish="${escAttr(dish)}" data-date="${dateStr}" onchange="updateForecastGroesse(this)" title="Behälter-Größe" style="width:50px;margin-top:2px;font-size:8px;border:1px solid var(--border);border-radius:5px;padding:1px;background:#fff;color:var(--sub);">
-      <option value="gross" ${groesse==='gross'?'selected':''}>Groß·18</option>
-      <option value="mittel" ${groesse==='mittel'?'selected':''}>Mit.·12</option>
-      <option value="klein" ${groesse==='klein'?'selected':''}>Kl.·8</option>
-    </select>`;
-    return `<div style="display:flex;flex-direction:column;align-items:center;">${numberInput}${sizeSelect}</div>`;
+    return numberInput;
+  }
+
+  // Lasagne kann in mehreren Behälter-Größen gleichzeitig gebraucht werden (z.B. 2x Groß + 1x Klein) —
+  // eigene Darstellung mit einer Zeile pro verwendeter Größe + "+ Größe"-Button für weitere.
+  function lasagneCellInput(dateStr, dish, lockedNote, autoVal){
+    const records=(fRecordsMap[dateStr]||{})[dish]||[];
+    if(isHistoric){
+      if(!records.length) return `<div style="width:56px;margin:0 auto;text-align:center;font-size:13px;color:var(--border);">–</div>`;
+      return `<div style="font-size:10px;text-align:center;line-height:1.5;">${records.map(r=>`${formatQty(r.qty)}× ${(LASAGNE_SIZES.find(s=>s.k===r.groesse)||LASAGNE_SIZES[0]).l.split('·')[0]}`).join('<br>')}</div>`;
+    }
+    if(lockedNote){
+      if(!records.length) return `<div title="${lockedNote}" style="width:56px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:10px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 –</div>`;
+      return `<div title="${lockedNote}" style="font-size:9.5px;text-align:center;background:#F3F4F6;border-radius:6px;padding:3px 2px;line-height:1.5;">🔒 ${records.map(r=>`${formatQty(r.qty)}×${(LASAGNE_SIZES.find(s=>s.k===r.groesse)||LASAGNE_SIZES[0]).l.split('·')[0]}`).join(', ')}</div>`;
+    }
+    const cellKey=dateStr+'|'+dish;
+    if(!lasagneExtraSizes[cellKey]) lasagneExtraSizes[cellKey]=new Set();
+    const shownSizes=records.length?records.map(r=>r.groesse):['gross'];
+    const revealedOrder=LASAGNE_SIZES.map(s=>s.k).filter(k=>shownSizes.includes(k)||lasagneExtraSizes[cellKey].has(k));
+    let h='<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">';
+    revealedOrder.forEach(sizeKey=>{
+      const rec=records.find(r=>r.groesse===sizeKey);
+      const isDefaultEmptyRow=sizeKey==='gross' && !rec && revealedOrder.length===1;
+      const val=rec ? rec.qty : (isDefaultEmptyRow ? autoVal : null);
+      const isSuggestion=isDefaultEmptyRow && autoVal!=null;
+      const manual=rec?.source==='manual';
+      const sizeLabel=(LASAGNE_SIZES.find(s=>s.k===sizeKey)||LASAGNE_SIZES[0]).l;
+      h+=`<div style="display:flex;align-items:center;gap:3px;">
+        <input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}"
+          onchange="updateForecastQtyGroesse(this)"
+          style="width:38px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">
+        <span style="font-size:7.5px;color:var(--sub);white-space:nowrap;">${sizeLabel}</span>
+      </div>`;
+    });
+    const remaining=LASAGNE_SIZES.filter(s=>!revealedOrder.includes(s.k));
+    if(remaining.length){
+      h+=`<button onclick="addLasagneSize('${escAttr(cellKey)}','${remaining[0].k}')" style="font-size:8px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:5px;padding:1px 4px;cursor:pointer;">+ Größe</button>`;
+    }
+    h+='</div>';
+    return h;
   }
 
   let anyLasagne=false;
@@ -2037,18 +2310,34 @@ async function updateForecastQty(input){
 }
 window.updateForecastQty=updateForecastQty;
 
-async function updateForecastGroesse(select){
-  const dateStr=select.dataset.date;
-  const dishName=select.dataset.dish;
-  const groesse=select.value;
+async function updateForecastQtyGroesse(input){
+  const dateStr=input.dataset.date;
+  const dishName=input.dataset.dish;
+  const groesse=input.dataset.groesse;
+  const newQty=parseFloat(input.value);
   try{
-    const existing=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&select=qty`).catch(()=>[]);
-    if(!existing?.length){ showToast('Bitte zuerst eine Menge eintragen'); select.value='gross'; return; }
-    await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'PATCH',body:JSON.stringify({groesse})});
-    showToast('✓ Größe gespeichert — Küche wird informiert');
+    // Nur den Datensatz DIESER Größe löschen/ersetzen — Geschwister-Größen (z.B. Groß bleibt,
+    // während Klein geändert wird) dürfen dabei nicht verloren gehen.
+    await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${groesse}`,{method:'DELETE'});
+    if(!isNaN(newQty) && newQty>0){
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{
+        store_id:currentStore.id, forecast_date:dateStr, dish_name:dishName, qty:newQty, groesse,
+        source:'manual', changed_by:currentStore.name, changed_at:new Date().toISOString()
+      }])});
+    }
+    showToast('✓ Angepasst — Küche wird informiert');
+    renderOrder();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
-window.updateForecastGroesse=updateForecastGroesse;
+window.updateForecastQtyGroesse=updateForecastQtyGroesse;
+
+function addLasagneSize(cellKey, sizeKey){
+  if(!lasagneExtraSizes[cellKey]) lasagneExtraSizes[cellKey]=new Set();
+  lasagneExtraSizes[cellKey].add(sizeKey);
+  renderOrder();
+}
+window.addLasagneSize=addLasagneSize;
+
 async function submitWochensalat(){
   const today=new Date().toISOString().split('T')[0];
   const rest=parseFloat(document.getElementById('wsalat-rest').value);
@@ -3877,6 +4166,33 @@ async function renderPack(){
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
 
+  // Alle Transporter-Artikel — auch ohne heutige Bestellung, damit Lieferbarkeit VORAB gemeldet werden
+  // kann (z.B. wenn Servietten leer sind, bevor überhaupt eine Filiale sie nachbestellt hat).
+  // Gleiches Prinzip wie bei KC: erst die Artikel ohne Bestand-Daten aussortieren, aber jederzeit einsehbar.
+  const notOrderedToday=[];
+  TRANSPORTER_CATS.forEach(cat=>{
+    articles.filter(a=>a.category===cat && !storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0)).forEach(a=>notOrderedToday.push(a));
+  });
+  if(notOrderedToday.length){
+    html+=`<details style="margin-top:10px;">
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Alle Artikel — Lieferbarkeit verwalten (${notOrderedToday.length})</summary>
+      <div class="card" style="margin-top:6px;">`;
+    notOrderedToday.forEach(a=>{
+      const verfuegbar=a.verfuegbar!==false;
+      html+=`<div class="item-row">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;">
+          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          <div>
+            <div class="item-name">${a.name}</div>
+            ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
+          </div>
+        </div>
+        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+      </div>`;
+    });
+    html+='</div></details>';
+  }
+
   el.innerHTML=html;
   translateEl(el);
 }
@@ -3982,13 +4298,15 @@ function switchPackTab(t){activePackTab=t;renderPack();}
 window.switchPackTab=switchPackTab;
 
 async function toggleArticleVerfuegbarPack(id, current){
-  let hinweis=null;
-  if(current){ hinweis=prompt('Hinweis für die Stores (optional)\nz.B. "wird erst Donnerstag geliefert"','')||''; }
+  if(current){
+    showVerfuegbarModal(id, ()=>{ renderPack(); });
+    return;
+  }
   try{
-    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:!current,verfuegbar_hinweis:current?hinweis:null})});
+    await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:true,verfuegbar_hinweis:null,verfuegbar_bis:null})});
     articles=await api('articles?select=*&order=sort_order');
     renderPack();
-    showToast(current?'❌ Als nicht lieferbar markiert':'✅ Wieder lieferbar');
+    showToast('✅ Wieder lieferbar');
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
@@ -4206,29 +4524,30 @@ async function renderSamosaTableHtml(){
   const valMap={}; // valMap[date][store_id] = rec
   (todayVals||[]).forEach(d=>{ if(!valMap[d.supply_date])valMap[d.supply_date]={}; valMap[d.supply_date][d.store_id]=d; });
 
-  if(!baseline?.length){
-    return `<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Samosa-Basiswerte hinterlegt.</div>`;
-  }
-
   let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Standort</th>
     ${[1,2,3,4].map(wd=>`<th style="${wd===todayWeekday?'color:#F97316;font-weight:700;':''}">${WD_LABEL[wd]}${wd===todayWeekday?' (heute)':''}</th>`).join('')}
   </tr></thead><tbody>`;
 
   const dayTotals={1:0,2:0,3:0,4:0};
+  // dayValues[wd] = [{storeName, val}] — für die Kopier-Textzusammenfassung unten
+  const dayValues={1:[],2:[],3:[],4:[]};
   storeList.forEach(s=>{
     html+=`<tr><td data-no-translate style="text-align:left;font-size:12px;color:${STORE_COLORS[s.id]||'#888'};">${s.name.split(' ')[0]}</td>`;
     [1,2,3,4].forEach(wd=>{
       const b=baseline.find(x=>x.store_id===s.id && x.weekday===wd);
-      if(!b){ html+='<td style="color:var(--border);">·</td>'; return; }
       const dateStr=weekDates[wd];
       const rec=(valMap[dateStr]||{})[s.id];
-      const val=rec?rec.qty:b.base_qty;
+      // Auch ohne hinterlegten Basiswert ein Eingabefeld anzeigen (z.B. für Filialen, die aktuell
+      // keine Samosas bekommen, aber künftig vielleicht welche brauchen) — Standard dann 0.
+      const val=rec?rec.qty:(b?b.base_qty:0);
       dayTotals[wd]+=parseInt(val)||0;
+      if(parseInt(val)>0) dayValues[wd].push({name:s.name.split(' ')[0], val:parseInt(val)});
       const adjusted=!!rec?.is_adjusted;
+      const isOptional=!b; // kein Standard-Liefertag für diese Filiale — dezenter dargestellt
       html+=`<td><input type="number" step="1" value="${val}" data-store="${s.id}" data-weekday="${wd}" data-date="${dateStr}"
         onchange="updateSamosaQty(this)"
-        style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:3px 1px;background:${adjusted?'#FFF7ED':'#fff'};"></td>`;
+        style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:3px 1px;background:${adjusted?'#FFF7ED':isOptional?'transparent':'#fff'};color:${isOptional&&!val?'var(--muted)':'inherit'};"></td>`;
     });
     html+='</tr>';
   });
@@ -4236,9 +4555,41 @@ async function renderSamosaTableHtml(){
     ${[1,2,3,4].map(wd=>`<td style="color:#3B6D11;font-size:13px;">${dayTotals[wd]}</td>`).join('')}
   </tr>`;
   html+='</tbody></table></div></div>';
-  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen (z.B. wenn die Lieferantenbestellung mal abweicht). Orange = angepasst.</div>`;
+  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = angepasst. Leere/graue Felder = aktuell kein Standard-Liefertag, aber jederzeit eintragbar.</div>`;
+
+  // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp
+  let summary=`🥟 Samosas Woche (Mo–Do):\n`;
+  [1,2,3,4].forEach(wd=>{
+    if(!dayValues[wd].length) return;
+    summary+=`${WD_LABEL[wd]}: `+dayValues[wd].map(v=>`${v.name} ${v.val}`).join(', ')+`\n`;
+  });
+  const summaryEsc=summary.replace(/`/g,'\\`').replace(/</g,'&lt;');
+  html+=`<div style="margin-top:14px;">
+    <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">📋 Für den Produzenten</div>
+    <textarea id="samosa-copy-text" readonly style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:13px;min-height:110px;resize:vertical;font-family:inherit;box-sizing:border-box;background:var(--card);">${summary}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button onclick="copySamosaText()" style="flex:1;padding:9px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:13px;font-weight:500;cursor:pointer;">📋 Kopieren</button>
+      <button id="samosa-share-btn" onclick="shareSamosaText()" style="display:${(typeof navigator!=='undefined'&&navigator.share)?'block':'none'};flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">📤 Teilen</button>
+    </div>
+  </div>`;
   return html;
 }
+
+function copySamosaText(){
+  const el=document.getElementById('samosa-copy-text');
+  if(!el) return;
+  navigator.clipboard?.writeText(el.value).then(()=>showToast('✔ In Zwischenablage kopiert')).catch(()=>{
+    el.select(); document.execCommand('copy'); showToast('✔ Kopiert');
+  });
+}
+window.copySamosaText=copySamosaText;
+
+function shareSamosaText(){
+  const el=document.getElementById('samosa-copy-text');
+  if(!el) return;
+  if(navigator.share){ navigator.share({text:el.value}).catch(()=>{}); }
+}
+window.shareSamosaText=shareSamosaText;
 
 async function updateSamosaQty(input){
   const storeId=input.dataset.store;
@@ -4300,8 +4651,6 @@ async function renderBeilagenTableHtml(){
           ${storeList.map(st=>`<th style="color:${STORE_COLORS[st.id]||'#888'};font-size:11px;" data-no-translate>${st.name.split(' ')[0]}</th>`).join('')}
           <th style="font-weight:700;">Gesamt</th>
         </tr></thead><tbody>`;
-
-        const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D'};
 
         articleNames.forEach(name=>{
           const unit=dayItems.find(b=>b.article_name===name)?.unit||'';
@@ -4451,12 +4800,13 @@ async function renderKitchen(){
 
     html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Portionsmengen pro Filiale für die Küchen-Produktion</div>`;
 
-    const weekForecasts=await api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source`).catch(()=>[]);
-    const fMap={}; // fMap[date][store_id][dish] = rec
+    const weekForecasts=await api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source,groesse`).catch(()=>[]);
+    const fMap={}; // fMap[date][store_id][dish] = [rec, ...] (mehrere bei Lasagne mit mehreren Größen)
     (weekForecasts||[]).forEach(f=>{
       if(!fMap[f.forecast_date])fMap[f.forecast_date]={};
       if(!fMap[f.forecast_date][f.store_id])fMap[f.forecast_date][f.store_id]={};
-      fMap[f.forecast_date][f.store_id][f.dish_name]=f;
+      if(!fMap[f.forecast_date][f.store_id][f.dish_name])fMap[f.forecast_date][f.store_id][f.dish_name]=[];
+      fMap[f.forecast_date][f.store_id][f.dish_name].push(f);
     });
     const anyAdjusted=(weekForecasts||[]).some(f=>f.source==='manual');
 
@@ -4492,10 +4842,13 @@ async function renderKitchen(){
 
       storeList.forEach(st=>{
         const cells=allDishes.map(dish=>{
-          const rec=(fMap[dateStr]?.[st.id]||{})[dish];
-          if(!rec) return '<td style="color:var(--border);">·</td>';
-          const manual=rec.source==='manual';
-          return `<td style="font-weight:${manual?'700':'400'};color:${manual?'#0369A1':'#1a1a18'};font-size:12px;">${formatQty(rec.qty)}${manual?'*':''}</td>`;
+          const recs=(fMap[dateStr]?.[st.id]||{})[dish];
+          if(!recs||!recs.length) return '<td style="color:var(--border);">·</td>';
+          const total=recs.reduce((a,r)=>a+(r.qty||0),0);
+          const manual=recs.some(r=>r.source==='manual');
+          const isLasagneDish=dish.includes('Lasagne');
+          const breakdown=(isLasagneDish && recs.length>1)?`<div style="font-size:8.5px;color:var(--muted);">${recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join(' + ')}</div>`:'';
+          return `<td style="font-weight:${manual?'700':'400'};color:${manual?'#0369A1':'#1a1a18'};font-size:12px;">${formatQty(total)}${manual?'*':''}${breakdown}</td>`;
         }).join('');
         html+=`<tr>
           <td data-no-translate style="color:${STORE_COLORS[st.id]||'#888'};font-size:12px;">${st.name.split(' ')[0]}</td>
@@ -4606,7 +4959,8 @@ async function renderMorgenKoch(el, tabHtml){
   const fMap = {};
   (forecasts||[]).forEach(f=>{
     if(!fMap[f.dish_name]) fMap[f.dish_name]={};
-    fMap[f.dish_name][f.store_id]=f;
+    if(!fMap[f.dish_name][f.store_id]) fMap[f.dish_name][f.store_id]=[];
+    fMap[f.dish_name][f.store_id].push(f);
   });
 
   // Get tomorrow's menu dishes from MENU_DATA
@@ -4643,7 +4997,7 @@ async function renderMorgenKoch(el, tabHtml){
   dishNames.forEach(dish=>{
     const storeData = fMap[dish]||{};
     const isLasagne=dish.includes('Lasagne');
-    const total = storeList.reduce((sum,s)=>sum+(storeData[s.id]?.qty||0),0);
+    const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
     const hasData = total>0;
     html+=`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden;">
         <div style="background:${hasData?'var(--green-light)':'#F5F5F3'};border-bottom:2px solid ${hasData?'var(--green)':'var(--border)'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
@@ -4658,10 +5012,11 @@ async function renderMorgenKoch(el, tabHtml){
       </div>
       <div style="padding:10px 14px;">
         ${storeList.map(s=>{
-          const rec=storeData[s.id];
-          const qty=rec?.qty;
-          const changed=rec?.source==='manual';
+          const recs=storeData[s.id]||[];
+          const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
+          const changed=recs.some(r=>r.source==='manual');
           const col=STORE_COLORS[s.id]||'#888';
+          const sizeLabel=isLasagne&&recs.length?recs.map(r=>`${formatQty(r.qty)}× ${GROESSE_LABEL[r.groesse||'gross']}`).join(' + '):null;
           return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);">
             <div style="display:flex;align-items:center;gap:8px;">
               <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></div>
@@ -4669,8 +5024,8 @@ async function renderMorgenKoch(el, tabHtml){
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
               ${changed?`<span style="font-size:10px;color:#185FA5;background:#E6F1FB;padding:1px 6px;border-radius:20px;">angepasst</span>`:''}
-              ${isLasagne&&qty!=null?`<span style="font-size:9.5px;color:var(--muted);">${GROESSE_LABEL[rec?.groesse||'gross']}</span>`:''}
-              <span style="font-size:18px;font-weight:700;color:${qty?'#1a1a18':'var(--border)'};">${qty!=null?formatQty(qty):'–'}</span>
+              ${sizeLabel?`<span style="font-size:9.5px;color:var(--muted);">${sizeLabel}</span>`:''}
+              <span style="font-size:18px;font-weight:700;color:${qty?'#1a1a18':'var(--border)'};">${qty?formatQty(qty):'–'}</span>
             </div>
           </div>`;
         }).join('')}
