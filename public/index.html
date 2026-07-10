@@ -1611,6 +1611,42 @@ function getIsoWeekNumber(dateStr){
   const week1=new Date(d.getFullYear(),0,4);
   return 1+Math.round(((d-week1)/86400000-3+((week1.getDay()+6)%7))/7);
 }
+// Samosas — kompakte Mo-Do-Tabelle nur für die eingeloggte Filiale (gleiche Tabellen wie beim
+// Transporter/Organisation, aber gefiltert auf currentStore.id). Freitags sammelt die Organisation
+// alle Filialen-Werte und schickt sie gesammelt an den Produzenten (Indian Heritage) weiter.
+async function renderStoreSamosaHtml(weekDates){
+  const WD_LABEL={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag'};
+  const todayWeekday=new Date().getDay();
+  const baseline=await api(`samosa_baseline?store_id=eq.${currentStore.id}&select=weekday,base_qty`).catch(()=>[]);
+  const todayVals=await api(`samosa_today?store_id=eq.${currentStore.id}&supply_date=gte.${weekDates[1]}&supply_date=lte.${weekDates[4]}&select=supply_date,qty,is_adjusted`).catch(()=>[]);
+  const valMap={}; (todayVals||[]).forEach(d=>{valMap[d.supply_date]=d;});
+
+  let html=`<div class="section-lbl" style="color:#F97316;">🥟 Samosas — diese Woche</div>
+  <div class="card"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Tag</th><th style="text-align:right;">Menge</th>
+  </tr></thead><tbody>`;
+  [1,2,3,4].forEach(wd=>{
+    const b=baseline.find(x=>x.weekday===wd);
+    const dateStr=weekDates[wd];
+    const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+    const rec=valMap[dateStr];
+    const val=rec?rec.qty:(b?b.base_qty:0);
+    const adjusted=!!rec?.is_adjusted;
+    const isToday=wd===todayWeekday;
+    html+=`<tr${isToday?` style="background:#FFF7ED;"`:''}>
+      <td style="padding:10px 6px;text-align:left;font-weight:${isToday?'700':'500'};color:${isToday?'#F97316':'#1a1a18'};font-size:13px;">${WD_LABEL[wd]} · ${dateLabel}${isToday?' — heute':''}</td>
+      <td style="padding:10px 6px;text-align:right;">
+        <input type="number" step="1" value="${val}" data-store="${currentStore.id}" data-weekday="${wd}" data-date="${dateStr}"
+          onchange="updateSamosaQty(this)" inputmode="numeric"
+          style="width:64px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:8px;font-size:15px;padding:9px 4px;background:${adjusted?'#FFF7ED':'#fff'};">
+      </td>
+    </tr>`;
+  });
+  html+='</tbody></table></div>';
+  html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Werte werden freitags von der Organisation gesammelt und an den Produzenten weitergegeben — bei Bedarf jederzeit anpassbar.</div>`;
+  return html;
+}
+
 async function renderKuecheOrderTab(el, tabHtml){
   const tab=ORDER_TABS.kueche;
   let html=tabHtml;
@@ -1692,6 +1728,10 @@ async function renderKuecheOrderTab(el, tabHtml){
     }
     html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Werte sind die Grundmengen laut Plan für die jeweilige Woche. Jeder Tag kann einzeln angepasst werden — Änderungen werden gespeichert und an die Küche gemeldet.</div>`;
   }
+
+  // Samosas — eigene, kleine Wochentabelle nur für diese Filiale (Mo–Do), damit die Mengen
+  // direkt hier gepflegt werden können, statt separat per WhatsApp durchgegeben zu werden.
+  html+=await renderStoreSamosaHtml(weekDates);
 
   // Wochensalat — Restbestand-Meldung (Schichtende), täglich auszufüllen
   const today=new Date().toISOString().split('T')[0];
@@ -3537,7 +3577,12 @@ function renderDcTabContent(){
   let html='';
   if(activeDcTab==='wek'){
     html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th style="text-align:left;">Lieferant</th><th style="text-align:left;">Ware</th><th>i.O.</th><th>Temp.</th><th style="text-align:left;">Maßnahme</th></tr></thead><tbody>`;
-    html+=(wek||[]).map(w=>`<tr><td>${new Date(w.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[w.store_id]||w.store_id}</td><td>${w.lieferant||'-'}</td><td>${w.ware||'-'}</td><td><span class="badge ${w.ware_ok===false?'badge-warn':'badge-ok'}">${w.ware_ok===false?'nein':'ja'}</span></td><td><span class="badge ${w.temperatur>=65?'badge-ok':'badge-warn'}">${w.temperatur}°C</span></td><td style="text-align:left;font-size:11px;color:var(--muted);">${w.massnahme||'-'}</td></tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
+    html+=(wek||[]).map(w=>{
+      const breakdown=w.temperaturen&&Object.keys(w.temperaturen).length>1?Object.entries(w.temperaturen).map(([d,t])=>`${d} ${t}°C`).join(' · '):null;
+      let row=`<tr><td>${new Date(w.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[w.store_id]||w.store_id}</td><td>${w.lieferant||'-'}</td><td>${w.ware||'-'}</td><td><span class="badge ${w.ware_ok===false?'badge-warn':'badge-ok'}">${w.ware_ok===false?'nein':'ja'}</span></td><td><span class="badge ${w.temperatur>=65?'badge-ok':'badge-warn'}" title="${breakdown?'niedrigster Wert':''}">${w.temperatur}°C</span></td><td style="text-align:left;font-size:11px;color:var(--muted);">${w.massnahme||'-'}</td></tr>`;
+      if(breakdown) row+=`<tr><td colspan="7" style="font-size:10.5px;color:var(--muted);padding-top:0;" data-no-translate>↳ ${breakdown}</td></tr>`;
+      return row;
+    }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
     html+=`</tbody></table></div></div>`;
   } else if(activeDcTab==='rein'){
     html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Reinigung</th><th>Desinfektion</th></tr></thead><tbody>`;
@@ -3608,21 +3653,32 @@ async function renderDailyCheck(){
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="wek-ware-chips">${(()=>{
         const menuDishes=getTodayDishNames();
         const chips=menuDishes.length>0?menuDishes:['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'];
-        return chips.map(w=>{
+        return chips.map((w,i)=>{
           // Standardmäßig ausgewählt, solange heute noch kein Eintrag existiert — die Waren kommen quasi immer 100% an,
           // also nur abwählen, wenn ausnahmsweise mal was fehlt, statt jedes Mal alles einzeln antippen zu müssen.
           const sel=wek ? (wek.ware||'').includes(w) : true;
-          return `<div onclick="toggleWareChip(this,'${w.replace(/'/g,"\\'")}')" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
+          return `<div id="wek-chip-${i}" onclick="toggleWareChip(this,'${w.replace(/'/g,"\\'")}',${i})" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
         }).join('');
       })()}</div>
       <div class="cl-item" style="padding:10px 0;" onclick="toggleWareOkUI()">
         <div class="check-box${wareOkDefault?' done':''}" id="wek-ware-ok-box" data-value="${wareOkDefault?'1':'0'}">${wareOkDefault?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Ware in Ordnung</span>
       </div>
-      <div class="item-row" style="border-bottom:none;padding:8px 0 4px;">
-        <div class="item-name">🌡️ Temperatur eintragen (über 65° verpflichtend)</div>
-        <input id="wek-temp" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${tempDefault}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
-      </div>
+      <div style="font-size:12px;font-weight:500;color:var(--sub);margin:10px 0 2px;">🌡️ Temperatur je Gericht (über 65° verpflichtend):</div>
+      ${(()=>{
+        const menuDishes=getTodayDishNames();
+        const chips=menuDishes.length>0?menuDishes:['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'];
+        const existingTemps=wek?.temperaturen||{};
+        return chips.map((w,i)=>{
+          const sel=wek ? (wek.ware||'').includes(w) : true;
+          const tval=existingTemps[w] ?? '';
+          const fallbackVal=(tval!=='')?tval:(wek?.temperatur ?? wekPrev?.temperatur ?? '');
+          return `<div class="item-row" id="wek-temp-row-${i}" style="display:${sel?'flex':'none'};padding:8px 0;">
+            <div class="item-name" data-no-translate>${w}</div>
+            <input id="wek-temp-${i}" data-dish="${w.replace(/"/g,'&quot;')}" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${fallbackVal}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+          </div>`;
+        }).join('');
+      })()}
       <div id="wek-massnahme-wrap" style="display:${(tempDefault!=='' && tempDefault<65)?'block':'none'};margin-top:6px;">
         <input id="wek-massnahme" type="text" placeholder="Maßnahme bei Abweichung (Pflicht)" value="${wek?.massnahme||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
       </div>
@@ -3652,11 +3708,22 @@ async function renderDailyCheck(){
 
 async function saveDailyCheckAll(){
   const today=new Date().toISOString().split('T')[0];
-  const temp=parseFloat(document.getElementById('wek-temp')?.value);
-  if(isNaN(temp)){ showToast('Bitte Temperatur eintragen'); return; }
+  const tempRows=[...document.querySelectorAll('[id^="wek-temp-row-"]')].filter(r=>r.style.display!=='none');
+  if(!tempRows.length){ showToast('Bitte mindestens eine angelieferte Ware auswählen'); return; }
+  const temperaturen={};
+  let anyInvalid=false, minTemp=null;
+  tempRows.forEach(row=>{
+    const input=row.querySelector('input');
+    const dish=input?.dataset.dish;
+    const v=parseFloat(input?.value);
+    if(isNaN(v)){ anyInvalid=true; return; }
+    if(dish) temperaturen[dish]=v;
+    if(minTemp===null||v<minTemp) minTemp=v;
+  });
+  if(anyInvalid || minTemp===null){ showToast('Bitte bei jedem Gericht eine Temperatur eintragen'); return; }
   const massnahmeEl=document.getElementById('wek-massnahme');
   const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
-  if(temp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
+  if(minTemp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
   const klein=parseFloat(document.getElementById('kuehl-klein')?.value);
   const gross=parseFloat(document.getElementById('kuehl-gross')?.value);
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Kühltemperaturen eintragen'); return; }
@@ -3666,7 +3733,7 @@ async function saveDailyCheckAll(){
     await Promise.all([
       (async()=>{
         await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
-        await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:temp,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
+        await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:minTemp,temperaturen,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
       })(),
       (async()=>{
         await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
@@ -3726,11 +3793,16 @@ async function renderWaehrend(){
   translateEl(el);
 }
 
-function toggleWareChip(el, ware){
+function toggleWareChip(el, ware, i){
   const selected=el.style.borderColor==='var(--green)'||el.style.borderColor==='rgb(15, 110, 86)';
   el.style.borderColor=selected?'var(--border)':'var(--green)';
   el.style.background=selected?'var(--card)':'var(--green-light)';
   el.style.color=selected?'var(--sub)':'var(--green)';
+  if(i!=null){
+    const row=document.getElementById('wek-temp-row-'+i);
+    if(row) row.style.display=selected?'none':'flex';
+  }
+  checkWareneingangTemp();
 }
 function getSelectedWaren(){
   const chips=document.querySelectorAll('#wek-ware-chips div');
@@ -3748,26 +3820,15 @@ function toggleWareOkUI(){
 }
 
 function checkWareneingangTemp(){
-  const v=parseFloat(document.getElementById('wek-temp').value);
+  const rows=document.querySelectorAll('[id^="wek-temp-row-"]');
+  let anyLow=false;
+  rows.forEach(row=>{
+    if(row.style.display==='none') return;
+    const v=parseFloat(row.querySelector('input')?.value);
+    if(!isNaN(v) && v<65) anyLow=true;
+  });
   const wrap=document.getElementById('wek-massnahme-wrap');
-  if(wrap) wrap.style.display=(!isNaN(v)&&v<65)?'block':'none';
-}
-
-async function saveWareneingang(){
-  const temp=parseFloat(document.getElementById('wek-temp').value);
-  if(isNaN(temp)){ showToast('Bitte Temperatur eingeben'); return; }
-  const massnahmeEl=document.getElementById('wek-massnahme');
-  const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
-  if(temp<65 && !massnahme){ showToast('Bitte Maßnahme bei Abweichung angeben'); return; }
-  const lieferant=FIXER_LIEFERANT;
-  const ware=getSelectedWaren()||'';
-  const wareOk=document.getElementById('wek-ware-ok-box').dataset.value==='1';
-  const today=new Date().toISOString().split('T')[0];
-  try{
-    await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
-    await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:lieferant||null,ware:ware||null,ware_ok:wareOk,temperatur:temp,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
-    showToast('✔ Gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  if(wrap) wrap.style.display=anyLow?'block':'none';
 }
 
 async function toggleReinigungField(field, itemEl){
