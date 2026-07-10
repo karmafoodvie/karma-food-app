@@ -1332,13 +1332,10 @@ function renderOrderSection(cats, label, color, icon){
         ${isOrg?`
           <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
         `:`
-        <div style="display:flex;align-items:center;gap:6px;">
-          <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
-            <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
-            <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
-            <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
-          </div>
-          <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" title="${verfuegbar?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;flex-shrink:0;line-height:1;">${verfuegbar?'❌':'✅'}</button>
+        <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
+          <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
+          <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
+          <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
         </div>
         `}
       </div>`;
@@ -1380,7 +1377,6 @@ function renderVariantGroupRow(groupKey, groupItems){
         <span class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}">${v}</span>
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},1)">+</button>
       </div>
-      ${r.articleId?`<button onclick="toggleArticleVerfuegbar(${r.articleId},${selVerf})" title="${selVerf?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;line-height:1;">${selVerf?'❌':'✅'}</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
       ${rows.length>1?`<button onclick="variantRemove('${groupKey}',${i})" style="background:none;border:none;color:#DC2626;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;">✕</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
     </div>`;
   }).join('');
@@ -1517,7 +1513,7 @@ async function renderKCOrderTab(el, tabHtml){
       </td>
       <td style="color:var(--muted);">${soll}</td>
       <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
-      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" title="${verfuegbar?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">${verfuegbar?'❌':'✅'}</button>`}</td>
+      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:(verfuegbar?'<span class="badge badge-ok">ja</span>':`<span class="badge badge-warn" title="${a.verfuegbar_hinweis||'aktuell nicht verfügbar'}">nein</span>`)}</td>
     </tr>
     ${!isOrg && !verfuegbar?`<tr><td colspan="5" style="font-size:10px;color:#DC2626;padding-top:0;">↳ ${verfuegbarLabel(a)}</td></tr>`:''}`;
   });
