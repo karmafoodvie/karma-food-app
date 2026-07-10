@@ -4618,12 +4618,16 @@ async function renderSamosaTableHtml(){
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = angepasst. Leere/graue Felder = aktuell kein Standard-Liefertag, aber jederzeit eintragbar.</div>`;
 
-  // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp
+  // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp — der braucht nur die
+  // Gesamtmenge pro Tag (und die Wochensumme), keine Aufschlüsselung nach Filiale.
+  let weekTotal=0;
   let summary=`🥟 Samosas Woche (Mo–Do):\n`;
   [1,2,3,4].forEach(wd=>{
     if(!dayValues[wd].length) return;
-    summary+=`${WD_LABEL[wd]}: `+dayValues[wd].map(v=>`${v.name} ${v.val}`).join(', ')+`\n`;
+    weekTotal+=dayTotals[wd];
+    summary+=`${WD_LABEL[wd]}: ${dayTotals[wd]}\n`;
   });
+  summary+=`Gesamt Woche: ${weekTotal}`;
   const summaryEsc=summary.replace(/`/g,'\\`').replace(/</g,'&lt;');
   html+=`<div style="margin-top:14px;">
     <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">📋 Für den Produzenten</div>
