@@ -275,6 +275,11 @@ const VARIANT_GROUPS = {
   bareballs:{label:'Barebells', prefix:/^bareballs?\s*/i, match:n=>/^bareballs?\b/i.test(n)}
 };
 let variantRows = {}; // {groupKey: [{articleId:number|null}, ...]}
+// Küchen-Liefermengen (Dressing, Raita, etc.) sind freie Textnamen in kitchen_supply_baseline,
+// nicht mit der articles-Tabelle verknüpft — Bilder daher über diese Zuordnung, sobald vorhanden.
+const KITCHEN_SUPPLY_IMAGES = {
+  // 'Dressing': '/images/kitchen-supply/dressing.jpg',
+};
 const WEEKDAY_NAMES = {1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
 const WEEKDAY_STR = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'}; // Kurzform-Schlüssel für Wochentage, u.a. für MENU_DATA-Keys (w1_mo, w1_di, ...)
 const CL_TYPES = ['abschluss']; // 'oeffnung' & 'reinigung' bleiben als Daten bestehen, sind aber keine Pflicht-Tabs mehr — siehe renderOeffnungHelp()/renderReinigungHelp()
@@ -1620,23 +1625,29 @@ async function renderKuecheOrderTab(el, tabHtml){
   const valMap={}; // valMap[date][article_name] = rec
   (weekVals||[]).forEach(d=>{if(!valMap[d.supply_date])valMap[d.supply_date]={};valMap[d.supply_date][d.article_name]=d;});
 
-  if(!baseline?.length){
+  const daysWithItems=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
+
+  if(!daysWithItems.length){
     html+=`<div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);font-size:13px;">Für diese Filiale ist keine Küchen-Lieferung hinterlegt.</div>`;
   } else {
-    for(let wd=1; wd<=5; wd++){
+    // Fokus-Tag: heute, falls es dafür Artikel gibt — sonst der nächste kommende Liefertag.
+    // So ist auf einen Blick (ohne Scrollen) klar, was als Nächstes gebraucht wird.
+    let focusWd=daysWithItems.find(wd=>wd===todayWeekday);
+    if(!focusWd) focusWd=daysWithItems.find(wd=>wd>todayWeekday) || daysWithItems[0];
+    const isTodayFocus=focusWd===todayWeekday;
+
+    const renderDayItems=(wd)=>{
       const items=baseline.filter(b=>b.weekday===wd);
-      if(!items.length) continue;
-      const isToday=wd===todayWeekday;
       const dateStr=weekDates[wd];
-      const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-      html+=`<div class="section-lbl" style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd]} · ${dateLabel}${isToday?' — heute':''}</div>
-      <div class="card" style="${isToday?`border:1.5px solid ${tab.color};`:''}">`;
+      let h='';
       items.forEach(b=>{
         const rec=(valMap[dateStr]||{})[b.article_name];
         const val=rec ? rec.qty : b.base_qty;
         const adjusted=rec?.is_adjusted;
-        html+=`<div class="item-row">
+        const img=KITCHEN_SUPPLY_IMAGES[b.article_name];
+        h+=`<div class="item-row">
           <div style="display:flex;align-items:center;gap:10px;flex:1;">
+            ${img?`<img src="${img}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
             <div><div class="item-name">${b.article_name}${adjusted?' <span style="color:#F97316;font-size:10px;font-weight:600;">· angepasst</span>':''}</div><div class="item-unit">${b.unit}</div></div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
@@ -1646,7 +1657,24 @@ async function renderKuecheOrderTab(el, tabHtml){
           </div>
         </div>`;
       });
-      html+='</div>';
+      return h;
+    };
+
+    const focusDateStr=weekDates[focusWd];
+    const focusDateLabel=new Date(focusDateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+    html+=`<div class="section-lbl" style="color:${tab.color};font-weight:700;">${WEEKDAY_NAMES[focusWd]} · ${focusDateLabel}${isTodayFocus?' — heute':' — nächster Liefertag'}</div>
+    <div class="card" style="border:1.5px solid ${tab.color};">${renderDayItems(focusWd)}</div>`;
+
+    const otherDays=daysWithItems.filter(wd=>wd!==focusWd);
+    if(otherDays.length){
+      html+=`<details style="margin-top:10px;">
+        <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Restliche Woche anzeigen (${otherDays.length} Tage)</summary>`;
+      otherDays.forEach(wd=>{
+        const dateStr=weekDates[wd];
+        const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        html+=`<div class="section-lbl">${WEEKDAY_NAMES[wd]} · ${dateLabel}</div><div class="card">${renderDayItems(wd)}</div>`;
+      });
+      html+='</details>';
     }
     html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Werte sind die Grundmengen laut Plan für die jeweilige Woche. Jeder Tag kann einzeln angepasst werden — Änderungen werden gespeichert und an die Küche gemeldet.</div>`;
   }
