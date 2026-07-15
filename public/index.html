@@ -693,6 +693,13 @@ async function hasTodayEntry(table, dateCol, storeId=currentStore?.id){
 async function initLogin() {
   try {
     const stores = (await api('stores?select=id,name,image_url&order=id')).filter(s=>s.id!=='1070');
+    // Feste Reihenfolge am Login-Screen (nicht alphabetisch nach ID): Börse, Laurenzerberg,
+    // Ausstellungsstraße, Stadtplatz, Kitchen, Organisation.
+    const LOGIN_ORDER=['boerse','lb','1020','3400','kitchen','zentrale'];
+    stores.sort((a,b)=>{
+      const ia=LOGIN_ORDER.indexOf(a.id), ib=LOGIN_ORDER.indexOf(b.id);
+      return (ia===-1?999:ia)-(ib===-1?999:ib);
+    });
     const list = document.getElementById('store-list');
     if (!stores?.length) { list.innerHTML='<p style="color:red;font-size:12px;">Verbindungsfehler</p>'; return; }
     list.innerHTML = stores.map(s => {
