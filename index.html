@@ -116,6 +116,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .badge{font-size:10px;padding:3px 8px;border-radius:20px;font-weight:500;}
 .badge-ok{background:#EAF3DE;color:#3B6D11;}
 .badge-warn{background:#FCEBEB;color:#A32D2D;}
+.badge-info{background:#E0F2FE;color:#0369A1;}
 .badge-pend{background:#FAEEDA;color:#854F0B;}
 .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:10px 20px;border-radius:30px;font-size:14px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;}
 .toast.show{opacity:1;}
@@ -156,7 +157,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="tb-sub" id="tb-sub"></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;position:relative;">
-      <button class="size-btn" onclick="toggleSizeMenu()" title="Textgröße">🔍</button>
+      <button class="size-btn" onclick="toggleSizeMenu()" title="Textgröße" style="font-weight:700;">Aa</button>
       <div id="size-menu">
         <button onclick="setUiSize('klein')" id="size-btn-klein">Klein</button>
         <button onclick="setUiSize('mittel')" id="size-btn-mittel">Mittel</button>
@@ -169,7 +170,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <button onclick="setLang('es')">🇪🇸 Español</button>
         <button onclick="setLang('hi')">🇮🇳 हिन्दी</button>
       </div>
-      <div class="tb-avatar" id="tb-avatar"></div>
+      <button onclick="goTo('hilfe')" title="Hilfe & Ansprechpartner" style="width:28px;height:28px;border-radius:50%;border:none;background:#FBBF24;color:#78350F;font-size:14px;font-weight:800;cursor:pointer;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.35);">?</button>
+      <div class="tb-avatar" id="tb-avatar" style="display:none;"></div>
       <button onclick="doLogout()" title="Filiale wechseln / Abmelden" style="width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.18);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
         <svg width="17" height="17" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
@@ -202,6 +204,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
     <div id="v-disposal" class="view"></div>
+    <div id="v-hilfe" class="view"></div>
   </div>
 
   <nav id="bottomnav">
@@ -282,7 +285,90 @@ const KITCHEN_SUPPLY_IMAGES = {
   // 'Dressing': '/images/kitchen-supply/dressing.jpg',
 };
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
-const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D'};
+const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D','Wochensalat Dressing':'#9333EA'};
+
+// FAQ & Ansprechpartner — beides einfach hier erweiterbar, sobald mehr Inhalte/Kontaktdaten da sind.
+// SHOW_FAQ: FAQ-Bereich ist vorerst ausgeblendet (Inhalt bleibt erhalten) — auf true setzen, um ihn
+// wieder einzublenden, sobald klar ist, dass er gebraucht wird.
+const SHOW_FAQ=false;
+const FAQ_ITEMS=[
+  {q:'Ich habe zu viel oder zu wenig Essen bekommen — was tun?', a:'Bitte bis 12:45 Uhr melden (Chat oder direkt bei Tini anrufen) — danach wird bei Bedarf ein Uber für die Umverteilung organisiert.'},
+  {q:'Ein Gutschein funktioniert nicht oder ich brauche schnell eine Antwort — was tun?', a:'Immer anrufen — Ines oder Tini. Im Chat sind die beiden vor allem zwischen 11:00–12:30 Uhr aktiv, außerhalb dieser Zeit lieber gleich anrufen.'},
+  {q:'Ich habe noch Samosas von gestern und heute neue dazubekommen — welche zuerst verkaufen?', a:'Immer die älteren zuerst verkaufen (FIFO) — am besten sichtbar vorne hinstellen, damit sie zuerst weggehen.'},
+  {q:'Ein Artikel ist gerade nicht lieferbar — wie melde ich das?', a:'Das trägt aktuell die Organisation ein (Tini/Michi) — meldet euch kurz, wenn euch etwas auffällt, dann wird es in der App für alle Filialen sichtbar gemacht.'},
+  {q:'Ich möchte die vorgeschlagene Forecast-Menge ändern — wie geht das?', a:'Zahl im Feld einfach überschreiben (wird orange markiert) und danach unten auf "Änderungen speichern" tippen — erst dann wird’s an die Küche übermittelt.'},
+  {q:'Beim Wareneingang liegt die Temperatur unter 65° — was jetzt?', a:'Sobald ein Wert unter 65° eingetragen wird, erscheint automatisch ein Pflichtfeld für die Maßnahme (z.B. nacherhitzt, Lieferant informiert) — bitte kurz ausfüllen.'},
+];
+const CONTACT_PERSONS=[
+  {name:'Tini', responsible:'Dienstplan, App-Fragen, Notfälle · zu viel oder zu wenig Essen? Bis 12:45 Uhr melden · während der Arbeitszeit erreichbar', phone:''},
+  {name:'Ines', responsible:'Fragen zu KC-Produkten oder Webshop-Nachschub · dringende Hilfe (z.B. Gutschein funktioniert nicht) — sofort anrufen', phone:''},
+  {name:'Michi', responsible:'Bestellungen & Lieferungen, Samosas, Verpackungsnachschub', phone:''},
+  {name:'Nooru', responsible:'Rezepte, Mengen, Zutaten', phone:''},
+  {name:'Simone', responsible:'Krankmeldung am Wochenende, Fragen zu Arbeitsvertrag/Stunden · ab 17:00 Uhr für den Dienstplan gemeinsam mit Tini kontaktieren', phone:''},
+  {name:'Adi', responsible:'Wenn etwas kaputt ist oder technisch nicht funktioniert (Geräte, Reparaturen) — Support-Gruppe', phone:''},
+];
+// Aktuell gültige Rabattcodes — Liste hier pflegen, sobald die echten aktuellen Codes feststehen
+// (werden ja ohnehin ausgedruckt/aufgeklebt in den Stores, hier nur als digitales Backup/Nachschlagen).
+// store: leer = gilt für alle Filialen; sonst Store-ID (z.B. 'lb','boerse','1020','3400') = nur dort gültig.
+const RABATT_CODES=[
+  // {code:'ST', wert:'10%', bedingung:'Studierende', store:''},
+  // {code:'MESSE', wert:'€10', bedingung:'Messe/WU', store:'lb'},
+];
+
+async function renderHilfe(){
+  const el=document.getElementById('v-hilfe');
+  let html=backToHomeHtml();
+
+  html+=`<div class="section-lbl">👥 Ansprechpartner</div><div class="card">`;
+  CONTACT_PERSONS.forEach(p=>{
+    html+=`<div class="item-row">
+      <div>
+        <div data-no-translate style="font-size:13px;font-weight:600;">${p.name}</div>
+        <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${p.responsible}</div>
+      </div>
+      ${p.phone?`<a href="tel:${p.phone}" style="font-size:12px;color:var(--green);font-weight:500;white-space:nowrap;">📞 ${p.phone}</a>`:`<span style="font-size:10.5px;color:var(--border);white-space:nowrap;">–</span>`}
+    </div>`;
+  });
+  html+='</div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Fehlt etwas oder eine Telefonnummer? Einfach Tini Bescheid geben.</div>`;
+
+  html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card">`;
+  const isOrgHilfe=currentStore?.id==='zentrale';
+  const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz'};
+  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.store||r.store===currentStore?.id);
+  if(visibleCodes.length){
+    visibleCodes.forEach(r=>{
+      const storeCol=r.store?(STORE_COLORS[r.store]||'#888'):null;
+      html+=`<div class="item-row">
+        <div>
+          <div data-no-translate style="font-size:13px;font-weight:600;">${r.code}
+            ${storeCol?`<span data-no-translate style="font-size:10px;font-weight:600;color:${storeCol};background:${storeCol}20;border-radius:20px;padding:2px 7px;margin-left:6px;">${storeLabelMap[r.store]||r.store}</span>`:''}
+          </div>
+          <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${r.bedingung}</div>
+        </div>
+        <span style="font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert}</span>
+      </div>`;
+    });
+  } else {
+    html+=`<div style="padding:12px;font-size:12.5px;color:var(--muted);">Noch keine Codes hinterlegt.</div>`;
+  }
+  html+='</div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Aktuelle Codes fehlen? Einfach Tini Bescheid geben.</div>`;
+
+  if(SHOW_FAQ){
+    html+=`<div class="section-lbl" style="margin-top:14px;">❓ Häufige Fragen</div><div class="card">`;
+    FAQ_ITEMS.forEach((item,i)=>{
+      html+=`<details style="border-bottom:${i<FAQ_ITEMS.length-1?'1px solid var(--border)':'none'};padding:10px 12px;">
+        <summary style="font-size:13px;font-weight:500;cursor:pointer;">${item.q}</summary>
+        <div style="font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.4;">${item.a}</div>
+      </details>`;
+    });
+    html+='</div>';
+  }
+
+  el.innerHTML=html;
+  translateEl(el);
+}
 const WEEKDAY_NAMES = {1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
 const WEEKDAY_STR = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'}; // Kurzform-Schlüssel für Wochentage, u.a. für MENU_DATA-Keys (w1_mo, w1_di, ...)
 const CL_TYPES = ['abschluss']; // 'oeffnung' & 'reinigung' bleiben als Daten bestehen, sind aber keine Pflicht-Tabs mehr — siehe renderOeffnungHelp()/renderReinigungHelp()
@@ -607,6 +693,13 @@ async function hasTodayEntry(table, dateCol, storeId=currentStore?.id){
 async function initLogin() {
   try {
     const stores = (await api('stores?select=id,name,image_url&order=id')).filter(s=>s.id!=='1070');
+    // Feste Reihenfolge am Login-Screen (nicht alphabetisch nach ID): Börse, Laurenzerberg,
+    // Ausstellungsstraße, Stadtplatz, Kitchen, Organisation.
+    const LOGIN_ORDER=['boerse','lb','1020','3400','kitchen','zentrale'];
+    stores.sort((a,b)=>{
+      const ia=LOGIN_ORDER.indexOf(a.id), ib=LOGIN_ORDER.indexOf(b.id);
+      return (ia===-1?999:ia)-(ib===-1?999:ib);
+    });
     const list = document.getElementById('store-list');
     if (!stores?.length) { list.innerHTML='<p style="color:red;font-size:12px;">Verbindungsfehler</p>'; return; }
     list.innerHTML = stores.map(s => {
@@ -741,11 +834,11 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores'};
+  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -1127,6 +1220,14 @@ async function renderHome(){
     <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
 `;
+  el.innerHTML+=`<div onclick="goTo('hilfe')" style="display:flex;align-items:center;gap:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 14px;margin-top:10px;cursor:pointer;">
+    <span style="font-size:18px;">❓</span>
+    <div style="flex:1;">
+      <div style="font-size:12.5px;font-weight:600;color:#78350F;">Hilfe & Ansprechpartner</div>
+      <div style="font-size:10.5px;color:#92660A;">Wer für was zuständig ist</div>
+    </div>
+    <span style="color:#B45309;">→</span>
+  </div>`;
   translateEl(el);
   if(currentStore?.id==='zentrale') loadOrgRolesRow();
 }
@@ -1174,7 +1275,7 @@ window.markMonthlyCleaningDone=markMonthlyCleaningDone;
 // ---- VERFÜGBARKEIT (Organisation) ----
 function renderVerfuegbarkeit(){
   const el=document.getElementById('v-verfuegbarkeit');
-  const allCats=[...TRANSPORTER_CATS, 'Webshop-Produkte'];
+  const allCats=[...TRANSPORTER_CATS, 'Webshop-Produkte', ...SWEETS_CATS];
   let html=backToHomeHtml();
   html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Artikel auf "nicht lieferbar" stellen — Stores sehen das sofort beim Bestellen.</div>`;
   allCats.forEach(cat=>{
@@ -1332,13 +1433,10 @@ function renderOrderSection(cats, label, color, icon){
         ${isOrg?`
           <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
         `:`
-        <div style="display:flex;align-items:center;gap:6px;">
-          <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
-            <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
-            <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
-            <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
-          </div>
-          <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" title="${verfuegbar?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;flex-shrink:0;line-height:1;">${verfuegbar?'❌':'✅'}</button>
+        <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
+          <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
+          <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
+          <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
         </div>
         `}
       </div>`;
@@ -1380,7 +1478,6 @@ function renderVariantGroupRow(groupKey, groupItems){
         <span class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}">${v}</span>
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},1)">+</button>
       </div>
-      ${r.articleId?`<button onclick="toggleArticleVerfuegbar(${r.articleId},${selVerf})" title="${selVerf?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;line-height:1;">${selVerf?'❌':'✅'}</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
       ${rows.length>1?`<button onclick="variantRemove('${groupKey}',${i})" style="background:none;border:none;color:#DC2626;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;">✕</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
     </div>`;
   }).join('');
@@ -1517,7 +1614,7 @@ async function renderKCOrderTab(el, tabHtml){
       </td>
       <td style="color:var(--muted);">${soll}</td>
       <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
-      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" title="${verfuegbar?'Als nicht lieferbar melden':'Als lieferbar melden'}" style="background:none;border:none;font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">${verfuegbar?'❌':'✅'}</button>`}</td>
+      <td>${isOrg?`<button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅':'❌'}</button>`:(verfuegbar?'<span class="badge badge-ok">ja</span>':`<span class="badge badge-warn" title="${a.verfuegbar_hinweis||'aktuell nicht verfügbar'}">nein</span>`)}</td>
     </tr>
     ${!isOrg && !verfuegbar?`<tr><td colspan="5" style="font-size:10px;color:#DC2626;padding-top:0;">↳ ${verfuegbarLabel(a)}</td></tr>`:''}`;
   });
@@ -1611,6 +1708,44 @@ function getIsoWeekNumber(dateStr){
   const week1=new Date(d.getFullYear(),0,4);
   return 1+Math.round(((d-week1)/86400000-3+((week1.getDay()+6)%7))/7);
 }
+// Samosas — kompakte Mo-Do-Tabelle nur für die eingeloggte Filiale (gleiche Tabellen wie beim
+// Transporter/Organisation, aber gefiltert auf currentStore.id). Freitags sammelt die Organisation
+// alle Filialen-Werte und schickt sie gesammelt an den Produzenten (Indian Heritage) weiter.
+async function renderStoreSamosaHtml(weekDates){
+  const WD_SHORT={1:'Mo',2:'Di',3:'Mi',4:'Do'};
+  const todayWeekday=new Date().getDay();
+  const baseline=await api(`samosa_baseline?store_id=eq.${currentStore.id}&select=weekday,base_qty`).catch(()=>[]);
+  const todayVals=await api(`samosa_today?store_id=eq.${currentStore.id}&supply_date=gte.${weekDates[1]}&supply_date=lte.${weekDates[4]}&select=supply_date,qty,is_adjusted`).catch(()=>[]);
+  const valMap={}; (todayVals||[]).forEach(d=>{valMap[d.supply_date]=d;});
+
+  let html=`<div class="section-lbl" style="color:#F97316;">🥟 Samosas — diese Woche</div>
+  <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Artikel</th>
+    ${[1,2,3,4].map(wd=>{
+      const dateStr=weekDates[wd];
+      const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      const isToday=wd===todayWeekday;
+      return `<th style="${isToday?'color:#F97316;font-weight:700;':''}">${WD_SHORT[wd]}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍':''}</div></th>`;
+    }).join('')}
+  </tr></thead><tbody><tr>
+    <td style="font-size:13px;font-weight:600;color:#C2410C;white-space:nowrap;">Samosas<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Stk</div></td>
+    ${[1,2,3,4].map(wd=>{
+      const b=baseline.find(x=>x.weekday===wd);
+      const dateStr=weekDates[wd];
+      const rec=valMap[dateStr];
+      const val=rec?rec.qty:(b?b.base_qty:0);
+      const adjusted=!!rec?.is_adjusted;
+      return `<td style="padding:6px 3px;">
+        <input type="number" step="1" value="${val}" data-store="${currentStore.id}" data-weekday="${wd}" data-date="${dateStr}"
+          onchange="updateSamosaQty(this)" inputmode="numeric"
+          style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':'#fff'};">
+      </td>`;
+    }).join('')}
+  </tr></tbody></table></div></div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte werden freitags von der Organisation gesammelt und an den Produzenten weitergegeben — bei Bedarf jederzeit anpassbar.</div>`;
+  return html;
+}
+
 async function renderKuecheOrderTab(el, tabHtml){
   const tab=ORDER_TABS.kueche;
   let html=tabHtml;
@@ -1630,85 +1765,79 @@ async function renderKuecheOrderTab(el, tabHtml){
   (weekVals||[]).forEach(d=>{if(!valMap[d.supply_date])valMap[d.supply_date]={};valMap[d.supply_date][d.article_name]=d;});
 
   const daysWithItems=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
-
-  if(!daysWithItems.length){
-    html+=`<div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);font-size:13px;">Für diese Filiale ist keine Küchen-Lieferung hinterlegt.</div>`;
-  } else {
-    // Fokus-Tag: heute, falls es dafür Artikel gibt — sonst der nächste kommende Liefertag.
-    // So ist auf einen Blick (ohne Scrollen) klar, was als Nächstes gebraucht wird.
-    let focusWd=daysWithItems.find(wd=>wd===todayWeekday);
-    if(!focusWd) focusWd=daysWithItems.find(wd=>wd>todayWeekday) || daysWithItems[0];
-    const isTodayFocus=focusWd===todayWeekday;
-
-    const renderDayItems=(wd)=>{
-      const items=baseline.filter(b=>b.weekday===wd);
-      const dateStr=weekDates[wd];
-      let h=`<table class="pack-table" style="width:100%;"><thead><tr>
-        <th style="text-align:left;">Artikel</th>
-        <th style="text-align:right;">Menge</th>
-      </tr></thead><tbody>`;
-      items.forEach(b=>{
-        const rec=(valMap[dateStr]||{})[b.article_name];
-        const val=rec ? rec.qty : b.base_qty;
-        const adjusted=rec?.is_adjusted;
-        const img=KITCHEN_SUPPLY_IMAGES[b.article_name];
-        const color=ARTICLE_COLORS[b.article_name]||'#1a1a18';
-        h+=`<tr>
-          <td style="padding:10px 6px;text-align:left;vertical-align:middle;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              ${img?`<img src="${img}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
-              <div>
-                <div data-no-translate style="font-size:14px;font-weight:600;color:${color};">${b.article_name}${adjusted?' <span style="color:#F97316;font-size:10px;font-weight:600;">· angepasst</span>':''}</div>
-                <div style="font-size:10.5px;color:var(--muted);">${b.unit}</div>
-              </div>
-            </div>
-          </td>
-          <td style="padding:10px 6px;text-align:right;">
-            <input type="number" step="0.01" value="${val}" data-article="${b.article_name}" data-base="${b.base_qty}" data-date="${dateStr}"
-              onchange="updateKuecheQty(this)" inputmode="decimal"
-              style="width:72px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:8px;font-size:15px;padding:9px 4px;background:${adjusted?'#FFF7ED':'#fff'};">
-          </td>
-        </tr>`;
-      });
-      h+='</tbody></table>';
-      return h;
-    };
-
-    const focusDateStr=weekDates[focusWd];
-    const focusDateLabel=new Date(focusDateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-    html+=`<div class="section-lbl" style="color:${tab.color};font-weight:700;">${WEEKDAY_NAMES[focusWd]} · ${focusDateLabel}${isTodayFocus?' — heute':' — nächster Liefertag'}</div>
-    <div class="card" style="border:1.5px solid ${tab.color};overflow-x:auto;">${renderDayItems(focusWd)}</div>`;
-
-    const otherDays=daysWithItems.filter(wd=>wd!==focusWd);
-    if(otherDays.length){
-      html+=`<details style="margin-top:10px;">
-        <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Andere Tage anzeigen (${otherDays.length})</summary>`;
-      otherDays.forEach(wd=>{
-        const dateStr=weekDates[wd];
-        const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-        html+=`<div class="section-lbl">${WEEKDAY_NAMES[wd]} · ${dateLabel}</div><div class="card" style="overflow-x:auto;">${renderDayItems(wd)}</div>`;
-      });
-      html+='</details>';
-    }
-    html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Werte sind die Grundmengen laut Plan für die jeweilige Woche. Jeder Tag kann einzeln angepasst werden — Änderungen werden gespeichert und an die Küche gemeldet.</div>`;
-  }
-
-  // Wochensalat — Restbestand-Meldung (Schichtende), täglich auszufüllen
   const today=new Date().toISOString().split('T')[0];
   const todayRest=await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]);
   const restRec=(todayRest||[])[0]||{};
-  html+=`<div class="section-lbl" style="color:#A21CAF;">🥗 Wochensalat — Meldung Schichtende (heute)</div>
-  <div class="card" style="border:1.5px solid #A21CAF;">
-    <div class="item-row">
-      <div class="item-name">Rest jetzt im Kühlschrank</div>
-      <input type="number" step="0.25" value="${restRec.rest_qty??''}" placeholder="–" id="wsalat-rest" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
-    </div>
-    <div class="item-row">
-      <div class="item-name">Bedarf für morgen</div>
-      <input type="number" step="0.25" value="${restRec.needed_qty??''}" placeholder="–" id="wsalat-needed" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
-    </div>
-  </div>
-  <button class="submit-btn" style="background:#A21CAF;margin-top:8px;" onclick="submitWochensalat()">Wochensalat-Meldung speichern ✓</button>`;
+  // Wochensalat-Meldung ist eine tägliche Aufgabe unabhängig von den sonstigen Beilagen — die
+  // heutige Spalte muss also immer existieren, auch wenn an einem Tag sonst nichts geliefert wird.
+  const displayDays=[...new Set([...daysWithItems, ...((todayWeekday>=1&&todayWeekday<=5)?[todayWeekday]:[])])].sort((a,b)=>a-b);
+
+  if(!displayDays.length){
+    html+=`<div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);font-size:13px;">Für diese Filiale ist keine Küchen-Lieferung hinterlegt.</div>`;
+  } else {
+    // Kompakte Wochentabelle: 1 Zeile pro Artikel, 1 Spalte pro Liefertag — jede Zelle einzeln
+    // anpassbar (z.B. 0 eintragen, wenn vom Vortag noch genug übrig ist). Alle Tage auf einen
+    // Blick statt einzeln durchklicken zu müssen.
+    const articleNames=[...new Set(baseline.map(b=>b.article_name))];
+    let matrixHtml=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Artikel</th>
+      ${displayDays.map(wd=>{
+        const dateStr=weekDates[wd];
+        const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        const isToday=wd===todayWeekday;
+        return `<th style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍':''}</div></th>`;
+      }).join('')}
+    </tr></thead><tbody>`;
+
+    articleNames.forEach(name=>{
+      const unit=baseline.find(b=>b.article_name===name)?.unit||'';
+      const color=ARTICLE_COLORS[name]||'#1a1a18';
+      const cells=displayDays.map(wd=>{
+        const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
+        if(!b) return `<td style="color:var(--border);">·</td>`;
+        const dateStr=weekDates[wd];
+        const rec=(valMap[dateStr]||{})[name];
+        const val=rec ? rec.qty : b.base_qty;
+        const adjusted=rec?.is_adjusted;
+        return `<td style="padding:6px 3px;">
+          <input type="number" step="0.01" value="${val}" data-article="${escAttr(name)}" data-base="${b.base_qty}" data-date="${dateStr}"
+            onchange="updateKuecheQty(this)" inputmode="decimal"
+            style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':'#fff'};">
+        </td>`;
+      }).join('');
+      matrixHtml+=`<tr>
+        <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></td>
+        ${cells}
+      </tr>`;
+    });
+
+    // Wochensalat — tägliche Schichtende-Meldung (Rest + Bedarf für morgen), als eigene Zeile
+    // direkt in derselben Tabelle statt als separater Block. Nur die heutige Spalte ist relevant.
+    if(displayDays.includes(todayWeekday)){
+      const wsCells=displayDays.map(wd=>{
+        if(wd!==todayWeekday) return `<td style="color:var(--border);">·</td>`;
+        return `<td style="padding:4px 3px;">
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
+            <input type="number" step="0.25" value="${restRec.rest_qty??''}" placeholder="Rest" id="wsalat-rest" onchange="submitWochensalat()" inputmode="decimal"
+              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
+            <input type="number" step="0.25" value="${restRec.needed_qty??''}" placeholder="Morgen" id="wsalat-needed" onchange="submitWochensalat()" inputmode="decimal"
+              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
+          </div>
+        </td>`;
+      }).join('');
+      matrixHtml+=`<tr>
+        <td data-no-translate style="font-size:13px;font-weight:600;color:#A21CAF;white-space:nowrap;">Wochensalat<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Rest / Bedarf morgen</div></td>
+        ${wsCells}
+      </tr>`;
+    }
+    matrixHtml+='</tbody></table></div></div>';
+    html+=matrixHtml;
+    html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
+  }
+
+  // Samosas — eigene, kleine Wochentabelle nur für diese Filiale (Mo–Do), damit die Mengen
+  // direkt hier gepflegt werden können, statt separat per WhatsApp durchgegeben zu werden.
+  html+=await renderStoreSamosaHtml(weekDates);
 
   el.innerHTML=html;
   translateEl(el);
@@ -2197,8 +2326,8 @@ async function renderForecastOrderTab(el, tabHtml){
     if(lockedNote){
       return `<div title="${lockedNote}" style="width:48px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div>`;
     }
-    const numberInput=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}"
-      onchange="updateForecastQty(this)"
+    const numberInput=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
+      oninput="markForecastDirty(this)"
       style="width:48px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
     return numberInput;
   }
@@ -2228,8 +2357,8 @@ async function renderForecastOrderTab(el, tabHtml){
       const manual=rec?.source==='manual';
       const sizeLabel=(LASAGNE_SIZES.find(s=>s.k===sizeKey)||LASAGNE_SIZES[0]).l;
       h+=`<div style="display:flex;align-items:center;gap:3px;">
-        <input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}"
-          onchange="updateForecastQtyGroesse(this)"
+        <input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}" data-original="${val??''}"
+          oninput="markForecastDirty(this)"
           style="width:38px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">
         <span style="font-size:7.5px;color:var(--sub);white-space:nowrap;">${sizeLabel}</span>
       </div>`;
@@ -2243,12 +2372,12 @@ async function renderForecastOrderTab(el, tabHtml){
   }
 
   let anyLasagne=false;
-  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
+  html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
     <thead><tr>
       <th style="text-align:left;">Tag</th>
       <th style="color:#A21CAF;">Salat</th>
-      <th>Gericht 2</th>
-      <th>Gericht 3</th>
+      <th data-no-translate>Gericht 2</th>
+      <th data-no-translate>Gericht 3</th>
       <th>Reis</th>
     </tr></thead><tbody>`;
 
@@ -2269,16 +2398,16 @@ async function renderForecastOrderTab(el, tabHtml){
         <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍':''}</div>
         ${dayReasonMap[dateStr]?`<div style="font-size:9.5px;color:var(--muted);line-height:1.3;">${dayReasonMap[dateStr]}</div>`:''}
       </td>
-      <td style="padding:6px 3px;text-align:center;">${cellInput(dateStr,'Salat')}</td>
-      <td style="padding:6px 3px;text-align:center;">
+      <td style="padding:6px 3px;text-align:center;vertical-align:top;">${cellInput(dateStr,'Salat')}</td>
+      <td style="padding:6px 3px;text-align:center;vertical-align:top;">
         ${g2?cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
         ${g2?`<div data-no-translate style="font-size:8.5px;color:var(--muted);margin-top:2px;line-height:1.2;">${g2}</div>`:''}
       </td>
-      <td style="padding:6px 3px;text-align:center;">
+      <td style="padding:6px 3px;text-align:center;vertical-align:top;">
         ${g3?cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
         ${g3?`<div data-no-translate style="font-size:8.5px;color:var(--muted);margin-top:2px;line-height:1.2;">${g3}</div>`:''}
       </td>
-      <td style="padding:6px 3px;text-align:center;">${reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>'}</td>
+      <td style="padding:6px 3px;text-align:center;vertical-align:top;">${reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>'}</td>
     </tr>`;
   }
   html+='</tbody></table></div></div>';
@@ -2286,50 +2415,67 @@ async function renderForecastOrderTab(el, tabHtml){
   if(anyLasagne){
     html+=`<div style="font-size:10.5px;color:#15803D;padding:6px 2px 2px;">🥗 An Lasagne-Tagen wird grüner Salat + Dressing automatisch mitproduziert · 🔒 Lasagne-Menge ist am Vortag ab 12:00 Uhr fixiert</div>`;
   }
-  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">Werte mit blauem Rahmen sind Vorschläge (Wetter, Feiertage, Ferien & Verkaufsdaten berücksichtigt) — bei Bedarf einfach überschreiben. Orange = manuell angepasst. Die Küche sieht eure Anpassung sofort.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">Werte mit blauem Rahmen sind Vorschläge (Wetter, Feiertage, Ferien & Verkaufsdaten berücksichtigt) — bei Bedarf einfach überschreiben. Orange = geändert, noch nicht gespeichert.</div>`;
+
+  if(!isHistoric){
+    html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
+  }
 
   el.innerHTML=html;
   translateEl(el);
 }
-async function updateForecastQty(input){
-  const dateStr=input.dataset.date;
-  const dishName=input.dataset.dish;
-  const newQty=parseFloat(input.value);
-  if(isNaN(newQty)){return;}
-  try{
-    const existing=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&select=groesse`).catch(()=>[]);
-    const groesse=existing?.[0]?.groesse||'gross'; // Standard: "1" = 1 Großer Behälter (18 Stück)
-    await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'});
-    await api('forecast_qty',{method:'POST',body:JSON.stringify([{
-      store_id:currentStore.id, forecast_date:dateStr, dish_name:dishName, qty:newQty, groesse,
-      source:'manual', changed_by:currentStore.name, changed_at:new Date().toISOString()
-    }])});
-    showToast('✓ Angepasst — Küche wird informiert');
-    renderOrder();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
-}
-window.updateForecastQty=updateForecastQty;
 
-async function updateForecastQtyGroesse(input){
-  const dateStr=input.dataset.date;
-  const dishName=input.dataset.dish;
-  const groesse=input.dataset.groesse;
-  const newQty=parseFloat(input.value);
-  try{
-    // Nur den Datensatz DIESER Größe löschen/ersetzen — Geschwister-Größen (z.B. Groß bleibt,
-    // während Klein geändert wird) dürfen dabei nicht verloren gehen.
-    await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${groesse}`,{method:'DELETE'});
-    if(!isNaN(newQty) && newQty>0){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{
-        store_id:currentStore.id, forecast_date:dateStr, dish_name:dishName, qty:newQty, groesse,
-        source:'manual', changed_by:currentStore.name, changed_at:new Date().toISOString()
-      }])});
-    }
-    showToast('✓ Angepasst — Küche wird informiert');
-    renderOrder();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+// Zeigt eine Zelle als "geändert, noch nicht gespeichert" (orange) und aktiviert den Speichern-Button —
+// speichert aber noch NICHT selbst, damit man erst alle Felder in Ruhe ausfüllen kann, ohne dass
+// zwischendurch ein Re-Render laufende Eingaben in anderen Zellen überschreibt.
+function markForecastDirty(input){
+  const dirty=input.value!==input.dataset.original;
+  input.style.borderColor=dirty?'#F97316':'var(--border)';
+  input.style.background=dirty?'#FFF7ED':'#fff';
+  const btn=document.getElementById('forecast-save-btn');
+  if(btn){
+    const anyDirty=[...document.querySelectorAll('#forecast-table-wrap input[data-dish]')].some(i=>i.value!==i.dataset.original);
+    btn.disabled=!anyDirty;
+    btn.style.opacity=anyDirty?'1':'0.4';
+  }
 }
-window.updateForecastQtyGroesse=updateForecastQtyGroesse;
+window.markForecastDirty=markForecastDirty;
+
+// Sammelt alle geänderten Zellen (auch mehrere Lasagne-Größen gleichzeitig) und speichert sie in
+// einem Rutsch — erst danach EIN Re-Render, damit keine parallel eingegebenen Werte verloren gehen.
+async function saveForecastChanges(){
+  const inputs=[...document.querySelectorAll('#forecast-table-wrap input[data-dish]')].filter(i=>i.value!==i.dataset.original);
+  if(!inputs.length){ showToast('Keine Änderungen'); return; }
+  const btn=document.getElementById('forecast-save-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Speichert …'; }
+  try{
+    for(const input of inputs){
+      const dateStr=input.dataset.date;
+      const dishName=input.dataset.dish;
+      const groesse=input.dataset.groesse;
+      const newQty=parseFloat(input.value);
+      if(groesse){
+        await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${groesse}`,{method:'DELETE'});
+        if(!isNaN(newQty) && newQty>0){
+          await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse,source:'manual',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
+        }
+      }else{
+        if(isNaN(newQty)) continue;
+        const existing=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&select=groesse`).catch(()=>[]);
+        const existingGroesse=existing?.[0]?.groesse||'gross';
+        await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'});
+        await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse:existingGroesse,source:'manual',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
+      }
+    }
+    showToast('✓ Änderungen gespeichert — Küche wird informiert');
+    renderOrder();
+  }catch(e){
+    console.error(e);
+    showToast('Fehler beim Speichern');
+    if(btn){ btn.disabled=false; btn.textContent='💾 Änderungen speichern'; }
+  }
+}
+window.saveForecastChanges=saveForecastChanges;
 
 function addLasagneSize(cellKey, sizeKey){
   if(!lasagneExtraSizes[cellKey]) lasagneExtraSizes[cellKey]=new Set();
@@ -3537,7 +3683,12 @@ function renderDcTabContent(){
   let html='';
   if(activeDcTab==='wek'){
     html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th style="text-align:left;">Lieferant</th><th style="text-align:left;">Ware</th><th>i.O.</th><th>Temp.</th><th style="text-align:left;">Maßnahme</th></tr></thead><tbody>`;
-    html+=(wek||[]).map(w=>`<tr><td>${new Date(w.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[w.store_id]||w.store_id}</td><td>${w.lieferant||'-'}</td><td>${w.ware||'-'}</td><td><span class="badge ${w.ware_ok===false?'badge-warn':'badge-ok'}">${w.ware_ok===false?'nein':'ja'}</span></td><td><span class="badge ${w.temperatur>=65?'badge-ok':'badge-warn'}">${w.temperatur}°C</span></td><td style="text-align:left;font-size:11px;color:var(--muted);">${w.massnahme||'-'}</td></tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
+    html+=(wek||[]).map(w=>{
+      const breakdown=w.temperaturen&&Object.keys(w.temperaturen).length>1?Object.entries(w.temperaturen).map(([d,t])=>`${d} ${t}°C`).join(' · '):null;
+      let row=`<tr><td>${new Date(w.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[w.store_id]||w.store_id}</td><td>${w.lieferant||'-'}</td><td>${w.ware||'-'}</td><td><span class="badge ${w.ware_ok===false?'badge-warn':'badge-ok'}">${w.ware_ok===false?'nein':'ja'}</span></td><td><span class="badge ${w.temperatur>=65?'badge-ok':'badge-warn'}" title="${breakdown?'niedrigster Wert':''}">${w.temperatur}°C</span></td><td style="text-align:left;font-size:11px;color:var(--muted);">${w.massnahme||'-'}</td></tr>`;
+      if(breakdown) row+=`<tr><td colspan="7" style="font-size:10.5px;color:var(--muted);padding-top:0;" data-no-translate>↳ ${breakdown}</td></tr>`;
+      return row;
+    }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
     html+=`</tbody></table></div></div>`;
   } else if(activeDcTab==='rein'){
     html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Reinigung</th><th>Desinfektion</th></tr></thead><tbody>`;
@@ -3608,21 +3759,32 @@ async function renderDailyCheck(){
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="wek-ware-chips">${(()=>{
         const menuDishes=getTodayDishNames();
         const chips=menuDishes.length>0?menuDishes:['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'];
-        return chips.map(w=>{
+        return chips.map((w,i)=>{
           // Standardmäßig ausgewählt, solange heute noch kein Eintrag existiert — die Waren kommen quasi immer 100% an,
           // also nur abwählen, wenn ausnahmsweise mal was fehlt, statt jedes Mal alles einzeln antippen zu müssen.
           const sel=wek ? (wek.ware||'').includes(w) : true;
-          return `<div onclick="toggleWareChip(this,'${w.replace(/'/g,"\\'")}')" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
+          return `<div id="wek-chip-${i}" onclick="toggleWareChip(this,'${w.replace(/'/g,"\\'")}',${i})" style="padding:5px 10px;border-radius:20px;font-size:12px;cursor:pointer;border:1.5px solid ${sel?'var(--green)':'var(--border)'};background:${sel?'var(--green-light)':'var(--card)'};color:${sel?'var(--green)':'var(--sub)'};">${w}</div>`;
         }).join('');
       })()}</div>
       <div class="cl-item" style="padding:10px 0;" onclick="toggleWareOkUI()">
         <div class="check-box${wareOkDefault?' done':''}" id="wek-ware-ok-box" data-value="${wareOkDefault?'1':'0'}">${wareOkDefault?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Ware in Ordnung</span>
       </div>
-      <div class="item-row" style="border-bottom:none;padding:8px 0 4px;">
-        <div class="item-name">🌡️ Temperatur eintragen (über 65° verpflichtend)</div>
-        <input id="wek-temp" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${tempDefault}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
-      </div>
+      <div style="font-size:12px;font-weight:500;color:var(--sub);margin:10px 0 2px;">🌡️ Temperatur je Gericht (über 65° verpflichtend):</div>
+      ${(()=>{
+        const menuDishes=getTodayDishNames();
+        const chips=menuDishes.length>0?menuDishes:['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'];
+        const existingTemps=wek?.temperaturen||{};
+        return chips.map((w,i)=>{
+          const sel=wek ? (wek.ware||'').includes(w) : true;
+          const tval=existingTemps[w] ?? '';
+          const fallbackVal=(tval!=='')?tval:(wek?.temperatur ?? wekPrev?.temperatur ?? '');
+          return `<div class="item-row" id="wek-temp-row-${i}" style="display:${sel?'flex':'none'};padding:8px 0;">
+            <div class="item-name" data-no-translate>${w}</div>
+            <input id="wek-temp-${i}" data-dish="${w.replace(/"/g,'&quot;')}" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${fallbackVal}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+          </div>`;
+        }).join('');
+      })()}
       <div id="wek-massnahme-wrap" style="display:${(tempDefault!=='' && tempDefault<65)?'block':'none'};margin-top:6px;">
         <input id="wek-massnahme" type="text" placeholder="Maßnahme bei Abweichung (Pflicht)" value="${wek?.massnahme||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
       </div>
@@ -3652,11 +3814,22 @@ async function renderDailyCheck(){
 
 async function saveDailyCheckAll(){
   const today=new Date().toISOString().split('T')[0];
-  const temp=parseFloat(document.getElementById('wek-temp')?.value);
-  if(isNaN(temp)){ showToast('Bitte Temperatur eintragen'); return; }
+  const tempRows=[...document.querySelectorAll('[id^="wek-temp-row-"]')].filter(r=>r.style.display!=='none');
+  if(!tempRows.length){ showToast('Bitte mindestens eine angelieferte Ware auswählen'); return; }
+  const temperaturen={};
+  let anyInvalid=false, minTemp=null;
+  tempRows.forEach(row=>{
+    const input=row.querySelector('input');
+    const dish=input?.dataset.dish;
+    const v=parseFloat(input?.value);
+    if(isNaN(v)){ anyInvalid=true; return; }
+    if(dish) temperaturen[dish]=v;
+    if(minTemp===null||v<minTemp) minTemp=v;
+  });
+  if(anyInvalid || minTemp===null){ showToast('Bitte bei jedem Gericht eine Temperatur eintragen'); return; }
   const massnahmeEl=document.getElementById('wek-massnahme');
   const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
-  if(temp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
+  if(minTemp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
   const klein=parseFloat(document.getElementById('kuehl-klein')?.value);
   const gross=parseFloat(document.getElementById('kuehl-gross')?.value);
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Kühltemperaturen eintragen'); return; }
@@ -3666,7 +3839,7 @@ async function saveDailyCheckAll(){
     await Promise.all([
       (async()=>{
         await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
-        await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:temp,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
+        await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:minTemp,temperaturen,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
       })(),
       (async()=>{
         await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
@@ -3726,11 +3899,16 @@ async function renderWaehrend(){
   translateEl(el);
 }
 
-function toggleWareChip(el, ware){
+function toggleWareChip(el, ware, i){
   const selected=el.style.borderColor==='var(--green)'||el.style.borderColor==='rgb(15, 110, 86)';
   el.style.borderColor=selected?'var(--border)':'var(--green)';
   el.style.background=selected?'var(--card)':'var(--green-light)';
   el.style.color=selected?'var(--sub)':'var(--green)';
+  if(i!=null){
+    const row=document.getElementById('wek-temp-row-'+i);
+    if(row) row.style.display=selected?'none':'flex';
+  }
+  checkWareneingangTemp();
 }
 function getSelectedWaren(){
   const chips=document.querySelectorAll('#wek-ware-chips div');
@@ -3748,26 +3926,15 @@ function toggleWareOkUI(){
 }
 
 function checkWareneingangTemp(){
-  const v=parseFloat(document.getElementById('wek-temp').value);
+  const rows=document.querySelectorAll('[id^="wek-temp-row-"]');
+  let anyLow=false;
+  rows.forEach(row=>{
+    if(row.style.display==='none') return;
+    const v=parseFloat(row.querySelector('input')?.value);
+    if(!isNaN(v) && v<65) anyLow=true;
+  });
   const wrap=document.getElementById('wek-massnahme-wrap');
-  if(wrap) wrap.style.display=(!isNaN(v)&&v<65)?'block':'none';
-}
-
-async function saveWareneingang(){
-  const temp=parseFloat(document.getElementById('wek-temp').value);
-  if(isNaN(temp)){ showToast('Bitte Temperatur eingeben'); return; }
-  const massnahmeEl=document.getElementById('wek-massnahme');
-  const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
-  if(temp<65 && !massnahme){ showToast('Bitte Maßnahme bei Abweichung angeben'); return; }
-  const lieferant=FIXER_LIEFERANT;
-  const ware=getSelectedWaren()||'';
-  const wareOk=document.getElementById('wek-ware-ok-box').dataset.value==='1';
-  const today=new Date().toISOString().split('T')[0];
-  try{
-    await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
-    await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:lieferant||null,ware:ware||null,ware_ok:wareOk,temperatur:temp,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
-    showToast('✔ Gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  if(wrap) wrap.style.display=anyLow?'block':'none';
 }
 
 async function toggleReinigungField(field, itemEl){
@@ -3809,17 +3976,24 @@ async function renderMaengel(){
       api('stores?select=id,name').catch(()=>[])
     ]);
     const storeMap=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
-    el.innerHTML=(rows||[]).map(m=>`
+    const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
+    const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
+    el.innerHTML=(rows||[]).map(m=>{
+      const status=m.status||'offen';
+      return `
       <div class="card" style="padding:12px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;">
           <strong data-no-translate>${storeMap[m.store_id]||m.store_id}</strong>
-          <span class="badge ${m.status==='behoben'?'badge-ok':'badge-warn'}">${m.status==='behoben'?'behoben':'offen'}</span>
+          <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
         </div>
         <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · behoben: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
-        ${m.status!=='behoben'?`<div style="margin-top:8px;"><button onclick="markMangelBehoben(${m.id})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--green);cursor:pointer;">Als behoben markieren</button></div>`:''}
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · abgeschlossen: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
+        ${status!=='behoben'?`<div style="margin-top:8px;display:flex;gap:8px;">
+          ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
+          <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
+        </div>`:''}
       </div>
-    `).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
+    `;}).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
     translateEl(el);
     return;
   }
@@ -3851,16 +4025,22 @@ async function sendMangelMeldung(){
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
 }
 
-async function markMangelBehoben(id){
+async function setMangelStatus(id, newStatus){
   try{
     const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
     const m=(rows||[])[0];
     if(!m) return;
     await api(`maengel?id=eq.${id}`,{method:'DELETE'});
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:m.store_id,beschreibung:m.beschreibung,gemeldet_am:m.gemeldet_am,gemeldet_von:m.gemeldet_von,status:'behoben',behoben_am:new Date().toISOString(),behoben_von:currentStore?.name||'Organisation'}])});
+    await api('maengel',{method:'POST',body:JSON.stringify([{
+      store_id:m.store_id, beschreibung:m.beschreibung, gemeldet_am:m.gemeldet_am, gemeldet_von:m.gemeldet_von,
+      status:newStatus,
+      behoben_am:newStatus==='behoben'?new Date().toISOString():null,
+      behoben_von:newStatus==='behoben'?(currentStore?.name||'Organisation'):null
+    }])});
     renderMaengel();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
+window.setMangelStatus=setMangelStatus;
 
 // ---- SCHICHTENDE ----
 async function renderSchichtende(){
@@ -4381,7 +4561,7 @@ async function renderDisposal(){
     return;
   }
 
-  const disp=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=slot,dish_name,sold_out_time,leftover_qty`).catch(()=>[]);
+  const disp=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=slot,dish_name,sold_out_time,leftover_qty,note`).catch(()=>[]);
   const dispMap={};
   (disp||[]).forEach(d=>dispMap[d.slot]=d);
 
@@ -4419,11 +4599,12 @@ async function renderDisposal(){
       </td>
       <td>
         <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid ${isDone?'var(--green)':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;">
+        <input type="text" value="${rec?.note?escAttr(rec.note):''}" onchange="updateDisposalNote('${s.k}','${dishNameSafe}',this.value)" placeholder="Notiz…" style="display:block;width:80px;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:5px;font-size:10px;color:var(--sub);">
       </td>
     </tr>`;
   });
   html+='</tbody></table></div>';
-  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px;">Uhrzeit antippen, um sie zu setzen oder nachträglich zu korrigieren. Restmenge in Portionen — bei Bedarf Umrechnungstabelle (i) nutzen.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px;">Uhrzeit antippen, um sie zu setzen oder nachträglich zu korrigieren. Restmenge in Portionen — bei Bedarf Umrechnungstabelle (i) nutzen. Notiz für Sonderfälle (z.B. Reste über mehrere Tage verteilt).</div>`;
 
   el.innerHTML=html;
   translateEl(el);
@@ -4462,11 +4643,12 @@ async function updateSoldOutTime(slot, dishName, value){
   const today=new Date().toISOString().split('T')[0];
   const v=value===''?null:value+':00';
   try{
-    const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=leftover_qty`).catch(()=>[]);
+    const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=leftover_qty,note`).catch(()=>[]);
     const leftover=existing?.[0]?.leftover_qty ?? null;
+    const note=existing?.[0]?.note ?? null;
     await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}`,{method:'DELETE'});
-    if(v!==null || leftover!==null){
-      await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:v,leftover_qty:leftover}])});
+    if(v!==null || leftover!==null || note){
+      await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:v,leftover_qty:leftover,note}])});
     }
     showToast('✓ Gespeichert');
     renderDisposal();
@@ -4476,17 +4658,33 @@ async function updateLeftover(slot, dishName, value){
   const today=new Date().toISOString().split('T')[0];
   const v=value===''?null:parseFloat(value);
   try{
-    const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time`).catch(()=>[]);
+    const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time,note`).catch(()=>[]);
     const soldOut=existing?.[0]?.sold_out_time ?? null;
+    const note=existing?.[0]?.note ?? null;
     await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}`,{method:'DELETE'});
-    if(v!==null || soldOut){
-      await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:soldOut,leftover_qty:v}])});
+    if(v!==null || soldOut || note){
+      await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:soldOut,leftover_qty:v,note}])});
     }
     showToast('✓ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
+async function updateDisposalNote(slot, dishName, value){
+  const today=new Date().toISOString().split('T')[0];
+  const note=value.trim()===''?null:value.trim();
+  try{
+    const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time,leftover_qty`).catch(()=>[]);
+    const soldOut=existing?.[0]?.sold_out_time ?? null;
+    const leftover=existing?.[0]?.leftover_qty ?? null;
+    await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}`,{method:'DELETE'});
+    if(soldOut || leftover!==null || note){
+      await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:soldOut,leftover_qty:leftover,note}])});
+    }
+    showToast('✓ Notiz gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
 window.updateSoldOutTime=updateSoldOutTime;
 window.updateLeftover=updateLeftover;
+window.updateDisposalNote=updateDisposalNote;
 
 // ---- KÜCHE (Wochenplan + Entsorgung) ----
 const WEEKDAYS=[{k:'mo',l:'Montag'},{k:'di',l:'Dienstag'},{k:'mi',l:'Mittwoch'},{k:'do',l:'Donnerstag'},{k:'fr',l:'Freitag'}];
@@ -4557,12 +4755,16 @@ async function renderSamosaTableHtml(){
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = angepasst. Leere/graue Felder = aktuell kein Standard-Liefertag, aber jederzeit eintragbar.</div>`;
 
-  // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp
+  // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp — der braucht nur die
+  // Gesamtmenge pro Tag (und die Wochensumme), keine Aufschlüsselung nach Filiale.
+  let weekTotal=0;
   let summary=`🥟 Samosas Woche (Mo–Do):\n`;
   [1,2,3,4].forEach(wd=>{
     if(!dayValues[wd].length) return;
-    summary+=`${WD_LABEL[wd]}: `+dayValues[wd].map(v=>`${v.name} ${v.val}`).join(', ')+`\n`;
+    weekTotal+=dayTotals[wd];
+    summary+=`${WD_LABEL[wd]}: ${dayTotals[wd]}\n`;
   });
+  summary+=`Gesamt Woche: ${weekTotal}`;
   const summaryEsc=summary.replace(/`/g,'\\`').replace(/</g,'&lt;');
   html+=`<div style="margin-top:14px;">
     <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">📋 Für den Produzenten</div>
@@ -4695,7 +4897,8 @@ async function renderBeilagenTableHtml(){
 
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
-  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam: Nooru / Dinesh</div>`;
+  html+=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -4870,7 +5073,7 @@ async function renderKitchen(){
     const toDate=isoDate(weekDates[4]);
     const kw=weekDates[0].toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+' – '+weekDates[4].toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
-    const disp=await api(`disposal?disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=store_id,disposal_date,slot,dish_name,sold_out_time,leftover_qty`).catch(()=>[]);
+    const disp=await api(`disposal?disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=store_id,disposal_date,slot,dish_name,sold_out_time,leftover_qty,note`).catch(()=>[]);
     const dispMap={}; // dispMap[date][slot][store_id] = rec
     (disp||[]).forEach(d=>{
       if(!dispMap[d.disposal_date])dispMap[d.disposal_date]={};
@@ -4906,7 +5109,7 @@ async function renderKitchen(){
             if(!rec){html+='<td style="color:var(--border);">·</td>';return;}
             const time=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
             const qty=rec.leftover_qty??'';
-            html+=`<td style="font-size:11px;line-height:1.5;">${qty!==''?`<div style="font-weight:600;">${qty}</div>`:''}${time?`<div style="color:var(--muted);">${time}</div>`:''}${qty===''&&!time?'·':''}</td>`;
+            html+=`<td style="font-size:11px;line-height:1.5;">${qty!==''?`<div style="font-weight:600;">${qty}</div>`:''}${time?`<div style="color:var(--muted);">${time}</div>`:''}${rec.note?`<div style="color:#9333EA;font-size:9.5px;">📝 ${rec.note}</div>`:''}${qty===''&&!time&&!rec.note?'·':''}</td>`;
           });
           html+='</tr>';
         });
