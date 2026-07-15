@@ -307,12 +307,30 @@ const CONTACT_PERSONS=[
   {name:'Simone', responsible:'Krankmeldung am Wochenende, Fragen zu Arbeitsvertrag/Stunden · ab 17:00 Uhr für den Dienstplan gemeinsam mit Tini kontaktieren', phone:''},
   {name:'Adi', responsible:'Wenn etwas kaputt ist oder technisch nicht funktioniert (Geräte, Reparaturen) — Support-Gruppe', phone:''},
 ];
-// Aktuell gültige Rabattcodes — Liste hier pflegen, sobald die echten aktuellen Codes feststehen
+// Aktuell gültige Rabattcodes — Liste hier pflegen, sobald sich was ändert
 // (werden ja ohnehin ausgedruckt/aufgeklebt in den Stores, hier nur als digitales Backup/Nachschlagen).
-// store: leer = gilt für alle Filialen; sonst Store-ID (z.B. 'lb','boerse','1020','3400') = nur dort gültig.
+// stores: leeres Array = gilt für alle Filialen; sonst Store-IDs (z.B. ['lb'], ['boerse','1020']) = nur dort gültig.
 const RABATT_CODES=[
-  // {code:'ST', wert:'10%', bedingung:'Studierende', store:''},
-  // {code:'MESSE', wert:'€10', bedingung:'Messe/WU', store:'lb'},
+  {code:'K', wert:'gratis', bedingung:'Stempelkarte voll', stores:[]},
+  {code:'A', wert:'', bedingung:'Alumni (ehemalige Mitarbeiter:innen)', stores:[]},
+  {code:'BB', wert:'', bedingung:'Bogensberger', stores:['boerse']},
+  {code:'B', wert:'', bedingung:'Forum Alpbach', stores:['lb']},
+  {code:'EB', wert:'gratis', bedingung:'1000Things Erlebnisbuch — 2. Lunch Combo gratis', stores:['1070']},
+  {code:'FF', wert:'-0,50€', bedingung:'Freshfields', stores:['boerse']},
+  {code:'I', wert:'-0,50€', bedingung:'Imaging Radiologie', stores:['lb','1070','1020']},
+  {code:'ML', wert:'-0,50€', bedingung:'MSG Life', stores:['1020']},
+  {code:'S', wert:'-0,50€', bedingung:'Schönherr', stores:['boerse']},
+  {code:'ST', wert:'', bedingung:'StudentInnen Rabatt', stores:[]},
+  {code:'D', wert:'-0,50€', bedingung:'Donauversicherung', stores:['boerse']},
+  {code:'W', wert:'', bedingung:'Wien Mobil', stores:[]},
+  {code:'WA', wert:'-0,50€', bedingung:'Wirtschaftsagentur', stores:[]},
+  {code:'X', wert:'-0,50€', bedingung:'Messe Wien & WU Wien', stores:['1020']},
+  {code:'G', wert:'-1€', bedingung:'Global2000', stores:['1070']},
+  {code:'U', wert:'', bedingung:'Uni Vorteilsheft', stores:[]},
+  {code:'TG', wert:'-20%', bedingung:'TooGoodToGo', stores:[]},
+  {code:'TEAM25', wert:'25%', bedingung:'Karma Products (Gewürze, Pasten, Saucen — außer Kaffeebohnen)', stores:[]},
+  {code:'TEAM10', wert:'10%', bedingung:'Merch (Weducer Cup, Dabba, T-Shirts, Kochbücher — außer Kerzen)', stores:[]},
+  {code:'TEAM30', wert:'30%', bedingung:'Eigenkonsumation über das täglich inkludierte Gericht/Getränk/Kaffee hinaus (Sweets, Mango Lassi etc.)', stores:[]},
 ];
 
 async function renderHilfe(){
@@ -334,19 +352,20 @@ async function renderHilfe(){
 
   html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card">`;
   const isOrgHilfe=currentStore?.id==='zentrale';
-  const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz'};
-  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.store||r.store===currentStore?.id);
+  const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz', '1070':'Neustiftgasse (geschlossen)'};
+  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
   if(visibleCodes.length){
     visibleCodes.forEach(r=>{
-      const storeCol=r.store?(STORE_COLORS[r.store]||'#888'):null;
+      const storeBadges=(r.stores||[]).map(sid=>{
+        const col=STORE_COLORS[sid]||'#888';
+        return `<span data-no-translate style="font-size:10px;font-weight:600;color:${col};background:${col}20;border-radius:20px;padding:2px 7px;margin-left:4px;">${storeLabelMap[sid]||sid}</span>`;
+      }).join('');
       html+=`<div class="item-row">
         <div>
-          <div data-no-translate style="font-size:13px;font-weight:600;">${r.code}
-            ${storeCol?`<span data-no-translate style="font-size:10px;font-weight:600;color:${storeCol};background:${storeCol}20;border-radius:20px;padding:2px 7px;margin-left:6px;">${storeLabelMap[r.store]||r.store}</span>`:''}
-          </div>
+          <div data-no-translate style="font-size:13px;font-weight:600;">${r.code}${storeBadges}</div>
           <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${r.bedingung}</div>
         </div>
-        <span style="font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert}</span>
+        <span style="font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert||'–'}</span>
       </div>`;
     });
   } else {
