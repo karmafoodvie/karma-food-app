@@ -157,7 +157,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="tb-sub" id="tb-sub"></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;position:relative;">
-      <button class="size-btn" onclick="toggleSizeMenu()" title="Textgröße">🔍</button>
+      <button class="size-btn" onclick="toggleSizeMenu()" title="Textgröße" style="font-weight:700;">Aa</button>
       <div id="size-menu">
         <button onclick="setUiSize('klein')" id="size-btn-klein">Klein</button>
         <button onclick="setUiSize('mittel')" id="size-btn-mittel">Mittel</button>
@@ -171,7 +171,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <button onclick="setLang('hi')">🇮🇳 हिन्दी</button>
       </div>
       <button onclick="goTo('hilfe')" title="Hilfe & Ansprechpartner" style="width:28px;height:28px;border-radius:50%;border:none;background:#FBBF24;color:#78350F;font-size:14px;font-weight:800;cursor:pointer;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.35);">?</button>
-      <div class="tb-avatar" id="tb-avatar"></div>
+      <div class="tb-avatar" id="tb-avatar" style="display:none;"></div>
       <button onclick="doLogout()" title="Filiale wechseln / Abmelden" style="width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.18);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
         <svg width="17" height="17" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
@@ -288,6 +288,9 @@ const KITCHEN_SUPPLY_IMAGES = {
 const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D','Wochensalat Dressing':'#9333EA'};
 
 // FAQ & Ansprechpartner — beides einfach hier erweiterbar, sobald mehr Inhalte/Kontaktdaten da sind.
+// SHOW_FAQ: FAQ-Bereich ist vorerst ausgeblendet (Inhalt bleibt erhalten) — auf true setzen, um ihn
+// wieder einzublenden, sobald klar ist, dass er gebraucht wird.
+const SHOW_FAQ=false;
 const FAQ_ITEMS=[
   {q:'Ich habe zu viel oder zu wenig Essen bekommen — was tun?', a:'Bitte bis 12:45 Uhr melden (Chat oder direkt bei Tini anrufen) — danach wird bei Bedarf ein Uber für die Umverteilung organisiert.'},
   {q:'Ein Gutschein funktioniert nicht oder ich brauche schnell eine Antwort — was tun?', a:'Immer anrufen — Ines oder Tini. Im Chat sind die beiden vor allem zwischen 11:00–12:30 Uhr aktiv, außerhalb dieser Zeit lieber gleich anrufen.'},
@@ -297,26 +300,19 @@ const FAQ_ITEMS=[
   {q:'Beim Wareneingang liegt die Temperatur unter 65° — was jetzt?', a:'Sobald ein Wert unter 65° eingetragen wird, erscheint automatisch ein Pflichtfeld für die Maßnahme (z.B. nacherhitzt, Lieferant informiert) — bitte kurz ausfüllen.'},
 ];
 const CONTACT_PERSONS=[
-  {name:'Tini', role:'Geschäftsführung', responsible:'Dienstplan, Ad-hoc-Support, Notfälle, App-Fragen · zu viel/zu wenig Essen bis 12:45 Uhr', phone:''},
+  {name:'Tini', role:'Geschäftsführung', responsible:'Dienstplan, Ad-hoc-Support, Notfälle, App-Fragen · zu viel/zu wenig Essen bis 12:45 Uhr · erreichbar innerhalb der Arbeitszeit', phone:''},
   {name:'Ines', role:'KC / Ad-hoc-Support', responsible:'Kitchen-Collective-Produkte, Webshop-Nachschub · dringende Hilfe (z.B. Gutschein-Probleme), Support-Fragen', phone:''},
   {name:'Michi', role:'Transporter', responsible:'Bestellwesen & Transport, Lieferungen, Samosa-Bestellung/-Logistik, Verpackungsnachschub', phone:''},
   {name:'Nooru', role:'Küche / Chef', responsible:'Rezepte, Produktionsmengen, Zutaten', phone:''},
-  {name:'Simone', role:'Verwaltung (nicht im Tages-Chat)', responsible:'Krankenstand am Wochenende, Vertragsänderungen (z.B. Stundenausmaß)', phone:''},
+  {name:'Simone', role:'Verwaltung (nicht im Tages-Chat)', responsible:'Krankenstand am Wochenende, Vertragsänderungen (z.B. Stundenausmaß) · Dienstplan ab 17:00 Uhr — dann Tini & Simone gemeinsam kontaktieren', phone:''},
+  {name:'Adi', role:'Technik / Handwerk', responsible:'Wenn etwas handwerklich/technisch nicht funktioniert (Geräte, Reparaturen) — über die Support-Gruppe erreichbar', phone:''},
 ];
 
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
   let html=backToHomeHtml();
-  html+=`<div class="section-lbl">❓ Häufige Fragen</div><div class="card">`;
-  FAQ_ITEMS.forEach((item,i)=>{
-    html+=`<details style="border-bottom:${i<FAQ_ITEMS.length-1?'1px solid var(--border)':'none'};padding:10px 12px;">
-      <summary style="font-size:13px;font-weight:500;cursor:pointer;">${item.q}</summary>
-      <div style="font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.4;">${item.a}</div>
-    </details>`;
-  });
-  html+='</div>';
 
-  html+=`<div class="section-lbl" style="margin-top:14px;">👥 Ansprechpartner</div><div class="card">`;
+  html+=`<div class="section-lbl">👥 Ansprechpartner</div><div class="card">`;
   CONTACT_PERSONS.forEach(p=>{
     html+=`<div class="item-row">
       <div>
@@ -328,6 +324,17 @@ async function renderHilfe(){
   });
   html+='</div>';
   html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Fehlt etwas oder eine Telefonnummer? Einfach Tini Bescheid geben.</div>`;
+
+  if(SHOW_FAQ){
+    html+=`<div class="section-lbl" style="margin-top:14px;">❓ Häufige Fragen</div><div class="card">`;
+    FAQ_ITEMS.forEach((item,i)=>{
+      html+=`<details style="border-bottom:${i<FAQ_ITEMS.length-1?'1px solid var(--border)':'none'};padding:10px 12px;">
+        <summary style="font-size:13px;font-weight:500;cursor:pointer;">${item.q}</summary>
+        <div style="font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.4;">${item.a}</div>
+      </details>`;
+    });
+    html+='</div>';
+  }
 
   el.innerHTML=html;
   translateEl(el);
@@ -1180,7 +1187,7 @@ async function renderHome(){
     <span style="font-size:18px;">❓</span>
     <div style="flex:1;">
       <div style="font-size:12.5px;font-weight:600;color:#78350F;">Hilfe & Ansprechpartner</div>
-      <div style="font-size:10.5px;color:#92660A;">Häufige Fragen + wer für was zuständig ist</div>
+      <div style="font-size:10.5px;color:#92660A;">Wer für was zuständig ist</div>
     </div>
     <span style="color:#B45309;">→</span>
   </div>`;
