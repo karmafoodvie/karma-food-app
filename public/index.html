@@ -116,6 +116,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .badge{font-size:10px;padding:3px 8px;border-radius:20px;font-weight:500;}
 .badge-ok{background:#EAF3DE;color:#3B6D11;}
 .badge-warn{background:#FCEBEB;color:#A32D2D;}
+.badge-info{background:#E0F2FE;color:#0369A1;}
 .badge-pend{background:#FAEEDA;color:#854F0B;}
 .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#1a1a18;color:#fff;padding:10px 20px;border-radius:30px;font-size:14px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;}
 .toast.show{opacity:1;}
@@ -288,17 +289,19 @@ const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B
 
 // FAQ & Ansprechpartner — beides einfach hier erweiterbar, sobald mehr Inhalte/Kontaktdaten da sind.
 const FAQ_ITEMS=[
+  {q:'Ich habe zu viel oder zu wenig Essen bekommen — was tun?', a:'Bitte bis 12:45 Uhr melden (Chat oder direkt bei Tini anrufen) — danach wird bei Bedarf ein Uber für die Umverteilung organisiert.'},
+  {q:'Ein Gutschein funktioniert nicht oder ich brauche schnell eine Antwort — was tun?', a:'Immer anrufen — Ines oder Tini. Im Chat sind die beiden vor allem zwischen 11:00–12:30 Uhr aktiv, außerhalb dieser Zeit lieber gleich anrufen.'},
   {q:'Ich habe noch Samosas von gestern und heute neue dazubekommen — welche zuerst verkaufen?', a:'Immer die älteren zuerst verkaufen (FIFO) — am besten sichtbar vorne hinstellen, damit sie zuerst weggehen.'},
   {q:'Ein Artikel ist gerade nicht lieferbar — wie melde ich das?', a:'Das trägt aktuell die Organisation ein (Tini/Michi) — meldet euch kurz, wenn euch etwas auffällt, dann wird es in der App für alle Filialen sichtbar gemacht.'},
   {q:'Ich möchte die vorgeschlagene Forecast-Menge ändern — wie geht das?', a:'Zahl im Feld einfach überschreiben (wird orange markiert) und danach unten auf "Änderungen speichern" tippen — erst dann wird’s an die Küche übermittelt.'},
   {q:'Beim Wareneingang liegt die Temperatur unter 65° — was jetzt?', a:'Sobald ein Wert unter 65° eingetragen wird, erscheint automatisch ein Pflichtfeld für die Maßnahme (z.B. nacherhitzt, Lieferant informiert) — bitte kurz ausfüllen.'},
 ];
 const CONTACT_PERSONS=[
-  {name:'Tini', role:'Geschäftsführung', responsible:'Alles Grundsätzliche, Notfälle, App-Fragen', phone:''},
-  {name:'Michi', role:'Transporter', responsible:'Lieferungen, Samosa-Bestellung/-Logistik, Verpackungsnachschub', phone:''},
+  {name:'Tini', role:'Geschäftsführung', responsible:'Dienstplan, Ad-hoc-Support, Notfälle, App-Fragen · zu viel/zu wenig Essen bis 12:45 Uhr', phone:''},
+  {name:'Ines', role:'KC / Ad-hoc-Support', responsible:'Kitchen-Collective-Produkte, Webshop-Nachschub · dringende Hilfe (z.B. Gutschein-Probleme), Support-Fragen', phone:''},
+  {name:'Michi', role:'Transporter', responsible:'Bestellwesen & Transport, Lieferungen, Samosa-Bestellung/-Logistik, Verpackungsnachschub', phone:''},
   {name:'Nooru', role:'Küche / Chef', responsible:'Rezepte, Produktionsmengen, Zutaten', phone:''},
-  {name:'Ines', role:'KC', responsible:'Kitchen-Collective-Produkte, Webshop-Nachschub', phone:''},
-  {name:'Najeeb', role:'Bestell-Koordination', responsible:'Zentrale Bestellabwicklung', phone:''},
+  {name:'Simone', role:'Verwaltung (nicht im Tages-Chat)', responsible:'Krankenstand am Wochenende, Vertragsänderungen (z.B. Stundenausmaß)', phone:''},
 ];
 
 async function renderHilfe(){
@@ -3929,17 +3932,24 @@ async function renderMaengel(){
       api('stores?select=id,name').catch(()=>[])
     ]);
     const storeMap=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
-    el.innerHTML=(rows||[]).map(m=>`
+    const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
+    const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
+    el.innerHTML=(rows||[]).map(m=>{
+      const status=m.status||'offen';
+      return `
       <div class="card" style="padding:12px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;">
           <strong data-no-translate>${storeMap[m.store_id]||m.store_id}</strong>
-          <span class="badge ${m.status==='behoben'?'badge-ok':'badge-warn'}">${m.status==='behoben'?'behoben':'offen'}</span>
+          <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
         </div>
         <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · behoben: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
-        ${m.status!=='behoben'?`<div style="margin-top:8px;"><button onclick="markMangelBehoben(${m.id})" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--green);cursor:pointer;">Als behoben markieren</button></div>`:''}
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · abgeschlossen: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
+        ${status!=='behoben'?`<div style="margin-top:8px;display:flex;gap:8px;">
+          ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
+          <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
+        </div>`:''}
       </div>
-    `).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
+    `;}).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
     translateEl(el);
     return;
   }
@@ -3971,16 +3981,22 @@ async function sendMangelMeldung(){
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
 }
 
-async function markMangelBehoben(id){
+async function setMangelStatus(id, newStatus){
   try{
     const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
     const m=(rows||[])[0];
     if(!m) return;
     await api(`maengel?id=eq.${id}`,{method:'DELETE'});
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:m.store_id,beschreibung:m.beschreibung,gemeldet_am:m.gemeldet_am,gemeldet_von:m.gemeldet_von,status:'behoben',behoben_am:new Date().toISOString(),behoben_von:currentStore?.name||'Organisation'}])});
+    await api('maengel',{method:'POST',body:JSON.stringify([{
+      store_id:m.store_id, beschreibung:m.beschreibung, gemeldet_am:m.gemeldet_am, gemeldet_von:m.gemeldet_von,
+      status:newStatus,
+      behoben_am:newStatus==='behoben'?new Date().toISOString():null,
+      behoben_von:newStatus==='behoben'?(currentStore?.name||'Organisation'):null
+    }])});
     renderMaengel();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
+window.setMangelStatus=setMangelStatus;
 
 // ---- SCHICHTENDE ----
 async function renderSchichtende(){
@@ -4837,7 +4853,8 @@ async function renderBeilagenTableHtml(){
 
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
-  let html=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam: Nooru / Dinesh</div>`;
+  html+=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
