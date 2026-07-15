@@ -307,6 +307,13 @@ const CONTACT_PERSONS=[
   {name:'Simone', role:'Verwaltung (nicht im Tages-Chat)', responsible:'Krankenstand am Wochenende, Vertragsänderungen (z.B. Stundenausmaß) · Dienstplan ab 17:00 Uhr — dann Tini & Simone gemeinsam kontaktieren', phone:''},
   {name:'Adi', role:'Technik / Handwerk', responsible:'Wenn etwas handwerklich/technisch nicht funktioniert (Geräte, Reparaturen) — über die Support-Gruppe erreichbar', phone:''},
 ];
+// Aktuell gültige Rabattcodes — Liste hier pflegen, sobald die echten aktuellen Codes feststehen
+// (werden ja ohnehin ausgedruckt/aufgeklebt in den Stores, hier nur als digitales Backup/Nachschlagen).
+// store: leer = gilt für alle Filialen; sonst Store-ID (z.B. 'lb','boerse','1020','3400') = nur dort gültig.
+const RABATT_CODES=[
+  // {code:'ST', wert:'10%', bedingung:'Studierende', store:''},
+  // {code:'MESSE', wert:'€10', bedingung:'Messe/WU', store:'lb'},
+];
 
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
@@ -324,6 +331,29 @@ async function renderHilfe(){
   });
   html+='</div>';
   html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Fehlt etwas oder eine Telefonnummer? Einfach Tini Bescheid geben.</div>`;
+
+  html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card">`;
+  const isOrgHilfe=currentStore?.id==='zentrale';
+  const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz'};
+  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.store||r.store===currentStore?.id);
+  if(visibleCodes.length){
+    visibleCodes.forEach(r=>{
+      const storeCol=r.store?(STORE_COLORS[r.store]||'#888'):null;
+      html+=`<div class="item-row">
+        <div>
+          <div data-no-translate style="font-size:13px;font-weight:600;">${r.code}
+            ${storeCol?`<span data-no-translate style="font-size:10px;font-weight:600;color:${storeCol};background:${storeCol}20;border-radius:20px;padding:2px 7px;margin-left:6px;">${storeLabelMap[r.store]||r.store}</span>`:''}
+          </div>
+          <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${r.bedingung}</div>
+        </div>
+        <span style="font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert}</span>
+      </div>`;
+    });
+  } else {
+    html+=`<div style="padding:12px;font-size:12.5px;color:var(--muted);">Noch keine Codes hinterlegt.</div>`;
+  }
+  html+='</div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Aktuelle Codes fehlen? Einfach Tini Bescheid geben.</div>`;
 
   if(SHOW_FAQ){
     html+=`<div class="section-lbl" style="margin-top:14px;">❓ Häufige Fragen</div><div class="card">`;
