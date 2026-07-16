@@ -2776,9 +2776,32 @@ async function loadOrgDashboard(){
     const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
     const kcSet=new Set((kcToday||[]).map(k=>k.store_id));
     const forecastSet=new Set((forecastTomorrow||[]).map(f=>f.store_id));
+
+    // Reminder: Wochen-Forecast für die KOMMENDE Woche muss spätestens Freitag stehen — Dringlichkeit
+    // steigt Richtung Freitag. Erkennung: gibt's überhaupt schon Einträge für nächste Woche (Mo–Fr)?
+    let reminderHtml='';
+    const nextWeek=getWeekdayDates(1);
+    const nwFrom=nextWeek[1], nwTo=nextWeek[5];
+    const nextWeekForecast=await api(`forecast_qty?forecast_date=gte.${nwFrom}&forecast_date=lte.${nwTo}&select=store_id&limit=1`).catch(()=>[]);
+    if(!(nextWeekForecast||[]).length){
+      const todayWd=(new Date().getDay()+6)%7; // Mo=0 ... So=6
+      const isFriday=todayWd===4;
+      const isThuOrLater=todayWd>=3;
+      const urgent=isFriday;
+      reminderHtml=`<div onclick="goTo('orgForecast')" style="display:flex;align-items:center;gap:10px;background:${urgent?'#FEF2F2':'#FFFBEB'};border:1px solid ${urgent?'#FECACA':'#FDE68A'};border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
+        <span style="font-size:18px;">📅</span>
+        <div style="flex:1;">
+          <div style="font-size:12.5px;font-weight:600;color:${urgent?'#991B1B':'#78350F'};">${urgent?'Heute fällig: ':''}Wochen-Forecast für nächste Woche noch nicht angelegt</div>
+          <div style="font-size:10.5px;color:${urgent?'#B45309':'#92660A'};">${isThuOrLater?'Spätestens heute erledigen':'Bis spätestens Freitag einplanen'}</div>
+        </div>
+        <span style="color:${urgent?'#991B1B':'#B45309'};">→</span>
+      </div>`;
+    }
+
     // Transporter/Sweets: mind. 1 bestellter Artikel der jeweiligen Kategorie heute
     const dot=ok=>`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${ok?'#22C55E':'#EF4444'};"></span>`;
-    let html=`<div class="section-lbl">📦 Bestellstatus heute</div><div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    let html=reminderHtml;
+    html+=`<div class="section-lbl">📦 Bestellstatus heute</div><div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Filiale</th><th>KC</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th>
     </tr></thead><tbody>`;
     storeList.forEach(s=>{
@@ -5210,7 +5233,12 @@ async function renderBeilagenTableHtml(){
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam: Nooru / Dinesh</div>`;
-  html+=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
+  // Für das Tab-Label: nächster Kochtermin = morgen, Sa/So übersprungen (an denen wird nicht gekocht)
+  const nextCookDay=new Date();
+  nextCookDay.setDate(nextCookDay.getDate()+1);
+  while([0,6].includes(nextCookDay.getDay())){ nextCookDay.setDate(nextCookDay.getDate()+1); }
+  const nextCookDayLabel=nextCookDay.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+  html+=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 ${nextCookDayLabel}</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -5233,11 +5261,13 @@ async function renderKitchen(){
     const overrideMap = {};
     (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
-    // Week selector
+    // Week selector — jede Woche in eigener Farbe, damit man sie auf einen Blick unterscheidet
+    const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
     html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">`;
     for(let w=1;w<=4;w++){
       const active=selectedWoche===w;
-      html+=`<button onclick="window.kochplanWoche=${w};renderKitchen()" style="flex:1;padding:8px 4px;border-radius:10px;border:${active?'2px solid var(--green)':'1.5px solid var(--border)'};background:${active?'var(--green-light)':'var(--card)'};color:${active?'var(--green)':'var(--sub)'};font-weight:${active?'700':'400'};font-size:13px;cursor:pointer;">Woche ${w}</button>`;
+      const col=WOCHE_COLORS[w];
+      html+=`<button onclick="window.kochplanWoche=${w};renderKitchen()" style="flex:1;padding:8px 4px;border-radius:10px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-weight:${active?'700':'400'};font-size:13px;cursor:pointer;">Woche ${w}</button>`;
     }
     html+=`</div>`;
     html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
@@ -5324,6 +5354,9 @@ async function renderKitchen(){
       fMap[f.forecast_date][f.store_id][f.dish_name].push(f);
     });
     const anyAdjusted=(weekForecasts||[]).some(f=>f.source==='manual');
+    const nwOverrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
+    const nwOverrideMap = {};
+    (nwOverrides||[]).forEach(e=>{ nwOverrideMap[e.gericht]=e; });
 
     // Wetter (Referenz Wien-Innenstadt, gilt näherungsweise für alle Filialen) + Feiertage/Ferien — auch die Küche soll das auf einen Blick sehen
     const kitchenCalendarEvents = await getCalendarEvents();
@@ -5375,6 +5408,28 @@ async function renderKitchen(){
       if(hasAnyAdjusted){
         html+=`<div style="font-size:10px;color:#0369A1;padding:2px 4px 8px;">* von Filiale angepasst</div>`;
       }
+      // Zutaten optional aufklappbar — ohne die Seite zu verlassen (kein Zurück-Klick nötig)
+      const dayDishObjs=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${wdStr}`])||[];
+      const dayDetailId=`nw_zut_${wd}`;
+      html+=`<div style="margin:-4px 0 12px;">
+        <div onclick="document.getElementById('${dayDetailId}').style.display=document.getElementById('${dayDetailId}').style.display==='none'?'block':'none'" style="font-size:11.5px;color:var(--muted);cursor:pointer;padding:4px 2px;">📖 Zutaten & Allergene anzeigen</div>
+        <div id="${dayDetailId}" style="display:none;">
+          ${dishNames.map(name=>{
+            const dObj=dayDishObjs.find(d=>d.name===name);
+            if(!dObj) return '';
+            const override=nwOverrideMap[name];
+            const zutaten=(override?.zutaten||dObj.zutaten||'').replace(/\n/g,' ').trim();
+            const {gemuese, rest}=splitZutaten(zutaten);
+            const allergenMain=dObj.allergene?.main||[];
+            return `<div class="card" style="margin-bottom:6px;padding:10px 14px;">
+              <div style="font-size:13px;font-weight:600;">${name}${allergenMain.length?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}</span>`:''}</div>
+              ${gemuese.length?`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">🥕 ${gemuese.join(', ')}</div>`:''}
+              ${rest.length?`<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">🧂 ${rest.join(' · ')}</div>`:''}
+              ${!gemuese.length&&!rest.length?'<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Keine Zutaten hinterlegt</div>':''}
+            </div>`;
+          }).join('') || '<div style="font-size:11.5px;color:var(--muted);padding:4px 2px;">Keine Zutaten hinterlegt</div>'}
+        </div>
+      </div>`;
     }
   }else{
     // WOCHENÜBERSICHT — historischer Verlauf wie im Excel, eine Woche pro Bildschirm
@@ -5461,8 +5516,11 @@ function formatZutatenFuerKoch(zutaten, allergene){
 let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 
 async function renderMorgenKoch(el, tabHtml){
+  // Nächster Kochtermin = morgen — außer morgen ist Samstag/Sonntag (nicht gekocht),
+  // dann automatisch weiter auf den nächsten Montag springen.
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate()+1);
+  while([0,6].includes(tomorrow.getDay())){ tomorrow.setDate(tomorrow.getDate()+1); } // 0=So, 6=Sa überspringen
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
   const tomorrowWd = (['so','mo','di','mi','do','fr','sa'])[tomorrow.getDay()];
   const DAY_NAME = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag',sa:'Samstag',so:'Sonntag'};
@@ -5481,6 +5539,9 @@ async function renderMorgenKoch(el, tabHtml){
   // Get tomorrow's menu dishes from MENU_DATA
   const menuDishes = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${tomorrowWd}`])||[];
   const dishNames = menuDishes.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
+  const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
+  const overrideMap = {};
+  (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
   // Last update time
   const lastUpdate = forecasts.length ? forecasts.reduce((a,b)=>(!a||b.changed_at>a)?b.changed_at:a, null) : null;
@@ -5496,7 +5557,7 @@ async function renderMorgenKoch(el, tabHtml){
 
   let html = tabHtml;
   html += `<div style="background:var(--green);border-radius:14px;padding:14px 16px;margin-bottom:12px;">
-    <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:2px;">Was muss ich morgen kochen?</div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-bottom:2px;">🍽️ Nächster Kochtermin</div>
     <div style="font-size:22px;font-weight:700;color:#fff;">${DAY_NAME[tomorrowWd]}</div>
     <div style="font-size:14px;color:rgba(255,255,255,0.85);margin-top:2px;">${tomorrow.toLocaleDateString('de-AT',{day:'2-digit',month:'long',year:'numeric'})}</div>
     ${morgenReason?`<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:6px;">${morgenReason}</div>`:''}
@@ -5509,13 +5570,19 @@ async function renderMorgenKoch(el, tabHtml){
   }
 
   const GROESSE_LABEL={gross:'Groß·18 Stk',mittel:'Mittel·12 Stk',klein:'Klein·8 Stk'};
-  dishNames.forEach(dish=>{
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
+  menuDishes.filter(d=>d.name&&!d.name.startsWith('ÖL')).forEach((dishObj,dIdx)=>{
+    const dish=dishObj.name;
     const storeData = fMap[dish]||{};
     const isLasagne=dish.includes('Lasagne');
     const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
     const hasData = total>0;
+    const override = overrideMap[dish];
+    const zutaten = (override?.zutaten||dishObj.zutaten||'').replace(/\n/g,' ').trim();
+    const {gemuese, rest} = splitZutaten(zutaten);
+    const detailId = `morgen_zut_${dIdx}`;
     html+=`<div class="card" style="padding:0;margin-bottom:10px;overflow:hidden;">
-        <div style="background:${hasData?'var(--green-light)':'#F5F5F3'};border-bottom:2px solid ${hasData?'var(--green)':'var(--border)'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="background:${hasData?'var(--green-light)':'#F5F5F3'};border-bottom:2px solid ${hasData?'var(--green)':'var(--border)'};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:28px;">${getDishEmoji(dish)}</span>
           <div style="font-size:16px;font-weight:700;color:#1a1a18;">${dish}</div>
@@ -5544,6 +5611,23 @@ async function renderMorgenKoch(el, tabHtml){
             </div>
           </div>`;
         }).join('')}
+      </div>
+      <div id="${detailId}" style="display:none;background:#FAFAFA;border-top:0.5px solid var(--border);">
+        ${gemuese.length?`
+        <div style="padding:10px 14px 6px;">
+          <div style="font-size:10px;font-weight:700;color:#166534;letter-spacing:.04em;margin-bottom:6px;">🥕 GEMÜSE — anpassbar je nach Verfügbarkeit</div>
+          <div style="font-size:12px;color:var(--sub);">${gemuese.join(', ')}</div>
+        </div>`:''}
+        ${rest.length?`
+        <div style="padding:${gemuese.length?'0':'10px'} 14px 10px;">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:5px;">🧂 GEWÜRZE & GRUNDZUTATEN</div>
+          <div style="font-size:12px;color:var(--sub);line-height:1.8;">${rest.map(z=>{
+            const up=z.toUpperCase();
+            const isA=/(SESAM|KÄSE|JOGHURT|BUTTER|TEIGBLÄTTER|SOJA|TOFU|SELLERIE|SELLIERE|SENF|WEIZEN|MEHL)/.test(up);
+            return isA?`<strong style="color:#92400E;">${z}</strong>`:z;
+          }).join(' · ')}</div>
+        </div>`:''}
+        ${!gemuese.length&&!rest.length?'<div style="padding:10px 14px;font-size:12px;color:var(--muted);">Keine Zutaten hinterlegt</div>':''}
       </div>
     </div>`;
   });
