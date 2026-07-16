@@ -3994,6 +3994,21 @@ async function renderMaengel(){
   const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
   const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
 
+  const mangelCardHtml=(m, storeMap)=>{
+    const status=m.status||'offen';
+    return `
+    <div class="card" style="padding:12px;cursor:pointer;" onclick="openMangelDetail(${m.id})">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;">${m.betreff||m.beschreibung.slice(0,40)}</div>
+          ${storeMap?`<div data-no-translate style="font-size:11.5px;color:var(--muted);margin-top:2px;">📍 ${storeMap[m.store_id]||m.store_id}</div>`:''}
+        </div>
+        <span class="badge ${statusClass[status]||'badge-warn'}" style="flex-shrink:0;">${statusLabel[status]||status}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;">${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.foto_url?' · 📷':''}</div>
+    </div>`;
+  };
+
   if(isOrg){
     const [rows, stores] = await Promise.all([
       api('maengel?select=*&order=gemeldet_am.desc').catch(()=>[]),
@@ -4001,24 +4016,15 @@ async function renderMaengel(){
     ]);
     const storeOptions=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070');
     const storeMap=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
+    const active=(rows||[]).filter(m=>(m.status||'offen')!=='behoben');
+    const archived=(rows||[]).filter(m=>m.status==='behoben');
     let html=mangelFormHtml(storeOptions);
-    html+=(rows||[]).map(m=>{
-      const status=m.status||'offen';
-      return `
-      <div class="card" style="padding:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;">
-          <strong data-no-translate>${storeMap[m.store_id]||m.store_id}</strong>
-          <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
-        </div>
-        <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
-        ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:120px;max-height:120px;border-radius:8px;margin-top:8px;display:block;object-fit:cover;"></a>`:''}
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · abgeschlossen: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
-        ${status!=='behoben'?`<div style="margin-top:8px;display:flex;gap:8px;">
-          ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
-          <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
-        </div>`:''}
-      </div>
-    `;}).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
+    html+=active.map(m=>mangelCardHtml(m,storeMap)).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine offenen Meldungen.</div>';
+    if(archived.length){
+      html+=`<details style="margin-top:10px;"><summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">✓ Erledigte anzeigen (${archived.length})</summary>
+        <div style="margin-top:6px;">${archived.map(m=>mangelCardHtml(m,storeMap)).join('')}</div>
+      </details>`;
+    }
     el.innerHTML=html;
     translateEl(el);
     return;
@@ -4027,21 +4033,16 @@ async function renderMaengel(){
   // Store-Ansicht: Meldeformular + Liste der eigenen Meldungen (auch die, die die Organisation
   // direkt für diese Filiale angelegt hat — beidseitig sichtbar).
   const rows=await api(`maengel?store_id=eq.${currentStore.id}&select=*&order=gemeldet_am.desc`).catch(()=>[]);
+  const active=(rows||[]).filter(m=>(m.status||'offen')!=='behoben');
+  const archived=(rows||[]).filter(m=>m.status==='behoben');
   let html=mangelFormHtml(null);
   html+=`<div class="section-lbl" style="margin-top:14px;">Meine Meldungen</div>`;
-  html+=(rows||[]).map(m=>{
-    const status=m.status||'offen';
-    return `
-    <div class="card" style="padding:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
-        <span style="font-size:11px;color:var(--muted);">${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}</span>
-      </div>
-      <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
-      ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:120px;max-height:120px;border-radius:8px;margin-top:8px;display:block;object-fit:cover;"></a>`:''}
-      ${m.gemeldet_von?`<div style="font-size:10.5px;color:var(--muted);margin-top:6px;">gemeldet von: ${m.gemeldet_von}</div>`:''}
-    </div>`;
-  }).join('') || '<div class="card" style="padding:12px;font-size:13px;color:var(--muted);">Noch keine Meldungen.</div>';
+  html+=active.map(m=>mangelCardHtml(m,null)).join('') || '<div class="card" style="padding:12px;font-size:13px;color:var(--muted);">Noch keine offenen Meldungen.</div>';
+  if(archived.length){
+    html+=`<details style="margin-top:10px;"><summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">✓ Erledigte anzeigen (${archived.length})</summary>
+      <div style="margin-top:6px;">${archived.map(m=>mangelCardHtml(m,null)).join('')}</div>
+    </details>`;
+  }
   el.innerHTML=html;
   translateEl(el);
 }
@@ -4056,7 +4057,8 @@ function mangelFormHtml(storeOptions){
         <option value="">Filiale wählen…</option>
         ${storeOptions.map(s=>`<option value="${s.id}" data-no-translate>${s.name}</option>`).join('')}
       </select>`:''}
-      <textarea id="mangel-text" placeholder="Was ist kaputt oder fehlt? (z.B. Handwaschbecken defekt)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+      <input type="text" id="mangel-betreff" placeholder="Kurzer Betreff (z.B. Handwaschbecken defekt)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
+      <textarea id="mangel-text" placeholder="Details (was genau, seit wann, etc.)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
       <div style="margin-top:10px;">
         <input type="file" id="mangel-foto-input" accept="image/*" capture="environment" onchange="previewMangelFoto(this)" style="display:none;">
         <button type="button" onclick="document.getElementById('mangel-foto-input').click()" style="background:none;border:1.5px dashed var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--sub);cursor:pointer;width:100%;">📷 Foto hinzufügen (optional)</button>
@@ -4130,8 +4132,10 @@ async function uploadMangelFoto(blob){
 }
 
 async function sendMangelMeldung(){
+  const betreff=document.getElementById('mangel-betreff')?.value?.trim();
   const text=document.getElementById('mangel-text')?.value?.trim();
-  if(!text){ showToast('Bitte Beschreibung eingeben'); return; }
+  if(!betreff){ showToast('Bitte kurzen Betreff eingeben'); return; }
+  if(!text){ showToast('Bitte Details eingeben'); return; }
   const storeSelect=document.getElementById('mangel-store-select');
   let targetStoreId=currentStore.id, targetStoreName=currentStore.name, gemeldetVon=currentStore.name;
   if(storeSelect){
@@ -4147,15 +4151,17 @@ async function sendMangelMeldung(){
   try{
     let fotoUrl=null;
     if(mangelFotoBlob){ fotoUrl=await uploadMangelFoto(mangelFotoBlob); }
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl}])});
+    const verlauf=[{t:'erstellt', text:'Meldung erstellt', autor:gemeldetVon, zeit:new Date().toISOString()}];
+    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf}])});
     await emailjs.send('service_xla195w','template_9uiq1wf',{
-      name: targetStoreName+' — Schadensmeldung',
+      name: targetStoreName+' — Schadensmeldung: '+betreff,
       time: now,
       message: text,
       title: 'Karma Food Schadensmeldung',
       to_email: 'tini@karmafood.at'
     });
     showToast('✓ Gemeldet & E-Mail verschickt!');
+    document.getElementById('mangel-betreff').value='';
     document.getElementById('mangel-text').value='';
     if(storeSelect) storeSelect.value='';
     clearMangelFoto();
@@ -4164,18 +4170,98 @@ async function sendMangelMeldung(){
   finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } }
 }
 
-async function setMangelStatus(id, newStatus){
+// ---- Detailansicht mit chronologischem Verlauf (Status-Änderungen + Rückmeldungen) ----
+async function openMangelDetail(id){
+  const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
+  const m=(rows||[])[0];
+  if(!m) return;
+  let storeName=currentStore?.name;
+  if(currentStore?.id==='zentrale'){
+    const s=await api(`stores?id=eq.${m.store_id}&select=name`).catch(()=>[]);
+    storeName=(s||[])[0]?.name||m.store_id;
+  }
+  const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
+  const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
+  const status=m.status||'offen';
+  const isOrg=currentStore?.id==='zentrale';
+  const verlauf=(m.verlauf||[]).slice().sort((a,b)=>new Date(a.zeit)-new Date(b.zeit));
+
+  const existing=document.getElementById('mangel-detail-overlay');
+  if(existing) existing.remove();
+  const overlay=document.createElement('div');
+  overlay.id='mangel-detail-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  overlay.innerHTML=`
+    <div style="background:var(--card,#fff);border-radius:18px 18px 0 0;padding:18px;max-width:520px;width:100%;max-height:88vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px;">
+        <div>
+          <div style="font-size:16px;font-weight:700;">${m.betreff||'(kein Betreff)'}</div>
+          <div data-no-translate style="font-size:12px;color:var(--muted);margin-top:2px;">📍 ${storeName}</div>
+        </div>
+        <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
+      </div>
+      <div style="font-size:13.5px;color:var(--sub);margin-top:10px;line-height:1.4;">${m.beschreibung}</div>
+      ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:block;object-fit:cover;"></a>`:''}
+
+      ${isOrg && status!=='behoben'?`<div style="margin-top:12px;display:flex;gap:8px;">
+        ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
+        <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
+      </div>`:''}
+
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:18px;margin-bottom:8px;">Verlauf</div>
+      <div style="display:flex;flex-direction:column;gap:10px;max-height:220px;overflow-y:auto;padding-right:2px;">
+        ${verlauf.map(v=>`<div style="border-left:2px solid ${v.t==='status'?'#0369A1':(v.t==='erstellt'?'var(--green)':'var(--border)')};padding-left:10px;">
+          <div style="font-size:12.5px;">${v.text}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:1px;">${v.autor||''} · ${new Date(v.zeit).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Noch kein Verlauf.</div>'}
+      </div>
+
+      <div style="margin-top:14px;display:flex;gap:8px;">
+        <input type="text" id="mangel-update-text" placeholder="Rückmeldung schreiben (z.B. wie schaut's aus)…" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:13px;">
+        <button onclick="sendMangelUpdate(${m.id})" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;white-space:nowrap;">Senden</button>
+      </div>
+      <button onclick="closeMangelDetail()" style="width:100%;margin-top:14px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;font-size:13px;color:var(--sub);cursor:pointer;">Schließen</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  translateEl(overlay);
+}
+window.openMangelDetail=openMangelDetail;
+
+function closeMangelDetail(){
+  const el=document.getElementById('mangel-detail-overlay');
+  if(el) el.remove();
+}
+window.closeMangelDetail=closeMangelDetail;
+
+async function sendMangelUpdate(id){
+  const input=document.getElementById('mangel-update-text');
+  const text=input?.value?.trim();
+  if(!text) return;
   try{
-    const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
-    const m=(rows||[])[0];
-    if(!m) return;
-    await api(`maengel?id=eq.${id}`,{method:'DELETE'});
-    await api('maengel',{method:'POST',body:JSON.stringify([{
-      store_id:m.store_id, beschreibung:m.beschreibung, gemeldet_am:m.gemeldet_am, gemeldet_von:m.gemeldet_von, foto_url:m.foto_url,
-      status:newStatus,
-      behoben_am:newStatus==='behoben'?new Date().toISOString():null,
-      behoben_von:newStatus==='behoben'?(currentStore?.name||'Organisation'):null
-    }])});
+    await appendMangelVerlauf(id, {t:'kommentar', text, autor:currentStore?.name||'—', zeit:new Date().toISOString()});
+    openMangelDetail(id); // Modal mit aktuellem Verlauf neu aufbauen
+    renderMaengel();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.sendMangelUpdate=sendMangelUpdate;
+
+// Hängt einen Eintrag an den JSONB-Verlauf einer Meldung an (Status-Änderung oder Kommentar) —
+// so bleibt lückenlos nachvollziehbar, wer wann was gemacht/geschrieben hat.
+async function appendMangelVerlauf(id, entry){
+  const rows=await api(`maengel?id=eq.${id}&select=verlauf`).catch(()=>[]);
+  const current=(rows||[])[0]?.verlauf||[];
+  const updated=[...current, entry];
+  await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verlauf:updated})});
+}
+
+async function setMangelStatus(id, newStatus){
+  const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
+  try{
+    const patch={status:newStatus};
+    if(newStatus==='behoben'){ patch.behoben_am=new Date().toISOString(); patch.behoben_von=currentStore?.name||'Organisation'; }
+    await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
+    await appendMangelVerlauf(id, {t:'status', text:`Status geändert auf „${statusLabel[newStatus]}"`, autor:currentStore?.name||'—', zeit:new Date().toISOString()});
+    closeMangelDetail();
     renderMaengel();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
