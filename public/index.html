@@ -5233,7 +5233,12 @@ async function renderBeilagenTableHtml(){
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam: Nooru / Dinesh</div>`;
-  html+=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 Morgen</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
+  // Für das Tab-Label: nächster Kochtermin = morgen, Sa/So übersprungen (an denen wird nicht gekocht)
+  const nextCookDay=new Date();
+  nextCookDay.setDate(nextCookDay.getDate()+1);
+  while([0,6].includes(nextCookDay.getDay())){ nextCookDay.setDate(nextCookDay.getDate()+1); }
+  const nextCookDayLabel=nextCookDay.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+  html+=`<div class="cl-tabs"><button class="cl-tab${kitchenTab==='morgen'?' active':''}" onclick="switchKitchenTab('morgen')">🌅 ${nextCookDayLabel}</button><button class="cl-tab${kitchenTab==='forecast'?' active':''}" onclick="switchKitchenTab('forecast')">📅 Nächste Woche</button><button class="cl-tab${kitchenTab==='plan'?' active':''}" onclick="switchKitchenTab('plan')">🗓️ Kochplan</button><button class="cl-tab${kitchenTab==='supply'?' active':''}" onclick="switchKitchenTab('supply')">🥗 Beilagen</button></div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -5511,14 +5516,11 @@ function formatZutatenFuerKoch(zutaten, allergene){
 let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 
 async function renderMorgenKoch(el, tabHtml){
-  // Der Koch bereitet 06:30–09:30 das Gericht für HEUTE zu. Danach (ab 09:30) ist das für ihn
-  // erledigt — der relevante "nächste" Kochtermin rutscht dann automatisch einen Tag weiter,
-  // damit "morgen" hier nie versehentlich den falschen (schon erledigten) Tag meint.
-  const now = new Date();
-  const cutoff = new Date(now); cutoff.setHours(9,30,0,0);
-  const daysAhead = now >= cutoff ? 2 : 1;
+  // Nächster Kochtermin = morgen — außer morgen ist Samstag/Sonntag (nicht gekocht),
+  // dann automatisch weiter auf den nächsten Montag springen.
   const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate()+daysAhead);
+  tomorrow.setDate(tomorrow.getDate()+1);
+  while([0,6].includes(tomorrow.getDay())){ tomorrow.setDate(tomorrow.getDate()+1); } // 0=So, 6=Sa überspringen
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
   const tomorrowWd = (['so','mo','di','mi','do','fr','sa'])[tomorrow.getDay()];
   const DAY_NAME = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag',sa:'Samstag',so:'Sonntag'};
