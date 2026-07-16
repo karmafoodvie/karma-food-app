@@ -300,12 +300,12 @@ const FAQ_ITEMS=[
   {q:'Beim Wareneingang liegt die Temperatur unter 65° — was jetzt?', a:'Sobald ein Wert unter 65° eingetragen wird, erscheint automatisch ein Pflichtfeld für die Maßnahme (z.B. nacherhitzt, Lieferant informiert) — bitte kurz ausfüllen.'},
 ];
 const CONTACT_PERSONS=[
-  {name:'Tini', responsible:'Dienstplan, App-Fragen, Notfälle · zu viel oder zu wenig Essen? Bis 12:45 Uhr melden · während der Arbeitszeit erreichbar', phone:''},
-  {name:'Ines', responsible:'Fragen zu KC-Produkten oder Webshop-Nachschub · dringende Hilfe (z.B. Gutschein funktioniert nicht) — sofort anrufen', phone:''},
-  {name:'Michi', responsible:'Bestellungen & Lieferungen, Samosas, Verpackungsnachschub', phone:''},
-  {name:'Nooru', responsible:'Rezepte, Mengen, Zutaten', phone:''},
-  {name:'Simone', responsible:'Krankmeldung am Wochenende, Fragen zu Arbeitsvertrag/Stunden · ab 17:00 Uhr für den Dienstplan gemeinsam mit Tini kontaktieren', phone:''},
-  {name:'Adi', responsible:'Wenn etwas kaputt ist oder technisch nicht funktioniert (Geräte, Reparaturen) — Support-Gruppe', phone:''},
+  {name:'Tini', responsible:'Dienstplan, App-Fragen, Notfälle · zu viel oder zu wenig Essen? Bis 12:45 Uhr melden · während der Arbeitszeit erreichbar', phone:'+436769188012'},
+  {name:'Ines', responsible:'Fragen zu KC-Produkten oder Webshop-Nachschub · dringende Hilfe (z.B. Gutschein funktioniert nicht) — sofort anrufen', phone:'+436769058012'},
+  {name:'Michi', responsible:'Bestellungen & Lieferungen, Samosas, Verpackungsnachschub', phone:'+436504203104'},
+  {name:'Nooru', responsible:'Rezepte, Mengen, Zutaten · Küchentelefon vorhanden — bitte nur im Notfall anrufen', phone:'+436769128012'},
+  {name:'Simone', responsible:'Krankmeldung am Wochenende, Fragen zu Arbeitsvertrag/Stunden · ab 17:00 Uhr für den Dienstplan gemeinsam mit Tini kontaktieren', phone:'+436764966786'},
+  {name:'Adi', responsible:'Wenn etwas kaputt ist oder technisch nicht funktioniert (Geräte, Reparaturen) — Support-Gruppe', phone:'+436606242588'},
 ];
 // Aktuell gültige Rabattcodes — Liste hier pflegen, sobald sich was ändert
 // (werden ja ohnehin ausgedruckt/aufgeklebt in den Stores, hier nur als digitales Backup/Nachschlagen).
@@ -350,28 +350,30 @@ async function renderHilfe(){
   html+='</div>';
   html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Fehlt etwas oder eine Telefonnummer? Einfach Tini Bescheid geben.</div>`;
 
-  html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card">`;
+  html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card"><div style="overflow-x:auto;">`;
   const isOrgHilfe=currentStore?.id==='zentrale';
   const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz', '1070':'Neustiftgasse (geschlossen)'};
   const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
   if(visibleCodes.length){
+    html+=`<table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Wofür</th><th style="text-align:left;">Code</th><th style="text-align:right;">Rabatt</th>
+    </tr></thead><tbody>`;
     visibleCodes.forEach(r=>{
       const storeBadges=(r.stores||[]).map(sid=>{
         const col=STORE_COLORS[sid]||'#888';
-        return `<span data-no-translate style="font-size:10px;font-weight:600;color:${col};background:${col}20;border-radius:20px;padding:2px 7px;margin-left:4px;">${storeLabelMap[sid]||sid}</span>`;
+        return `<span data-no-translate style="font-size:9.5px;font-weight:600;color:${col};background:${col}20;border-radius:20px;padding:1px 6px;margin-left:4px;white-space:nowrap;">${storeLabelMap[sid]||sid}</span>`;
       }).join('');
-      html+=`<div class="item-row">
-        <div>
-          <div data-no-translate style="font-size:13px;font-weight:600;">${r.code}${storeBadges}</div>
-          <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${r.bedingung}</div>
-        </div>
-        <span style="font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert||'–'}</span>
-      </div>`;
+      html+=`<tr>
+        <td style="text-align:left;font-size:12px;color:var(--sub);">${r.bedingung}${storeBadges}</td>
+        <td data-no-translate style="text-align:left;font-size:13px;font-weight:700;">${r.code}</td>
+        <td style="text-align:right;font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert||'–'}</td>
+      </tr>`;
     });
+    html+='</tbody></table>';
   } else {
     html+=`<div style="padding:12px;font-size:12.5px;color:var(--muted);">Noch keine Codes hinterlegt.</div>`;
   }
-  html+='</div>';
+  html+='</div></div>';
   html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Aktuelle Codes fehlen? Einfach Tini Bescheid geben.</div>`;
 
   if(SHOW_FAQ){
