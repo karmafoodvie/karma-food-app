@@ -300,19 +300,37 @@ const FAQ_ITEMS=[
   {q:'Beim Wareneingang liegt die Temperatur unter 65° — was jetzt?', a:'Sobald ein Wert unter 65° eingetragen wird, erscheint automatisch ein Pflichtfeld für die Maßnahme (z.B. nacherhitzt, Lieferant informiert) — bitte kurz ausfüllen.'},
 ];
 const CONTACT_PERSONS=[
-  {name:'Tini', responsible:'Dienstplan, App-Fragen, Notfälle · zu viel oder zu wenig Essen? Bis 12:45 Uhr melden · während der Arbeitszeit erreichbar', phone:''},
-  {name:'Ines', responsible:'Fragen zu KC-Produkten oder Webshop-Nachschub · dringende Hilfe (z.B. Gutschein funktioniert nicht) — sofort anrufen', phone:''},
-  {name:'Michi', responsible:'Bestellungen & Lieferungen, Samosas, Verpackungsnachschub', phone:''},
-  {name:'Nooru', responsible:'Rezepte, Mengen, Zutaten', phone:''},
-  {name:'Simone', responsible:'Krankmeldung am Wochenende, Fragen zu Arbeitsvertrag/Stunden · ab 17:00 Uhr für den Dienstplan gemeinsam mit Tini kontaktieren', phone:''},
-  {name:'Adi', responsible:'Wenn etwas kaputt ist oder technisch nicht funktioniert (Geräte, Reparaturen) — Support-Gruppe', phone:''},
+  {name:'Tini', responsible:'Dienstplan, App-Fragen, Notfälle · zu viel oder zu wenig Essen? Bis 12:45 Uhr melden · während der Arbeitszeit erreichbar', phone:'+436769188012'},
+  {name:'Ines', responsible:'Fragen zu KC-Produkten oder Webshop-Nachschub · dringende Hilfe (z.B. Gutschein funktioniert nicht) — sofort anrufen', phone:'+436769058012'},
+  {name:'Michi', responsible:'Bestellungen & Lieferungen, Samosas, Verpackungsnachschub', phone:'+436504203104'},
+  {name:'Nooru', responsible:'Rezepte, Mengen, Zutaten · Küchentelefon vorhanden — bitte nur im Notfall anrufen', phone:'+436769128012'},
+  {name:'Simone', responsible:'Krankmeldung am Wochenende, Fragen zu Arbeitsvertrag/Stunden · ab 17:00 Uhr für den Dienstplan gemeinsam mit Tini kontaktieren', phone:'+436764966786'},
+  {name:'Adi', responsible:'Wenn etwas kaputt ist oder technisch nicht funktioniert (Geräte, Reparaturen) — Support-Gruppe', phone:'+436606242588'},
 ];
-// Aktuell gültige Rabattcodes — Liste hier pflegen, sobald die echten aktuellen Codes feststehen
+// Aktuell gültige Rabattcodes — Liste hier pflegen, sobald sich was ändert
 // (werden ja ohnehin ausgedruckt/aufgeklebt in den Stores, hier nur als digitales Backup/Nachschlagen).
-// store: leer = gilt für alle Filialen; sonst Store-ID (z.B. 'lb','boerse','1020','3400') = nur dort gültig.
+// stores: leeres Array = gilt für alle Filialen; sonst Store-IDs (z.B. ['lb'], ['boerse','1020']) = nur dort gültig.
 const RABATT_CODES=[
-  // {code:'ST', wert:'10%', bedingung:'Studierende', store:''},
-  // {code:'MESSE', wert:'€10', bedingung:'Messe/WU', store:'lb'},
+  {code:'K', wert:'gratis', bedingung:'Stempelkarte voll', stores:[]},
+  {code:'A', wert:'', bedingung:'Alumni (ehemalige Mitarbeiter:innen)', stores:[]},
+  {code:'BB', wert:'', bedingung:'Bogensberger', stores:['boerse']},
+  {code:'B', wert:'', bedingung:'Forum Alpbach', stores:['lb']},
+  {code:'EB', wert:'gratis', bedingung:'1000Things Erlebnisbuch — 2. Lunch Combo gratis', stores:['1070']},
+  {code:'FF', wert:'-0,50€', bedingung:'Freshfields', stores:['boerse']},
+  {code:'I', wert:'-0,50€', bedingung:'Imaging Radiologie', stores:['lb','1070','1020']},
+  {code:'ML', wert:'-0,50€', bedingung:'MSG Life', stores:['1020']},
+  {code:'S', wert:'-0,50€', bedingung:'Schönherr', stores:['boerse']},
+  {code:'ST', wert:'', bedingung:'StudentInnen Rabatt', stores:[]},
+  {code:'D', wert:'-0,50€', bedingung:'Donauversicherung', stores:['boerse']},
+  {code:'W', wert:'', bedingung:'Wien Mobil', stores:[]},
+  {code:'WA', wert:'-0,50€', bedingung:'Wirtschaftsagentur', stores:[]},
+  {code:'X', wert:'-0,50€', bedingung:'Messe Wien & WU Wien', stores:['1020']},
+  {code:'G', wert:'-1€', bedingung:'Global2000', stores:['1070']},
+  {code:'U', wert:'', bedingung:'Uni Vorteilsheft', stores:[]},
+  {code:'TG', wert:'-20%', bedingung:'TooGoodToGo', stores:[]},
+  {code:'TEAM25', wert:'25%', bedingung:'Karma Products (Gewürze, Pasten, Saucen — außer Kaffeebohnen)', stores:[]},
+  {code:'TEAM10', wert:'10%', bedingung:'Merch (Weducer Cup, Dabba, T-Shirts, Kochbücher — außer Kerzen)', stores:[]},
+  {code:'TEAM30', wert:'30%', bedingung:'Eigenkonsumation über das täglich inkludierte Gericht/Getränk/Kaffee hinaus (Sweets, Mango Lassi etc.)', stores:[]},
 ];
 
 async function renderHilfe(){
@@ -332,27 +350,30 @@ async function renderHilfe(){
   html+='</div>';
   html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Fehlt etwas oder eine Telefonnummer? Einfach Tini Bescheid geben.</div>`;
 
-  html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card">`;
+  html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card"><div style="overflow-x:auto;">`;
   const isOrgHilfe=currentStore?.id==='zentrale';
-  const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz'};
-  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.store||r.store===currentStore?.id);
+  const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz', '1070':'Neustiftgasse (geschlossen)'};
+  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
   if(visibleCodes.length){
+    html+=`<table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Wofür</th><th style="text-align:left;">Code</th><th style="text-align:right;">Rabatt</th>
+    </tr></thead><tbody>`;
     visibleCodes.forEach(r=>{
-      const storeCol=r.store?(STORE_COLORS[r.store]||'#888'):null;
-      html+=`<div class="item-row">
-        <div>
-          <div data-no-translate style="font-size:13px;font-weight:600;">${r.code}
-            ${storeCol?`<span data-no-translate style="font-size:10px;font-weight:600;color:${storeCol};background:${storeCol}20;border-radius:20px;padding:2px 7px;margin-left:6px;">${storeLabelMap[r.store]||r.store}</span>`:''}
-          </div>
-          <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${r.bedingung}</div>
-        </div>
-        <span style="font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert}</span>
-      </div>`;
+      const storeBadges=(r.stores||[]).map(sid=>{
+        const col=STORE_COLORS[sid]||'#888';
+        return `<span data-no-translate style="font-size:9.5px;font-weight:600;color:${col};background:${col}20;border-radius:20px;padding:1px 6px;margin-left:4px;white-space:nowrap;">${storeLabelMap[sid]||sid}</span>`;
+      }).join('');
+      html+=`<tr>
+        <td style="text-align:left;font-size:12px;color:var(--sub);">${r.bedingung}${storeBadges}</td>
+        <td data-no-translate style="text-align:left;font-size:13px;font-weight:700;">${r.code}</td>
+        <td style="text-align:right;font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert||'–'}</td>
+      </tr>`;
     });
+    html+='</tbody></table>';
   } else {
     html+=`<div style="padding:12px;font-size:12.5px;color:var(--muted);">Noch keine Codes hinterlegt.</div>`;
   }
-  html+='</div>';
+  html+='</div></div>';
   html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Aktuelle Codes fehlen? Einfach Tini Bescheid geben.</div>`;
 
   if(SHOW_FAQ){
@@ -1216,6 +1237,7 @@ async function renderHome(){
 
     `:''}
     ${currentStore?.id==='zentrale'?`
+    <div id="org-dashboard-widget"></div>
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
@@ -1229,7 +1251,7 @@ async function renderHome(){
     <span style="color:#B45309;">→</span>
   </div>`;
   translateEl(el);
-  if(currentStore?.id==='zentrale') loadOrgRolesRow();
+  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); }
 }
 
 async function renderOeffnungHelp(){
@@ -2630,10 +2652,35 @@ async function toggleCl(templateId){
 }
 
 // ---- ORGANISATION VIEW (PIN 9999) ----
-function renderManagement(){
+async function renderManagement(){
   const el=document.getElementById('v-management');
+  const maengelOffen=await api(`maengel?status=neq.behoben&select=id`).catch(()=>[]);
   el.innerHTML=`
     ${pageHeaderHtml('🗂️','Management','Alles, was Organisation braucht — an einem Ort','#2B3A67')}
+    ${(maengelOffen||[]).length?`<div onclick="goTo('maengel')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
+      <span style="font-size:18px;">🔧</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#991B1B;">${maengelOffen.length} offene Meldung${maengelOffen.length===1?'':'en'}</div>
+        <div style="font-size:10.5px;color:#B45309;">Antippen für Übersicht</div>
+      </div>
+      <span style="color:#991B1B;">→</span>
+    </div>`:''}
+
+    <div class="section-lbl">📊 Tagesgeschäft</div>
+    <button class="org-btn" onclick="goTo('pack')" style="border-color:#2B3A67;">
+      <span class="org-btn-icon">📋</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#2B3A67;">Bestellungen — Übersicht</span>
+        <span class="org-btn-sub">Übersicht welche Filialen heute bestellt haben</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('verfuegbarkeit')" style="border-color:#2B3A67;">
+      <span class="org-btn-icon">🚫</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#2B3A67;">Verfügbarkeit verwalten</span>
+        <span class="org-btn-sub">Artikel als nicht lieferbar markieren, Stores werden gewarnt</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('orgForecast')" style="border-color:#2B3A67;">
       <span class="org-btn-icon">🧭</span>
       <div class="org-btn-text">
@@ -2641,50 +2688,8 @@ function renderManagement(){
         <span class="org-btn-sub">Portionsmengen aller Filialen direkt überschreiben</span>
       </div>
     </button>
-    <button class="org-btn" onclick="goTo('broadcast')" style="border-color:#2B3A67;">
-      <span class="org-btn-icon">📣</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#2B3A67;">Nachricht an Stores</span>
-        <span class="org-btn-sub">An alle oder eine Filiale — poppt beim nächsten Öffnen auf</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('hygieneSchulung')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">🎓</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Hygiene-Schulungen</span>
-        <span class="org-btn-sub">Wer wurde wann geschult — pro Person</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('broadcast')" style="border-color:#0EA5E9;">
-      <span class="org-btn-icon">📢</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0EA5E9;">Nachricht an Stores</span>
-        <span class="org-btn-sub">Poppt beim nächsten Öffnen der App auf — an alle oder eine Filiale</span>
-      </div>
-    </button>
 
-    <div class="section-lbl">🗂️ Verwaltung</div>
-    <button class="org-btn" onclick="goTo('verfuegbarkeit')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">🚫</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Verfügbarkeit verwalten</span>
-        <span class="org-btn-sub">Artikel als nicht lieferbar markieren, Stores werden gewarnt</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('pack')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">📋</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Bestellungen — Übersicht</span>
-        <span class="org-btn-sub">Übersicht welche Filialen heute bestellt haben</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('allergene')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">🧪</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Allergene & Zutaten pflegen</span>
-        <span class="org-btn-sub">Zentrale Liste, wird automatisch in allen Filialen angezeigt</span>
-      </div>
-    </button>
+    <div class="section-lbl" style="margin-top:16px;">🔧 Meldungen & Kontrolle</div>
     <button class="org-btn" onclick="goTo('maengel')" style="border-color:#0F6E56;">
       <span class="org-btn-icon">🔧</span>
       <div class="org-btn-text">
@@ -2706,25 +2711,45 @@ function renderManagement(){
         <span class="org-btn-sub">Allergene, Schädlinge, Hygiene, Temperatur — Übersicht</span>
       </div>
     </button>
-    <button class="org-btn" onclick="goTo('guide')" style="border-color:#0F6E56;">
+
+    <div class="section-lbl" style="margin-top:16px;">📚 Inhalte pflegen</div>
+    <button class="org-btn" onclick="goTo('allergene')" style="border-color:#B45309;">
+      <span class="org-btn-icon">🧪</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#B45309;">Allergene & Zutaten pflegen</span>
+        <span class="org-btn-sub">Zentrale Liste, wird automatisch in allen Filialen angezeigt</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('guide')" style="border-color:#B45309;">
       <span class="org-btn-icon">📖</span>
       <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Store Guide verwalten</span>
+        <span class="org-btn-title" style="color:#B45309;">Store Guide verwalten</span>
         <span class="org-btn-sub">Globale und store-spezifische Infos & Anleitungen pflegen</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('hygieneSchulung')" style="border-color:#B45309;">
+      <span class="org-btn-icon">🎓</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#B45309;">Hygiene-Schulungen</span>
+        <span class="org-btn-sub">Wer wurde wann geschult — pro Person</span>
+      </div>
+    </button>
+
+    <div class="section-lbl" style="margin-top:16px;">📣 Kommunikation</div>
+    <button class="org-btn" onclick="goTo('broadcast')" style="border-color:#0EA5E9;">
+      <span class="org-btn-icon">📢</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0EA5E9;">Nachricht an Stores</span>
+        <span class="org-btn-sub">Poppt beim nächsten Öffnen der App auf — an alle oder eine Filiale</span>
+      </div>
+    </button>
+
+    <div class="section-lbl" style="margin-top:16px;">📈 Analyse</div>
     <button class="org-btn" onclick="goTo('forecastReview')" style="border-color:#0EA5E9;">
       <span class="org-btn-icon">📊</span>
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#0EA5E9;">Prognose-Rückblick</span>
         <span class="org-btn-sub">Vergangene Daten mit Wetter & Feiertagen abgleichen</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('msg')" style="border-color:#6B7280;">
-      <span class="org-btn-icon">💬</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title">Nachricht an Chefin</span>
-        <span class="org-btn-sub">Lagerinfos, Probleme oder Hinweise</span>
       </div>
     </button>`;
   translateEl(el);
@@ -2732,6 +2757,54 @@ function renderManagement(){
 window.renderManagement=renderManagement;
 function renderOrg(){ goTo('management'); } // alter Einstiegspunkt, leitet nur noch weiter
 window.renderOrg=renderOrg;
+
+// Echtes Tages-Dashboard für die Organisation: Bestellstatus je Filiale + offene Meldungen —
+// auf einen Blick, statt erst durch mehrere Menüs klicken zu müssen.
+async function loadOrgDashboard(){
+  const wrap=document.getElementById('org-dashboard-widget');
+  if(!wrap) return;
+  const today=new Date().toISOString().split('T')[0];
+  const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrowStr=tomorrow.toISOString().split('T')[0];
+  try{
+    const [stores, ordersToday, kcToday, forecastTomorrow] = await Promise.all([
+      api('stores?select=id,name&order=id').catch(()=>[]),
+      api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
+      api(`kc_submissions?order_date=eq.${today}&select=store_id`).catch(()=>[]),
+      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=eq.manual&select=store_id`).catch(()=>[])
+    ]);
+    const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
+    const kcSet=new Set((kcToday||[]).map(k=>k.store_id));
+    const forecastSet=new Set((forecastTomorrow||[]).map(f=>f.store_id));
+    // Transporter/Sweets: mind. 1 bestellter Artikel der jeweiligen Kategorie heute
+    const dot=ok=>`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${ok?'#22C55E':'#EF4444'};"></span>`;
+    let html=`<div class="section-lbl">📦 Bestellstatus heute</div><div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Filiale</th><th>KC</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th>
+    </tr></thead><tbody>`;
+    storeList.forEach(s=>{
+      const storeOrders=(ordersToday||[]).filter(o=>o.store_id===s.id);
+      const transporterOk=storeOrders.some(o=>{
+        const a=articles.find(x=>x.id===o.article_id);
+        return a && TRANSPORTER_CATS.includes(a.category) && o.quantity>0;
+      });
+      const sweetsOk=storeOrders.some(o=>{
+        const a=articles.find(x=>x.id===o.article_id);
+        return a && SWEETS_CATS.includes(a.category) && o.quantity>0;
+      });
+      const col=STORE_COLORS[s.id]||'#888';
+      html+=`<tr>
+        <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:${col};flex-shrink:0;"></span><span data-no-translate style="font-size:12.5px;font-weight:500;">${s.name.split(' ')[0]}</span></span></td>
+        <td>${dot(kcSet.has(s.id))}</td>
+        <td>${dot(forecastSet.has(s.id))}</td>
+        <td>${dot(transporterOk)}</td>
+        <td>${dot(sweetsOk)}</td>
+      </tr>`;
+    });
+    html+='</tbody></table></div>';
+    wrap.innerHTML=html;
+    translateEl(wrap);
+  }catch(e){console.error(e);}
+}
 
 async function loadOrgRolesRow(){
   const roles=await api('org_roles?select=*').catch(()=>[]);
@@ -3970,73 +4043,312 @@ async function saveKuehleinrichtungen(){
 async function renderMaengel(){
   const el=document.getElementById('v-maengel');
   const isOrg=currentStore?.id==='zentrale';
+  const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
+  const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
+
+  const mangelCardHtml=(m, storeMap)=>{
+    const status=m.status||'offen';
+    return `
+    <div class="card" style="padding:12px;cursor:pointer;" onclick="openMangelDetail(${m.id})">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:600;">${m.betreff||m.beschreibung.slice(0,40)}</div>
+          ${storeMap?`<div data-no-translate style="font-size:11.5px;color:var(--muted);margin-top:2px;">📍 ${storeMap[m.store_id]||m.store_id}</div>`:''}
+        </div>
+        <span class="badge ${statusClass[status]||'badge-warn'}" style="flex-shrink:0;">${statusLabel[status]||status}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;">${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.foto_url?' · 📷':''}</div>
+    </div>`;
+  };
+
   if(isOrg){
     const [rows, stores] = await Promise.all([
       api('maengel?select=*&order=gemeldet_am.desc').catch(()=>[]),
       api('stores?select=id,name').catch(()=>[])
     ]);
+    const storeOptions=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070');
     const storeMap=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
-    const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
-    const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
-    el.innerHTML=(rows||[]).map(m=>{
-      const status=m.status||'offen';
-      return `
-      <div class="card" style="padding:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;">
-          <strong data-no-translate>${storeMap[m.store_id]||m.store_id}</strong>
-          <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
-        </div>
-        <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · abgeschlossen: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
-        ${status!=='behoben'?`<div style="margin-top:8px;display:flex;gap:8px;">
-          ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
-          <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
-        </div>`:''}
-      </div>
-    `;}).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
+    const active=(rows||[]).filter(m=>(m.status||'offen')!=='behoben');
+    const archived=(rows||[]).filter(m=>m.status==='behoben');
+    let html=mangelFormHtml(storeOptions);
+    html+=active.map(m=>mangelCardHtml(m,storeMap)).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine offenen Meldungen.</div>';
+    if(archived.length){
+      html+=`<details style="margin-top:10px;"><summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">✓ Erledigte anzeigen (${archived.length})</summary>
+        <div style="margin-top:6px;">${archived.map(m=>mangelCardHtml(m,storeMap)).join('')}</div>
+      </details>`;
+    }
+    el.innerHTML=html;
     translateEl(el);
     return;
   }
-  el.innerHTML = `
-    <div class="section-lbl" style="color:var(--green);">🔧 Schaden melden</div>
-    <div class="card" style="padding:14px;">
-      <textarea id="mangel-text" placeholder="Was ist kaputt oder fehlt? (z.B. Handwaschbecken defekt)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
-      <button class="submit-btn" onclick="sendMangelMeldung()">Schaden melden ✓</button>
-    </div>
-  `;
+
+  // Store-Ansicht: Meldeformular + Liste der eigenen Meldungen (auch die, die die Organisation
+  // direkt für diese Filiale angelegt hat — beidseitig sichtbar).
+  const rows=await api(`maengel?store_id=eq.${currentStore.id}&select=*&order=gemeldet_am.desc`).catch(()=>[]);
+  const active=(rows||[]).filter(m=>(m.status||'offen')!=='behoben');
+  const archived=(rows||[]).filter(m=>m.status==='behoben');
+  let html=mangelFormHtml(null);
+  html+=`<div class="section-lbl" style="margin-top:14px;">Meine Meldungen</div>`;
+  html+=active.map(m=>mangelCardHtml(m,null)).join('') || '<div class="card" style="padding:12px;font-size:13px;color:var(--muted);">Noch keine offenen Meldungen.</div>';
+  if(archived.length){
+    html+=`<details style="margin-top:10px;"><summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">✓ Erledigte anzeigen (${archived.length})</summary>
+      <div style="margin-top:6px;">${archived.map(m=>mangelCardHtml(m,null)).join('')}</div>
+    </details>`;
+  }
+  el.innerHTML=html;
   translateEl(el);
 }
 
+// Formular ist für Store & Organisation identisch, außer dass die Organisation zusätzlich
+// auswählen muss, für welche Filiale die Meldung gilt.
+function mangelFormHtml(storeOptions){
+  return `
+    <div class="section-lbl" style="color:var(--green);">🔧 Schaden melden</div>
+    <div class="card" style="padding:14px;">
+      ${storeOptions?`<select id="mangel-store-select" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;background:#fff;">
+        <option value="">Filiale wählen…</option>
+        ${storeOptions.map(s=>`<option value="${s.id}" data-no-translate>${s.name}</option>`).join('')}
+      </select>`:''}
+      <input type="text" id="mangel-betreff" placeholder="Kurzer Betreff (z.B. Handwaschbecken defekt)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
+      <textarea id="mangel-text" placeholder="Details (was genau, seit wann, etc.)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+      <div style="margin-top:10px;">
+        <input type="file" id="mangel-foto-input" accept="image/*" capture="environment" onchange="previewMangelFoto(this)" style="display:none;">
+        <button type="button" onclick="document.getElementById('mangel-foto-input').click()" style="background:none;border:1.5px dashed var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--sub);cursor:pointer;width:100%;">📷 Foto hinzufügen (optional)</button>
+        <div id="mangel-foto-preview" style="margin-top:8px;display:none;position:relative;">
+          <img id="mangel-foto-img" style="max-width:100%;max-height:180px;border-radius:10px;display:block;">
+          <button type="button" onclick="clearMangelFoto()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;cursor:pointer;">✕</button>
+        </div>
+      </div>
+      <button class="submit-btn" id="mangel-submit-btn" onclick="sendMangelMeldung()">Schaden melden ✓</button>
+    </div>
+  `;
+}
+
+let mangelFotoBlob=null;
+
+function previewMangelFoto(input){
+  const file=input.files?.[0];
+  if(!file) return;
+  compressImageFile(file, 1280, 0.75).then(blob=>{
+    mangelFotoBlob=blob;
+    const url=URL.createObjectURL(blob);
+    document.getElementById('mangel-foto-img').src=url;
+    document.getElementById('mangel-foto-preview').style.display='block';
+  }).catch(()=>showToast('Foto konnte nicht verarbeitet werden'));
+}
+window.previewMangelFoto=previewMangelFoto;
+
+function clearMangelFoto(){
+  mangelFotoBlob=null;
+  document.getElementById('mangel-foto-preview').style.display='none';
+  document.getElementById('mangel-foto-input').value='';
+}
+window.clearMangelFoto=clearMangelFoto;
+
+// Bild im Browser verkleinern/komprimieren, bevor es hochgeladen wird — hält Upload schnell
+// und Speicherplatz klein, egal wie groß das Original-Kamerafoto ist.
+function compressImageFile(file, maxDim=1280, quality=0.75){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        if(w>maxDim||h>maxDim){
+          if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; } else { w=Math.round(w*maxDim/h); h=maxDim; }
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('toBlob failed')), 'image/jpeg', quality);
+      };
+      img.onerror=reject;
+      img.src=e.target.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Direkter Upload in den Supabase-Storage-Bucket "mangel-fotos" (öffentlich lesbar) via REST-API,
+// ohne zusätzliche Library.
+async function uploadMangelFoto(blob){
+  const path=`m_${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+  const res=await fetch(`${SUPABASE_URL}/storage/v1/object/mangel-fotos/${path}`,{
+    method:'POST',
+    headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'image/jpeg'},
+    body:blob
+  });
+  if(!res.ok) throw new Error('Foto-Upload fehlgeschlagen');
+  return `${SUPABASE_URL}/storage/v1/object/public/mangel-fotos/${path}`;
+}
+
 async function sendMangelMeldung(){
+  const betreff=document.getElementById('mangel-betreff')?.value?.trim();
   const text=document.getElementById('mangel-text')?.value?.trim();
-  if(!text){ showToast('Bitte Beschreibung eingeben'); return; }
+  if(!betreff){ showToast('Bitte kurzen Betreff eingeben'); return; }
+  if(!text){ showToast('Bitte Details eingeben'); return; }
+  const storeSelect=document.getElementById('mangel-store-select');
+  let targetStoreId=currentStore.id, targetStoreName=currentStore.name, gemeldetVon=currentStore.name;
+  if(storeSelect){
+    // Organisation meldet für eine bestimmte Filiale
+    if(!storeSelect.value){ showToast('Bitte Filiale auswählen'); return; }
+    targetStoreId=storeSelect.value;
+    targetStoreName=storeSelect.options[storeSelect.selectedIndex].textContent;
+    gemeldetVon='Organisation';
+  }
   const now=new Date().toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const btn=document.getElementById('mangel-submit-btn');
+  if(btn){ btn.disabled=true; btn.textContent=mangelFotoBlob?'Foto wird hochgeladen …':'Wird gemeldet …'; }
   try{
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,beschreibung:text,gemeldet_von:currentStore.name,status:'offen'}])});
+    let fotoUrl=null;
+    if(mangelFotoBlob){ fotoUrl=await uploadMangelFoto(mangelFotoBlob); }
+    const verlauf=[{t:'erstellt', text:'Meldung erstellt', autor:gemeldetVon, zeit:new Date().toISOString()}];
+    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf}])});
     await emailjs.send('service_xla195w','template_9uiq1wf',{
-      name: currentStore.name+' — Schadensmeldung',
+      name: targetStoreName+' — Schadensmeldung: '+betreff,
       time: now,
       message: text,
       title: 'Karma Food Schadensmeldung',
       to_email: 'tini@karmafood.at'
     });
     showToast('✓ Gemeldet & E-Mail verschickt!');
+    document.getElementById('mangel-betreff').value='';
     document.getElementById('mangel-text').value='';
+    if(storeSelect) storeSelect.value='';
+    clearMangelFoto();
+    renderMaengel();
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
+  finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } }
+}
+
+// ---- Detailansicht mit chronologischem Verlauf (Status-Änderungen + Rückmeldungen) ----
+async function openMangelDetail(id){
+  const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
+  const m=(rows||[])[0];
+  if(!m) return;
+  let storeName=currentStore?.name;
+  if(currentStore?.id==='zentrale'){
+    const s=await api(`stores?id=eq.${m.store_id}&select=name`).catch(()=>[]);
+    storeName=(s||[])[0]?.name||m.store_id;
+  }
+  const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
+  const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
+  const status=m.status||'offen';
+  const isOrg=currentStore?.id==='zentrale';
+  const verlauf=(m.verlauf||[]).slice().sort((a,b)=>new Date(a.zeit)-new Date(b.zeit));
+
+  const existing=document.getElementById('mangel-detail-overlay');
+  if(existing) existing.remove();
+  const overlay=document.createElement('div');
+  overlay.id='mangel-detail-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML=`
+    <div style="background:var(--card,#fff);border-radius:18px;padding:18px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;">
+      <div id="mangel-view-mode">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px;">
+          <div style="flex:1;">
+            <div style="font-size:16px;font-weight:700;">${m.betreff||'(kein Betreff)'}</div>
+            <div data-no-translate style="font-size:12px;color:var(--muted);margin-top:2px;">📍 ${storeName}</div>
+          </div>
+          <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
+        </div>
+        <div style="font-size:13.5px;color:var(--sub);margin-top:10px;line-height:1.4;">${m.beschreibung}</div>
+        ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:block;object-fit:cover;"></a>`:''}
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+          ${isOrg && status!=='behoben'?`
+            ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
+            <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
+          `:''}
+          <button onclick="toggleMangelEdit(true)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--sub);cursor:pointer;">✏️ Bearbeiten</button>
+        </div>
+      </div>
+
+      <div id="mangel-edit-mode" style="display:none;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Meldung bearbeiten</div>
+        <input type="text" id="mangel-edit-betreff" value="${(m.betreff||'').replace(/"/g,'&quot;')}" placeholder="Betreff" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+        <textarea id="mangel-edit-text" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:90px;resize:vertical;font-family:inherit;box-sizing:border-box;">${m.beschreibung||''}</textarea>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button onclick="toggleMangelEdit(false)" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:10px;background:none;font-size:13px;color:var(--sub);cursor:pointer;">Abbrechen</button>
+          <button onclick="saveMangelEdit(${m.id})" style="flex:1;padding:9px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:13px;font-weight:500;cursor:pointer;">Speichern</button>
+        </div>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:18px;margin-bottom:8px;">Verlauf</div>
+      <div style="display:flex;flex-direction:column;gap:10px;max-height:220px;overflow-y:auto;padding-right:2px;">
+        ${verlauf.map(v=>`<div style="border-left:2px solid ${v.t==='status'?'#0369A1':(v.t==='erstellt'?'var(--green)':'var(--border)')};padding-left:10px;">
+          <div style="font-size:12.5px;">${v.text}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:1px;">${v.autor||''} · ${new Date(v.zeit).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+        </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Noch kein Verlauf.</div>'}
+      </div>
+
+      <div style="margin-top:14px;display:flex;gap:8px;">
+        <input type="text" id="mangel-update-text" placeholder="Rückmeldung schreiben (z.B. wie schaut's aus)…" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:13px;">
+        <button onclick="sendMangelUpdate(${m.id})" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer;white-space:nowrap;">Senden</button>
+      </div>
+      <button onclick="closeMangelDetail()" style="width:100%;margin-top:14px;padding:10px;border:1px solid var(--border);border-radius:10px;background:none;font-size:13px;color:var(--sub);cursor:pointer;">Schließen</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  translateEl(overlay);
+}
+window.openMangelDetail=openMangelDetail;
+
+function toggleMangelEdit(showEdit){
+  const v=document.getElementById('mangel-view-mode');
+  const e=document.getElementById('mangel-edit-mode');
+  if(v) v.style.display=showEdit?'none':'block';
+  if(e) e.style.display=showEdit?'block':'none';
+}
+window.toggleMangelEdit=toggleMangelEdit;
+
+async function saveMangelEdit(id){
+  const betreff=document.getElementById('mangel-edit-betreff')?.value?.trim();
+  const text=document.getElementById('mangel-edit-text')?.value?.trim();
+  if(!text){ showToast('Bitte Beschreibung eingeben'); return; }
+  try{
+    await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({betreff:betreff||null,beschreibung:text})});
+    await appendMangelVerlauf(id, {t:'bearbeitet', text:'Meldung bearbeitet', autor:currentStore?.name||'—', zeit:new Date().toISOString()});
+    openMangelDetail(id);
+    renderMaengel();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveMangelEdit=saveMangelEdit;
+
+function closeMangelDetail(){
+  const el=document.getElementById('mangel-detail-overlay');
+  if(el) el.remove();
+}
+window.closeMangelDetail=closeMangelDetail;
+
+async function sendMangelUpdate(id){
+  const input=document.getElementById('mangel-update-text');
+  const text=input?.value?.trim();
+  if(!text) return;
+  try{
+    await appendMangelVerlauf(id, {t:'kommentar', text, autor:currentStore?.name||'—', zeit:new Date().toISOString()});
+    openMangelDetail(id); // Modal mit aktuellem Verlauf neu aufbauen
+    renderMaengel();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.sendMangelUpdate=sendMangelUpdate;
+
+// Hängt einen Eintrag an den JSONB-Verlauf einer Meldung an (Status-Änderung oder Kommentar) —
+// so bleibt lückenlos nachvollziehbar, wer wann was gemacht/geschrieben hat.
+async function appendMangelVerlauf(id, entry){
+  const rows=await api(`maengel?id=eq.${id}&select=verlauf`).catch(()=>[]);
+  const current=(rows||[])[0]?.verlauf||[];
+  const updated=[...current, entry];
+  await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verlauf:updated})});
 }
 
 async function setMangelStatus(id, newStatus){
+  const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
   try{
-    const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
-    const m=(rows||[])[0];
-    if(!m) return;
-    await api(`maengel?id=eq.${id}`,{method:'DELETE'});
-    await api('maengel',{method:'POST',body:JSON.stringify([{
-      store_id:m.store_id, beschreibung:m.beschreibung, gemeldet_am:m.gemeldet_am, gemeldet_von:m.gemeldet_von,
-      status:newStatus,
-      behoben_am:newStatus==='behoben'?new Date().toISOString():null,
-      behoben_von:newStatus==='behoben'?(currentStore?.name||'Organisation'):null
-    }])});
+    const patch={status:newStatus};
+    if(newStatus==='behoben'){ patch.behoben_am=new Date().toISOString(); patch.behoben_von=currentStore?.name||'Organisation'; }
+    await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
+    await appendMangelVerlauf(id, {t:'status', text:`Status geändert auf „${statusLabel[newStatus]}"`, autor:currentStore?.name||'—', zeit:new Date().toISOString()});
+    closeMangelDetail();
     renderMaengel();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
