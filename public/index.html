@@ -4190,23 +4190,37 @@ async function openMangelDetail(id){
   if(existing) existing.remove();
   const overlay=document.createElement('div');
   overlay.id='mangel-detail-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
   overlay.innerHTML=`
-    <div style="background:var(--card,#fff);border-radius:18px 18px 0 0;padding:18px;max-width:520px;width:100%;max-height:88vh;overflow-y:auto;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px;">
-        <div>
-          <div style="font-size:16px;font-weight:700;">${m.betreff||'(kein Betreff)'}</div>
-          <div data-no-translate style="font-size:12px;color:var(--muted);margin-top:2px;">📍 ${storeName}</div>
+    <div style="background:var(--card,#fff);border-radius:18px;padding:18px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;">
+      <div id="mangel-view-mode">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px;">
+          <div style="flex:1;">
+            <div style="font-size:16px;font-weight:700;">${m.betreff||'(kein Betreff)'}</div>
+            <div data-no-translate style="font-size:12px;color:var(--muted);margin-top:2px;">📍 ${storeName}</div>
+          </div>
+          <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
         </div>
-        <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
+        <div style="font-size:13.5px;color:var(--sub);margin-top:10px;line-height:1.4;">${m.beschreibung}</div>
+        ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:block;object-fit:cover;"></a>`:''}
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+          ${isOrg && status!=='behoben'?`
+            ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
+            <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
+          `:''}
+          <button onclick="toggleMangelEdit(true)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--sub);cursor:pointer;">✏️ Bearbeiten</button>
+        </div>
       </div>
-      <div style="font-size:13.5px;color:var(--sub);margin-top:10px;line-height:1.4;">${m.beschreibung}</div>
-      ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:block;object-fit:cover;"></a>`:''}
 
-      ${isOrg && status!=='behoben'?`<div style="margin-top:12px;display:flex;gap:8px;">
-        ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
-        <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
-      </div>`:''}
+      <div id="mangel-edit-mode" style="display:none;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Meldung bearbeiten</div>
+        <input type="text" id="mangel-edit-betreff" value="${(m.betreff||'').replace(/"/g,'&quot;')}" placeholder="Betreff" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+        <textarea id="mangel-edit-text" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:90px;resize:vertical;font-family:inherit;box-sizing:border-box;">${m.beschreibung||''}</textarea>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button onclick="toggleMangelEdit(false)" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:10px;background:none;font-size:13px;color:var(--sub);cursor:pointer;">Abbrechen</button>
+          <button onclick="saveMangelEdit(${m.id})" style="flex:1;padding:9px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:13px;font-weight:500;cursor:pointer;">Speichern</button>
+        </div>
+      </div>
 
       <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:18px;margin-bottom:8px;">Verlauf</div>
       <div style="display:flex;flex-direction:column;gap:10px;max-height:220px;overflow-y:auto;padding-right:2px;">
@@ -4226,6 +4240,27 @@ async function openMangelDetail(id){
   translateEl(overlay);
 }
 window.openMangelDetail=openMangelDetail;
+
+function toggleMangelEdit(showEdit){
+  const v=document.getElementById('mangel-view-mode');
+  const e=document.getElementById('mangel-edit-mode');
+  if(v) v.style.display=showEdit?'none':'block';
+  if(e) e.style.display=showEdit?'block':'none';
+}
+window.toggleMangelEdit=toggleMangelEdit;
+
+async function saveMangelEdit(id){
+  const betreff=document.getElementById('mangel-edit-betreff')?.value?.trim();
+  const text=document.getElementById('mangel-edit-text')?.value?.trim();
+  if(!text){ showToast('Bitte Beschreibung eingeben'); return; }
+  try{
+    await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({betreff:betreff||null,beschreibung:text})});
+    await appendMangelVerlauf(id, {t:'bearbeitet', text:'Meldung bearbeitet', autor:currentStore?.name||'—', zeit:new Date().toISOString()});
+    openMangelDetail(id);
+    renderMaengel();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveMangelEdit=saveMangelEdit;
 
 function closeMangelDetail(){
   const el=document.getElementById('mangel-detail-overlay');
