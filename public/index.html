@@ -3991,15 +3991,18 @@ async function saveKuehleinrichtungen(){
 async function renderMaengel(){
   const el=document.getElementById('v-maengel');
   const isOrg=currentStore?.id==='zentrale';
+  const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
+  const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
+
   if(isOrg){
     const [rows, stores] = await Promise.all([
       api('maengel?select=*&order=gemeldet_am.desc').catch(()=>[]),
       api('stores?select=id,name').catch(()=>[])
     ]);
+    const storeOptions=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070');
     const storeMap=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
-    const statusLabel={offen:'offen',in_bearbeitung:'in Bearbeitung',behoben:'abgeschlossen'};
-    const statusClass={offen:'badge-warn',in_bearbeitung:'badge-info',behoben:'badge-ok'};
-    el.innerHTML=(rows||[]).map(m=>{
+    let html=mangelFormHtml(storeOptions);
+    html+=(rows||[]).map(m=>{
       const status=m.status||'offen';
       return `
       <div class="card" style="padding:12px;">
@@ -4008,6 +4011,7 @@ async function renderMaengel(){
           <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
         </div>
         <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
+        ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:120px;max-height:120px;border-radius:8px;margin-top:8px;display:block;object-fit:cover;"></a>`:''}
         <div style="font-size:11px;color:var(--muted);margin-top:6px;">gemeldet: ${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.behoben_am?` · abgeschlossen: ${new Date(m.behoben_am).toLocaleDateString('de-AT')}`:''}</div>
         ${status!=='behoben'?`<div style="margin-top:8px;display:flex;gap:8px;">
           ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
@@ -4015,27 +4019,137 @@ async function renderMaengel(){
         </div>`:''}
       </div>
     `;}).join('') || '<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Keine Meldungen vorhanden.</div>';
+    el.innerHTML=html;
     translateEl(el);
     return;
   }
-  el.innerHTML = `
+
+  // Store-Ansicht: Meldeformular + Liste der eigenen Meldungen (auch die, die die Organisation
+  // direkt für diese Filiale angelegt hat — beidseitig sichtbar).
+  const rows=await api(`maengel?store_id=eq.${currentStore.id}&select=*&order=gemeldet_am.desc`).catch(()=>[]);
+  let html=mangelFormHtml(null);
+  html+=`<div class="section-lbl" style="margin-top:14px;">Meine Meldungen</div>`;
+  html+=(rows||[]).map(m=>{
+    const status=m.status||'offen';
+    return `
+    <div class="card" style="padding:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
+        <span style="font-size:11px;color:var(--muted);">${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}</span>
+      </div>
+      <div style="font-size:13px;color:var(--sub);margin-top:6px;">${m.beschreibung}</div>
+      ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:120px;max-height:120px;border-radius:8px;margin-top:8px;display:block;object-fit:cover;"></a>`:''}
+      ${m.gemeldet_von?`<div style="font-size:10.5px;color:var(--muted);margin-top:6px;">gemeldet von: ${m.gemeldet_von}</div>`:''}
+    </div>`;
+  }).join('') || '<div class="card" style="padding:12px;font-size:13px;color:var(--muted);">Noch keine Meldungen.</div>';
+  el.innerHTML=html;
+  translateEl(el);
+}
+
+// Formular ist für Store & Organisation identisch, außer dass die Organisation zusätzlich
+// auswählen muss, für welche Filiale die Meldung gilt.
+function mangelFormHtml(storeOptions){
+  return `
     <div class="section-lbl" style="color:var(--green);">🔧 Schaden melden</div>
     <div class="card" style="padding:14px;">
+      ${storeOptions?`<select id="mangel-store-select" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;background:#fff;">
+        <option value="">Filiale wählen…</option>
+        ${storeOptions.map(s=>`<option value="${s.id}" data-no-translate>${s.name}</option>`).join('')}
+      </select>`:''}
       <textarea id="mangel-text" placeholder="Was ist kaputt oder fehlt? (z.B. Handwaschbecken defekt)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
-      <button class="submit-btn" onclick="sendMangelMeldung()">Schaden melden ✓</button>
+      <div style="margin-top:10px;">
+        <input type="file" id="mangel-foto-input" accept="image/*" capture="environment" onchange="previewMangelFoto(this)" style="display:none;">
+        <button type="button" onclick="document.getElementById('mangel-foto-input').click()" style="background:none;border:1.5px dashed var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--sub);cursor:pointer;width:100%;">📷 Foto hinzufügen (optional)</button>
+        <div id="mangel-foto-preview" style="margin-top:8px;display:none;position:relative;">
+          <img id="mangel-foto-img" style="max-width:100%;max-height:180px;border-radius:10px;display:block;">
+          <button type="button" onclick="clearMangelFoto()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;cursor:pointer;">✕</button>
+        </div>
+      </div>
+      <button class="submit-btn" id="mangel-submit-btn" onclick="sendMangelMeldung()">Schaden melden ✓</button>
     </div>
   `;
-  translateEl(el);
+}
+
+let mangelFotoBlob=null;
+
+function previewMangelFoto(input){
+  const file=input.files?.[0];
+  if(!file) return;
+  compressImageFile(file, 1280, 0.75).then(blob=>{
+    mangelFotoBlob=blob;
+    const url=URL.createObjectURL(blob);
+    document.getElementById('mangel-foto-img').src=url;
+    document.getElementById('mangel-foto-preview').style.display='block';
+  }).catch(()=>showToast('Foto konnte nicht verarbeitet werden'));
+}
+window.previewMangelFoto=previewMangelFoto;
+
+function clearMangelFoto(){
+  mangelFotoBlob=null;
+  document.getElementById('mangel-foto-preview').style.display='none';
+  document.getElementById('mangel-foto-input').value='';
+}
+window.clearMangelFoto=clearMangelFoto;
+
+// Bild im Browser verkleinern/komprimieren, bevor es hochgeladen wird — hält Upload schnell
+// und Speicherplatz klein, egal wie groß das Original-Kamerafoto ist.
+function compressImageFile(file, maxDim=1280, quality=0.75){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        if(w>maxDim||h>maxDim){
+          if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; } else { w=Math.round(w*maxDim/h); h=maxDim; }
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('toBlob failed')), 'image/jpeg', quality);
+      };
+      img.onerror=reject;
+      img.src=e.target.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Direkter Upload in den Supabase-Storage-Bucket "mangel-fotos" (öffentlich lesbar) via REST-API,
+// ohne zusätzliche Library.
+async function uploadMangelFoto(blob){
+  const path=`m_${Date.now()}_${Math.random().toString(36).slice(2,8)}.jpg`;
+  const res=await fetch(`${SUPABASE_URL}/storage/v1/object/mangel-fotos/${path}`,{
+    method:'POST',
+    headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'image/jpeg'},
+    body:blob
+  });
+  if(!res.ok) throw new Error('Foto-Upload fehlgeschlagen');
+  return `${SUPABASE_URL}/storage/v1/object/public/mangel-fotos/${path}`;
 }
 
 async function sendMangelMeldung(){
   const text=document.getElementById('mangel-text')?.value?.trim();
   if(!text){ showToast('Bitte Beschreibung eingeben'); return; }
+  const storeSelect=document.getElementById('mangel-store-select');
+  let targetStoreId=currentStore.id, targetStoreName=currentStore.name, gemeldetVon=currentStore.name;
+  if(storeSelect){
+    // Organisation meldet für eine bestimmte Filiale
+    if(!storeSelect.value){ showToast('Bitte Filiale auswählen'); return; }
+    targetStoreId=storeSelect.value;
+    targetStoreName=storeSelect.options[storeSelect.selectedIndex].textContent;
+    gemeldetVon='Organisation';
+  }
   const now=new Date().toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const btn=document.getElementById('mangel-submit-btn');
+  if(btn){ btn.disabled=true; btn.textContent=mangelFotoBlob?'Foto wird hochgeladen …':'Wird gemeldet …'; }
   try{
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,beschreibung:text,gemeldet_von:currentStore.name,status:'offen'}])});
+    let fotoUrl=null;
+    if(mangelFotoBlob){ fotoUrl=await uploadMangelFoto(mangelFotoBlob); }
+    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl}])});
     await emailjs.send('service_xla195w','template_9uiq1wf',{
-      name: currentStore.name+' — Schadensmeldung',
+      name: targetStoreName+' — Schadensmeldung',
       time: now,
       message: text,
       title: 'Karma Food Schadensmeldung',
@@ -4043,7 +4157,11 @@ async function sendMangelMeldung(){
     });
     showToast('✓ Gemeldet & E-Mail verschickt!');
     document.getElementById('mangel-text').value='';
+    if(storeSelect) storeSelect.value='';
+    clearMangelFoto();
+    renderMaengel();
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
+  finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } }
 }
 
 async function setMangelStatus(id, newStatus){
@@ -4053,7 +4171,7 @@ async function setMangelStatus(id, newStatus){
     if(!m) return;
     await api(`maengel?id=eq.${id}`,{method:'DELETE'});
     await api('maengel',{method:'POST',body:JSON.stringify([{
-      store_id:m.store_id, beschreibung:m.beschreibung, gemeldet_am:m.gemeldet_am, gemeldet_von:m.gemeldet_von,
+      store_id:m.store_id, beschreibung:m.beschreibung, gemeldet_am:m.gemeldet_am, gemeldet_von:m.gemeldet_von, foto_url:m.foto_url,
       status:newStatus,
       behoben_am:newStatus==='behoben'?new Date().toISOString():null,
       behoben_von:newStatus==='behoben'?(currentStore?.name||'Organisation'):null
