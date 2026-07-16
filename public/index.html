@@ -1237,6 +1237,7 @@ async function renderHome(){
 
     `:''}
     ${currentStore?.id==='zentrale'?`
+    <div id="org-dashboard-widget"></div>
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
@@ -1250,7 +1251,7 @@ async function renderHome(){
     <span style="color:#B45309;">→</span>
   </div>`;
   translateEl(el);
-  if(currentStore?.id==='zentrale') loadOrgRolesRow();
+  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); }
 }
 
 async function renderOeffnungHelp(){
@@ -2655,6 +2656,22 @@ function renderManagement(){
   const el=document.getElementById('v-management');
   el.innerHTML=`
     ${pageHeaderHtml('🗂️','Management','Alles, was Organisation braucht — an einem Ort','#2B3A67')}
+
+    <div class="section-lbl">📊 Tagesgeschäft</div>
+    <button class="org-btn" onclick="goTo('pack')" style="border-color:#2B3A67;">
+      <span class="org-btn-icon">📋</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#2B3A67;">Bestellungen — Übersicht</span>
+        <span class="org-btn-sub">Übersicht welche Filialen heute bestellt haben</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('verfuegbarkeit')" style="border-color:#2B3A67;">
+      <span class="org-btn-icon">🚫</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#2B3A67;">Verfügbarkeit verwalten</span>
+        <span class="org-btn-sub">Artikel als nicht lieferbar markieren, Stores werden gewarnt</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('orgForecast')" style="border-color:#2B3A67;">
       <span class="org-btn-icon">🧭</span>
       <div class="org-btn-text">
@@ -2662,50 +2679,8 @@ function renderManagement(){
         <span class="org-btn-sub">Portionsmengen aller Filialen direkt überschreiben</span>
       </div>
     </button>
-    <button class="org-btn" onclick="goTo('broadcast')" style="border-color:#2B3A67;">
-      <span class="org-btn-icon">📣</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#2B3A67;">Nachricht an Stores</span>
-        <span class="org-btn-sub">An alle oder eine Filiale — poppt beim nächsten Öffnen auf</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('hygieneSchulung')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">🎓</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Hygiene-Schulungen</span>
-        <span class="org-btn-sub">Wer wurde wann geschult — pro Person</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('broadcast')" style="border-color:#0EA5E9;">
-      <span class="org-btn-icon">📢</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0EA5E9;">Nachricht an Stores</span>
-        <span class="org-btn-sub">Poppt beim nächsten Öffnen der App auf — an alle oder eine Filiale</span>
-      </div>
-    </button>
 
-    <div class="section-lbl">🗂️ Verwaltung</div>
-    <button class="org-btn" onclick="goTo('verfuegbarkeit')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">🚫</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Verfügbarkeit verwalten</span>
-        <span class="org-btn-sub">Artikel als nicht lieferbar markieren, Stores werden gewarnt</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('pack')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">📋</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Bestellungen — Übersicht</span>
-        <span class="org-btn-sub">Übersicht welche Filialen heute bestellt haben</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('allergene')" style="border-color:#0F6E56;">
-      <span class="org-btn-icon">🧪</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Allergene & Zutaten pflegen</span>
-        <span class="org-btn-sub">Zentrale Liste, wird automatisch in allen Filialen angezeigt</span>
-      </div>
-    </button>
+    <div class="section-lbl" style="margin-top:16px;">🔧 Meldungen & Kontrolle</div>
     <button class="org-btn" onclick="goTo('maengel')" style="border-color:#0F6E56;">
       <span class="org-btn-icon">🔧</span>
       <div class="org-btn-text">
@@ -2727,25 +2702,45 @@ function renderManagement(){
         <span class="org-btn-sub">Allergene, Schädlinge, Hygiene, Temperatur — Übersicht</span>
       </div>
     </button>
-    <button class="org-btn" onclick="goTo('guide')" style="border-color:#0F6E56;">
+
+    <div class="section-lbl" style="margin-top:16px;">📚 Inhalte pflegen</div>
+    <button class="org-btn" onclick="goTo('allergene')" style="border-color:#B45309;">
+      <span class="org-btn-icon">🧪</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#B45309;">Allergene & Zutaten pflegen</span>
+        <span class="org-btn-sub">Zentrale Liste, wird automatisch in allen Filialen angezeigt</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('guide')" style="border-color:#B45309;">
       <span class="org-btn-icon">📖</span>
       <div class="org-btn-text">
-        <span class="org-btn-title" style="color:#0F6E56;">Store Guide verwalten</span>
+        <span class="org-btn-title" style="color:#B45309;">Store Guide verwalten</span>
         <span class="org-btn-sub">Globale und store-spezifische Infos & Anleitungen pflegen</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('hygieneSchulung')" style="border-color:#B45309;">
+      <span class="org-btn-icon">🎓</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#B45309;">Hygiene-Schulungen</span>
+        <span class="org-btn-sub">Wer wurde wann geschult — pro Person</span>
+      </div>
+    </button>
+
+    <div class="section-lbl" style="margin-top:16px;">📣 Kommunikation</div>
+    <button class="org-btn" onclick="goTo('broadcast')" style="border-color:#0EA5E9;">
+      <span class="org-btn-icon">📢</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0EA5E9;">Nachricht an Stores</span>
+        <span class="org-btn-sub">Poppt beim nächsten Öffnen der App auf — an alle oder eine Filiale</span>
+      </div>
+    </button>
+
+    <div class="section-lbl" style="margin-top:16px;">📈 Analyse</div>
     <button class="org-btn" onclick="goTo('forecastReview')" style="border-color:#0EA5E9;">
       <span class="org-btn-icon">📊</span>
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#0EA5E9;">Prognose-Rückblick</span>
         <span class="org-btn-sub">Vergangene Daten mit Wetter & Feiertagen abgleichen</span>
-      </div>
-    </button>
-    <button class="org-btn" onclick="goTo('msg')" style="border-color:#6B7280;">
-      <span class="org-btn-icon">💬</span>
-      <div class="org-btn-text">
-        <span class="org-btn-title">Nachricht an Chefin</span>
-        <span class="org-btn-sub">Lagerinfos, Probleme oder Hinweise</span>
       </div>
     </button>`;
   translateEl(el);
@@ -2753,6 +2748,45 @@ function renderManagement(){
 window.renderManagement=renderManagement;
 function renderOrg(){ goTo('management'); } // alter Einstiegspunkt, leitet nur noch weiter
 window.renderOrg=renderOrg;
+
+// Echtes Tages-Dashboard für die Organisation: Bestellstatus je Filiale + offene Meldungen —
+// auf einen Blick, statt erst durch mehrere Menüs klicken zu müssen.
+async function loadOrgDashboard(){
+  const wrap=document.getElementById('org-dashboard-widget');
+  if(!wrap) return;
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    const [stores, ordersToday, maengelOffen] = await Promise.all([
+      api('stores?select=id,name&order=id').catch(()=>[]),
+      api(`orders?order_date=eq.${today}&select=store_id,quantity`).catch(()=>[]),
+      api(`maengel?status=neq.behoben&select=id`).catch(()=>[])
+    ]);
+    const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
+    let html=`<div class="section-lbl">📦 Bestellstatus heute</div><div class="card">`;
+    storeList.forEach(s=>{
+      const total=(ordersToday||[]).filter(o=>o.store_id===s.id).reduce((a,o)=>a+(o.quantity||0),0);
+      const col=STORE_COLORS[s.id]||'#888';
+      html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+        <span data-no-translate style="flex:1;font-size:13px;font-weight:500;">${s.name}</span>
+        <span class="badge ${total>0?'badge-ok':'badge-warn'}">${total>0?`${total} Artikel`:'ausstehend'}</span>
+      </div>`;
+    });
+    html+='</div>';
+    if((maengelOffen||[]).length){
+      html+=`<div onclick="goTo('maengel')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin-top:10px;cursor:pointer;">
+        <span style="font-size:18px;">🔧</span>
+        <div style="flex:1;">
+          <div style="font-size:12.5px;font-weight:600;color:#991B1B;">${maengelOffen.length} offene Meldung${maengelOffen.length===1?'':'en'}</div>
+          <div style="font-size:10.5px;color:#B45309;">Antippen für Übersicht</div>
+        </div>
+        <span style="color:#991B1B;">→</span>
+      </div>`;
+    }
+    wrap.innerHTML=html;
+    translateEl(wrap);
+  }catch(e){console.error(e);}
+}
 
 async function loadOrgRolesRow(){
   const roles=await api('org_roles?select=*').catch(()=>[]);
