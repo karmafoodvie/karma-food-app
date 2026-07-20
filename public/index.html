@@ -1146,7 +1146,7 @@ async function renderHome(){
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle'?`
 
     <!-- START BUTTON -->
-    <div onclick="goTo('dailycheck')" style="background:#E0521F;border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
+    <div onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div>
           <div style="font-weight:600;color:#fff;font-size:14px;">☀️ Let's start the shift!</div>
@@ -3826,6 +3826,25 @@ async function renderDailyCheck(){
     renderDcTabContent();
     return;
   }
+  const todayKey=new Date().toISOString().split('T')[0];
+  const dienstplanKey=`dienstplan_ok_${todayKey}_${currentStore.id}`;
+  if(!localStorage.getItem(dienstplanKey)){
+    el.innerHTML=`
+      <div style="display:flex;gap:5px;margin-bottom:16px;">
+        <div style="flex:1;height:6px;border-radius:4px;background:var(--green);"></div>
+        <div style="flex:1;height:6px;border-radius:4px;background:var(--border);"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Schritt 1 von 2</div>
+      <div class="card" style="padding:20px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:10px;">🗓️</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:8px;">Hast du dich bei "Mein Dienstplan" eingecheckt?</div>
+        <div style="font-size:12.5px;color:var(--sub);margin-bottom:16px;">Bitte zuerst dort einchecken, bevor die Schicht hier gestartet wird.</div>
+        <a href="#" target="_blank" rel="noopener" style="display:inline-block;padding:10px 18px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;color:var(--sub);text-decoration:none;margin-bottom:14px;">🔗 Zu "Mein Dienstplan"</a>
+        <button class="submit-btn" style="background:var(--green);" onclick="localStorage.setItem('${dienstplanKey}','1');renderDailyCheck();">✓ Ja, eingecheckt — weiter</button>
+      </div>`;
+    translateEl(el);
+    return;
+  }
   const today=new Date().toISOString().split('T')[0];
   const [wekRows,reinRows,kuehlRows,wekPrevRows,kuehlPrevRows]=await Promise.all([
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
@@ -3846,6 +3865,11 @@ async function renderDailyCheck(){
   const kleinDefault = kuehl?.temp_klein ?? kuehlPrev?.temp_klein ?? '';
   const grossDefault = kuehl?.temp_gross ?? kuehlPrev?.temp_gross ?? '';
   el.innerHTML = backToHomeHtml()+`
+    <div style="display:flex;gap:5px;margin-bottom:10px;">
+      <div style="flex:1;height:6px;border-radius:4px;background:var(--green);"></div>
+      <div style="flex:1;height:6px;border-radius:4px;background:var(--green);"></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Schritt 2 von 2</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Beide Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
 
     <div class="section-lbl" style="color:var(--green);">🌡️ Wareneingangskontrolle</div>
