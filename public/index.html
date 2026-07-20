@@ -906,16 +906,22 @@ function getTodayDishNames(){
 
 const GEMUESE_KEYWORDS = ['ZWIEBEL','TOMATEN','TOMATENPASSATA','PAPRIKA','ZUCCHINI','KAROTTEN','KAROTTE','BROKKOLI','SPINAT','MELANZANI','ERDÄPFEL','KARTOFFELN','KÜRBIS','FENCHEL','SELLERIE','LAUCH','KNOBLAUCH','MAIS','ERBSEN','BOHNEN','KOHL','WEISSKRAUT','ROTKRAUT','KICHERERBSEN','SÜSSKARTOFFELN','SÜSSKARTOFFEL','WEISSER RETTICH','KIDNEYBOHNEN','CHAMPIGNONS','PILZE','AUBERGINE','KOHLRABI','MANGOLD','CHINAKOHL','PORREE','BRECHBOHNEN','OKRA','CURRY BLÄTTER'];
 
+const GETREIDE_KEYWORDS = ['BASMATI','REIS','COUSCOUS','EBLY','QUINOA'];
 function splitZutaten(text){
-  if(!text) return {gemuese:[], rest:[]};
+  if(!text) return {gemuese:[], rest:[], getreide:[]};
   const items = text.split(',').map(s=>s.trim()).filter(Boolean);
-  const gemuese=[], rest=[];
+  const gemuese=[], rest=[], getreide=[];
+  // Gewürzformen (Pulver, Samen, Gewürzmischungen) sind kein "frisches Gemüse", auch wenn das
+  // Grundwort (z.B. "Paprika") in der Gemüse-Liste steht — z.B. Paprikapulver ist ein Gewürz.
+  const SPICE_MARKERS = ['PULVER','SAMEN','GEWÜRZ','MISCHUNG'];
   items.forEach(item=>{
     const up=item.toUpperCase();
-    if(GEMUESE_KEYWORDS.some(kw=>up.includes(kw))) gemuese.push(item);
+    const isSpiceForm = SPICE_MARKERS.some(m=>up.includes(m));
+    if(GETREIDE_KEYWORDS.some(kw=>up.includes(kw))) getreide.push(item);
+    else if(!isSpiceForm && GEMUESE_KEYWORDS.some(kw=>up.includes(kw))) gemuese.push(item);
     else rest.push(item);
   });
-  return {gemuese, rest};
+  return {gemuese, rest, getreide};
 }
 
 function isVegan(allergenMain){
@@ -1587,6 +1593,23 @@ function renderOrder(){
 
   html+=renderOrderSection(tab.cats, tab.title, tab.color, tab.icon);
 
+  if(activeOrderTab==='transporter'){
+    html+=`<div class="section-lbl" style="margin-top:14px;">💶 Geldwechsel</div>
+    <div class="card" style="padding:12px;">
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Braucht ihr Wechselgeld? Michi bringt's beim nächsten Mal mit.</div>
+      <div style="display:flex;gap:8px;">
+        <input type="number" id="geldwechsel-betrag" placeholder="Betrag in €" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;">
+        <select id="geldwechsel-format" style="padding:9px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">
+          <option value="Münzen">Münzen</option>
+          <option value="Scheine">Scheine</option>
+          <option value="Gemischt">Gemischt</option>
+        </select>
+      </div>
+      <button onclick="requestGeldwechsel()" style="margin-top:8px;width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;">Anfragen</button>
+      <div id="geldwechsel-list" style="margin-top:10px;"></div>
+    </div>`;
+  }
+
   if(activeOrderTab==='sweets'){
     html+=`<div style="background:#FEF3F7;border:1px solid #F9A8D4;border-radius:8px;padding:8px 12px;margin-top:-4px;margin-bottom:4px;font-size:12px;color:#BE185D;display:flex;align-items:center;gap:6px;">
       <span>⏰</span><span>Sweets-Bestellung bitte bis <strong>14:00 Uhr</strong> für den nächsten Tag abschicken</span>
@@ -1600,6 +1623,7 @@ function renderOrder(){
   <button class="submit-btn" id="order-submit-btn" style="background:${tab.color};" onclick="submitOrder()">${tab.title} abschicken ✓</button>`;
   el.innerHTML=html;
   translateEl(el);
+  if(activeOrderTab==='transporter') loadGeldwechselList();
 }
 
 async function renderKCOrderTab(el, tabHtml){
@@ -4230,6 +4254,43 @@ async function uploadMangelFoto(blob){
   return `${SUPABASE_URL}/storage/v1/object/public/mangel-fotos/${path}`;
 }
 
+// ---- GELDWECHSEL (Wechselgeld-Anfrage an Michi/Transporter) ----
+async function requestGeldwechsel(){
+  const betrag=parseFloat(document.getElementById('geldwechsel-betrag')?.value);
+  const format=document.getElementById('geldwechsel-format')?.value||'Gemischt';
+  if(!betrag || betrag<=0){ showToast('Bitte Betrag eingeben'); return; }
+  try{
+    await api('geldwechsel',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,betrag,format,status:'offen'}])});
+    document.getElementById('geldwechsel-betrag').value='';
+    showToast('✓ Geldwechsel angefragt');
+    loadGeldwechselList();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.requestGeldwechsel=requestGeldwechsel;
+
+async function loadGeldwechselList(){
+  const wrap=document.getElementById('geldwechsel-list');
+  if(!wrap) return;
+  const rows=await api(`geldwechsel?store_id=eq.${currentStore.id}&status=eq.offen&select=*&order=erstellt_am.desc`).catch(()=>[]);
+  if(!(rows||[]).length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML=(rows||[]).map(g=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:0.5px solid var(--border);">
+      <span style="font-size:12.5px;">${formatQty(g.betrag)}€ · ${g.format}</span>
+      <span class="badge badge-warn">offen</span>
+    </div>`).join('');
+}
+window.loadGeldwechselList=loadGeldwechselList;
+
+async function setGeldwechselStatus(id, newStatus){
+  try{
+    const patch={status:newStatus};
+    if(newStatus==='erledigt') patch.erledigt_am=new Date().toISOString();
+    await api(`geldwechsel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.setGeldwechselStatus=setGeldwechselStatus;
+
 async function sendMangelMeldung(){
   const betreff=document.getElementById('mangel-betreff')?.value?.trim();
   const text=document.getElementById('mangel-text')?.value?.trim();
@@ -4698,6 +4759,23 @@ async function renderPack(){
   });
 
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
+  const geldwechselOffen=await api('geldwechsel?status=eq.offen&select=*&order=erstellt_am.asc').catch(()=>[]);
+  if((geldwechselOffen||[]).length){
+    html+=`<div class="section-lbl">💶 Geldwechsel — offen</div><div class="card">`;
+    geldwechselOffen.forEach(g=>{
+      const store=stores.find(x=>x.id===g.store_id);
+      const col=STORE_COLORS[g.store_id]||'#888';
+      html+=`<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);">
+        <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+        <div style="flex:1;">
+          <div style="font-size:12.5px;font-weight:500;" data-no-translate>${store?.name||g.store_id}</div>
+          <div style="font-size:12px;color:var(--sub);">${formatQty(g.betrag)}€ · ${g.format}</div>
+        </div>
+        <button onclick="setGeldwechselStatus(${g.id},'erledigt')" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;">✓ erledigt</button>
+      </div>`;
+    });
+    html+='</div>';
+  }
   if(specs.length){
     html+=`<div class="section-lbl">📝 Sonderbestellungen</div><div class="card">`;
     specs.forEach(s=>{const store=stores.find(x=>x.id===s.store_id);const col=STORE_COLORS[s.store_id]||'#888';html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;"><span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;margin-top:3px;"></span><div><div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div><div style="font-size:13px;color:var(--sub);">${s.note}</div></div></div>`;});
@@ -5262,13 +5340,13 @@ async function renderKitchen(){
   nextCookDay.setDate(nextCookDay.getDate()+1);
   while([0,6].includes(nextCookDay.getDay())){ nextCookDay.setDate(nextCookDay.getDate()+1); }
   const nextCookDayLabel=nextCookDay.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-  const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E', supply:'#EC4899'};
+  const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E'};
   const ktab=(key,label)=>{
     const active=kitchenTab===key;
     const col=KTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchKitchenTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 Nächste Woche')}${ktab('plan','🗓️ Kochplan')}${ktab('supply','🥗 Beilagen')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 Nächste Woche')}${ktab('plan','🗓️ Kochplan')}</div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -5321,7 +5399,7 @@ async function renderKitchen(){
           const hasZutaten = zutaten.length>0;
           const vegan = isVegan(allergenMain);
           const gf = isGlutenfrei(allergenMain);
-          const {gemuese, rest} = splitZutaten(zutaten);
+          const {gemuese, rest, getreide} = splitZutaten(zutaten);
           const detailId = `kp_${selectedWoche}_${day}_${i}`;
           const gemueseId = `gem_${selectedWoche}_${day}_${i}`;
 
@@ -5345,6 +5423,11 @@ async function renderKitchen(){
                 <textarea id="${gemueseId}" style="width:100%;padding:8px;border:1.5px solid #BBF7D0;border-radius:8px;font-size:12px;background:#F0FDF4;min-height:50px;resize:vertical;box-sizing:border-box;font-family:inherit;">${gemuese.join(', ')}</textarea>
                 <button onclick="saveGemuese('${dish.name.replace(/'/g,"\\'")}', document.getElementById('${gemueseId}').value)" style="margin-top:6px;background:#166534;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:500;cursor:pointer;">💾 Gemüse speichern</button>
               </div>`:''}
+              ${getreide.length?`
+              <div style="padding:${gemuese.length?'0':'10px'} 14px 6px;">
+                <div style="font-size:10px;font-weight:700;color:#1D4ED8;letter-spacing:.04em;margin-bottom:5px;">🌾 GETREIDE/BEILAGE — kann variieren</div>
+                <div style="font-size:12px;color:var(--sub);">${getreide.join(', ')}</div>
+              </div>`:''}
               ${rest.length?`
               <div style="padding:${gemuese.length?'0':'10px'} 14px 10px;">
                 <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:5px;">🧂 GEWÜRZE & GRUNDZUTATEN</div>
@@ -5354,7 +5437,7 @@ async function renderKitchen(){
                   return isA?`<strong style="color:#92400E;">${z}</strong>`:z;
                 }).join(' · ')}</div>
               </div>`:''}
-              ${!gemuese.length&&!rest.length?'<div style="padding:10px 14px;font-size:12px;color:var(--muted);">Keine Zutaten hinterlegt</div>':''}
+              ${!gemuese.length&&!rest.length&&!getreide.length?'<div style="padding:10px 14px;font-size:12px;color:var(--muted);">Keine Zutaten hinterlegt</div>':''}
             </div>
           </div>`;
         });
@@ -5449,13 +5532,14 @@ async function renderKitchen(){
             if(!dObj) return '';
             const override=nwOverrideMap[name];
             const zutaten=(override?.zutaten||dObj.zutaten||'').replace(/\n/g,' ').trim();
-            const {gemuese, rest}=splitZutaten(zutaten);
+            const {gemuese, rest, getreide}=splitZutaten(zutaten);
             const allergenMain=dObj.allergene?.main||[];
             return `<div class="card" style="margin-bottom:6px;padding:10px 14px;">
               <div style="font-size:13px;font-weight:600;">${name}${allergenMain.length?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}</span>`:''}</div>
               ${gemuese.length?`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">🥕 ${gemuese.join(', ')}</div>`:''}
+              ${getreide.length?`<div style="font-size:11.5px;color:#1D4ED8;margin-top:2px;">🌾 ${getreide.join(', ')}</div>`:''}
               ${rest.length?`<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">🧂 ${rest.join(' · ')}</div>`:''}
-              ${!gemuese.length&&!rest.length?'<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Keine Zutaten hinterlegt</div>':''}
+              ${!gemuese.length&&!rest.length&&!getreide.length?'<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Keine Zutaten hinterlegt</div>':''}
             </div>`;
           }).join('') || '<div style="font-size:11.5px;color:var(--muted);padding:4px 2px;">Keine Zutaten hinterlegt</div>'}
         </div>
@@ -5634,13 +5718,17 @@ async function renderMorgenKoch(el, tabHtml){
     const dish=dishObj.name;
     const override = overrideMap[dish];
     const zutaten = (override?.zutaten||dishObj.zutaten||'').replace(/\n/g,' ').trim();
-    const {gemuese, rest} = splitZutaten(zutaten);
+    const {gemuese, rest, getreide} = splitZutaten(zutaten);
     const detailId = `morgen_zut_${dIdx}`;
     html+=`<div id="${detailId}" class="card" style="display:none;margin-top:-4px;margin-bottom:8px;padding:10px 14px;background:#FAFAFA;">
       <div style="font-size:13px;font-weight:700;margin-bottom:6px;">${getDishEmoji(dish)} ${dish}</div>
       ${gemuese.length?`<div style="padding:2px 0 6px;">
         <div style="font-size:10px;font-weight:700;color:#166534;letter-spacing:.04em;margin-bottom:4px;">🥕 GEMÜSE — anpassbar je nach Verfügbarkeit</div>
         <div style="font-size:12px;color:var(--sub);">${gemuese.join(', ')}</div>
+      </div>`:''}
+      ${getreide.length?`<div style="padding:${gemuese.length?'0':'2px'} 0 4px;">
+        <div style="font-size:10px;font-weight:700;color:#1D4ED8;letter-spacing:.04em;margin-bottom:4px;">🌾 GETREIDE/BEILAGE — kann variieren</div>
+        <div style="font-size:12px;color:var(--sub);">${getreide.join(', ')}</div>
       </div>`:''}
       ${rest.length?`<div style="padding:${gemuese.length?'0':'2px'} 0 4px;">
         <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:4px;">🧂 GEWÜRZE & GRUNDZUTATEN</div>
@@ -5650,7 +5738,7 @@ async function renderMorgenKoch(el, tabHtml){
           return isA?`<strong style="color:#92400E;">${z}</strong>`:z;
         }).join(' · ')}</div>
       </div>`:''}
-      ${!gemuese.length&&!rest.length?'<div style="font-size:12px;color:var(--muted);">Keine Zutaten hinterlegt</div>':''}
+      ${!gemuese.length&&!rest.length&&!getreide.length?'<div style="font-size:12px;color:var(--muted);">Keine Zutaten hinterlegt</div>':''}
     </div>`;
   });
 
@@ -5728,7 +5816,26 @@ window.changeWeek=changeWeek;
 window.switchKitchenTab=switchKitchenTab;
 
 // ---- SWEETS LISTE KÜCHE ----
+let teamTab='sweets';
+function switchTeamTab(t){ teamTab=t; renderSweets(); }
+window.switchTeamTab=switchTeamTab;
+
 async function renderSweets(){
+  const el=document.getElementById('v-sweets');
+  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E'};
+  const ttab=(key,label)=>{
+    const active=teamTab===key;
+    const col=TEAMTAB_COLORS[key];
+    return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
+  };
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('supply','🥗 Beilagen')}</div>`;
+
+  if(teamTab==='supply'){
+    el.innerHTML=tabsHtml+await renderBeilagenTableHtml();
+    translateEl(el);
+    return;
+  }
+
   const stores=await api('stores?select=id,name&order=id');
   const today=new Date().toISOString().split('T')[0];
   const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`);
@@ -5738,8 +5845,7 @@ async function renderSweets(){
   const sweetsItems=articles.filter(a=>a.category==='Sweets');
   const todayStr=new Date().toLocaleDateString('de-AT');
 
-  const el=document.getElementById('v-sweets');
-  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Für morgen · Stand: ${todayStr}</div>`;
+  let html=tabsHtml+`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Für morgen · Stand: ${todayStr}</div>`;
   html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table">
     <thead><tr>
       <th style="text-align:left;">Sweets 🍰</th>`;
