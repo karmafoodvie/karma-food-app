@@ -286,6 +286,8 @@ const KITCHEN_SUPPLY_IMAGES = {
 };
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
 const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D','Wochensalat Dressing':'#9333EA'};
+// Ausgeschriebene Allergen-Namen statt Buchstaben-Codes — Mitarbeitende kennen die Buchstaben nicht auswendig
+const ALLERGEN_NAMES={A:'Gluten',C:'Sellerie',F:'Soja',G:'Milch',L:'Sesam',M:'Senf',N:'Nüsse'};
 
 // FAQ & Ansprechpartner — beides einfach hier erweiterbar, sobald mehr Inhalte/Kontaktdaten da sind.
 // SHOW_FAQ: FAQ-Bereich ist vorerst ausgeblendet (Inhalt bleibt erhalten) — auf true setzen, um ihn
@@ -1169,35 +1171,33 @@ async function renderHome(){
     ${(()=>{
       const todayMenu=getTodayMenu()||[];
       if(!todayMenu.length) return '';
-      return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${todayMenu.map((d,i)=>{
+      return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${todayMenu.map((d,i)=>{
         const cat=mapDishNameToCategory(d.name);
         const mainCodes=d.allergene?.main||[];
         const dressingCodes=d.allergene?.dressing||[];
-        const badges=[
-          ...mainCodes.map(c=>`<span class="badge badge-ok" style="font-size:9px;">${c}</span>`),
-          ...dressingCodes.map(c=>`<span class="badge" style="font-size:9px;background:#FEF3C7;color:#92400E;">${c} Dressing</span>`)
-        ].join(' ');
-        return `<div style="flex:1;min-width:88px;display:flex;flex-direction:column;">
+        const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
+        const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
+        const allNames=[...namesMain,...namesDressing];
+        const zutaten=(d.zutaten||'').replace(/\n/g,' ').trim();
+        return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
           <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
             <div style="font-size:20px;">${getDishEmoji(d.name)}</div>
             <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
             <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
           </div>
-          <div id="dish-allergen-${i}" style="display:none;background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
-            <div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;">${badges||'<span style="font-size:9px;color:var(--muted);">keine Allergene angegeben</span>'}</div>
+          <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
+            <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
+          </div>
+          <div id="dish-allergen-${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px;">
+            <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:3px;">ZUTATEN:</div>
+            <div style="font-size:10px;color:var(--sub);line-height:1.5;">${zutaten||'Keine Zutaten hinterlegt'}</div>
           </div>
         </div>`;
       }).join('')}</div>`;
     })()}
-    <div style="display:flex;gap:6px;margin-bottom:6px;">
-      <div class="home-card" onclick="goTo('allergene')" style="flex:1;margin-bottom:0;padding:8px 10px;">
-        <div style="font-size:13px;font-weight:500;">📋 Zutaten &<br>Allergene</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px;">Nachschlagen</div>
-      </div>
-      <div class="home-card" onclick="goTo('disposal')" style="flex:1;margin-bottom:0;padding:8px 10px;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
-        <div style="font-size:13px;font-weight:500;">🗑️ Entsorgung /<br>Food Waste</div>
-        <div style="font-size:10px;color:${disposalDone?'var(--green)':'var(--muted)'};margin-top:2px;">${disposalDone?'✓ erledigt':'Restmengen eintragen'}</div>
-      </div>
+    <div class="home-card" onclick="goTo('disposal')" style="margin-bottom:6px;padding:8px 10px;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
+      <div style="font-size:13px;font-weight:500;">🗑️ Entsorgung / Food Waste</div>
+      <div style="font-size:10px;color:${disposalDone?'var(--green)':'var(--muted)'};margin-top:2px;">${disposalDone?'✓ erledigt':'Restmengen eintragen'}</div>
     </div>
     <div onclick="goTo('reinigungHilfe')" style="text-align:center;margin:-2px 0 8px;">
       <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe bei der Reinigung? Checkliste ansehen</span>
