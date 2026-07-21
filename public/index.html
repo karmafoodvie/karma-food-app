@@ -1178,7 +1178,7 @@ async function renderHome(){
       const todayMenu=getTodayMenu()||[];
       if(!todayMenu.length) return '';
       return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${todayMenu.map((d,i)=>{
-        const cat=mapDishNameToCategory(d.name);
+        const cat=mapDishNameToCategory(d.name, d.slot);
         const mainCodes=d.allergene?.main||[];
         const dressingCodes=d.allergene?.dressing||[];
         const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
@@ -2071,15 +2071,16 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
 
 // Ordnet einen (ggf. beschreibenden) Gerichtnamen der generischen Verkaufs-Kategorie zu,
 // mit der auch sales_history befüllt ist (aus dem Odoo-Export abgeleitet).
-function mapDishNameToCategory(dishName){
+function mapDishNameToCategory(dishName, slot){
   const n=(dishName||'').toLowerCase();
+  if(slot==='salat') return 'Salat'; // die Salat-Zeile ist immer Salat, unabhängig vom Eigennamen des Gerichts
   if(n==='reis') return 'Reis';
   if(n.includes('curry')) return 'Curry';
   if(n.includes('dal')) return 'Dal';
   if(n.includes('biryani')) return 'Biryani';
   if(n.includes('lasagne')) return 'Lasagne';
   if(n.includes('salat')) return 'Salat';
-  return 'Special'; // rotierendes Sondergericht (Meatballs, Aloo Gobi, Gulasch etc.)
+  return 'Special'; // rotierendes Sondergericht (Meatballs, Aloo Gobi, Gulasch etc.) — kommt nur mittwochs vor
 }
 
 function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMap, calendarEvents, settings, salesHistoryByCategory, lastWeekDisposalByDate){
