@@ -207,6 +207,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-kitchen" class="view"></div>
     <div id="v-disposal" class="view"></div>
     <div id="v-hilfe" class="view"></div>
+    <div id="v-onboarding" class="view"></div>
   </div>
 
   <nav id="bottomnav">
@@ -284,18 +285,20 @@ let lasagneExtraSizes = {}; // {cellKey('date|dish'): Set(groesse)} — manuell 
 // Küchen-Liefermengen (Dressing, Raita, etc.) sind freie Textnamen in kitchen_supply_baseline,
 // nicht mit der articles-Tabelle verknüpft — Bilder daher über diese Zuordnung, sobald vorhanden.
 const KITCHEN_SUPPLY_IMAGES = {
+  // 'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
   // 'Dressing': '/images/kitchen-supply/dressing.jpg',
 };
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
-const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D','Wochensalat Dressing':'#9333EA'};
+const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat (zur Lasagne)':'#A21CAF','Raita':'#15803D'};
 // Ausgeschriebene Allergen-Namen statt Buchstaben-Codes — Mitarbeitende kennen die Buchstaben nicht auswendig
 const ALLERGEN_NAMES={A:'Gluten',C:'Sellerie',F:'Soja',G:'Milch',L:'Sesam',M:'Senf',N:'Nüsse'};
 
 // FAQ & Ansprechpartner — beides einfach hier erweiterbar, sobald mehr Inhalte/Kontaktdaten da sind.
 // SHOW_FAQ: FAQ-Bereich ist vorerst ausgeblendet (Inhalt bleibt erhalten) — auf true setzen, um ihn
 // wieder einzublenden, sobald klar ist, dass er gebraucht wird.
-const SHOW_FAQ=false;
+const SHOW_FAQ=true;
 const FAQ_ITEMS=[
+  {q:'Der Bankomat/das Kartenterminal funktioniert nicht — was tun?', a:'Zuerst Gerät neu starten (aus- und wieder einstecken). Funktioniert es weiterhin nicht: Kunde bar zahlen lassen falls möglich, und sofort bei Adi oder in der Support-Gruppe melden (siehe Ansprechpartner oben).'},
   {q:'Ich habe zu viel oder zu wenig Essen bekommen — was tun?', a:'Bitte bis 12:45 Uhr melden (Chat oder direkt bei Tini anrufen) — danach wird bei Bedarf ein Uber für die Umverteilung organisiert.'},
   {q:'Ein Gutschein funktioniert nicht oder ich brauche schnell eine Antwort — was tun?', a:'Immer anrufen — Ines oder Tini. Im Chat sind die beiden vor allem zwischen 11:00–12:30 Uhr aktiv, außerhalb dieser Zeit lieber gleich anrufen.'},
   {q:'Ich habe noch Samosas von gestern und heute neue dazubekommen — welche zuerst verkaufen?', a:'Immer die älteren zuerst verkaufen (FIFO) — am besten sichtbar vorne hinstellen, damit sie zuerst weggehen.'},
@@ -337,9 +340,164 @@ const RABATT_CODES=[
   {code:'TEAM30', wert:'30%', bedingung:'Eigenkonsumation über das täglich inkludierte Gericht/Getränk/Kaffee hinaus (Sweets, Mango Lassi etc.)', stores:[]},
 ];
 
+const ONBOARDING_STEPS=[
+  {id:'firma', label:'Über Karma Food gelesen (unten auf dieser Seite)'},
+  {id:'guide', label:'Store Guide durchgesehen'},
+  {id:'allergene', label:'Zutaten- & Allergenliste angeschaut'},
+  {id:'hygiene', label:'Hygiene-Schulung abgeschlossen'},
+  {id:'dienstplan', label:'Zugang zu "Mein Dienstplan" erhalten & getestet'},
+  {id:'ansprechpartner', label:'Ansprechpartner-Liste angeschaut (wer ist wofür da)'},
+];
+
+async function renderOnboarding(){
+  const el=document.getElementById('v-onboarding');
+  const isOrg=currentStore?.id==='zentrale';
+  let html=backToHomeHtml();
+  const doneKey=`onboarding_done_${currentStore?.id}`;
+  const done=JSON.parse(localStorage.getItem(doneKey)||'{}');
+
+  // Wochenprogramm — Tag für Tag, von der Organisation selbst pflegbar (kein Code-Update nötig)
+  const days=await api('onboarding_program?select=*&order=day_number,sort_order').catch(()=>[]);
+  html+=`<div class="section-lbl">📅 Wochenprogramm</div>`;
+  if(isOrg){
+    html+=`<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+      <button onclick="showOnboardingDayForm()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">+ Tag hinzufügen</button>
+    </div>
+    <div id="onb-day-form" style="display:none;"></div>`;
+  }
+  const dayNumbers=[...new Set((days||[]).map(d=>d.day_number))].sort((a,b)=>a-b);
+  if(!dayNumbers.length){
+    html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">${isOrg?'Noch kein Programm angelegt — "+ Tag hinzufügen" nutzen.':'Noch kein Wochenprogramm hinterlegt.'}</div>`;
+  }
+  dayNumbers.forEach(dn=>{
+    const dayEntries=(days||[]).filter(d=>d.day_number===dn);
+    const dayDoneKey=`tag${dn}`;
+    const isDayDone=!!done[dayDoneKey];
+    html+=`<div class="card" style="margin-bottom:8px;overflow:hidden;">
+      <div style="background:#F5F5F3;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:700;font-size:13px;">Tag ${dn}</div>
+        ${!isOrg?`<div onclick="toggleOnboardingStep('${dayDoneKey}')" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <span style="font-size:11px;color:${isDayDone?'var(--green)':'var(--muted)'};">${isDayDone?'✓ erledigt':'als erledigt markieren'}</span>
+          <div class="check-box${isDayDone?' done':''}" style="width:16px;height:16px;">${isDayDone?'<svg width="10" height="10" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+        </div>`:''}
+      </div>`;
+    dayEntries.forEach(e=>{
+      html+=`<div style="padding:10px 12px;border-top:0.5px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div style="font-weight:500;font-size:13px;">${e.titel}</div>
+          ${isOrg?`<div style="display:flex;gap:6px;flex-shrink:0;">
+            <button onclick="editOnboardingDay(${e.id},${e.day_number},'${e.titel.replace(/'/g,"\\'")}',\`${(e.inhalt||'').replace(/`/g,'\\`')}\`)" style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">✏️</button>
+            <button onclick="deleteOnboardingDay(${e.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
+          </div>`:''}
+        </div>
+        ${e.inhalt?`<div style="font-size:12.5px;color:var(--sub);margin-top:4px;white-space:pre-wrap;">${e.inhalt}</div>`:''}
+      </div>`;
+    });
+    html+='</div>';
+  });
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">✅ Erste Schritte</div><div class="card">`;
+  ONBOARDING_STEPS.forEach(step=>{
+    const isDone=!!done[step.id];
+    html+=`<div class="cl-item" onclick="toggleOnboardingStep('${step.id}')">
+      <div class="check-box${isDone?' done':''}">${isDone?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+      <span class="cl-text">${step.label}</span>
+    </div>`;
+  });
+  html+='</div>';
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">🔗 Wichtige Bereiche</div><div class="card">`;
+  const links=[
+    {icon:'📖', label:'Store Guide', sub:'Wie läuft der Store-Alltag ab', view:'guide'},
+    {icon:'🧪', label:'Zutaten & Allergene', sub:'Nachschlagen, was in welchem Gericht drin ist', view:'allergene'},
+    {icon:'🎓', label:'Hygiene-Schulung', sub:'Pflichtschulung, einmal abzuschließen', view:'hygieneSchulung'},
+    {icon:'👥', label:'Ansprechpartner', sub:'Wer ist wofür zuständig', view:'hilfe'},
+  ];
+  links.forEach(l=>{
+    html+=`<div class="item-row" onclick="goTo('${l.view}')" style="cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">${l.icon}</span>
+        <div><div class="item-name">${l.label}</div><div class="item-unit">${l.sub}</div></div>
+      </div>
+      <span style="color:var(--muted);">→</span>
+    </div>`;
+  });
+  html+='</div>';
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">🥗 Über Karma Food</div><div class="card" style="padding:14px;font-size:13px;color:var(--sub);line-height:1.6;">
+    Karma Food ist ein vegetarisches Lunch-Restaurant mit mehreren Standorten in Wien. Wir kochen täglich frisch — Currys, Dals, Bowls, Biryanis, Lasagnen und wechselnde Specials — und legen viel Wert auf Qualität, Hygiene und einen respektvollen Umgang miteinander im Team.
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;">📝 Tini/Ines: dieser Text ist ein erster Entwurf — gerne anpassen/ergänzen lassen.</div>
+  </div>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+function toggleOnboardingStep(stepId){
+  const doneKey=`onboarding_done_${currentStore?.id}`;
+  const done=JSON.parse(localStorage.getItem(doneKey)||'{}');
+  done[stepId]=!done[stepId];
+  localStorage.setItem(doneKey, JSON.stringify(done));
+  renderOnboarding();
+}
+window.toggleOnboardingStep=toggleOnboardingStep;
+
+function showOnboardingDayForm(editId, dayNum, titel, inhalt){
+  const wrap=document.getElementById('onb-day-form');
+  wrap.style.display='block';
+  wrap.innerHTML=`<div class="card" style="padding:12px;margin-bottom:10px;">
+    <input type="number" id="onb-day-number" placeholder="Tag (1, 2, 3...)" value="${dayNum||''}" min="1" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="text" id="onb-day-titel" placeholder="Titel (z.B. Team & Küche kennenlernen)" value="${titel?titel.replace(/"/g,'&quot;'):''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <textarea id="onb-day-inhalt" placeholder="Was steht an diesem Tag an?" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:8px;">${inhalt||''}</textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('onb-day-form').style.display='none';document.getElementById('onb-day-form').innerHTML='';" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="saveOnboardingDay(${editId||'null'})" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:13px;font-weight:500;cursor:pointer;">Speichern</button>
+    </div>
+  </div>`;
+}
+window.showOnboardingDayForm=showOnboardingDayForm;
+
+function editOnboardingDay(id, dayNum, titel, inhalt){
+  showOnboardingDayForm(id, dayNum, titel, inhalt);
+}
+window.editOnboardingDay=editOnboardingDay;
+
+async function saveOnboardingDay(editId){
+  const dayNumber=parseInt(document.getElementById('onb-day-number').value);
+  const titel=document.getElementById('onb-day-titel').value.trim();
+  const inhalt=document.getElementById('onb-day-inhalt').value.trim();
+  if(!dayNumber || !titel){ showToast('Bitte Tag und Titel angeben'); return; }
+  try{
+    if(editId){
+      await api(`onboarding_program?id=eq.${editId}`,{method:'PATCH',body:JSON.stringify({day_number:dayNumber, titel, inhalt})});
+    }else{
+      await api('onboarding_program',{method:'POST',body:JSON.stringify([{day_number:dayNumber, titel, inhalt}])});
+    }
+    showToast('✓ Gespeichert');
+    renderOnboarding();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveOnboardingDay=saveOnboardingDay;
+
+async function deleteOnboardingDay(id){
+  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  try{
+    await api(`onboarding_program?id=eq.${id}`,{method:'DELETE'});
+    renderOnboarding();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen');}
+}
+window.deleteOnboardingDay=deleteOnboardingDay;
+
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
   let html=backToHomeHtml();
+  html+=`<div onclick="goTo('onboarding')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
+    <span style="font-size:18px;">🌱</span>
+    <div style="flex:1;">
+      <div style="font-size:12.5px;font-weight:600;color:#166534;">Onboarding — neu im Team?</div>
+      <div style="font-size:10.5px;color:#3B6D11;">Erste Schritte, wichtige Infos & Checkliste</div>
+    </div>
+    <span style="color:#166534;">→</span>
+  </div>`;
 
   html+=`<div class="section-lbl">👥 Ansprechpartner</div><div class="card">`;
   CONTACT_PERSONS.forEach(p=>{
@@ -859,11 +1017,11 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner'};
+  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -1855,30 +2013,16 @@ async function renderKuecheOrderTab(el, tabHtml){
         </td>`;
       }).join('');
       matrixHtml+=`<tr>
-        <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></td>
+        <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+            <div>${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></div>
+          </div>
+        </td>
         ${cells}
       </tr>`;
     });
 
-    // Wochensalat — tägliche Schichtende-Meldung (Rest + Bedarf für morgen), als eigene Zeile
-    // direkt in derselben Tabelle statt als separater Block. Nur die heutige Spalte ist relevant.
-    if(displayDays.includes(todayWeekday)){
-      const wsCells=displayDays.map(wd=>{
-        if(wd!==todayWeekday) return `<td style="color:var(--border);">·</td>`;
-        return `<td style="padding:4px 3px;">
-          <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
-            <input type="number" step="0.25" value="${restRec.rest_qty??''}" placeholder="Rest" id="wsalat-rest" onchange="submitWochensalat()" inputmode="decimal"
-              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
-            <input type="number" step="0.25" value="${restRec.needed_qty??''}" placeholder="Morgen" id="wsalat-needed" onchange="submitWochensalat()" inputmode="decimal"
-              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
-          </div>
-        </td>`;
-      }).join('');
-      matrixHtml+=`<tr>
-        <td data-no-translate style="font-size:13px;font-weight:600;color:#A21CAF;white-space:nowrap;">Wochensalat<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Rest / Bedarf morgen</div></td>
-        ${wsCells}
-      </tr>`;
-    }
     matrixHtml+='</tbody></table></div></div>';
     html+=matrixHtml;
     html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
@@ -1910,6 +2054,22 @@ async function updateKuecheQty(input){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 window.updateKuecheQty=updateKuecheQty;
+
+// Outcheck: Organisation/Transporter bestätigt vor der Abfahrt, dass eine Beilage für eine Filiale
+// wirklich eingepackt wurde — verhindert, dass z.B. der Lasagne-Salat vergessen wird.
+async function toggleKuecheEingepackt(storeId, articleName, dateStr, currentQty, isPacked){
+  try{
+    const existing=await api(`kitchen_supply_today?store_id=eq.${storeId}&supply_date=eq.${dateStr}&article_name=eq.${encodeURIComponent(articleName)}&select=qty,is_adjusted`).catch(()=>[]);
+    const qty=existing?.[0]?.qty ?? currentQty;
+    const isAdjusted=existing?.[0]?.is_adjusted ?? false;
+    await api(`kitchen_supply_today?store_id=eq.${storeId}&supply_date=eq.${dateStr}&article_name=eq.${encodeURIComponent(articleName)}`,{method:'DELETE'});
+    await api('kitchen_supply_today',{method:'POST',body:JSON.stringify([{
+      store_id:storeId, supply_date:dateStr, article_name:articleName, qty, is_adjusted:isAdjusted, eingepackt:!isPacked
+    }])});
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.toggleKuecheEingepackt=toggleKuecheEingepackt;
 
 // ---- FORECAST (Hauptspeisen-Portionsmengen pro Filiale & Tag) ----
 
@@ -5286,7 +5446,7 @@ async function renderBeilagenTableHtml(){
     let html=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Mengen pro Filiale & Gesamtsumme für die Küchen-Produktion</div>`;
 
     const baseline=await api(`kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty`).catch(()=>[]);
-    const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted`).catch(()=>[]);
+    const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
     const valMap={}; // valMap[date][store_id][article_name] = rec
     (weekVals||[]).forEach(d=>{
       if(!valMap[d.supply_date])valMap[d.supply_date]={};
@@ -5330,11 +5490,27 @@ async function renderBeilagenTableHtml(){
             const val=rec?rec.qty:b.base_qty;
             sum+=parseFloat(val)||0;
             const adjusted=rec?.is_adjusted;
+            if(isToday){
+              // Outcheck: heutige Lieferung antippen = als eingepackt bestätigen (verhindert, dass
+              // z.B. der Lasagne-Salat vergessen wird — Michi sieht sofort, was noch fehlt)
+              const packed=!!rec?.eingepackt;
+              return `<td>
+                <div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(name)}','${dateStr}',${val},${packed})" style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;gap:1px;padding:3px 5px;border-radius:6px;background:${packed?'var(--green-light)':'transparent'};">
+                  <span style="font-weight:${adjusted?'700':'500'};color:${adjusted?'#C2410C':'#1a1a18'};font-size:12px;">${formatQty(val)}${adjusted?'*':''}</span>
+                  <span style="font-size:10px;color:${packed?'var(--green)':'var(--border)'};">${packed?'✓':'○'}</span>
+                </div>
+              </td>`;
+            }
             return `<td style="font-weight:${adjusted?'700':'400'};color:${adjusted?'#C2410C':'#1a1a18'};font-size:12px;">${formatQty(val)}${adjusted?'*':''}</td>`;
           }).join('');
           const sumDisplay = Number.isInteger(sum) ? sum : Math.round(sum*1000)/1000;
           dayHtml+=`<tr>
-            <td data-no-translate style="font-size:12px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};">${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></td>
+            <td data-no-translate style="font-size:12px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};">
+              <div style="display:flex;align-items:center;gap:5px;">
+                ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
+                <div>${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></div>
+              </div>
+            </td>
             ${cells}
             <td style="font-weight:700;color:#3B6D11;font-size:12px;">${formatQty(sumDisplay)}</td>
           </tr>`;
@@ -5369,13 +5545,18 @@ async function renderKitchen(){
   nextCookDay.setDate(nextCookDay.getDate()+1);
   while([0,6].includes(nextCookDay.getDay())){ nextCookDay.setDate(nextCookDay.getDate()+1); }
   const nextCookDayLabel=nextCookDay.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+  // Ab 13:00 Uhr zeigt "Nächste Woche" wirklich die kommende Woche (vorher die laufende) — Wording
+  // im Tab passt sich automatisch mit an, damit nie unklar ist, welche Woche gerade gemeint ist.
+  const kitchenWeekOffset = new Date().getHours()>=13 ? 1 : 0;
+  const nwWeekDates=getWeekdayDates(kitchenWeekOffset);
+  const nwLabel=(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+' '+new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
   const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E'};
   const ktab=(key,label)=>{
     const active=kitchenTab===key;
     const col=KTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchKitchenTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 Nächste Woche')}${ktab('plan','🗓️ Kochplan')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche'))}${ktab('plan','🗓️ Kochplan')}</div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -5398,16 +5579,49 @@ async function renderKitchen(){
     const overrideMap = {};
     (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
-    // Week selector — jede Woche in eigener Farbe, damit man sie auf einen Blick unterscheidet
+    // Week selector — jede Woche in eigener Farbe, damit man sie auf einen Blick unterscheidet.
+    // Zusätzlich das reale Kalenderdatum darunter, damit Woche 1-4 nicht mit dem Monat verwechselt wird.
     const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
+    const thisMonday=new Date(); thisMonday.setDate(thisMonday.getDate()-((thisMonday.getDay()+6)%7));
     html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">`;
     for(let w=1;w<=4;w++){
       const active=selectedWoche===w;
       const col=WOCHE_COLORS[w];
-      html+=`<button onclick="window.kochplanWoche=${w};renderKitchen()" style="flex:1;padding:8px 4px;border-radius:10px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;cursor:pointer;">Woche ${w}</button>`;
+      const weeksAhead=((w-CURRENT_MENU_WOCHE)+4)%4;
+      const wMon=new Date(thisMonday); wMon.setDate(wMon.getDate()+weeksAhead*7);
+      const wFri=new Date(wMon); wFri.setDate(wFri.getDate()+4);
+      const rangeLabel=wMon.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+wFri.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      html+=`<button onclick="window.kochplanWoche=${w};renderKitchen()" style="flex:1;padding:8px 4px;border-radius:10px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;cursor:pointer;">Woche ${w}<div style="font-size:9px;font-family:inherit;margin-top:2px;">${rangeLabel}</div></button>`;
     }
     html+=`</div>`;
     html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
+
+    // Entsorgung vom Vortag — auch hier auf einen Blick sichtbar (dieselbe Info wie im Nächste-Woche-Tab)
+    const planYesterday=new Date(); planYesterday.setDate(planYesterday.getDate()-1);
+    const planYStr=planYesterday.toISOString().split('T')[0];
+    const planStores=await api('stores?select=id,name&order=id').catch(()=>[]);
+    const planStoreList=planStores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
+    const planYDisp=await api(`disposal?disposal_date=eq.${planYStr}&select=store_id,slot,dish_name,sold_out_time,leftover_qty`).catch(()=>[]);
+    if((planYDisp||[]).length){
+      const planYMap={}; planYDisp.forEach(d=>{ if(!planYMap[d.slot])planYMap[d.slot]={}; planYMap[d.slot][d.store_id]=d; });
+      html+=`<div class="section-lbl">🗑️ Entsorgung — Vortag (${planYesterday.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})})</div>
+      <div class="card" style="margin-bottom:14px;"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Gericht</th>${planStoreList.map(s=>`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`).join('')}</tr></thead><tbody>`;
+      MENU_SLOTS.forEach(s=>{
+        const slotData=planYMap[s.k];
+        if(!slotData) return;
+        const sampleName=Object.values(slotData)[0]?.dish_name||s.l;
+        html+=`<tr><td data-no-translate style="font-size:12px;">${sampleName}</td>`;
+        planStoreList.forEach(st=>{
+          const rec=slotData[st.id];
+          if(!rec){ html+='<td style="color:var(--border);">·</td>'; return; }
+          const time=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
+          const qty=rec.leftover_qty??'';
+          html+=`<td style="font-size:11px;line-height:1.4;">${qty!==''?`<div style="font-weight:600;">${qty}</div>`:''}${time?`<div style="color:var(--muted);">${time}</div>`:''}${qty===''&&!time?'·':''}</td>`;
+        });
+        html+='</tr>';
+      });
+      html+='</tbody></table></div></div>';
+    }
 
     DAYS_ORDER.forEach(day=>{
       const key=`w${selectedWoche}_${day}`;
@@ -5478,14 +5692,16 @@ async function renderKitchen(){
   if(kitchenTab==='supply'){
     html+=await renderBeilagenTableHtml();
   }else if(kitchenTab==='forecast'){
-    // FORECAST — Portionsmengen aller Filialen für die ganze Woche, wie das Excel-Vorbild
+    // FORECAST — Portionsmengen aller Filialen für die ganze Woche, wie das Excel-Vorbild.
+    // Ab 13:00 Uhr automatisch auf die nächste Woche umgeschaltet (siehe kitchenWeekOffset oben).
     const stores=await api('stores?select=id,name&order=id');
     const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
     const todayWeekday=new Date().getDay();
-    const weekDates=getWeekdayDates();
+    const weekDates=nwWeekDates;
     const fromDate=weekDates[1], toDate=weekDates[5];
 
-    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Portionsmengen pro Filiale für die Küchen-Produktion</div>`;
+    html+=`<div style="font-size:13px;font-weight:600;margin:10px 0 2px;">${nwLabel}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Portionsmengen pro Filiale für die Küchen-Produktion</div>`;
 
     const weekForecasts=await api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source,groesse`).catch(()=>[]);
     const fMap={}; // fMap[date][store_id][dish] = [rec, ...] (mehrere bei Lasagne mit mehreren Größen)
@@ -5509,6 +5725,41 @@ async function renderKitchen(){
       html+=`<div style="background:#F0F9FF;border:1px solid #7DD3FC;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#0369A1;display:flex;align-items:center;gap:6px;">
         <span>ℹ️</span><span>Mindestens eine Filiale hat diese Woche eine Menge angepasst</span>
       </div>`;
+    }
+
+    // Beilagen (Bowl Sauce, Limetten, Dressing etc.) mit Mengen ebenfalls hier zeigen, pro Tag
+    const supplyBaseline=await api('kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty').catch(()=>[]);
+    const supplyToday=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty`).catch(()=>[]);
+    const supplyValMap={}; // [date][article_name][store_id] = qty
+    (supplyToday||[]).forEach(r=>{
+      if(!supplyValMap[r.supply_date])supplyValMap[r.supply_date]={};
+      if(!supplyValMap[r.supply_date][r.article_name])supplyValMap[r.supply_date][r.article_name]={};
+      supplyValMap[r.supply_date][r.article_name][r.store_id]=r.qty;
+    });
+
+    // Entsorgung vom Vortag — auf einen Blick, wie viel gestern übrig war (Zeit + Restmenge je Filiale)
+    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+    const yStr=yesterday.toISOString().split('T')[0];
+    const yDisp=await api(`disposal?disposal_date=eq.${yStr}&select=store_id,slot,dish_name,sold_out_time,leftover_qty,note`).catch(()=>[]);
+    if((yDisp||[]).length){
+      const yMap={}; yDisp.forEach(d=>{ if(!yMap[d.slot])yMap[d.slot]={}; yMap[d.slot][d.store_id]=d; });
+      html+=`<div class="section-lbl">🗑️ Entsorgung — Vortag (${yesterday.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})})</div>
+      <div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Gericht</th>${storeList.map(s=>`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`).join('')}</tr></thead><tbody>`;
+      MENU_SLOTS.forEach(s=>{
+        const slotData=yMap[s.k];
+        if(!slotData) return;
+        const sampleName=Object.values(slotData)[0]?.dish_name||s.l;
+        html+=`<tr><td data-no-translate style="font-size:12px;">${sampleName}</td>`;
+        storeList.forEach(st=>{
+          const rec=slotData[st.id];
+          if(!rec){ html+='<td style="color:var(--border);">·</td>'; return; }
+          const time=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
+          const qty=rec.leftover_qty??'';
+          html+=`<td style="font-size:11px;line-height:1.4;">${qty!==''?`<div style="font-weight:600;">${qty}</div>`:''}${time?`<div style="color:var(--muted);">${time}</div>`:''}${qty===''&&!time?'·':''}</td>`;
+        });
+        html+='</tr>';
+      });
+      html+='</tbody></table></div></div>';
     }
 
     for(let wd=1; wd<=5; wd++){
@@ -5550,31 +5801,63 @@ async function renderKitchen(){
       if(hasAnyAdjusted){
         html+=`<div style="font-size:10px;color:#0369A1;padding:2px 4px 8px;">* von Filiale angepasst</div>`;
       }
+
+      // Beilagen für diesen Tag, mit Mengen — direkt darunter statt in einem separaten Tab
+      const dayBaseline=supplyBaseline.filter(b=>b.weekday===wd);
+      const beilagenNames=[...new Set(dayBaseline.map(b=>b.article_name))];
+      if(beilagenNames.length){
+        html+=`<div class="card" style="margin:-2px 0 12px;"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
+          <th style="text-align:left;">Beilage</th>
+          ${storeList.map(s=>`<th data-no-translate style="color:${STORE_COLORS[s.id]||'#888'};font-size:10.5px;">${s.name.split(' ')[0]}</th>`).join('')}
+        </tr></thead><tbody>`;
+        beilagenNames.forEach(name=>{
+          const color=ARTICLE_COLORS[name]||'#444';
+          html+=`<tr><td data-no-translate style="font-size:11.5px;font-weight:600;color:${color};">${name}</td>
+            ${storeList.map(s=>{
+              const b=dayBaseline.find(x=>x.store_id===s.id && x.article_name===name);
+              if(!b) return '<td style="color:var(--border);">·</td>';
+              const val=supplyValMap[dateStr]?.[name]?.[s.id] ?? b.base_qty;
+              return `<td style="font-size:11.5px;">${formatQty(val)}</td>`;
+            }).join('')}
+          </tr>`;
+        });
+        html+='</tbody></table></div></div>';
+      }
       // Zutaten optional aufklappbar — ohne die Seite zu verlassen (kein Zurück-Klick nötig)
       const dayDishObjs=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${wdStr}`])||[];
       const dayDetailId=`nw_zut_${wd}`;
       html+=`<div style="margin:-4px 0 12px;">
         <div onclick="document.getElementById('${dayDetailId}').style.display=document.getElementById('${dayDetailId}').style.display==='none'?'block':'none'" style="font-size:11.5px;color:var(--muted);cursor:pointer;padding:4px 2px;">📖 Zutaten & Allergene anzeigen</div>
         <div id="${dayDetailId}" style="display:none;">
-          ${dishNames.map(name=>{
+          ${dishNames.map((name,dni)=>{
             const dObj=dayDishObjs.find(d=>d.name===name);
             if(!dObj) return '';
             const override=nwOverrideMap[name];
             const zutaten=(override?.zutaten||dObj.zutaten||'').replace(/\n/g,' ').trim();
+            const allergenCodes=(override?.allergene_codes||dObj.allergene?.main||[]);
             const {gemuese, rest, getreide}=splitZutaten(zutaten);
             const allergenMain=dObj.allergene?.main||[];
+            const editKey=`nw${wd}_${dni}`;
             return `<div class="card" style="margin-bottom:6px;padding:10px 14px;">
-              <div style="font-size:13px;font-weight:600;">${name}${allergenMain.length?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}</span>`:''}</div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                <div style="font-size:13px;font-weight:600;">${name}${allergenMain.length?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}</span>`:''}</div>
+                <button onclick="document.getElementById('nwedit-${editKey}').style.display=document.getElementById('nwedit-${editKey}').style.display==='none'?'block':'none'" style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:3px 8px;cursor:pointer;flex-shrink:0;">✏️ Bearbeiten</button>
+              </div>
               ${gemuese.length?`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">🥕 ${gemuese.join(', ')}</div>`:''}
               ${getreide.length?`<div style="font-size:11.5px;color:#1D4ED8;margin-top:2px;">🌾 ${getreide.join(', ')}</div>`:''}
               ${rest.length?`<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">🧂 ${rest.join(' · ')}</div>`:''}
               ${!gemuese.length&&!rest.length&&!getreide.length?'<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Keine Zutaten hinterlegt</div>':''}
+              <div id="nwedit-${editKey}" style="display:none;margin-top:8px;border-top:0.5px solid var(--border);padding-top:8px;">
+                <textarea id="zut-${editKey}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;min-height:70px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:6px;">${zutaten}</textarea>
+                <input id="all-${editKey}" type="text" value="${allergenCodes.join(', ')}" placeholder="Allergen-Kürzel, z.B. A, M" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;margin-bottom:8px;">
+                <button onclick="saveMenuDish('${name.replace(/'/g,"\\'")}','${editKey}')" style="width:100%;padding:8px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:12.5px;font-weight:500;cursor:pointer;">Speichern</button>
+              </div>
             </div>`;
           }).join('') || '<div style="font-size:11.5px;color:var(--muted);padding:4px 2px;">Keine Zutaten hinterlegt</div>'}
         </div>
       </div>`;
     }
-  }else{
+  }else if(kitchenTab==='history'){
     // WOCHENÜBERSICHT — historischer Verlauf wie im Excel, eine Woche pro Bildschirm
     const stores=await api('stores?select=id,name&order=id');
     const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
