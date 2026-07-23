@@ -849,6 +849,8 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
+const APP_VERSION = '6.0.1';
+
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
 
@@ -1040,6 +1042,21 @@ window.addEventListener('popstate',(e)=>{
   const v=e.state?.view||'home';
   goTo(v, true);
 });
+
+async function checkForUpdate(){
+  try{
+    const res=await fetch('/index.html?v='+Date.now(),{cache:'no-store'});
+    const text=await res.text();
+    const m=text.match(/APP_VERSION = '([^']+)'/);
+    if(m && m[1] && m[1]!==APP_VERSION){
+      const b=document.createElement('div');
+      b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#1a1a18;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+      b.innerHTML='<span>🆕 Neue Version verfügbar</span><button onclick="window.location.reload(true)" style="background:#D4FF3F;color:#1a1a18;border:none;border-radius:8px;padding:7px 14px;font-weight:700;font-size:13px;cursor:pointer;">Jetzt aktualisieren</button>';
+      document.body.prepend(b);
+    }
+  }catch(e){}
+}
+setTimeout(checkForUpdate, 3000);
 
 document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('pin-input').addEventListener('keydown',e=>{ if(e.key==='Enter') checkPin(); });
@@ -1251,19 +1268,8 @@ async function saveGemuese(dishName, newGemuese){
 // Keyword-basiert: Treffer auf Name → Foto aus /images/dishes/
 // Neue Fotos einfach in /images/dishes/ ablegen und hier eintragen.
 const DISH_IMAGE_MAP = [
-  { match: /LASAGNE/,                   src: '/images/dishes/lasagne.jpg' },
-  { match: /MEATBALL/,                  src: '/images/dishes/meatballs.jpg' },
-  { match: /BIRYANI|\bBOWL\b/,         src: '/images/dishes/bowl.jpg' },
-  { match: /\bDAL\b|LINSEN/,           src: '/images/dishes/dal.jpg' },
-  { match: /CURRY/,                     src: '/images/dishes/curry.jpg' },
-  { match: /WOCHENSALAT/,              src: '/images/dishes/bowl.jpg' },
-  { match: /SALAT LASAGNE|LASAGNE.*SALAT/, src: '/images/kitchen-supply/salat-lasagne.jpg' },
-  { match: /RAITA/,                        src: '/images/dishes/raita.jpg' },
-  { match: /SALAT|SALAD/,                src: '/images/dishes/salat.jpg' },
-  { match: /REIS|RICE|BASMATI/,        src: '/images/dishes/reis.jpg' },
-  { match: /SAMOSA/,                   src: '/images/dishes/samosa.jpg' },
-  { match: /CHAI/,                     src: '/images/dishes/masala-chai.jpg' },
-  { match: /CHUTNEY/,                  src: '/images/dishes/mango-chutney.jpg' },
+  // Gerichte: keine Fotos — Emojis via getDishEmoji() als Fallback
+  // Beilagen-Fotos bleiben in KITCHEN_SUPPLY_IMAGES
 ];
 
 function getDishImage(name){
@@ -1535,10 +1541,7 @@ async function renderHome(){
         const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
         const allNames=[...namesMain,...namesDressing];
         const zutaten=(d.zutaten||'').replace(/\n/g,' ').trim();
-        const dishSrc=getDishImage(d.name);
-        const dishVisual=dishSrc
-          ? `<img src="${dishSrc}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover;margin:0 auto 3px;">`
-          : `<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
+        const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
         return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
           <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
             ${dishVisual}
@@ -5549,8 +5552,12 @@ async function renderDisposal(){
 
   // Tatsächliche Hauptgerichte aus dem aktuell laufenden Menü
   const menuDishes=getMenuDishNamesForDay(weekday); // [Gericht A, Gericht B] dieser Woche
+  // Echter Salatname aus dem Menü holen (Slot 'salat')
+  const todayMenuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${weekday}`])||[];
+  const salatEntry=todayMenuEntries.find(e=>e.slot==='salat');
+  const salatName=salatEntry?.name||'Salat';
   const daySlots=[
-    {k:'salat', l:'Salat', name:'Salat'},
+    {k:'salat', l:'Salat', name:salatName},
     ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', l: `Gericht ${i+1}`, name})),
     {k:'reis', l:'Reis', name:REIS_DISH_NAME}
   ];
@@ -6509,6 +6516,50 @@ async function renderMorgenKoch(el, tabHtml){
     html+='</tbody></table></div>';
   }
 
+  // Beilagen für morgen — zum Abhaken für die Küche (Prep)
+  const _wdMap={'mo':1,'di':2,'mi':3,'do':4,'fr':5,'sa':6,'so':7}; const tomorrowWdNum = _wdMap[tomorrowWd]||1;
+  const beilagenBaselineMorgen = await api(`kitchen_supply_baseline?weekday=eq.${tomorrowWdNum}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
+  const beilagenTodayMorgen = await api(`kitchen_supply_today?supply_date=eq.${tomorrowStr}&select=store_id,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
+  const beilagenValMapMorgen={};
+  (beilagenTodayMorgen||[]).forEach(d=>{
+    if(!beilagenValMapMorgen[d.store_id])beilagenValMapMorgen[d.store_id]={};
+    beilagenValMapMorgen[d.store_id][d.article_name]=d;
+  });
+  const allBeilagenMorgen=[...new Set((beilagenBaselineMorgen||[]).map(b=>b.article_name))];
+
+  if(allBeilagenMorgen.length){
+    html+=`<div style="font-size:12px;font-weight:700;color:#EC4899;margin:14px 0 8px;">🥗 Beilagen vorbereiten</div>`;
+    html+=`<div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
+      <thead><tr>
+        <th style="text-align:left;font-size:11px;">Artikel</th>
+        ${storeList.map(s=>`<th style="font-size:11px;color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
+      </tr></thead><tbody>`;
+    allBeilagenMorgen.forEach(name=>{
+      const unit=(beilagenBaselineMorgen||[]).find(b=>b.article_name===name)?.unit||'';
+      const img=KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:22px;height:22px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;">`:'' ;
+      const cells=storeList.map(st=>{
+        const b=(beilagenBaselineMorgen||[]).find(x=>x.store_id===st.id&&x.article_name===name);
+        const rec=(beilagenValMapMorgen[st.id]||{})[name];
+        const val=rec?rec.qty:(b?b.base_qty:null);
+        const packed=!!rec?.eingepackt;
+        if(val==null) return `<td style="color:var(--border);text-align:center;">–</td>`;
+        return `<td style="text-align:center;padding:4px 3px;">
+          <div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(name)}','${tomorrowStr}',${val},${packed})"
+            style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;padding:3px 6px;border-radius:7px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
+            <span style="font-size:12px;font-weight:600;color:${packed?'var(--green)':'#1a1a18'};">${val%1===0?val:val}</span>
+            <span style="font-size:9px;color:${packed?'var(--green)':'var(--muted)'};">${packed?'✓':'○'}</span>
+          </div>
+        </td>`;
+      }).join('');
+      html+=`<tr style="border-top:0.5px solid var(--border);">
+        <td style="font-size:11px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};padding:6px 6px;">
+          ${img}${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div>
+        </td>${cells}
+      </tr>`;
+    });
+    html+='</tbody></table></div>';
+  }
+
   html+=`<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 4px 16px;">Wenn ein Store die Menge ändert, wird diese Seite automatisch aktualisiert.</div>`;
   html+=`<button onclick="renderKitchen()" style="width:100%;padding:10px;background:var(--green-light);color:var(--green);border:none;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;">🔄 Aktualisieren</button>`;
 
@@ -6595,13 +6646,7 @@ async function renderSweets(){
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('supply','🥗 Beilagen')}</div>`;
-
-  if(teamTab==='supply'){
-    el.innerHTML=tabsHtml+await renderBeilagenTableHtml();
-    translateEl(el);
-    return;
-  }
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   const today=new Date().toISOString().split('T')[0];
