@@ -86,9 +86,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .section-banner{border-left:3px solid;border-radius:0 8px 8px 0;padding:8px 12px;margin:14px 0 6px;display:flex;align-items:center;gap:8px;}
 
 /* CHECKLIST */
-.cl-tabs{display:flex;gap:6px;margin-bottom:10px;}
-.cl-tab{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;text-align:center;}
-.cl-tab.active{background:var(--green);border-color:var(--green);color:#fff;}
+.cl-tabs{display:flex;gap:6px;margin-bottom:12px;}
+.cl-tab{flex:1;padding:9px 4px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:13px;font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.3;color:var(--sub);cursor:pointer;text-align:center;}
+.cl-tab.active{background:var(--green);border:2px solid var(--green);color:#fff;}
 .cl-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;}
 .cl-item:last-child{border-bottom:none;}
 .cl-item:active{background:var(--green-light);}
@@ -292,7 +292,7 @@ const KITCHEN_SUPPLY_IMAGES = {
   'Dressing': '/images/kitchen-supply/dressing.jpg',
   'Bowl Sauce': '/images/kitchen-supply/bowl-sauce.jpg',
   'Limetten': '/images/kitchen-supply/limetten.jpg',
-  // 'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
+  'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
 };
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
 const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat (zur Lasagne)':'#A21CAF','Raita':'#15803D'};
@@ -1224,6 +1224,41 @@ async function saveGemuese(dishName, newGemuese){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
+// Foto, wie das Gericht fertig serviert aussieht — hilft neuen Mitarbeitenden, die das Gericht noch
+// nie gesehen haben. Wird nach und nach befüllt, sobald Fotos da sind. Key = exakter Gerichtename.
+// ─── Dish Images ─────────────────────────────────────────────────────────────
+// Keyword-basiert: Treffer auf Name → Foto aus /images/dishes/
+// Neue Fotos einfach in /images/dishes/ ablegen und hier eintragen.
+const DISH_IMAGE_MAP = [
+  { match: /LASAGNE/,                   src: '/images/dishes/lasagne.jpg' },
+  { match: /MEATBALL/,                  src: '/images/dishes/meatballs.jpg' },
+  { match: /BIRYANI|\bBOWL\b/,         src: '/images/dishes/bowl.jpg' },
+  { match: /\bDAL\b|LINSEN/,           src: '/images/dishes/dal.jpg' },
+  { match: /CURRY/,                     src: '/images/dishes/curry.jpg' },
+  { match: /SALAT|SALAD|WOCHENSALAT/,  src: '/images/dishes/bowl.jpg' },
+  { match: /REIS|RICE|BASMATI/,        src: '/images/dishes/reis.jpg' },
+  { match: /SAMOSA/,                   src: '/images/dishes/samosa.jpg' },
+  { match: /CHAI/,                     src: '/images/dishes/masala-chai.jpg' },
+  { match: /CHUTNEY/,                  src: '/images/dishes/mango-chutney.jpg' },
+];
+
+function getDishImage(name){
+  if(!name) return null;
+  const n = name.toUpperCase();
+  const hit = DISH_IMAGE_MAP.find(e => e.match.test(n));
+  return hit ? hit.src : null;
+}
+
+// Bild-Tag für ein Gericht — mit Emoji-Fallback
+// size: px-Zahl (default 36)
+function dishImgHtml(name, size=36, style=''){
+  const src = getDishImage(name);
+  const r = Math.round(size * 0.25);
+  if(src) return `<img src="${src}" alt="" style="width:${size}px;height:${size}px;border-radius:${r}px;object-fit:cover;flex-shrink:0;${style}">`;
+  return `<span style="font-size:${Math.round(size*0.55)}px;line-height:1;">${getDishEmoji(name)}</span>`;
+}
+
+// Emoji-Fallback (bleibt für Stellen wo kein Foto da ist)
 function getDishEmoji(name){
   if(!name) return '🍽️';
   const n=name.toUpperCase();
@@ -1243,6 +1278,22 @@ function getDishEmoji(name){
   if(/BROKKOLI/.test(n)) return '🥦';
   return '🍽️';
 }
+
+// ─── Globale Tab-Bar Helper ───────────────────────────────────────────────────
+// Einheitlicher Stil für ALLE Tab-Bars in der App (Kitchen, Transporter, etc.)
+// tabs: [{key, label}]  activeKey: aktuell aktiver Key
+// onclickFn: JS-String der aufgerufen wird, z.B. "switchKitchenTab"
+// color: Akzentfarbe des Bereichs (default: var(--green))
+function tabBarHtml(tabs, activeKey, onclickFn, color='var(--green)'){
+  const btns = tabs.map(t => {
+    const active = t.key === activeKey;
+    return `<button onclick="${onclickFn}('${t.key}')" style="flex:1;padding:9px 4px;border-radius:10px;border:${active?`2px solid ${color}`:`1.5px solid var(--border)`};background:${active?color:`var(--card)`};color:${active?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;line-height:1.3;cursor:pointer;">${t.label}</button>`;
+  }).join('');
+  return `<div style="display:flex;gap:6px;margin-bottom:14px;">${btns}</div>`;
+}
+
+// ─── Legacy: DISH_IMAGES (Compat-Alias, nicht mehr befüllen) ─────────────────
+const DISH_IMAGES = {};
 
 async function computeAndSaveScore(storeId){
   const today=new Date().toISOString().split('T')[0];
@@ -5370,7 +5421,7 @@ async function renderDisposal(){
     const soldOut=rec?.sold_out_time ? rec.sold_out_time.slice(0,5) : '';
     const dishNameSafe=escForInlineHandler(dishName);
     html+=`<tr style="${isDone?'background:#F0FDF4;':''}">
-      <td data-no-translate style="font-size:12px;">${isDone?'<span style="color:var(--green);margin-right:2px;">✓</span>':''}${getDishEmoji(dishName)} ${dishName}<div style="font-size:10px;color:var(--muted);">${s.l}</div></td>
+      <td data-no-translate style="font-size:12px;"><div style="display:flex;align-items:center;gap:7px;">${dishImgHtml(dishName,38)}<div>${isDone?'<span style="color:var(--green);margin-right:2px;">✓</span>':''}<span style="font-weight:600;">${dishName}</span><div style="font-size:10px;color:var(--muted);">${s.l}</div></div></div></td>
       <td>
         <input type="time" value="${soldOut}"
           onclick="if(!this.value){const n=new Date();this.value=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');updateSoldOutTime('${s.k}','${dishNameSafe}',this.value);}"
@@ -5607,7 +5658,8 @@ async function renderBeilagenTableHtml(){
     const weekDates=getWeekdayDates();
     const fromDate=weekDates[1], toDate=weekDates[5];
 
-    let html=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Mengen pro Filiale & Gesamtsumme für die Küchen-Produktion</div>`;
+    let html=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Mengen pro Filiale & Gesamtsumme für die Küchen-Produktion</div>
+    <div style="font-size:11px;color:#3B6D11;background:var(--green-light);border-radius:8px;padding:7px 10px;margin-bottom:10px;">✓ = eingepackt bestätigt. Endverantwortung liegt bei Michi (Transporter) — Küche sieht den Status nur mit.</div>`;
 
     const baseline=await api(`kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty`).catch(()=>[]);
     const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
@@ -5791,7 +5843,7 @@ async function renderKitchen(){
 
           html+=`<div style="${i>0?'border-top:0.5px solid var(--border);':''}">
             <div onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;">
-              <span style="font-size:20px;">${getDishEmoji(dish.name)}</span>
+              ${dishImgHtml(dish.name, 36)}
               <div style="flex:1;">
                 <div style="font-size:14px;font-weight:600;color:#1a1a18;">${dish.name}</div>
                 <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
@@ -6142,7 +6194,7 @@ async function renderMorgenKoch(el, tabHtml){
       return `<td style="font-weight:${changed?'700':'400'};color:${changed?'#0369A1':(qty?'#1a1a18':'var(--border)')};">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
     }).join('');
     html+=`<tr onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
-      <td style="text-align:left;"><span style="font-size:18px;">${getDishEmoji(dish)}</span> <span style="font-weight:600;">${dish}</span></td>
+      <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
       ${cells}
       <td style="font-weight:700;color:${hasData?'var(--green)':'var(--muted)'};">${total>0?formatQty(total):'–'}</td>
     </tr>`;
@@ -6329,7 +6381,7 @@ async function renderKCLager(){
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
   if(!kcLagerStoreId) kcLagerStoreId=storeList[0]?.id;
 
-  let html=`<div class="cl-tabs"><button class="cl-tab${kcTab==='shop'?' active':''}" onclick="switchKCTab('shop')">Lager Shop</button><button class="cl-tab${kcTab==='kitchen'?' active':''}" onclick="switchKCTab('kitchen')">Lager Küche</button></div>`;
+  let html=tabBarHtml([{key:'shop',label:'🛒 Lager Shop'},{key:'kitchen',label:'🥘 Lager Küche'}], kcTab, 'switchKCTab');
 
   if(kcTab==='shop'){
     // Store selector pills
