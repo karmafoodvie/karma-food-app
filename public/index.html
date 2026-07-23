@@ -5192,7 +5192,7 @@ async function renderPack(){
     return;
   }
   if(transporterSubTab==='beilagen'){
-    html+=await renderBeilagenTableHtml();
+    html+=await renderBeilagenTableHtml('transporter');
     el.innerHTML=html;
     translateEl(el);
     return;
@@ -5730,7 +5730,7 @@ async function updateSamosaQty(input){
 }
 window.updateSamosaQty=updateSamosaQty;
 
-async function renderBeilagenTableHtml(){
+async function renderBeilagenTableHtml(mode='kueche'){
     // BEILAGEN — kompakte Wochenmatrix: Artikel als Zeilen, Tage Mo–Fr als Spalten.
     // Gesamtsumme aller Stores pro Zelle — eine Seite, kein Scrollen nötig.
     const stores=await api('stores?select=id,name&order=id');
@@ -5782,18 +5782,19 @@ async function renderBeilagenTableHtml(){
         const dateStr=weekDates[wd];
         const isToday=wd===todayWeekday;
         const dayItems=baseline.filter(b=>b.weekday===wd && b.article_name===name);
-        let sum=0; let adjusted=false;
+        let sum=0; let adjusted=false; const storeQtys=[];
         storeList.forEach(st=>{
           const b=dayItems.find(x=>x.store_id===st.id);
           const rec=(valMap[dateStr]?.[st.id]||{})[name];
           const val=rec?rec.qty:(b?b.base_qty:null);
-          if(val!=null) sum+=parseFloat(val)||0;
+          if(val!=null){ sum+=parseFloat(val)||0; storeQtys.push({storeName:st.name.split(' · ')[1]||st.name.split(' ')[0], val:Number.isInteger(val)?val:Math.round(val*100)/100, color:STORE_COLORS[st.id]||'#888'}); }
           if(rec?.is_adjusted) adjusted=true;
         });
         if(!sum && !dayItems.length) return `<td style="color:var(--border);font-size:11px;padding:6px 4px;">–</td>`;
         const sumDisplay=Number.isInteger(sum)?sum:Math.round(sum*100)/100;
         const allPacked=isToday && storeList.every(st=>{ const rec=(valMap[dateStr]?.[st.id]||{})[name]; return !rec||!!rec.eingepackt; });
-        return `<td style="font-size:12px;font-weight:${isToday?'700':'500'};color:${adjusted?'#C2410C':(isToday?'#9D174D':'#1a1a18')};${isToday?'background:#FDF4FF;':''}padding:6px 4px;">${sumDisplay}${adjusted?'*':''}<div style="font-size:9px;color:${allPacked?'var(--green)':'var(--muted)'};">${isToday?(allPacked?'✓':'○'):''}</div></td>`;
+        const breakdown=mode==='transporter' && storeQtys.length>1?`<div style="margin-top:2px;">${storeQtys.map(s=>`<div style="font-size:8px;color:${s.color};line-height:1.4;">${s.storeName}: ${s.val}</div>`).join('')}</div>`:'';
+        return `<td style="font-size:12px;font-weight:${isToday?'700':'500'};color:${adjusted?'#C2410C':(isToday?'#9D174D':'#1a1a18')};${isToday?'background:#FDF4FF;':''}padding:6px 4px;vertical-align:top;">${sumDisplay}${adjusted?'*':''}<div style="font-size:9px;color:${allPacked?'var(--green)':'var(--muted)'};">${isToday?(allPacked?'✓':'○'):''}</div>${breakdown}</td>`;
       }).join('');
       html+=`<tr style="border-top:0.5px solid var(--border);">
         <td style="font-size:11px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};padding:7px 8px;">${img}${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></td>
