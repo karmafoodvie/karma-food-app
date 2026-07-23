@@ -86,9 +86,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .section-banner{border-left:3px solid;border-radius:0 8px 8px 0;padding:8px 12px;margin:14px 0 6px;display:flex;align-items:center;gap:8px;}
 
 /* CHECKLIST */
-.cl-tabs{display:flex;gap:6px;margin-bottom:10px;}
-.cl-tab{flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;text-align:center;}
-.cl-tab.active{background:var(--green);border-color:var(--green);color:#fff;}
+.cl-tabs{display:flex;gap:6px;margin-bottom:12px;}
+.cl-tab{flex:1;padding:9px 4px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:13px;font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.3;color:var(--sub);cursor:pointer;text-align:center;}
+.cl-tab.active{background:var(--green);border:2px solid var(--green);color:#fff;}
 .cl-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;}
 .cl-item:last-child{border-bottom:none;}
 .cl-item:active{background:var(--green-light);}
@@ -172,6 +172,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <button onclick="setLang('es')">🇪🇸 Español</button>
         <button onclick="setLang('hi')">🇮🇳 हिन्दी</button>
       </div>
+      <button onclick="goTo('maengel')" id="nav-notif-bell" style="display:none;width:28px;height:28px;border-radius:50%;border:none;background:rgba(255,255,255,0.18);color:#fff;font-size:15px;cursor:pointer;flex-shrink:0;position:relative;">
+        🔔<span id="nav-notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;padding:0 2px;"></span>
+      </button>
       <button onclick="goTo('hilfe')" title="Hilfe & Ansprechpartner" style="width:28px;height:28px;border-radius:50%;border:none;background:#FBBF24;color:#78350F;font-size:14px;font-weight:800;cursor:pointer;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.35);">?</button>
       <div class="tb-avatar" id="tb-avatar" style="display:none;"></div>
       <button onclick="doLogout()" title="Filiale wechseln / Abmelden" style="width:34px;height:34px;border-radius:50%;border:none;background:rgba(255,255,255,0.18);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
@@ -207,6 +210,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-kitchen" class="view"></div>
     <div id="v-disposal" class="view"></div>
     <div id="v-hilfe" class="view"></div>
+    <div id="v-onboarding" class="view"></div>
   </div>
 
   <nav id="bottomnav">
@@ -238,7 +242,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg><span id="navlabel-transporter">Transporter</span>
     </button>
     <button class="nav-btn" onclick="goToPackTab('kc')" id="nav-org-kc" style="display:none;">
-      <svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span id="navlabel-kc">KC</span>
+      <svg viewBox="0 0 24 24"><path d="M21 8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span id="navlabel-kc">Shop Produkte</span>
     </button>
     <button class="nav-btn" onclick="goTo('management')" id="nav-org-management" style="display:none;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span id="navlabel-management">Management</span>
@@ -284,18 +288,23 @@ let lasagneExtraSizes = {}; // {cellKey('date|dish'): Set(groesse)} — manuell 
 // Küchen-Liefermengen (Dressing, Raita, etc.) sind freie Textnamen in kitchen_supply_baseline,
 // nicht mit der articles-Tabelle verknüpft — Bilder daher über diese Zuordnung, sobald vorhanden.
 const KITCHEN_SUPPLY_IMAGES = {
-  // 'Dressing': '/images/kitchen-supply/dressing.jpg',
+  'Petersilie': '/images/kitchen-supply/petersilie.jpg',
+  'Dressing': '/images/kitchen-supply/dressing.jpg',
+  'Bowl Sauce': '/images/kitchen-supply/bowl-sauce.jpg',
+  'Limetten': '/images/kitchen-supply/limetten.jpg',
+  'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
 };
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
-const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat':'#A21CAF','Raita':'#15803D','Wochensalat Dressing':'#9333EA'};
+const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat (zur Lasagne)':'#A21CAF','Raita':'#15803D'};
 // Ausgeschriebene Allergen-Namen statt Buchstaben-Codes — Mitarbeitende kennen die Buchstaben nicht auswendig
 const ALLERGEN_NAMES={A:'Gluten',C:'Sellerie',F:'Soja',G:'Milch',L:'Sesam',M:'Senf',N:'Nüsse'};
 
 // FAQ & Ansprechpartner — beides einfach hier erweiterbar, sobald mehr Inhalte/Kontaktdaten da sind.
 // SHOW_FAQ: FAQ-Bereich ist vorerst ausgeblendet (Inhalt bleibt erhalten) — auf true setzen, um ihn
 // wieder einzublenden, sobald klar ist, dass er gebraucht wird.
-const SHOW_FAQ=false;
+const SHOW_FAQ=true;
 const FAQ_ITEMS=[
+  {q:'Der Bankomat/das Kartenterminal funktioniert nicht — was tun?', a:'Zuerst Gerät neu starten (aus- und wieder einstecken). Funktioniert es weiterhin nicht: Kunde bar zahlen lassen falls möglich, und sofort bei Adi oder in der Support-Gruppe melden (siehe Ansprechpartner oben).'},
   {q:'Ich habe zu viel oder zu wenig Essen bekommen — was tun?', a:'Bitte bis 12:45 Uhr melden (Chat oder direkt bei Tini anrufen) — danach wird bei Bedarf ein Uber für die Umverteilung organisiert.'},
   {q:'Ein Gutschein funktioniert nicht oder ich brauche schnell eine Antwort — was tun?', a:'Immer anrufen — Ines oder Tini. Im Chat sind die beiden vor allem zwischen 11:00–12:30 Uhr aktiv, außerhalb dieser Zeit lieber gleich anrufen.'},
   {q:'Ich habe noch Samosas von gestern und heute neue dazubekommen — welche zuerst verkaufen?', a:'Immer die älteren zuerst verkaufen (FIFO) — am besten sichtbar vorne hinstellen, damit sie zuerst weggehen.'},
@@ -305,7 +314,7 @@ const FAQ_ITEMS=[
 ];
 const CONTACT_PERSONS=[
   {name:'Tini', responsible:'Dienstplan, App-Fragen, Notfälle · zu viel oder zu wenig Essen? Bis 12:45 Uhr melden · während der Arbeitszeit erreichbar', phone:'+436769188012'},
-  {name:'Ines', responsible:'Fragen zu KC-Produkten oder Webshop-Nachschub · dringende Hilfe (z.B. Gutschein funktioniert nicht) — sofort anrufen', phone:'+436769058012'},
+  {name:'Ines', responsible:'Fragen zu Shop-Produkten oder Webshop-Nachschub · dringende Hilfe (z.B. Gutschein funktioniert nicht) — sofort anrufen', phone:'+436769058012'},
   {name:'Michi', responsible:'Bestellungen & Lieferungen, Samosas, Verpackungsnachschub', phone:'+436504203104'},
   {name:'Nooru', responsible:'Rezepte, Mengen, Zutaten · Küchentelefon vorhanden — bitte nur im Notfall anrufen', phone:'+436769128012'},
   {name:'Simone', responsible:'Krankmeldung am Wochenende, Fragen zu Arbeitsvertrag/Stunden · ab 17:00 Uhr für den Dienstplan gemeinsam mit Tini kontaktieren', phone:'+436764966786'},
@@ -337,9 +346,239 @@ const RABATT_CODES=[
   {code:'TEAM30', wert:'30%', bedingung:'Eigenkonsumation über das täglich inkludierte Gericht/Getränk/Kaffee hinaus (Sweets, Mango Lassi etc.)', stores:[]},
 ];
 
+const ONBOARDING_STEPS=[
+  {id:'firma', label:'Über Karma Food gelesen (unten auf dieser Seite)'},
+  {id:'guide', label:'Store Guide durchgesehen'},
+  {id:'allergene', label:'Zutaten- & Allergenliste angeschaut'},
+  {id:'hygiene', label:'Hygiene-Schulung abgeschlossen'},
+  {id:'dienstplan', label:'Zugang zu "Mein Dienstplan" erhalten & getestet'},
+  {id:'ansprechpartner', label:'Ansprechpartner-Liste angeschaut (wer ist wofür da)'},
+];
+
+async function renderOnboarding(){
+  const el=document.getElementById('v-onboarding');
+  const isOrg=currentStore?.id==='zentrale';
+  let html=backToHomeHtml();
+  const doneKey=`onboarding_done_${currentStore?.id}`;
+  const done=JSON.parse(localStorage.getItem(doneKey)||'{}');
+
+  // Wochenprogramm — Tag für Tag, von der Organisation selbst pflegbar (kein Code-Update nötig)
+  const days=await api('onboarding_program?select=*&order=day_number,sort_order').catch(()=>[]);
+  html+=`<div class="section-lbl">📅 Wochenprogramm</div>`;
+  if(isOrg){
+    html+=`<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+      <button onclick="showOnboardingDayForm()" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:500;cursor:pointer;">+ Tag hinzufügen</button>
+    </div>
+    <div id="onb-day-form" style="display:none;"></div>`;
+  }
+  const dayNumbers=[...new Set((days||[]).map(d=>d.day_number))].sort((a,b)=>a-b);
+  if(!dayNumbers.length){
+    html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">${isOrg?'Noch kein Programm angelegt — "+ Tag hinzufügen" nutzen.':'Noch kein Wochenprogramm hinterlegt.'}</div>`;
+  }
+  dayNumbers.forEach(dn=>{
+    const dayEntries=(days||[]).filter(d=>d.day_number===dn);
+    const dayDoneKey=`tag${dn}`;
+    const isDayDone=!!done[dayDoneKey];
+    html+=`<div class="card" style="margin-bottom:8px;overflow:hidden;">
+      <div style="background:#F5F5F3;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-weight:700;font-size:13px;">Tag ${dn}</div>
+        ${!isOrg?`<div onclick="toggleOnboardingStep('${dayDoneKey}')" style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <span style="font-size:11px;color:${isDayDone?'var(--green)':'var(--muted)'};">${isDayDone?'✓ erledigt':'als erledigt markieren'}</span>
+          <div class="check-box${isDayDone?' done':''}" style="width:16px;height:16px;">${isDayDone?'<svg width="10" height="10" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+        </div>`:''}
+      </div>`;
+    dayEntries.forEach(e=>{
+      html+=`<div style="padding:10px 12px;border-top:0.5px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div style="font-weight:500;font-size:13px;">${e.titel}</div>
+          ${isOrg?`<div style="display:flex;gap:6px;flex-shrink:0;">
+            <button onclick="editOnboardingDay(${e.id},${e.day_number},'${e.titel.replace(/'/g,"\\'")}',\`${(e.inhalt||'').replace(/`/g,'\\`')}\`)" style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">✏️</button>
+            <button onclick="deleteOnboardingDay(${e.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
+          </div>`:''}
+        </div>
+        ${e.inhalt?`<div style="font-size:12.5px;color:var(--sub);margin-top:4px;white-space:pre-wrap;">${e.inhalt}</div>`:''}
+      </div>`;
+    });
+    html+='</div>';
+  });
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">✅ Erste Schritte</div><div class="card">`;
+  ONBOARDING_STEPS.forEach(step=>{
+    const isDone=!!done[step.id];
+    html+=`<div class="cl-item" onclick="toggleOnboardingStep('${step.id}')">
+      <div class="check-box${isDone?' done':''}">${isDone?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+      <span class="cl-text">${step.label}</span>
+    </div>`;
+  });
+  html+='</div>';
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">🔗 Wichtige Bereiche</div><div class="card">`;
+  const links=[
+    {icon:'📖', label:'Store Guide', sub:'Wie läuft der Store-Alltag ab', view:'guide'},
+    {icon:'🧪', label:'Zutaten & Allergene', sub:'Nachschlagen, was in welchem Gericht drin ist', view:'allergene'},
+    {icon:'🎓', label:'Hygiene-Schulung', sub:'Pflichtschulung, einmal abzuschließen', view:'hygieneSchulung'},
+    {icon:'👥', label:'Ansprechpartner', sub:'Wer ist wofür zuständig', view:'hilfe'},
+  ];
+  links.forEach(l=>{
+    html+=`<div class="item-row" onclick="goTo('${l.view}')" style="cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">${l.icon}</span>
+        <div><div class="item-name">${l.label}</div><div class="item-unit">${l.sub}</div></div>
+      </div>
+      <span style="color:var(--muted);">→</span>
+    </div>`;
+  });
+  html+='</div>';
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">🥗 Über Karma Food</div><div class="card" style="padding:14px;font-size:13px;color:var(--sub);line-height:1.6;">
+    Karma Food ist ein vegetarisches Lunch-Restaurant mit mehreren Standorten in Wien. Wir kochen täglich frisch — Currys, Dals, Bowls, Biryanis, Lasagnen und wechselnde Specials — und legen viel Wert auf Qualität, Hygiene und einen respektvollen Umgang miteinander im Team.
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;">📝 Tini/Ines: dieser Text ist ein erster Entwurf — gerne anpassen/ergänzen lassen.</div>
+  </div>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+function toggleOnboardingStep(stepId){
+  const doneKey=`onboarding_done_${currentStore?.id}`;
+  const done=JSON.parse(localStorage.getItem(doneKey)||'{}');
+  done[stepId]=!done[stepId];
+  localStorage.setItem(doneKey, JSON.stringify(done));
+  renderOnboarding();
+}
+window.toggleOnboardingStep=toggleOnboardingStep;
+
+// ---- Q&A-SUCHE mit Sprachfunktion (durchsucht FAQ + Store Guide, kein externer KI-Dienst) ----
+function startQaVoiceInput(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ showToast('Sprachfunktion wird von diesem Browser leider nicht unterstützt'); return; }
+  const btn=document.getElementById('qa-voice-btn');
+  const rec=new SR();
+  rec.lang='de-AT';
+  rec.interimResults=false;
+  rec.maxAlternatives=1;
+  if(btn){ btn.textContent='🔴'; btn.style.background='#FEE2E2'; }
+  rec.onresult=(e)=>{
+    const text=e.results[0][0].transcript;
+    const input=document.getElementById('qa-search-input');
+    if(input){ input.value=text; }
+    runQaSearch();
+  };
+  rec.onerror=()=>{ showToast('Konnte nichts verstehen — bitte nochmal versuchen'); };
+  rec.onend=()=>{ if(btn){ btn.textContent='🎤'; btn.style.background='var(--green-light)'; } };
+  rec.start();
+}
+window.startQaVoiceInput=startQaVoiceInput;
+
+async function runQaSearch(){
+  const q=(document.getElementById('qa-search-input')?.value||'').trim().toLowerCase();
+  const resultsEl=document.getElementById('qa-search-results');
+  if(!resultsEl) return;
+  if(!q){ resultsEl.innerHTML=''; return; }
+  resultsEl.innerHTML='<div style="font-size:12px;color:var(--muted);padding:6px 2px;">Suche…</div>';
+
+  const guideEntries=await api(`guide_eintraege?or=(store_id.is.null,store_id.eq.${currentStore?.id||'null'})&select=titel,inhalt,kategorie`).catch(()=>[]);
+
+  const words=q.split(/\s+/).filter(w=>w.length>2);
+  const score=(text)=>{
+    const t=(text||'').toLowerCase();
+    if(t.includes(q)) return 100;
+    return words.reduce((s,w)=>s+(t.includes(w)?10:0),0);
+  };
+
+  const candidates=[];
+  FAQ_ITEMS.forEach(item=>{
+    const s=score(item.q)+score(item.a)*0.5;
+    if(s>0) candidates.push({type:'faq', title:item.q, body:item.a, score:s});
+  });
+  (guideEntries||[]).forEach(g=>{
+    const s=score(g.titel)+score(g.inhalt)*0.5;
+    if(s>0) candidates.push({type:'guide', title:g.titel, body:g.inhalt, score:s});
+  });
+  candidates.sort((a,b)=>b.score-a.score);
+  const top=candidates.slice(0,5);
+
+  if(!top.length){
+    resultsEl.innerHTML=`<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px;font-size:12.5px;color:#78350F;">
+      Dazu hab ich nichts gefunden. Am besten direkt bei den <a href="#" onclick="event.preventDefault();document.getElementById('v-hilfe').scrollIntoView();" style="color:#78350F;text-decoration:underline;">Ansprechpartnern</a> oben nachfragen.
+    </div>`;
+    return;
+  }
+  resultsEl.innerHTML=top.map(r=>`
+    <div class="card" style="padding:10px 12px;margin-bottom:6px;">
+      <div style="font-size:12.5px;font-weight:600;">${r.type==='faq'?'❓':'📖'} ${r.title}</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px;line-height:1.4;">${r.body}</div>
+    </div>`).join('');
+}
+window.runQaSearch=runQaSearch;
+
+function showOnboardingDayForm(editId, dayNum, titel, inhalt){
+  const wrap=document.getElementById('onb-day-form');
+  wrap.style.display='block';
+  wrap.innerHTML=`<div class="card" style="padding:12px;margin-bottom:10px;">
+    <input type="number" id="onb-day-number" placeholder="Tag (1, 2, 3...)" value="${dayNum||''}" min="1" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="text" id="onb-day-titel" placeholder="Titel (z.B. Team & Küche kennenlernen)" value="${titel?titel.replace(/"/g,'&quot;'):''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <textarea id="onb-day-inhalt" placeholder="Was steht an diesem Tag an?" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:8px;">${inhalt||''}</textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('onb-day-form').style.display='none';document.getElementById('onb-day-form').innerHTML='';" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="saveOnboardingDay(${editId||'null'})" style="flex:1;padding:8px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:13px;font-weight:500;cursor:pointer;">Speichern</button>
+    </div>
+  </div>`;
+}
+window.showOnboardingDayForm=showOnboardingDayForm;
+
+function editOnboardingDay(id, dayNum, titel, inhalt){
+  showOnboardingDayForm(id, dayNum, titel, inhalt);
+}
+window.editOnboardingDay=editOnboardingDay;
+
+async function saveOnboardingDay(editId){
+  const dayNumber=parseInt(document.getElementById('onb-day-number').value);
+  const titel=document.getElementById('onb-day-titel').value.trim();
+  const inhalt=document.getElementById('onb-day-inhalt').value.trim();
+  if(!dayNumber || !titel){ showToast('Bitte Tag und Titel angeben'); return; }
+  try{
+    if(editId){
+      await api(`onboarding_program?id=eq.${editId}`,{method:'PATCH',body:JSON.stringify({day_number:dayNumber, titel, inhalt})});
+    }else{
+      await api('onboarding_program',{method:'POST',body:JSON.stringify([{day_number:dayNumber, titel, inhalt}])});
+    }
+    showToast('✓ Gespeichert');
+    renderOnboarding();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveOnboardingDay=saveOnboardingDay;
+
+async function deleteOnboardingDay(id){
+  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  try{
+    await api(`onboarding_program?id=eq.${id}`,{method:'DELETE'});
+    renderOnboarding();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen');}
+}
+window.deleteOnboardingDay=deleteOnboardingDay;
+
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
   let html=backToHomeHtml();
+
+  // Q&A-Suche mit Sprachfunktion — durchsucht FAQ + Store Guide, kein externer KI-Dienst nötig
+  html+=`<div class="card" style="padding:14px;margin-bottom:14px;border:1.5px solid var(--green);">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;">🔎 Frage stellen</div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="qa-search-input" placeholder="z.B. Bankomat funktioniert nicht" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')runQaSearch()">
+      <button id="qa-voice-btn" onclick="startQaVoiceInput()" style="width:44px;flex-shrink:0;border:none;border-radius:10px;background:var(--green-light);color:var(--green);font-size:18px;cursor:pointer;">🎤</button>
+      <button onclick="runQaSearch()" style="padding:10px 16px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:14px;font-weight:500;cursor:pointer;">Suchen</button>
+    </div>
+    <div id="qa-search-results" style="margin-top:10px;"></div>
+  </div>`;
+  html+=`<div onclick="goTo('onboarding')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
+    <span style="font-size:18px;">🌱</span>
+    <div style="flex:1;">
+      <div style="font-size:12.5px;font-weight:600;color:#166534;">Onboarding — neu im Team?</div>
+      <div style="font-size:10.5px;color:#3B6D11;">Erste Schritte, wichtige Infos & Checkliste</div>
+    </div>
+    <span style="color:#166534;">→</span>
+  </div>`;
 
   html+=`<div class="section-lbl">👥 Ansprechpartner</div><div class="card">`;
   CONTACT_PERSONS.forEach(p=>{
@@ -801,23 +1040,56 @@ async function loginAs(store){
     document.getElementById('nav-check').style.display='none';
     document.getElementById('nav-disposal').style.display='none';
     document.getElementById('nav-kontrolle').style.display='none';
+    // Organisation zeigt jetzt nur noch Management (Tini) — Team/Nooru/Michi sind zu Kitchen 3400
+    // gewandert, da die Küche vor Ort eigenständig arbeitet und nicht über Organisation laufen muss.
+    document.getElementById('nav-org-sweets').style.display='none';
+    document.getElementById('nav-org-kueche').style.display='none';
+    document.getElementById('nav-org-transporter').style.display='none';
+    document.getElementById('nav-org-kc').style.display='none';
+    document.getElementById('nav-org-management').style.display='flex';
+    document.getElementById('nav-notif-bell').style.display='flex';
+    loadNotifBadge();
+  } else if(store.id==='kitchen'){
+    // Kitchen 3400 = "Organisation Kitchen": kein normaler Store-Alltag (Bestellen/Forecast/
+    // Checkliste/Entsorgung/Kontrolle) — nur die Übersicht für Team/Nooru/Michi/Shop Produkte.
+    document.getElementById('nav-order').style.display='none';
+    document.getElementById('nav-forecast').style.display='none';
+    document.getElementById('nav-check').style.display='none';
+    document.getElementById('nav-disposal').style.display='none';
+    document.getElementById('nav-kontrolle').style.display='none';
     document.getElementById('nav-org-sweets').style.display='flex';
     document.getElementById('nav-org-kueche').style.display='flex';
     document.getElementById('nav-org-transporter').style.display='flex';
     document.getElementById('nav-org-kc').style.display='flex';
-    document.getElementById('nav-org-management').style.display='flex';
     loadOrgRolesRow();
   }
   await loadAll();
   checkForBroadcasts();
   const savedView=localStorage.getItem('kf_view')||'home';
   // Only restore views that make sense for this role
-  const orgViews=['management','pack','sweets','kitchen','allergene','schulung','dailycheck','maengel','verfuegbarkeit','msg','hygieneSchulung','orgForecast','guide','forecastReview','kontrolle'];
+  const orgViews=['management','maengel'];
+  const kitchenExtraViews=['pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
   const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende'];
-  const allowedViews=store.id==='zentrale'?[...orgViews,'home']:storeViews;
+  const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
   goTo(allowedViews.includes(savedView)?savedView:'home');
 }
 function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store'); location.reload(); } }
+
+async function loadNotifBadge(){
+  if(currentStore?.id!=='zentrale') return;
+  try{
+    const open=await api('maengel?status=neq.behoben&select=id').catch(()=>[]);
+    const badge=document.getElementById('nav-notif-badge');
+    if(!badge) return;
+    if((open||[]).length){
+      badge.textContent=open.length;
+      badge.style.display='flex';
+    }else{
+      badge.style.display='none';
+    }
+  }catch(e){console.error(e);}
+}
+window.loadNotifBadge=loadNotifBadge;
 
 // ---- DATA ----
 async function loadAll(){
@@ -859,11 +1131,11 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner'};
+  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -952,6 +1224,41 @@ async function saveGemuese(dishName, newGemuese){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 
+// Foto, wie das Gericht fertig serviert aussieht — hilft neuen Mitarbeitenden, die das Gericht noch
+// nie gesehen haben. Wird nach und nach befüllt, sobald Fotos da sind. Key = exakter Gerichtename.
+// ─── Dish Images ─────────────────────────────────────────────────────────────
+// Keyword-basiert: Treffer auf Name → Foto aus /images/dishes/
+// Neue Fotos einfach in /images/dishes/ ablegen und hier eintragen.
+const DISH_IMAGE_MAP = [
+  { match: /LASAGNE/,                   src: '/images/dishes/lasagne.jpg' },
+  { match: /MEATBALL/,                  src: '/images/dishes/meatballs.jpg' },
+  { match: /BIRYANI|\bBOWL\b/,         src: '/images/dishes/bowl.jpg' },
+  { match: /\bDAL\b|LINSEN/,           src: '/images/dishes/dal.jpg' },
+  { match: /CURRY/,                     src: '/images/dishes/curry.jpg' },
+  { match: /SALAT|SALAD|WOCHENSALAT/,  src: '/images/dishes/bowl.jpg' },
+  { match: /REIS|RICE|BASMATI/,        src: '/images/dishes/reis.jpg' },
+  { match: /SAMOSA/,                   src: '/images/dishes/samosa.jpg' },
+  { match: /CHAI/,                     src: '/images/dishes/masala-chai.jpg' },
+  { match: /CHUTNEY/,                  src: '/images/dishes/mango-chutney.jpg' },
+];
+
+function getDishImage(name){
+  if(!name) return null;
+  const n = name.toUpperCase();
+  const hit = DISH_IMAGE_MAP.find(e => e.match.test(n));
+  return hit ? hit.src : null;
+}
+
+// Bild-Tag für ein Gericht — mit Emoji-Fallback
+// size: px-Zahl (default 36)
+function dishImgHtml(name, size=36, style=''){
+  const src = getDishImage(name);
+  const r = Math.round(size * 0.25);
+  if(src) return `<img src="${src}" alt="" style="width:${size}px;height:${size}px;border-radius:${r}px;object-fit:cover;flex-shrink:0;${style}">`;
+  return `<span style="font-size:${Math.round(size*0.55)}px;line-height:1;">${getDishEmoji(name)}</span>`;
+}
+
+// Emoji-Fallback (bleibt für Stellen wo kein Foto da ist)
 function getDishEmoji(name){
   if(!name) return '🍽️';
   const n=name.toUpperCase();
@@ -971,6 +1278,22 @@ function getDishEmoji(name){
   if(/BROKKOLI/.test(n)) return '🥦';
   return '🍽️';
 }
+
+// ─── Globale Tab-Bar Helper ───────────────────────────────────────────────────
+// Einheitlicher Stil für ALLE Tab-Bars in der App (Kitchen, Transporter, etc.)
+// tabs: [{key, label}]  activeKey: aktuell aktiver Key
+// onclickFn: JS-String der aufgerufen wird, z.B. "switchKitchenTab"
+// color: Akzentfarbe des Bereichs (default: var(--green))
+function tabBarHtml(tabs, activeKey, onclickFn, color='var(--green)'){
+  const btns = tabs.map(t => {
+    const active = t.key === activeKey;
+    return `<button onclick="${onclickFn}('${t.key}')" style="flex:1;padding:9px 4px;border-radius:10px;border:${active?`2px solid ${color}`:`1.5px solid var(--border)`};background:${active?color:`var(--card)`};color:${active?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;line-height:1.3;cursor:pointer;">${t.label}</button>`;
+  }).join('');
+  return `<div style="display:flex;gap:6px;margin-bottom:14px;">${btns}</div>`;
+}
+
+// ─── Legacy: DISH_IMAGES (Compat-Alias, nicht mehr befüllen) ─────────────────
+const DISH_IMAGES = {};
 
 async function computeAndSaveScore(storeId){
   const today=new Date().toISOString().split('T')[0];
@@ -1068,7 +1391,7 @@ async function renderHome(){
   let uebergabeNotiz=null;
   let isKCDay=false;
   let transporterDone=false, kcDone=false, sweetsDone=false;
-  if(currentStore?.id!=='zentrale'){
+  if(currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen'){
     const todayDate=new Date().toISOString().split('T')[0];
     const dayIdx=(new Date().getDay()+6)%7; // Mon=0 ... Sun=6
     const isWeekday=dayIdx<5;
@@ -1152,8 +1475,9 @@ async function renderHome(){
 
   el.innerHTML=`
     <div style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
+    <div id="broadcast-banner-widget"></div>
     ${monthlyCleaningHtml}
-    ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle'?`
+    ${currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen' && homeMode!=='kontrolle'?`
 
     <!-- START BUTTON -->
     <div onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
@@ -1225,7 +1549,7 @@ async function renderHome(){
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
         ${sweetsDone?'<span class="badge badge-ok" style="font-size:10px;">Sweets ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Sweets</span>'}
         ${transporterDone?'<span class="badge badge-ok" style="font-size:10px;">Transporter ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Transporter</span>'}
-        ${isKCDay?(kcDone?'<span class="badge badge-ok" style="font-size:10px;">KC ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">KC</span>'):''}
+        ${isKCDay?(kcDone?'<span class="badge badge-ok" style="font-size:10px;">Shop Produkte ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Shop Produkte</span>'):''}
         ${disposalDone?'<span class="badge badge-ok" style="font-size:10px;">Entsorgung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Entsorgung</span>'}
         ${dcStatus.reinCount===2?'<span class="badge badge-ok" style="font-size:10px;">Reinigung & Desinfektion ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Reinigung & Desinfektion</span>'}
       </div>
@@ -1249,6 +1573,10 @@ async function renderHome(){
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
+    ${currentStore?.id==='kitchen'?`
+    <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
+    `:''}
 `;
   el.innerHTML+=`<div onclick="goTo('hilfe')" style="display:flex;align-items:center;gap:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 14px;margin-top:10px;cursor:pointer;">
     <span style="font-size:18px;">❓</span>
@@ -1260,6 +1588,8 @@ async function renderHome(){
   </div>`;
   translateEl(el);
   if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); }
+  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); }
+  else { loadActiveBroadcastBanner(); }
 }
 
 async function renderOeffnungHelp(){
@@ -1434,7 +1764,7 @@ function renderOrderSection(cats, label, color, icon){
     <div style="font-size:10px;color:var(--muted);">zuständig für diese Lieferung</div></div>
   </div>`;
   cats.forEach(cat=>{
-    const items=articles.filter(a=>a.category===cat && !(!isOrg && orderEingepackt[a.id]));
+    const items=articles.filter(a=>a.category===cat);
     if(!items.length) return;
     html+=`<div class="section-lbl">${cat}</div><div class="card">`;
     const handledGroups=new Set();
@@ -1465,7 +1795,9 @@ function renderOrderSection(cats, label, color, icon){
         `:`
         <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
           <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
-          <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
+          <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0"
+            onclick="this.select()" onchange="setQty(${a.id},this.value)"
+            style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
           <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
         </div>
         `}
@@ -1505,7 +1837,9 @@ function renderVariantGroupRow(groupKey, groupItems){
       </select>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;${(!r.articleId||!selVerf)?'opacity:0.3;pointer-events:none;':''}">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},-1)">−</button>
-        <span class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}">${v}</span>
+        <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}" value="${v}" min="0"
+          onclick="this.select()" onchange="setVariantQty('${groupKey}',${i},this.value)"
+          style="width:40px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:5px 2px;font-size:14px;">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},1)">+</button>
       </div>
       ${rows.length>1?`<button onclick="variantRemove('${groupKey}',${i})" style="background:none;border:none;color:#DC2626;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;">✕</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
@@ -1541,9 +1875,19 @@ function variantAdj(groupKey,i,d){
   if(!row || !row.articleId) return;
   orderQtys[row.articleId]=Math.max(0,(orderQtys[row.articleId]||0)+d);
   const el=document.getElementById('vq-'+groupKey+'-'+i);
-  if(el){el.textContent=orderQtys[row.articleId];el.className='qty-val'+(orderQtys[row.articleId]>0?' has-val':'');}
+  if(el){el.value=orderQtys[row.articleId];el.className='qty-val'+(orderQtys[row.articleId]>0?' has-val':'');}
 }
 window.variantAdj=variantAdj;
+
+function setVariantQty(groupKey,i,val){
+  const row=variantRows[groupKey] && variantRows[groupKey][i];
+  if(!row || !row.articleId) return;
+  const n=Math.max(0, parseInt(val)||0);
+  orderQtys[row.articleId]=n;
+  const el=document.getElementById('vq-'+groupKey+'-'+i);
+  if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'');}
+}
+window.setVariantQty=setVariantQty;
 
 function variantAddRow(groupKey){
   variantRows[groupKey].push({articleId:null});
@@ -1561,7 +1905,7 @@ function variantRemove(groupKey,i){
 window.variantRemove=variantRemove;
 const ORDER_TABS={
   transporter:{label:'🚚 Transporter',cats:TRANSPORTER_CATS,color:'#F97316',title:'Transporter',icon:'🚚'},
-  kc:{label:'📦 KC',cats:KC_CATS,color:'#A855F7',title:'KC — Kitchen Collective',icon:'📦'},
+  kc:{label:'📦 Shop Produkte',cats:KC_CATS,color:'#A855F7',title:'Shop Produkte',icon:'📦'},
   sweets:{label:'🍰 Sweets',cats:SWEETS_CATS,color:'#EC4899',title:'Sweets — für morgen',icon:'🍰'},
   kueche:{label:'🍳 Küche',cats:[],color:'#3B6D11',title:'Küche — Dressing, Raita & Co.',icon:'🍳'},
   forecast:{label:'📅 Forecast',cats:[],color:'#0EA5E9',title:'Forecast — Portionsmengen',icon:'📅'}
@@ -1571,7 +1915,7 @@ function renderOrder(){
   // Forecast NICHT mehr als Tab hier — nur noch über die Leiste unten erreichbar, damit's dort
   // wirklich nur den Forecast gibt und sonst nichts (keine Verwechslung mit den anderen Bestell-Tabs).
   const tabHtml=Object.entries(ORDER_TABS).filter(([k])=>k!=='forecast').map(([k,t])=>
-    `<button onclick="switchOrderTab('${k}')" style="flex:1;padding:10px 6px;border:1.5px solid ${activeOrderTab===k?t.color:'var(--border)'};border-radius:8px;background:${activeOrderTab===k?t.color+'15':'var(--card)'};color:${activeOrderTab===k?t.color:'#1a1a18'};font-size:12px;font-weight:${activeOrderTab===k?'600':'400'};cursor:pointer;">${t.label}</button>`
+    `<button onclick="switchOrderTab('${k}')" style="flex:1;padding:9px 4px;border:${activeOrderTab===k?`2px solid ${t.color}`:'1.5px solid var(--border)'};border-radius:10px;background:${activeOrderTab===k?t.color+'15':'var(--card)'};color:${activeOrderTab===k?t.color:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;line-height:1.3;cursor:pointer;">${t.label}</button>`
   ).join('');
 
   if(activeOrderTab==='forecast'){
@@ -1607,6 +1951,7 @@ function renderOrder(){
           <option value="Gemischt">Gemischt</option>
         </select>
       </div>
+      <input type="text" id="geldwechsel-detail" placeholder="Genaue Stückelung, z.B. 2× 10€, 20× 0,50€" style="width:100%;margin-top:8px;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
       <button onclick="requestGeldwechsel()" style="margin-top:8px;width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;">Anfragen</button>
       <div id="geldwechsel-list" style="margin-top:10px;"></div>
     </div>`;
@@ -1673,7 +2018,7 @@ async function renderKCOrderTab(el, tabHtml){
     <p style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Sonderbestellung / Anmerkung</p>
     <textarea id="special-note-kc" placeholder="z.B. Bitte extra Servietten, oder spezielle Bestellung..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:80px;resize:vertical;font-family:inherit;"></textarea>
   </div>
-  <button class="submit-btn" style="background:${tab.color};" onclick="submitKCNote()">KC abschicken ✓</button>`;
+  <button class="submit-btn" style="background:${tab.color};" onclick="submitKCNote()">Shop Produkte abschicken ✓</button>`;
 
   el.innerHTML=html;
   translateEl(el);
@@ -1688,7 +2033,7 @@ async function submitKCNote(){
       await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
     }
-    showToast('✓ KC gespeichert!');
+    showToast('✓ Shop Produkte gespeichert!');
     if(schichtendeReturnFlag){ schichtendeReturnFlag=false; goTo('schichtende'); } else { goTo('home'); }
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
 }
@@ -1773,7 +2118,7 @@ async function renderStoreSamosaHtml(weekDates){
       const dateStr=weekDates[wd];
       const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
       const isToday=wd===todayWeekday;
-      return `<th style="${isToday?'color:#F97316;font-weight:700;':''}">${WD_SHORT[wd]}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍':''}</div></th>`;
+      return `<th style="${isToday?'color:#F97316;font-weight:700;':''}">${WD_SHORT[wd]}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
     }).join('')}
   </tr></thead><tbody><tr>
     <td style="font-size:13px;font-weight:600;color:#C2410C;white-space:nowrap;">Samosas<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Stk</div></td>
@@ -1833,7 +2178,7 @@ async function renderKuecheOrderTab(el, tabHtml){
         const dateStr=weekDates[wd];
         const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
         const isToday=wd===todayWeekday;
-        return `<th style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍':''}</div></th>`;
+        return `<th style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
       }).join('')}
     </tr></thead><tbody>`;
 
@@ -1842,42 +2187,28 @@ async function renderKuecheOrderTab(el, tabHtml){
       const color=ARTICLE_COLORS[name]||'#1a1a18';
       const cells=displayDays.map(wd=>{
         const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
-        if(!b) return `<td style="color:var(--border);">·</td>`;
         const dateStr=weekDates[wd];
         const rec=(valMap[dateStr]||{})[name];
-        const val=rec ? rec.qty : b.base_qty;
+        const val=rec ? rec.qty : (b ? b.base_qty : 0);
         const adjusted=rec?.is_adjusted;
+        const isPlanned=!!b; // dezenter dargestellt, wenn's laut Plan eigentlich kein Liefertag ist
         return `<td style="padding:6px 3px;">
-          <input type="number" step="0.01" value="${val}" data-article="${escAttr(name)}" data-base="${b.base_qty}" data-date="${dateStr}"
+          <input type="number" step="0.01" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
             onchange="updateKuecheQty(this)" inputmode="decimal"
-            style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':'#fff'};">
+            style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':(isPlanned?'#fff':'#FAFAFA')};color:${isPlanned||val>0?'inherit':'var(--muted)'};">
         </td>`;
       }).join('');
       matrixHtml+=`<tr>
-        <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></td>
+        <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+            <div>${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></div>
+          </div>
+        </td>
         ${cells}
       </tr>`;
     });
 
-    // Wochensalat — tägliche Schichtende-Meldung (Rest + Bedarf für morgen), als eigene Zeile
-    // direkt in derselben Tabelle statt als separater Block. Nur die heutige Spalte ist relevant.
-    if(displayDays.includes(todayWeekday)){
-      const wsCells=displayDays.map(wd=>{
-        if(wd!==todayWeekday) return `<td style="color:var(--border);">·</td>`;
-        return `<td style="padding:4px 3px;">
-          <div style="display:flex;flex-direction:column;gap:4px;align-items:center;">
-            <input type="number" step="0.25" value="${restRec.rest_qty??''}" placeholder="Rest" id="wsalat-rest" onchange="submitWochensalat()" inputmode="decimal"
-              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
-            <input type="number" step="0.25" value="${restRec.needed_qty??''}" placeholder="Morgen" id="wsalat-needed" onchange="submitWochensalat()" inputmode="decimal"
-              style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px 2px;">
-          </div>
-        </td>`;
-      }).join('');
-      matrixHtml+=`<tr>
-        <td data-no-translate style="font-size:13px;font-weight:600;color:#A21CAF;white-space:nowrap;">Wochensalat<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Rest / Bedarf morgen</div></td>
-        ${wsCells}
-      </tr>`;
-    }
     matrixHtml+='</tbody></table></div></div>';
     html+=matrixHtml;
     html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
@@ -1909,6 +2240,22 @@ async function updateKuecheQty(input){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 window.updateKuecheQty=updateKuecheQty;
+
+// Outcheck: Organisation/Transporter bestätigt vor der Abfahrt, dass eine Beilage für eine Filiale
+// wirklich eingepackt wurde — verhindert, dass z.B. der Lasagne-Salat vergessen wird.
+async function toggleKuecheEingepackt(storeId, articleName, dateStr, currentQty, isPacked){
+  try{
+    const existing=await api(`kitchen_supply_today?store_id=eq.${storeId}&supply_date=eq.${dateStr}&article_name=eq.${encodeURIComponent(articleName)}&select=qty,is_adjusted`).catch(()=>[]);
+    const qty=existing?.[0]?.qty ?? currentQty;
+    const isAdjusted=existing?.[0]?.is_adjusted ?? false;
+    await api(`kitchen_supply_today?store_id=eq.${storeId}&supply_date=eq.${dateStr}&article_name=eq.${encodeURIComponent(articleName)}`,{method:'DELETE'});
+    await api('kitchen_supply_today',{method:'POST',body:JSON.stringify([{
+      store_id:storeId, supply_date:dateStr, article_name:articleName, qty, is_adjusted:isAdjusted, eingepackt:!isPacked
+    }])});
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.toggleKuecheEingepackt=toggleKuecheEingepackt;
 
 // ---- FORECAST (Hauptspeisen-Portionsmengen pro Filiale & Tag) ----
 
@@ -2351,6 +2698,27 @@ async function renderForecastOrderTab(el, tabHtml){
     });
   }
   const suggestionMap={}; // suggestionMap[dateStr][dish] = {qty, reason} or null
+  // Vorwoche-Referenz für ALLE Zellen (nicht nur leere) berechnen — wird unter jeder Zelle angezeigt
+  const lastWeekQtyMap={}; // lastWeekQtyMap[dateStr][dish] = {qty, disposal}
+  for(let wd=1; wd<=5; wd++){
+    const wdStr=WEEKDAY_STR[wd];
+    const dishNames=getMenuDishNamesForDay(wdStr);
+    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    const dateStr=weekDates[wd];
+    const lastWeekDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+    allDishes.forEach(dish=>{
+      const category=mapDishNameToCategory(dish);
+      const history=(salesHistory||{})[category]||[];
+      const lastEntry=history.find(h=>h.sale_date===lastWeekDateStr);
+      const dispRec=(lastWeekDisposalByDate[lastWeekDateStr]||{})[category];
+      if(!lastWeekQtyMap[dateStr]) lastWeekQtyMap[dateStr]={};
+      lastWeekQtyMap[dateStr][dish]={
+        qty: lastEntry ? Math.round((lastEntry.qty/20)*4)/4 : null,
+        soldOutEarly: dispRec?.soldOutEarly||false,
+        leftover: dispRec?.leftoverPortionen||0
+      };
+    });
+  }
   suggestionJobs.forEach(j=>{
     const result=computeAutoSuggestion(currentStore.id, j.dish, j.wdStr, j.dateStr, weatherMap, calendarEvents, fcSettings, salesHistory, lastWeekDisposalByDate);
     if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={};
@@ -2375,10 +2743,16 @@ async function renderForecastOrderTab(el, tabHtml){
     if(lockedNote){
       return `<div title="${lockedNote}" style="width:48px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div>`;
     }
+    const lwData=(lastWeekQtyMap[dateStr]||{})[dish];
+    const lwQty=lwData?.qty;
+    const lwIcon=lwData?.soldOutEarly?'🔥':(lwData?.leftover>5?'📦':'•');
+    const suggReason=autoSuggestion?.reason||'';
     const numberInput=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
       oninput="markForecastDirty(this)"
+      title="${escAttr(suggReason)}"
       style="width:48px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
-    return numberInput;
+    const lwHtml=lwQty!=null?`<div style="font-size:8.5px;color:var(--muted);margin-top:1px;text-align:center;" title="Vorwoche: ${formatQty(lwQty)} Behälter">${lwIcon} ${formatQty(lwQty)}</div>`:'';
+    return numberInput+lwHtml;
   }
 
   // Lasagne kann in mehreren Behälter-Größen gleichzeitig gebraucht werden (z.B. 2x Groß + 1x Klein) —
@@ -2414,7 +2788,9 @@ async function renderForecastOrderTab(el, tabHtml){
     });
     const remaining=LASAGNE_SIZES.filter(s=>!revealedOrder.includes(s.k));
     if(remaining.length){
-      h+=`<button onclick="addLasagneSize('${escAttr(cellKey)}','${remaining[0].k}')" style="font-size:8px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:5px;padding:1px 4px;cursor:pointer;">+ Größe</button>`;
+      h+=`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;">${remaining.map(s=>
+        `<button data-add-size="${escAttr(cellKey)}|${s.k}" onclick="addLasagneSize('${escAttr(cellKey)}','${s.k}')" style="font-size:7.5px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:5px;padding:1px 4px;cursor:pointer;white-space:nowrap;">+ ${s.l.split('·')[0]}</button>`
+      ).join('')}</div>`;
     }
     h+='</div>';
     return h;
@@ -2422,13 +2798,22 @@ async function renderForecastOrderTab(el, tabHtml){
 
   let anyLasagne=false;
   html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
-    <thead><tr>
-      <th style="text-align:left;">Tag</th>
-      <th style="color:#A21CAF;">Salat</th>
-      <th data-no-translate>Gericht 2</th>
-      <th data-no-translate>Gericht 3</th>
-      <th>Reis</th>
-    </tr></thead><tbody>`;
+    <thead>
+      <tr>
+        <th style="text-align:left;">Tag</th>
+        <th style="color:#A21CAF;">Salat</th>
+        <th data-no-translate>Gericht 2</th>
+        <th data-no-translate>Gericht 3</th>
+        <th>Reis</th>
+      </tr>
+      <tr style="background:var(--surface-1);">
+        <td style="font-size:9px;color:var(--muted);padding:2px 6px;">Behälter</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+      </tr>
+    </thead><tbody>`;
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
@@ -2444,7 +2829,7 @@ async function renderForecastOrderTab(el, tabHtml){
 
     html+=`<tr style="${isToday?`background:${tab.color}0d;`:''}">
       <td style="padding:6px 6px;vertical-align:top;">
-        <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍':''}</div>
+        <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍 heute':''}</div>
         ${dayReasonMap[dateStr]?`<div style="font-size:9.5px;color:var(--muted);line-height:1.3;">${dayReasonMap[dateStr]}</div>`:''}
       </td>
       <td style="padding:6px 3px;text-align:center;vertical-align:top;">${cellInput(dateStr,'Salat')}</td>
@@ -2464,7 +2849,10 @@ async function renderForecastOrderTab(el, tabHtml){
   if(anyLasagne){
     html+=`<div style="font-size:10.5px;color:#15803D;padding:6px 2px 2px;">🥗 An Lasagne-Tagen wird grüner Salat + Dressing automatisch mitproduziert · 🔒 Lasagne-Menge ist am Vortag ab 12:00 Uhr fixiert</div>`;
   }
-  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">Werte mit blauem Rahmen sind Vorschläge (Wetter, Feiertage, Ferien & Verkaufsdaten berücksichtigt) — bei Bedarf einfach überschreiben. Orange = geändert, noch nicht gespeichert.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">
+    🔵 Blau = KI-Vorschlag (Vorwoche + Wetter + Ferien) — antippen für Begründung &nbsp;·&nbsp; 🟠 Orange = geändert, noch nicht gespeichert<br>
+    Kleine Zahl darunter = tatsächliche Menge Vorwoche &nbsp;·&nbsp; 🔥 = Vorwoche ausverkauft &nbsp;·&nbsp; 📦 = Vorwoche viel übrig
+  </div>`;
 
   if(!isHistoric){
     html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
@@ -2529,7 +2917,19 @@ window.saveForecastChanges=saveForecastChanges;
 function addLasagneSize(cellKey, sizeKey){
   if(!lasagneExtraSizes[cellKey]) lasagneExtraSizes[cellKey]=new Set();
   lasagneExtraSizes[cellKey].add(sizeKey);
-  renderOrder();
+  // Nur den + Button durch ein neues Input ersetzen — KEIN renderOrder() damit
+  // die restlichen ungespeicherten Werte im Forecast erhalten bleiben
+  const btn=document.querySelector('[data-add-size="'+cellKey+'|'+sizeKey+'"]');
+  if(!btn){ renderOrder(); return; }
+  const [dateStr,...dishParts]=cellKey.split('|');
+  const dishName=dishParts.join('|');
+  const sLabel=sizeKey==='mittel'?'M':'K';
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;align-items:center;gap:3px;margin-top:3px;';
+  const safeDish=dishName.replace(/"/g,'&quot;');
+  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:18px;">${sLabel}</span><input type="number" step="0.25" placeholder="–" data-dish="${safeDish}" data-date="${dateStr}" data-groesse="${sizeKey}" data-original="" style="width:52px;padding:5px 3px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center;" oninput="markForecastDirty(this)">`;
+  btn.replaceWith(wrap);
+  wrap.querySelector('input')?.focus();
 }
 window.addLasagneSize=addLasagneSize;
 
@@ -2560,8 +2960,15 @@ window.switchOrderTab=switchOrderTab;
 function adj(id,d){
   orderQtys[id]=Math.max(0,(orderQtys[id]||0)+d);
   const el=document.getElementById('q'+id);
-  if(el){el.textContent=orderQtys[id];el.className='qty-val'+(orderQtys[id]>0?' has-val':'');}
+  if(el){el.value=orderQtys[id];el.className='qty-val'+(orderQtys[id]>0?' has-val':'');}
 }
+function setQty(id,val){
+  const n=Math.max(0, parseInt(val)||0);
+  orderQtys[id]=n;
+  const el=document.getElementById('q'+id);
+  if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'');}
+}
+window.setQty=setQty;
 async function submitOrder(){
   const today=new Date().toISOString().split('T')[0];
   const tab=ORDER_TABS[activeOrderTab];
@@ -2681,13 +3088,16 @@ async function toggleCl(templateId){
 // ---- ORGANISATION VIEW (PIN 9999) ----
 async function renderManagement(){
   const el=document.getElementById('v-management');
-  const maengelOffen=await api(`maengel?status=neq.behoben&select=id`).catch(()=>[]);
+  const maengelOffen=await api(`maengel?status=neq.behoben&select=id,status`).catch(()=>[]);
+  const anzOffen=(maengelOffen||[]).filter(m=>(m.status||'offen')==='offen').length;
+  const anzInBearbeitung=(maengelOffen||[]).filter(m=>m.status==='in_bearbeitung').length;
+  loadNotifBadge();
   el.innerHTML=`
     ${pageHeaderHtml('🗂️','Management','Alles, was Organisation braucht — an einem Ort','#2B3A67')}
     ${(maengelOffen||[]).length?`<div onclick="goTo('maengel')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
       <span style="font-size:18px;">🔧</span>
       <div style="flex:1;">
-        <div style="font-size:12.5px;font-weight:600;color:#991B1B;">${maengelOffen.length} offene Meldung${maengelOffen.length===1?'':'en'}</div>
+        <div style="font-size:12.5px;font-weight:600;color:#991B1B;">${maengelOffen.length} Meldung${maengelOffen.length===1?'':'en'} — ${anzOffen} offen${anzInBearbeitung?`, ${anzInBearbeitung} in Bearbeitung`:''}</div>
         <div style="font-size:10.5px;color:#B45309;">Antippen für Übersicht</div>
       </div>
       <span style="color:#991B1B;">→</span>
@@ -2794,15 +3204,17 @@ async function loadOrgDashboard(){
   const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
   const tomorrowStr=tomorrow.toISOString().split('T')[0];
   try{
-    const [stores, ordersToday, kcToday, forecastTomorrow] = await Promise.all([
+    const [stores, ordersToday, kcToday, forecastTomorrow, disposalToday] = await Promise.all([
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
       api(`kc_submissions?order_date=eq.${today}&select=store_id`).catch(()=>[]),
-      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=eq.manual&select=store_id`).catch(()=>[])
+      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=eq.manual&select=store_id`).catch(()=>[]),
+      api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[])
     ]);
     const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
     const kcSet=new Set((kcToday||[]).map(k=>k.store_id));
     const forecastSet=new Set((forecastTomorrow||[]).map(f=>f.store_id));
+    const disposalSet=new Set((disposalToday||[]).filter(d=>d.leftover_qty!=null).map(d=>d.store_id));
 
     // Reminder: Wochen-Forecast für die KOMMENDE Woche muss spätestens Freitag stehen — Dringlichkeit
     // steigt Richtung Freitag. Erkennung: gibt's überhaupt schon Einträge für nächste Woche (Mo–Fr)?
@@ -2829,7 +3241,7 @@ async function loadOrgDashboard(){
     const dot=ok=>`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${ok?'#22C55E':'#EF4444'};"></span>`;
     let html=reminderHtml;
     html+=`<div class="section-lbl">📦 Bestellstatus heute</div><div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
-      <th style="text-align:left;">Filiale</th><th>KC</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th>
+      <th style="text-align:left;">Filiale</th><th>Shop</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th><th>Entsorgung</th>
     </tr></thead><tbody>`;
     storeList.forEach(s=>{
       const storeOrders=(ordersToday||[]).filter(o=>o.store_id===s.id);
@@ -2848,6 +3260,7 @@ async function loadOrgDashboard(){
         <td>${dot(forecastSet.has(s.id))}</td>
         <td>${dot(transporterOk)}</td>
         <td>${dot(sweetsOk)}</td>
+        <td>${dot(disposalSet.has(s.id))}</td>
       </tr>`;
     });
     html+='</tbody></table></div>';
@@ -2869,7 +3282,7 @@ async function loadOrgRolesRow(){
 
   const wrap=document.getElementById('org-roles-row');
   if(!wrap) return;
-  const order=['kueche','operations','kc','transporter','sweets'];
+  const order=(currentStore?.id==='kitchen'?['kueche','kc','transporter','sweets']:['kueche','operations','kc','transporter','sweets']);
   wrap.innerHTML=order.filter(k=>byKey[k]).map(k=>{
     const r=byKey[k];
     return `<div style="position:relative;">
@@ -2991,6 +3404,10 @@ async function renderBroadcast(){
     </select>
     <div style="font-weight:500;margin-bottom:8px;">Nachricht</div>
     <textarea id="bc-message" placeholder="z.B. Bitte morgen extra Servietten mitbestellen..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
+    <div style="font-weight:500;margin-bottom:6px;">Sichtbarkeit</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Poppt in jedem Fall beim nächsten Öffnen einmal auf. Zusätzlich als Hinweis auf der Startseite anzeigen bis:</div>
+    <input type="date" id="bc-until" min="${new Date().toISOString().split('T')[0]}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;box-sizing:border-box;">
+    <div style="font-size:10.5px;color:var(--muted);margin-bottom:12px;">Leer lassen = nur einmaliges Popup, kein dauerhafter Hinweis.</div>
     <button class="submit-btn" onclick="sendBroadcast()">📢 Senden — poppt beim nächsten Öffnen auf</button>
   </div>
   <div class="section-lbl" style="margin-top:18px;">Gesendete Nachrichten</div>
@@ -3004,9 +3421,10 @@ async function renderBroadcast(){
 async function sendBroadcast(){
   const target=document.getElementById('bc-target').value||null;
   const message=document.getElementById('bc-message').value.trim();
+  const showUntil=document.getElementById('bc-until')?.value||null;
   if(!message){ showToast('Bitte Nachricht eingeben'); return; }
   try{
-    await api('org_broadcasts',{method:'POST',body:JSON.stringify([{message, target_store_id:target, created_by:currentStore?.name||'Organisation'}])});
+    await api('org_broadcasts',{method:'POST',body:JSON.stringify([{message, target_store_id:target, created_by:currentStore?.name||'Organisation', show_until:showUntil}])});
     showToast('✔ Nachricht gesendet');
     renderBroadcast();
   }catch(e){console.error(e);showToast('Fehler beim Senden');}
@@ -3050,6 +3468,26 @@ async function checkForBroadcasts(){
     const readIds=new Set((reads||[]).map(r=>r.broadcast_id));
     broadcastQueue=(all||[]).filter(b=>!readIds.has(b.id));
     showNextBroadcast();
+  }catch(e){console.error(e);}
+}
+
+// Dauerhafter Hinweis auf der Startseite, solange show_until in der Zukunft liegt — unabhängig davon,
+// ob das einmalige Popup schon gesehen/geschlossen wurde. Leeres show_until = kein Dauer-Hinweis.
+async function loadActiveBroadcastBanner(){
+  const wrap=document.getElementById('broadcast-banner-widget');
+  if(!wrap || !currentStore || currentStore.id==='zentrale') return;
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    const active=await api(`org_broadcasts?or=(target_store_id.is.null,target_store_id.eq.${currentStore.id})&show_until=gte.${today}&order=created_at.desc&select=id,message,show_until`).catch(()=>[]);
+    if(!(active||[]).length){ wrap.innerHTML=''; return; }
+    wrap.innerHTML=active.map(b=>`
+      <div style="display:flex;align-items:flex-start;gap:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 14px;margin-bottom:8px;">
+        <span style="font-size:16px;">📌</span>
+        <div style="flex:1;">
+          <div style="font-size:12.5px;color:#78350F;line-height:1.4;">${b.message}</div>
+          <div style="font-size:10px;color:#92660A;margin-top:3px;">sichtbar bis ${new Date(b.show_until+'T00:00:00').toLocaleDateString('de-AT')}</div>
+        </div>
+      </div>`).join('');
   }catch(e){console.error(e);}
 }
 function showNextBroadcast(){
@@ -3866,7 +4304,7 @@ async function renderDailyCheck(){
         <div style="font-size:36px;margin-bottom:10px;">🗓️</div>
         <div style="font-size:16px;font-weight:600;margin-bottom:8px;">Hast du dich bei "Mein Dienstplan" eingecheckt?</div>
         <div style="font-size:12.5px;color:var(--sub);margin-bottom:16px;">Bitte zuerst dort einchecken, bevor die Schicht hier gestartet wird.</div>
-        <a href="#" target="_blank" rel="noopener" style="display:inline-block;padding:10px 18px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;color:var(--sub);text-decoration:none;margin-bottom:14px;">🔗 Zu "Mein Dienstplan"</a>
+        <a href="https://terminal.meinezeiterfassung.at/unlocked" target="_blank" rel="noopener" style="display:inline-block;padding:10px 18px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;color:var(--sub);text-decoration:none;margin-bottom:14px;">🔗 Zu "Mein Dienstplan"</a>
         <button class="submit-btn" style="background:var(--green);" onclick="localStorage.setItem('${dienstplanKey}','1');renderDailyCheck();">✓ Ja, eingecheckt — weiter</button>
       </div>`;
     translateEl(el);
@@ -4261,10 +4699,12 @@ async function uploadMangelFoto(blob){
 async function requestGeldwechsel(){
   const betrag=parseFloat(document.getElementById('geldwechsel-betrag')?.value);
   const format=document.getElementById('geldwechsel-format')?.value||'Gemischt';
+  const detail=document.getElementById('geldwechsel-detail')?.value?.trim()||null;
   if(!betrag || betrag<=0){ showToast('Bitte Betrag eingeben'); return; }
   try{
-    await api('geldwechsel',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,betrag,format,status:'offen'}])});
+    await api('geldwechsel',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,betrag,format,detail,status:'offen'}])});
     document.getElementById('geldwechsel-betrag').value='';
+    document.getElementById('geldwechsel-detail').value='';
     showToast('✓ Geldwechsel angefragt');
     loadGeldwechselList();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
@@ -4277,10 +4717,12 @@ async function loadGeldwechselList(){
   const rows=await api(`geldwechsel?store_id=eq.${currentStore.id}&status=eq.offen&select=*&order=erstellt_am.desc`).catch(()=>[]);
   if(!(rows||[]).length){ wrap.innerHTML=''; return; }
   wrap.innerHTML=(rows||[]).map(g=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:0.5px solid var(--border);">
-      <span style="font-size:12.5px;">${formatQty(g.betrag)}€ · ${g.format}</span>
-      <span class="badge badge-warn">offen</span>
-    </div>`).join('');
+    <div style="padding:7px 0;border-top:0.5px solid var(--border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:12.5px;">${formatQty(g.betrag)}€ · ${g.format}</span>
+        <span class="badge badge-warn">offen</span>
+      </div>
+      ${g.detail?`<div style="font-size:11px;color:var(--muted);margin-top:2px;">${g.detail}</div>`:''}    </div>`).join('');
 }
 window.loadGeldwechselList=loadGeldwechselList;
 
@@ -4461,6 +4903,7 @@ async function setMangelStatus(id, newStatus){
     await appendMangelVerlauf(id, {t:'status', text:`Status geändert auf „${statusLabel[newStatus]}"`, autor:currentStore?.name||'—', zeit:new Date().toISOString()});
     closeMangelDetail();
     renderMaengel();
+    loadNotifBadge();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 window.setMangelStatus=setMangelStatus;
@@ -4502,7 +4945,7 @@ async function renderSchichtende(){
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
-    {id:'kc', label:'KC ausgefüllt', sub:'IST-Bestände der Webshop-Produkte', done:kcDone, link:'order', orderTab:'kc', group:'bestellungen'},
+    {id:'kc', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände der Shop-Produkte', done:kcDone, link:'order', orderTab:'kc', group:'bestellungen'},
     {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null, group:'sonstiges'},
     {id:'abschluss', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten — optionale Hilfe`, done:clDoneCount===clTotal && clTotal>0, link:'check', group:'sonstiges', optional:true}
   ];
@@ -4517,7 +4960,7 @@ async function renderSchichtende(){
     reinigung_protokoll: {emoji:'🧽', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', link:null},
     sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Bestellung für morgen', link:'order', orderTab:'sweets'},
     transporter:{emoji:'🚚', label:'Transporter bestellt', sub:'Verpackungen & Reinigung', link:'order', orderTab:'transporter'},
-    kc:         {emoji:'📦', label:'KC ausgefüllt', sub:'IST-Bestände Webshop', link:'order', orderTab:'kc'},
+    kc:         {emoji:'📦', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände Shop-Produkte', link:'order', orderTab:'kc'},
     uebergabe:  {emoji:'✍️', label:'Übergabe-Notiz', sub:'Hinweis für nächste Schicht', link:null}
   };
 
@@ -4696,7 +5139,7 @@ async function renderPack(){
   // Kein Tab-Umschalter mehr nötig — Transporter und KC haben jetzt eigene Reiter unten in der Navigation
   // (Michi/Ines), daher jede Ansicht komplett isoliert, ohne Vermischung.
   if(activePackTab==='kc'){
-    let html=pageHeaderHtml('📦','KC — Webshop-Produkte','Bestellung je Filiale (SOLL − IST)','#A855F7');
+    let html=pageHeaderHtml('📦','Shop Produkte','Bestellung je Filiale (SOLL − IST)','#A855F7');
     await renderKCOverview(el, html, storeList);
     return;
   }
@@ -5029,7 +5472,7 @@ async function renderDisposal(){
     const soldOut=rec?.sold_out_time ? rec.sold_out_time.slice(0,5) : '';
     const dishNameSafe=escForInlineHandler(dishName);
     html+=`<tr style="${isDone?'background:#F0FDF4;':''}">
-      <td data-no-translate style="font-size:12px;">${isDone?'<span style="color:var(--green);margin-right:2px;">✓</span>':''}${getDishEmoji(dishName)} ${dishName}<div style="font-size:10px;color:var(--muted);">${s.l}</div></td>
+      <td data-no-translate style="font-size:12px;"><div style="display:flex;align-items:center;gap:7px;">${dishImgHtml(dishName,38)}<div>${isDone?'<span style="color:var(--green);margin-right:2px;">✓</span>':''}<span style="font-weight:600;">${dishName}</span><div style="font-size:10px;color:var(--muted);">${s.l}</div></div></div></td>
       <td>
         <input type="time" value="${soldOut}"
           onclick="if(!this.value){const n=new Date();this.value=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');updateSoldOutTime('${s.k}','${dishNameSafe}',this.value);}"
@@ -5084,7 +5527,9 @@ async function updateSoldOutTime(slot, dishName, value){
   const v=value===''?null:value+':00';
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=leftover_qty,note`).catch(()=>[]);
-    const leftover=existing?.[0]?.leftover_qty ?? null;
+    // Eine eingetragene Uhrzeit heißt: komplett ausverkauft, also automatisch 0 Portionen übrig —
+    // muss nicht extra manuell eingetragen werden.
+    const leftover=v!==null ? 0 : (existing?.[0]?.leftover_qty ?? null);
     const note=existing?.[0]?.note ?? null;
     await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}`,{method:'DELETE'});
     if(v!==null || leftover!==null || note){
@@ -5130,6 +5575,13 @@ window.updateDisposalNote=updateDisposalNote;
 const WEEKDAYS=[{k:'mo',l:'Montag'},{k:'di',l:'Dienstag'},{k:'mi',l:'Mittwoch'},{k:'do',l:'Donnerstag'},{k:'fr',l:'Freitag'}];
 const MENU_SLOTS=[{k:'salat',l:'Salat'},{k:'gericht2',l:'Gericht 2'},{k:'gericht3',l:'Gericht 3'},{k:'reis',l:'Reis'}];
 let kitchenTab='morgen';
+let kitchenForecastManualOffset=null; // null = automatisch (13-Uhr-Regel), sonst manuell per Vorherige/Nächste gesetzt
+function changeKitchenForecastWeek(d){
+  const base = kitchenForecastManualOffset ?? (new Date().getHours()>=13?1:0);
+  kitchenForecastManualOffset = base + d;
+  renderKitchen();
+}
+window.changeKitchenForecastWeek=changeKitchenForecastWeek;
 let weekOffset=0; // 0 = aktuelle Woche, -1 = letzte Woche, etc.
 let forecastWeekOffset=0; // dasselbe Prinzip fuer den Store-Forecast-Tab: 0=aktuelle Woche, +1=naechste, -1=letzte (Historie)
 function changeForecastWeek(d){ forecastWeekOffset+=d; renderOrder(); }
@@ -5257,10 +5709,11 @@ async function renderBeilagenTableHtml(){
     const weekDates=getWeekdayDates();
     const fromDate=weekDates[1], toDate=weekDates[5];
 
-    let html=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Mengen pro Filiale & Gesamtsumme für die Küchen-Produktion</div>`;
+    let html=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Mengen pro Filiale & Gesamtsumme für die Küchen-Produktion</div>
+    <div style="font-size:11px;color:#3B6D11;background:var(--green-light);border-radius:8px;padding:7px 10px;margin-bottom:10px;">✓ = eingepackt bestätigt. Endverantwortung liegt bei Michi (Transporter) — Küche sieht den Status nur mit.</div>`;
 
     const baseline=await api(`kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty`).catch(()=>[]);
-    const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted`).catch(()=>[]);
+    const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
     const valMap={}; // valMap[date][store_id][article_name] = rec
     (weekVals||[]).forEach(d=>{
       if(!valMap[d.supply_date])valMap[d.supply_date]={};
@@ -5280,12 +5733,16 @@ async function renderBeilagenTableHtml(){
     }else{
       let otherDaysHtml='';
       for(let wd=1; wd<=5; wd++){
-        const dayItems=baseline.filter(b=>b.weekday===wd);
-        if(!dayItems.length) continue;
-        const isToday=wd===todayWeekday;
         const dateStr=weekDates[wd];
+        const dayItems=baseline.filter(b=>b.weekday===wd);
+        // Auch Tage zeigen, an denen zwar kein Grundplan existiert, aber eine Filiale trotzdem
+        // etwas eingetragen hat (z.B. Bowl Sauce jetzt täglich statt nur montags)
+        const extraArticlesToday=new Set();
+        Object.values(valMap[dateStr]||{}).forEach(storeVals=>{ Object.keys(storeVals).forEach(an=>extraArticlesToday.add(an)); });
+        if(!dayItems.length && !extraArticlesToday.size) continue;
+        const isToday=wd===todayWeekday;
         const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-        const articleNames=[...new Set(dayItems.map(b=>b.article_name))];
+        const articleNames=[...new Set([...dayItems.map(b=>b.article_name), ...extraArticlesToday])];
 
         let dayHtml=`<div class="section-lbl" style="${isToday?'color:#3B6D11;font-weight:700;':''}">${WEEKDAY_NAMES[wd]} · ${dateLabel}${isToday?' — heute':''}</div>`;
         dayHtml+=`<div class="card" style="${isToday?'border:1.5px solid #3B6D11;':''}"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
@@ -5299,16 +5756,32 @@ async function renderBeilagenTableHtml(){
           let sum=0;
           const cells=storeList.map(st=>{
             const b=dayItems.find(x=>x.store_id===st.id && x.article_name===name);
-            if(!b) return '<td style="color:var(--border);">·</td>';
             const rec=(valMap[dateStr]?.[st.id]||{})[name];
+            if(!b && !rec) return '<td style="color:var(--border);">·</td>';
             const val=rec?rec.qty:b.base_qty;
             sum+=parseFloat(val)||0;
             const adjusted=rec?.is_adjusted;
+            if(isToday){
+              // Outcheck: heutige Lieferung antippen = als eingepackt bestätigen (verhindert, dass
+              // z.B. der Lasagne-Salat vergessen wird — Michi sieht sofort, was noch fehlt)
+              const packed=!!rec?.eingepackt;
+              return `<td>
+                <div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(name)}','${dateStr}',${val},${packed})" style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;gap:1px;padding:3px 5px;border-radius:6px;background:${packed?'var(--green-light)':'transparent'};">
+                  <span style="font-weight:${adjusted?'700':'500'};color:${adjusted?'#C2410C':'#1a1a18'};font-size:12px;">${formatQty(val)}${adjusted?'*':''}</span>
+                  <span style="font-size:10px;color:${packed?'var(--green)':'var(--border)'};">${packed?'✓':'○'}</span>
+                </div>
+              </td>`;
+            }
             return `<td style="font-weight:${adjusted?'700':'400'};color:${adjusted?'#C2410C':'#1a1a18'};font-size:12px;">${formatQty(val)}${adjusted?'*':''}</td>`;
           }).join('');
           const sumDisplay = Number.isInteger(sum) ? sum : Math.round(sum*1000)/1000;
           dayHtml+=`<tr>
-            <td data-no-translate style="font-size:12px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};">${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></td>
+            <td data-no-translate style="font-size:12px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};">
+              <div style="display:flex;align-items:center;gap:5px;">
+                ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
+                <div>${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></div>
+              </div>
+            </td>
             ${cells}
             <td style="font-weight:700;color:#3B6D11;font-size:12px;">${formatQty(sumDisplay)}</td>
           </tr>`;
@@ -5343,13 +5816,20 @@ async function renderKitchen(){
   nextCookDay.setDate(nextCookDay.getDate()+1);
   while([0,6].includes(nextCookDay.getDay())){ nextCookDay.setDate(nextCookDay.getDate()+1); }
   const nextCookDayLabel=nextCookDay.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-  const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E'};
+  // Ab 13:00 Uhr zeigt "Nächste Woche" wirklich die kommende Woche (vorher die laufende) — Wording
+  // im Tab passt sich automatisch mit an, damit nie unklar ist, welche Woche gerade gemeint ist.
+  const kitchenWeekOffset = kitchenForecastManualOffset ?? (new Date().getHours()>=13 ? 1 : 0);
+  const nwWeekDates=getWeekdayDates(kitchenWeekOffset);
+  const nwKwNum=getIsoWeekNumber(nwWeekDates[1]);
+  const nwWeekLabelShort = kitchenWeekOffset===0?'Diese Woche':(kitchenWeekOffset===1?'Nächste Woche':`KW ${nwKwNum}`);
+  const nwLabel=nwWeekLabelShort+' '+new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+  const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E', supply:'#EC4899'};
   const ktab=(key,label)=>{
     const active=kitchenTab===key;
     const col=KTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchKitchenTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 Nächste Woche')}${ktab('plan','🗓️ Kochplan')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche'))}${ktab('plan','🗓️ Kochplan')}${ktab('supply','🥗 Beilagen')}</div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -5372,13 +5852,19 @@ async function renderKitchen(){
     const overrideMap = {};
     (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
-    // Week selector — jede Woche in eigener Farbe, damit man sie auf einen Blick unterscheidet
+    // Week selector — jede Woche in eigener Farbe, damit man sie auf einen Blick unterscheidet.
+    // Zusätzlich das reale Kalenderdatum darunter, damit Woche 1-4 nicht mit dem Monat verwechselt wird.
     const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
+    const thisMonday=new Date(); thisMonday.setDate(thisMonday.getDate()-((thisMonday.getDay()+6)%7));
     html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">`;
     for(let w=1;w<=4;w++){
       const active=selectedWoche===w;
       const col=WOCHE_COLORS[w];
-      html+=`<button onclick="window.kochplanWoche=${w};renderKitchen()" style="flex:1;padding:8px 4px;border-radius:10px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;cursor:pointer;">Woche ${w}</button>`;
+      const weeksAhead=((w-CURRENT_MENU_WOCHE)+4)%4;
+      const wMon=new Date(thisMonday); wMon.setDate(wMon.getDate()+weeksAhead*7);
+      const wFri=new Date(wMon); wFri.setDate(wFri.getDate()+4);
+      const rangeLabel=wMon.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+wFri.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      html+=`<button onclick="window.kochplanWoche=${w};renderKitchen()" style="flex:1;padding:8px 4px;border-radius:10px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;cursor:pointer;">Woche ${w}<div style="font-size:9px;font-family:inherit;margin-top:2px;">${rangeLabel}</div></button>`;
     }
     html+=`</div>`;
     html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
@@ -5408,7 +5894,7 @@ async function renderKitchen(){
 
           html+=`<div style="${i>0?'border-top:0.5px solid var(--border);':''}">
             <div onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;">
-              <span style="font-size:20px;">${getDishEmoji(dish.name)}</span>
+              ${dishImgHtml(dish.name, 36)}
               <div style="flex:1;">
                 <div style="font-size:14px;font-weight:600;color:#1a1a18;">${dish.name}</div>
                 <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
@@ -5452,14 +5938,22 @@ async function renderKitchen(){
   if(kitchenTab==='supply'){
     html+=await renderBeilagenTableHtml();
   }else if(kitchenTab==='forecast'){
-    // FORECAST — Portionsmengen aller Filialen für die ganze Woche, wie das Excel-Vorbild
+    // FORECAST — Portionsmengen aller Filialen für die ganze Woche, wie das Excel-Vorbild.
+    // Ab 13:00 Uhr automatisch auf die nächste Woche umgeschaltet (siehe kitchenWeekOffset oben).
     const stores=await api('stores?select=id,name&order=id');
     const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
     const todayWeekday=new Date().getDay();
-    const weekDates=getWeekdayDates();
+    const weekDates=nwWeekDates;
     const fromDate=weekDates[1], toDate=weekDates[5];
 
-    html+=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Portionsmengen pro Filiale für die Küchen-Produktion</div>`;
+    html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 2px;">
+      <button onclick="changeKitchenForecastWeek(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">← Vorherige</button>
+      <div style="text-align:center;">
+        <div style="font-size:13px;font-weight:600;">${nwLabel}</div>
+      </div>
+      <button onclick="changeKitchenForecastWeek(1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">Nächste →</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:center;">Portionsmengen pro Filiale für die Küchen-Produktion</div>`;
 
     const weekForecasts=await api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source,groesse`).catch(()=>[]);
     const fMap={}; // fMap[date][store_id][dish] = [rec, ...] (mehrere bei Lasagne mit mehreren Größen)
@@ -5484,6 +5978,16 @@ async function renderKitchen(){
         <span>ℹ️</span><span>Mindestens eine Filiale hat diese Woche eine Menge angepasst</span>
       </div>`;
     }
+
+    // Beilagen (Bowl Sauce, Limetten, Dressing etc.) mit Mengen ebenfalls hier zeigen, pro Tag
+    const supplyBaseline=await api('kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty').catch(()=>[]);
+    const supplyToday=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty`).catch(()=>[]);
+    const supplyValMap={}; // [date][article_name][store_id] = qty
+    (supplyToday||[]).forEach(r=>{
+      if(!supplyValMap[r.supply_date])supplyValMap[r.supply_date]={};
+      if(!supplyValMap[r.supply_date][r.article_name])supplyValMap[r.supply_date][r.article_name]={};
+      supplyValMap[r.supply_date][r.article_name][r.store_id]=r.qty;
+    });
 
     for(let wd=1; wd<=5; wd++){
       const wdStr=WEEKDAY_STR[wd];
@@ -5524,31 +6028,63 @@ async function renderKitchen(){
       if(hasAnyAdjusted){
         html+=`<div style="font-size:10px;color:#0369A1;padding:2px 4px 8px;">* von Filiale angepasst</div>`;
       }
+
+      // Beilagen für diesen Tag, mit Mengen — direkt darunter statt in einem separaten Tab
+      const dayBaseline=supplyBaseline.filter(b=>b.weekday===wd);
+      const beilagenNames=[...new Set(dayBaseline.map(b=>b.article_name))];
+      if(beilagenNames.length){
+        html+=`<div class="card" style="margin:-2px 0 12px;"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
+          <th style="text-align:left;">Beilage</th>
+          ${storeList.map(s=>`<th data-no-translate style="color:${STORE_COLORS[s.id]||'#888'};font-size:10.5px;">${s.name.split(' ')[0]}</th>`).join('')}
+        </tr></thead><tbody>`;
+        beilagenNames.forEach(name=>{
+          const color=ARTICLE_COLORS[name]||'#444';
+          html+=`<tr><td data-no-translate style="font-size:11.5px;font-weight:600;color:${color};">${name}</td>
+            ${storeList.map(s=>{
+              const b=dayBaseline.find(x=>x.store_id===s.id && x.article_name===name);
+              if(!b) return '<td style="color:var(--border);">·</td>';
+              const val=supplyValMap[dateStr]?.[name]?.[s.id] ?? b.base_qty;
+              return `<td style="font-size:11.5px;">${formatQty(val)}</td>`;
+            }).join('')}
+          </tr>`;
+        });
+        html+='</tbody></table></div></div>';
+      }
       // Zutaten optional aufklappbar — ohne die Seite zu verlassen (kein Zurück-Klick nötig)
       const dayDishObjs=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${wdStr}`])||[];
       const dayDetailId=`nw_zut_${wd}`;
       html+=`<div style="margin:-4px 0 12px;">
         <div onclick="document.getElementById('${dayDetailId}').style.display=document.getElementById('${dayDetailId}').style.display==='none'?'block':'none'" style="font-size:11.5px;color:var(--muted);cursor:pointer;padding:4px 2px;">📖 Zutaten & Allergene anzeigen</div>
         <div id="${dayDetailId}" style="display:none;">
-          ${dishNames.map(name=>{
+          ${dishNames.map((name,dni)=>{
             const dObj=dayDishObjs.find(d=>d.name===name);
             if(!dObj) return '';
             const override=nwOverrideMap[name];
             const zutaten=(override?.zutaten||dObj.zutaten||'').replace(/\n/g,' ').trim();
+            const allergenCodes=(override?.allergene_codes||dObj.allergene?.main||[]);
             const {gemuese, rest, getreide}=splitZutaten(zutaten);
             const allergenMain=dObj.allergene?.main||[];
+            const editKey=`nw${wd}_${dni}`;
             return `<div class="card" style="margin-bottom:6px;padding:10px 14px;">
-              <div style="font-size:13px;font-weight:600;">${name}${allergenMain.length?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}</span>`:''}</div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                <div style="font-size:13px;font-weight:600;">${name}${allergenMain.length?` <span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}</span>`:''}</div>
+                <button onclick="document.getElementById('nwedit-${editKey}').style.display=document.getElementById('nwedit-${editKey}').style.display==='none'?'block':'none'" style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:3px 8px;cursor:pointer;flex-shrink:0;">✏️ Bearbeiten</button>
+              </div>
               ${gemuese.length?`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">🥕 ${gemuese.join(', ')}</div>`:''}
               ${getreide.length?`<div style="font-size:11.5px;color:#1D4ED8;margin-top:2px;">🌾 ${getreide.join(', ')}</div>`:''}
               ${rest.length?`<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">🧂 ${rest.join(' · ')}</div>`:''}
               ${!gemuese.length&&!rest.length&&!getreide.length?'<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Keine Zutaten hinterlegt</div>':''}
+              <div id="nwedit-${editKey}" style="display:none;margin-top:8px;border-top:0.5px solid var(--border);padding-top:8px;">
+                <textarea id="zut-${editKey}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;min-height:70px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:6px;">${zutaten}</textarea>
+                <input id="all-${editKey}" type="text" value="${allergenCodes.join(', ')}" placeholder="Allergen-Kürzel, z.B. A, M" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;margin-bottom:8px;">
+                <button onclick="saveMenuDish('${name.replace(/'/g,"\\'")}','${editKey}')" style="width:100%;padding:8px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:12.5px;font-weight:500;cursor:pointer;">Speichern</button>
+              </div>
             </div>`;
           }).join('') || '<div style="font-size:11.5px;color:var(--muted);padding:4px 2px;">Keine Zutaten hinterlegt</div>'}
         </div>
       </div>`;
     }
-  }else{
+  }else if(kitchenTab==='history'){
     // WOCHENÜBERSICHT — historischer Verlauf wie im Excel, eine Woche pro Bildschirm
     const stores=await api('stores?select=id,name&order=id');
     const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -5709,7 +6245,7 @@ async function renderMorgenKoch(el, tabHtml){
       return `<td style="font-weight:${changed?'700':'400'};color:${changed?'#0369A1':(qty?'#1a1a18':'var(--border)')};">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
     }).join('');
     html+=`<tr onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
-      <td style="text-align:left;"><span style="font-size:18px;">${getDishEmoji(dish)}</span> <span style="font-weight:600;">${dish}</span></td>
+      <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
       ${cells}
       <td style="font-weight:700;color:${hasData?'var(--green)':'var(--muted)'};">${total>0?formatQty(total):'–'}</td>
     </tr>`;
@@ -5896,7 +6432,7 @@ async function renderKCLager(){
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
   if(!kcLagerStoreId) kcLagerStoreId=storeList[0]?.id;
 
-  let html=`<div class="cl-tabs"><button class="cl-tab${kcTab==='shop'?' active':''}" onclick="switchKCTab('shop')">Lager Shop</button><button class="cl-tab${kcTab==='kitchen'?' active':''}" onclick="switchKCTab('kitchen')">Lager Küche</button></div>`;
+  let html=tabBarHtml([{key:'shop',label:'🛒 Lager Shop'},{key:'kitchen',label:'🥘 Lager Küche'}], kcTab, 'switchKCTab');
 
   if(kcTab==='shop'){
     // Store selector pills
