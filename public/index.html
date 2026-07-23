@@ -293,7 +293,24 @@ const KITCHEN_SUPPLY_IMAGES = {
   'Bowl Sauce': '/images/kitchen-supply/bowl-sauce.jpg',
   'Limetten': '/images/kitchen-supply/limetten.jpg',
   'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
+  'Raita': '/images/kitchen-supply/raita.jpg',
 };
+
+// Welche Beilage gehört zu welchem Gericht — für die Anzeige im Morgen-Tab & Beilagen-Matrix.
+// Keyword-basiert: Treffer auf Gerichtsname → Beilagen die dazu serviert werden.
+const DISH_BEILAGEN = [
+  { match: /BIRYANI/,             beilagen: ['Raita', 'Limetten', 'Petersilie'] },
+  { match: /\bBOWL\b|LENTIL|LINSEN.*BOWL/,  beilagen: ['Bowl Sauce', 'Dressing'] },
+  { match: /SALAT|WOCHENSALAT/,   beilagen: ['Dressing'] },
+  { match: /LASAGNE/,             beilagen: ['Salat (zur Lasagne)'] },
+  { match: /CURRY|DAL/,           beilagen: ['Reis', 'Limetten'] },
+];
+function getDishBeilagen(dishName){
+  if(!dishName) return [];
+  const n = dishName.toUpperCase();
+  const hit = DISH_BEILAGEN.find(e => e.match.test(n));
+  return hit ? hit.beilagen : [];
+}
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
 const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat (zur Lasagne)':'#A21CAF','Raita':'#15803D'};
 // Ausgeschriebene Allergen-Namen statt Buchstaben-Codes — Mitarbeitende kennen die Buchstaben nicht auswendig
@@ -1237,6 +1254,7 @@ const DISH_IMAGE_MAP = [
   { match: /CURRY/,                     src: '/images/dishes/curry.jpg' },
   { match: /WOCHENSALAT/,              src: '/images/dishes/bowl.jpg' },
   { match: /SALAT LASAGNE|LASAGNE.*SALAT/, src: '/images/kitchen-supply/salat-lasagne.jpg' },
+  { match: /RAITA/,                        src: '/images/dishes/raita.jpg' },
   { match: /SALAT|SALAD/,                src: '/images/dishes/salat.jpg' },
   { match: /REIS|RICE|BASMATI/,        src: '/images/dishes/reis.jpg' },
   { match: /SAMOSA/,                   src: '/images/dishes/samosa.jpg' },
@@ -5149,12 +5167,12 @@ async function renderPack(){
   const today=new Date().toISOString().split('T')[0];
   let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
 
-  // Drei eigene Tabs, damit z.B. Samosas & Beilagen nicht untergehen, wenn gerade keine Bestellungen da sind
-  html+=`<div class="pack-tabs" style="margin-bottom:12px;">
-    <button class="pack-tab" onclick="switchTransporterSubTab('bestellliste')" style="border-color:${transporterSubTab==='bestellliste'?'#F97316':'var(--border)'};background:${transporterSubTab==='bestellliste'?'#FFF7ED':'var(--card)'};color:${transporterSubTab==='bestellliste'?'#F97316':'#1a1a18'};font-weight:${transporterSubTab==='bestellliste'?'600':'400'};">📦 Bestellliste</button>
-    <button class="pack-tab" onclick="switchTransporterSubTab('samosas')" style="border-color:${transporterSubTab==='samosas'?'#F97316':'var(--border)'};background:${transporterSubTab==='samosas'?'#FFF7ED':'var(--card)'};color:${transporterSubTab==='samosas'?'#F97316':'#1a1a18'};font-weight:${transporterSubTab==='samosas'?'600':'400'};">🥟 Samosas</button>
-    <button class="pack-tab" onclick="switchTransporterSubTab('beilagen')" style="border-color:${transporterSubTab==='beilagen'?'#F97316':'var(--border)'};background:${transporterSubTab==='beilagen'?'#FFF7ED':'var(--card)'};color:${transporterSubTab==='beilagen'?'#F97316':'#1a1a18'};font-weight:${transporterSubTab==='beilagen'?'600':'400'};">🥗 Beilagen</button>
-  </div>`;
+  // Drei Tabs — Boldonse via tabBarHtml helper
+  html+=tabBarHtml([
+    {key:'bestellliste', label:'📦 Bestellliste'},
+    {key:'samosas',      label:'🥟 Samosas'},
+    {key:'beilagen',     label:'🥗 Beilagen'}
+  ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
 
   if(transporterSubTab==='samosas'){
     html+=await renderSamosaTableHtml();
@@ -5702,113 +5720,80 @@ async function updateSamosaQty(input){
 window.updateSamosaQty=updateSamosaQty;
 
 async function renderBeilagenTableHtml(){
-    // BEILAGEN — Soll-Mengen aller Filialen für die ganze Woche, mit Gesamtsumme pro Artikel/Tag
-    // Eigene Funktion, damit dieselbe Tabelle sowohl in der Küche als auch bei Michi/Transporter
-    // angezeigt werden kann — Michi packt diese Beilagen ja mit ein, muss sie also auch sehen.
+    // BEILAGEN — kompakte Wochenmatrix: Artikel als Zeilen, Tage Mo–Fr als Spalten.
+    // Gesamtsumme aller Stores pro Zelle — eine Seite, kein Scrollen nötig.
     const stores=await api('stores?select=id,name&order=id');
     const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
     const todayWeekday=new Date().getDay();
     const weekDates=getWeekdayDates();
     const fromDate=weekDates[1], toDate=weekDates[5];
+    const DAY_SHORT=['','Mo','Di','Mi','Do','Fr'];
 
-    let html=`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Mengen pro Filiale & Gesamtsumme für die Küchen-Produktion</div>
-    <div style="font-size:11px;color:#3B6D11;background:var(--green-light);border-radius:8px;padding:7px 10px;margin-bottom:10px;">✓ = eingepackt bestätigt. Endverantwortung liegt bei Michi (Transporter) — Küche sieht den Status nur mit.</div>`;
-
-    const baseline=await api(`kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty`).catch(()=>[]);
+    const baseline=await api('kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty').catch(()=>[]);
     const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
-    const valMap={}; // valMap[date][store_id][article_name] = rec
+
+    const valMap={};
     (weekVals||[]).forEach(d=>{
       if(!valMap[d.supply_date])valMap[d.supply_date]={};
       if(!valMap[d.supply_date][d.store_id])valMap[d.supply_date][d.store_id]={};
       valMap[d.supply_date][d.store_id][d.article_name]=d;
     });
-    const anyAdjusted=(weekVals||[]).some(d=>d.is_adjusted);
-
-    if(anyAdjusted){
-      html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#C2410C;display:flex;align-items:center;gap:6px;">
-        <span>⚠️</span><span>Mindestens eine Filiale hat diese Woche eine Menge angepasst</span>
-      </div>`;
-    }
 
     if(!baseline?.length){
-      html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Grundmengen hinterlegt.</div>`;
-    }else{
-      let otherDaysHtml='';
-      for(let wd=1; wd<=5; wd++){
-        const dateStr=weekDates[wd];
-        const dayItems=baseline.filter(b=>b.weekday===wd);
-        // Auch Tage zeigen, an denen zwar kein Grundplan existiert, aber eine Filiale trotzdem
-        // etwas eingetragen hat (z.B. Bowl Sauce jetzt täglich statt nur montags)
-        const extraArticlesToday=new Set();
-        Object.values(valMap[dateStr]||{}).forEach(storeVals=>{ Object.keys(storeVals).forEach(an=>extraArticlesToday.add(an)); });
-        if(!dayItems.length && !extraArticlesToday.size) continue;
-        const isToday=wd===todayWeekday;
-        const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-        const articleNames=[...new Set([...dayItems.map(b=>b.article_name), ...extraArticlesToday])];
-
-        let dayHtml=`<div class="section-lbl" style="${isToday?'color:#3B6D11;font-weight:700;':''}">${WEEKDAY_NAMES[wd]} · ${dateLabel}${isToday?' — heute':''}</div>`;
-        dayHtml+=`<div class="card" style="${isToday?'border:1.5px solid #3B6D11;':''}"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
-          <th style="text-align:left;">Artikel</th>
-          ${storeList.map(st=>`<th style="color:${STORE_COLORS[st.id]||'#888'};font-size:11px;" data-no-translate>${st.name.split(' ')[0]}</th>`).join('')}
-          <th style="font-weight:700;">Gesamt</th>
-        </tr></thead><tbody>`;
-
-        articleNames.forEach(name=>{
-          const unit=dayItems.find(b=>b.article_name===name)?.unit||'';
-          let sum=0;
-          const cells=storeList.map(st=>{
-            const b=dayItems.find(x=>x.store_id===st.id && x.article_name===name);
-            const rec=(valMap[dateStr]?.[st.id]||{})[name];
-            if(!b && !rec) return '<td style="color:var(--border);">·</td>';
-            const val=rec?rec.qty:b.base_qty;
-            sum+=parseFloat(val)||0;
-            const adjusted=rec?.is_adjusted;
-            if(isToday){
-              // Outcheck: heutige Lieferung antippen = als eingepackt bestätigen (verhindert, dass
-              // z.B. der Lasagne-Salat vergessen wird — Michi sieht sofort, was noch fehlt)
-              const packed=!!rec?.eingepackt;
-              return `<td>
-                <div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(name)}','${dateStr}',${val},${packed})" style="cursor:pointer;display:inline-flex;flex-direction:column;align-items:center;gap:1px;padding:3px 5px;border-radius:6px;background:${packed?'var(--green-light)':'transparent'};">
-                  <span style="font-weight:${adjusted?'700':'500'};color:${adjusted?'#C2410C':'#1a1a18'};font-size:12px;">${formatQty(val)}${adjusted?'*':''}</span>
-                  <span style="font-size:10px;color:${packed?'var(--green)':'var(--border)'};">${packed?'✓':'○'}</span>
-                </div>
-              </td>`;
-            }
-            return `<td style="font-weight:${adjusted?'700':'400'};color:${adjusted?'#C2410C':'#1a1a18'};font-size:12px;">${formatQty(val)}${adjusted?'*':''}</td>`;
-          }).join('');
-          const sumDisplay = Number.isInteger(sum) ? sum : Math.round(sum*1000)/1000;
-          dayHtml+=`<tr>
-            <td data-no-translate style="font-size:12px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};">
-              <div style="display:flex;align-items:center;gap:5px;">
-                ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
-                <div>${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></div>
-              </div>
-            </td>
-            ${cells}
-            <td style="font-weight:700;color:#3B6D11;font-size:12px;">${formatQty(sumDisplay)}</td>
-          </tr>`;
-        });
-        dayHtml+='</tbody></table></div></div>';
-        const hasAnyAdjusted=articleNames.some(name=>storeList.some(st=>(valMap[dateStr]?.[st.id]||{})[name]?.is_adjusted));
-        if(hasAnyAdjusted){
-          dayHtml+=`<div style="font-size:10px;color:#C2410C;padding:2px 4px 8px;">* von Filiale angepasst</div>`;
-        }
-
-        if(isToday){
-          html+=dayHtml; // heutiger Tag immer direkt sichtbar
-        }else{
-          otherDaysHtml+=dayHtml; // restliche Tage gesammelt einklappbar
-        }
-      }
-      if(otherDaysHtml){
-        html+=`<details style="margin-top:8px;">
-          <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Andere Tage anzeigen</summary>
-          <div style="margin-top:6px;">${otherDaysHtml}</div>
-        </details>`;
-      }
+      return '<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Grundmengen hinterlegt.</div>';
     }
+
+    const allArticles=[...new Set(baseline.map(b=>b.article_name))];
+    const activeDays=[1,2,3,4,5].filter(wd=>
+      baseline.some(b=>b.weekday===wd) || Object.keys(valMap[weekDates[wd]]||{}).length>0
+    );
+    const anyAdjusted=(weekVals||[]).some(d=>d.is_adjusted);
+
+    let html='';
+    if(anyAdjusted){
+      html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:7px 10px;margin-bottom:8px;font-size:11px;color:#C2410C;">⚠️ Anpassung diese Woche — * markiert</div>`;
+    }
+
+    html+=`<div class="card" style="overflow-x:auto;padding:0;"><table class="pack-table" style="width:100%;min-width:260px;">
+      <thead><tr>
+        <th style="text-align:left;font-size:11px;padding:8px 8px;">Artikel</th>
+        ${activeDays.map(wd=>{
+          const isToday=wd===todayWeekday;
+          const dateLabel=new Date(weekDates[wd]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+          return `<th style="font-size:11px;padding:6px 4px;${isToday?'color:#EC4899;font-weight:700;background:#FDF4FF;':''}">${DAY_SHORT[wd]}<br><span style="font-size:9px;font-weight:400;">${dateLabel}</span></th>`;
+        }).join('')}
+      </tr></thead><tbody>`;
+
+    allArticles.forEach(name=>{
+      const unit=baseline.find(b=>b.article_name===name)?.unit||'';
+      const img=KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:4px;">`:'' ;
+      const cells=activeDays.map(wd=>{
+        const dateStr=weekDates[wd];
+        const isToday=wd===todayWeekday;
+        const dayItems=baseline.filter(b=>b.weekday===wd && b.article_name===name);
+        let sum=0; let adjusted=false;
+        storeList.forEach(st=>{
+          const b=dayItems.find(x=>x.store_id===st.id);
+          const rec=(valMap[dateStr]?.[st.id]||{})[name];
+          const val=rec?rec.qty:(b?b.base_qty:null);
+          if(val!=null) sum+=parseFloat(val)||0;
+          if(rec?.is_adjusted) adjusted=true;
+        });
+        if(!sum && !dayItems.length) return `<td style="color:var(--border);font-size:11px;padding:6px 4px;">–</td>`;
+        const sumDisplay=Number.isInteger(sum)?sum:Math.round(sum*100)/100;
+        const allPacked=isToday && storeList.every(st=>{ const rec=(valMap[dateStr]?.[st.id]||{})[name]; return !rec||!!rec.eingepackt; });
+        return `<td style="font-size:12px;font-weight:${isToday?'700':'500'};color:${adjusted?'#C2410C':(isToday?'#9D174D':'#1a1a18')};${isToday?'background:#FDF4FF;':''}padding:6px 4px;">${sumDisplay}${adjusted?'*':''}<div style="font-size:9px;color:${allPacked?'var(--green)':'var(--muted)'};">${isToday?(allPacked?'✓':'○'):''}</div></td>`;
+      }).join('');
+      html+=`<tr style="border-top:0.5px solid var(--border);">
+        <td style="font-size:11px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};padding:7px 8px;">${img}${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></td>
+        ${cells}
+      </tr>`;
+    });
+    html+='</tbody></table></div>';
+    html+=`<div style="font-size:10px;color:var(--muted);padding:5px 2px;">Pink = heute · * = Filiale hat angepasst · ✓ = eingepackt bestätigt</div>`;
     return html;
   }
+
 
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
@@ -5945,9 +5930,7 @@ async function renderKitchen(){
     });
   }
 
-  if(kitchenTab==='supply'){
-    html+=await renderBeilagenTableHtml();
-  }else if(kitchenTab==='forecast'){
+  if(kitchenTab==='forecast'){
     // FORECAST — Portionsmengen aller Filialen für die ganze Woche, wie das Excel-Vorbild.
     // Ab 13:00 Uhr automatisch auf die nächste Woche umgeschaltet (siehe kitchenWeekOffset oben).
     const stores=await api('stores?select=id,name&order=id');
@@ -6234,7 +6217,25 @@ async function renderMorgenKoch(el, tabHtml){
 
   const GROESSE_LABEL={gross:'Groß·18 Stk',mittel:'Mittel·12 Stk',klein:'Klein·8 Stk'};
   const validDishObjs=menuDishes.filter(d=>d.name&&!d.name.startsWith('ÖL'));
-  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
+  // Lasagne-Legende: einmalig oben, kompakt, damit Mitarbeitende die Größen verstehen
+  const hasAnyLasagne=validDishObjs.some(d=>d.name.includes('Lasagne'));
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
+  if(hasAnyLasagne){
+    html+=`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:4px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:3px 8px;">
+        <span style="font-size:11px;font-weight:700;color:#92400E;">K</span>
+        <span style="font-size:10px;color:#78350F;">Klein = 8 Stk</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:3px 8px;">
+        <span style="font-size:11px;font-weight:700;color:#92400E;">M</span>
+        <span style="font-size:10px;color:#78350F;">Mittel = 12 Stk</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:3px 8px;">
+        <span style="font-size:11px;font-weight:700;color:#92400E;">G</span>
+        <span style="font-size:10px;color:#78350F;">Groß = 18 Stk</span>
+      </div>
+    </div>`;
+  }
   html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Gericht</th>
     ${storeList.map(s=>`<th data-no-translate style="color:${STORE_COLORS[s.id]||'#888'};">${s.name.split(' ')[0]}</th>`).join('')}
@@ -6261,6 +6262,27 @@ async function renderMorgenKoch(el, tabHtml){
     </tr>`;
   });
   html+='</tbody></table></div></div>';
+
+  // "Serviert mit" — kompakte Badge-Zeile pro Gericht mit Beilage-Zuordnung
+  const beilagenChips=validDishObjs.map(dishObj=>{
+    const dish=dishObj.name;
+    const beilagen=getDishBeilagen(dish);
+    if(!beilagen.length) return '';
+    const chips=beilagen.map(b=>{
+      const img=KITCHEN_SUPPLY_IMAGES[b]?`<img src="${KITCHEN_SUPPLY_IMAGES[b]}" alt="" style="width:14px;height:14px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:3px;">`:'';
+      return `<span style="display:inline-flex;align-items:center;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:5px;padding:2px 6px;font-size:10px;color:#166534;">${img}${b}</span>`;
+    }).join('');
+    return `<div style="display:flex;align-items:center;gap:6px;padding:4px 2px;flex-wrap:wrap;">
+      <span style="font-size:10px;color:var(--muted);white-space:nowrap;">${dishImgHtml(dish,14)} ${dish.length>22?dish.slice(0,22)+'…':dish} →</span>
+      ${chips}
+    </div>`;
+  }).filter(Boolean).join('');
+  if(beilagenChips){
+    html+=`<div style="background:var(--surface-1);border-radius:10px;padding:8px 10px;margin-top:6px;margin-bottom:2px;">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:5px;">🥗 SERVIERT MIT</div>
+      ${beilagenChips}
+    </div>`;
+  }
 
   // Zutaten-Panels — eingeklappt unter der Tabelle, pro Gericht per Klick auf die Zeile sichtbar
   validDishObjs.forEach((dishObj,dIdx)=>{
