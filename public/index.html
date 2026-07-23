@@ -5535,8 +5535,12 @@ async function renderDisposal(){
 
   // Tatsächliche Hauptgerichte aus dem aktuell laufenden Menü
   const menuDishes=getMenuDishNamesForDay(weekday); // [Gericht A, Gericht B] dieser Woche
+  // Echter Salatname aus dem Menü holen (Slot 'salat')
+  const todayMenuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${weekday}`])||[];
+  const salatEntry=todayMenuEntries.find(e=>e.slot==='salat');
+  const salatName=salatEntry?.name||'Salat';
   const daySlots=[
-    {k:'salat', l:'Salat', name:'Salat'},
+    {k:'salat', l:'Salat', name:salatName},
     ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', l: `Gericht ${i+1}`, name})),
     {k:'reis', l:'Reis', name:REIS_DISH_NAME}
   ];
