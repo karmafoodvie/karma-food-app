@@ -3253,18 +3253,32 @@ async function loadOrgDashboard(){
     const nextWeek=getWeekdayDates(1);
     const nwFrom=nextWeek[1], nwTo=nextWeek[5];
     const nextWeekForecast=await api(`forecast_qty?forecast_date=gte.${nwFrom}&forecast_date=lte.${nwTo}&select=store_id&limit=1`).catch(()=>[]);
-    if(!(nextWeekForecast||[]).length){
-      const todayWd=(new Date().getDay()+6)%7; // Mo=0 ... So=6
-      const isFriday=todayWd===4;
-      const isThuOrLater=todayWd>=3;
-      const urgent=isFriday;
-      reminderHtml=`<div onclick="goTo('orgForecast')" style="display:flex;align-items:center;gap:10px;background:${urgent?'#FEF2F2':'#FFFBEB'};border:1px solid ${urgent?'#FECACA':'#FDE68A'};border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
-        <span style="font-size:18px;">📅</span>
+    const todayWd=(new Date().getDay()+6)%7; // Mo=0...So=6
+    const isFriday=todayWd===4;
+    const currentHour=new Date().getHours();
+    const isFridayPastDeadline=isFriday && currentHour>=10;
+    const forecastExists=(nextWeekForecast||[]).length>0;
+
+    if(!forecastExists){
+      // Kein Forecast angelegt — immer anzeigen, freitags rot + dringend
+      const urgent=todayWd>=3;
+      reminderHtml=`<div onclick="goTo('orgForecast')" style="display:flex;align-items:center;gap:10px;background:${isFridayPastDeadline?'#FEF2F2':urgent?'#FFFBEB':'#F0F9FF'};border:2px solid ${isFridayPastDeadline?'#EF4444':urgent?'#F59E0B':'#0EA5E9'};border-radius:12px;padding:12px 14px;margin-bottom:14px;cursor:pointer;">
+        <span style="font-size:22px;">${isFridayPastDeadline?'🚨':'📅'}</span>
         <div style="flex:1;">
-          <div style="font-size:12.5px;font-weight:600;color:${urgent?'#991B1B':'#78350F'};">${urgent?'Heute fällig: ':''}Wochen-Forecast für nächste Woche noch nicht angelegt</div>
-          <div style="font-size:10.5px;color:${urgent?'#B45309':'#92660A'};">${isThuOrLater?'Spätestens heute erledigen':'Bis spätestens Freitag einplanen'}</div>
+          <div style="font-size:13px;font-weight:700;color:${isFridayPastDeadline?'#991B1B':urgent?'#78350F':'#0C4A6E'};">${isFridayPastDeadline?'⚠️ JETZT ERLEDIGEN — Forecast überfällig!':urgent?'Heute fällig: Forecast nächste Woche anlegen':'Forecast für nächste Woche noch offen'}</div>
+          <div style="font-size:11px;color:${isFridayPastDeadline?'#B91C1C':urgent?'#92660A':'#0369A1'};margin-top:2px;">${isFridayPastDeadline?'Küche wartet — KI-Vorschläge prüfen & speichern':urgent?'Bis Freitag 10:00 Uhr — KI-Vorschläge sind bereits bereit':'Freitag bis 10:00 Uhr einplanen'}</div>
         </div>
-        <span style="color:${urgent?'#991B1B':'#B45309'};">→</span>
+        <span style="font-size:16px;color:${isFridayPastDeadline?'#991B1B':urgent?'#B45309':'#0369A1'};">→</span>
+      </div>`;
+    } else if(isFriday && currentHour<10){
+      // Forecast existiert aber es ist noch freitags vor 10 — Bestätigungs-Reminder
+      reminderHtml=`<div onclick="goTo('orgForecast')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1.5px solid #22C55E;border-radius:12px;padding:12px 14px;margin-bottom:14px;cursor:pointer;">
+        <span style="font-size:22px;">✅</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:#166534;">Forecast nächste Woche angelegt</div>
+          <div style="font-size:11px;color:#15803D;margin-top:2px;">Bitte noch einmal prüfen & bestätigen — bis 10:00 Uhr</div>
+        </div>
+        <span style="font-size:16px;color:#166534;">→</span>
       </div>`;
     }
 
