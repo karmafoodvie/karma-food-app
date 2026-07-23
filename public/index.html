@@ -294,6 +294,9 @@ const KITCHEN_SUPPLY_IMAGES = {
   'Limetten': '/images/kitchen-supply/limetten.jpg',
   'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
   'Raita': '/images/kitchen-supply/raita.jpg',
+  'Salat': '/images/dishes/salat.jpg',
+  'Samosas': '/images/dishes/samosa.jpg',
+  'Samosa': '/images/dishes/samosa.jpg',
 };
 
 // Welche Beilage gehört zu welchem Gericht — für die Anzeige im Morgen-Tab & Beilagen-Matrix.
@@ -2141,7 +2144,12 @@ async function renderStoreSamosaHtml(weekDates){
       return `<th style="${isToday?'color:#F97316;font-weight:700;':''}">${WD_SHORT[wd]}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
     }).join('')}
   </tr></thead><tbody><tr>
-    <td style="font-size:13px;font-weight:600;color:#C2410C;white-space:nowrap;">Samosas<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Stk</div></td>
+    <td style="font-size:13px;font-weight:600;color:#C2410C;white-space:nowrap;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <img src="/images/dishes/samosa.jpg" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">
+        <div>Samosas<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Stk</div></div>
+      </div>
+    </td>
     ${[1,2,3,4].map(wd=>{
       const b=baseline.find(x=>x.weekday===wd);
       const dateStr=weekDates[wd];
@@ -2213,7 +2221,7 @@ async function renderKuecheOrderTab(el, tabHtml){
         const adjusted=rec?.is_adjusted;
         const isPlanned=!!b; // dezenter dargestellt, wenn's laut Plan eigentlich kein Liefertag ist
         return `<td style="padding:6px 3px;">
-          <input type="number" step="0.01" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
+          <input type="number" step="0.25" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
             onchange="updateKuecheQty(this)" inputmode="decimal"
             style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':(isPlanned?'#fff':'#FAFAFA')};color:${isPlanned||val>0?'inherit':'var(--muted)'};">
         </td>`;
