@@ -1047,8 +1047,13 @@ async function loginAs(store){
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
   } else if(store.id==='kitchen'){
-    // Kitchen 3400: eigener Store-Alltag bleibt (Bestellen/Forecast/Checkliste/Entsorgung/Kontrolle),
-    // zusätzlich die frühere Organisations-Übersicht für Team/Nooru/Michi/Shop Produkte.
+    // Kitchen 3400 = "Organisation Kitchen": kein normaler Store-Alltag (Bestellen/Forecast/
+    // Checkliste/Entsorgung/Kontrolle) — nur die Übersicht für Team/Nooru/Michi/Shop Produkte.
+    document.getElementById('nav-order').style.display='none';
+    document.getElementById('nav-forecast').style.display='none';
+    document.getElementById('nav-check').style.display='none';
+    document.getElementById('nav-disposal').style.display='none';
+    document.getElementById('nav-kontrolle').style.display='none';
     document.getElementById('nav-org-sweets').style.display='flex';
     document.getElementById('nav-org-kueche').style.display='flex';
     document.getElementById('nav-org-transporter').style.display='flex';
@@ -1062,7 +1067,7 @@ async function loginAs(store){
   const orgViews=['management','maengel'];
   const kitchenExtraViews=['pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
   const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende'];
-  const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...storeViews,...kitchenExtraViews] : storeViews);
+  const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
   goTo(allowedViews.includes(savedView)?savedView:'home');
 }
 function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store'); location.reload(); } }
@@ -1332,7 +1337,7 @@ async function renderHome(){
   let uebergabeNotiz=null;
   let isKCDay=false;
   let transporterDone=false, kcDone=false, sweetsDone=false;
-  if(currentStore?.id!=='zentrale'){
+  if(currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen'){
     const todayDate=new Date().toISOString().split('T')[0];
     const dayIdx=(new Date().getDay()+6)%7; // Mon=0 ... Sun=6
     const isWeekday=dayIdx<5;
@@ -1418,7 +1423,7 @@ async function renderHome(){
     <div style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
     <div id="broadcast-banner-widget"></div>
     ${monthlyCleaningHtml}
-    ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle'?`
+    ${currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen' && homeMode!=='kontrolle'?`
 
     <!-- START BUTTON -->
     <div onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
@@ -1514,6 +1519,10 @@ async function renderHome(){
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
+    ${currentStore?.id==='kitchen'?`
+    <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
+    `:''}
 `;
   el.innerHTML+=`<div onclick="goTo('hilfe')" style="display:flex;align-items:center;gap:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 14px;margin-top:10px;cursor:pointer;">
     <span style="font-size:18px;">❓</span>
@@ -1524,7 +1533,9 @@ async function renderHome(){
     <span style="color:#B45309;">→</span>
   </div>`;
   translateEl(el);
-  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); } else { loadActiveBroadcastBanner(); }
+  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); }
+  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); }
+  else { loadActiveBroadcastBanner(); }
 }
 
 async function renderOeffnungHelp(){
