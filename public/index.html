@@ -2698,6 +2698,27 @@ async function renderForecastOrderTab(el, tabHtml){
     });
   }
   const suggestionMap={}; // suggestionMap[dateStr][dish] = {qty, reason} or null
+  // Vorwoche-Referenz für ALLE Zellen (nicht nur leere) berechnen — wird unter jeder Zelle angezeigt
+  const lastWeekQtyMap={}; // lastWeekQtyMap[dateStr][dish] = {qty, disposal}
+  for(let wd=1; wd<=5; wd++){
+    const wdStr=WEEKDAY_STR[wd];
+    const dishNames=getMenuDishNamesForDay(wdStr);
+    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    const dateStr=weekDates[wd];
+    const lastWeekDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+    allDishes.forEach(dish=>{
+      const category=mapDishNameToCategory(dish);
+      const history=(salesHistory||{})[category]||[];
+      const lastEntry=history.find(h=>h.sale_date===lastWeekDateStr);
+      const dispRec=(lastWeekDisposalByDate[lastWeekDateStr]||{})[category];
+      if(!lastWeekQtyMap[dateStr]) lastWeekQtyMap[dateStr]={};
+      lastWeekQtyMap[dateStr][dish]={
+        qty: lastEntry ? Math.round((lastEntry.qty/20)*4)/4 : null,
+        soldOutEarly: dispRec?.soldOutEarly||false,
+        leftover: dispRec?.leftoverPortionen||0
+      };
+    });
+  }
   suggestionJobs.forEach(j=>{
     const result=computeAutoSuggestion(currentStore.id, j.dish, j.wdStr, j.dateStr, weatherMap, calendarEvents, fcSettings, salesHistory, lastWeekDisposalByDate);
     if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={};
@@ -2722,10 +2743,16 @@ async function renderForecastOrderTab(el, tabHtml){
     if(lockedNote){
       return `<div title="${lockedNote}" style="width:48px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div>`;
     }
+    const lwData=(lastWeekQtyMap[dateStr]||{})[dish];
+    const lwQty=lwData?.qty;
+    const lwIcon=lwData?.soldOutEarly?'🔥':(lwData?.leftover>5?'📦':'•');
+    const suggReason=autoSuggestion?.reason||'';
     const numberInput=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
       oninput="markForecastDirty(this)"
+      title="${escAttr(suggReason)}"
       style="width:48px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
-    return numberInput;
+    const lwHtml=lwQty!=null?`<div style="font-size:8.5px;color:var(--muted);margin-top:1px;text-align:center;" title="Vorwoche: ${formatQty(lwQty)} Behälter">${lwIcon} ${formatQty(lwQty)}</div>`:'';
+    return numberInput+lwHtml;
   }
 
   // Lasagne kann in mehreren Behälter-Größen gleichzeitig gebraucht werden (z.B. 2x Groß + 1x Klein) —
@@ -2771,13 +2798,22 @@ async function renderForecastOrderTab(el, tabHtml){
 
   let anyLasagne=false;
   html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
-    <thead><tr>
-      <th style="text-align:left;">Tag</th>
-      <th style="color:#A21CAF;">Salat</th>
-      <th data-no-translate>Gericht 2</th>
-      <th data-no-translate>Gericht 3</th>
-      <th>Reis</th>
-    </tr></thead><tbody>`;
+    <thead>
+      <tr>
+        <th style="text-align:left;">Tag</th>
+        <th style="color:#A21CAF;">Salat</th>
+        <th data-no-translate>Gericht 2</th>
+        <th data-no-translate>Gericht 3</th>
+        <th>Reis</th>
+      </tr>
+      <tr style="background:var(--surface-1);">
+        <td style="font-size:9px;color:var(--muted);padding:2px 6px;">Behälter</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+      </tr>
+    </thead><tbody>`;
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
@@ -2813,7 +2849,10 @@ async function renderForecastOrderTab(el, tabHtml){
   if(anyLasagne){
     html+=`<div style="font-size:10.5px;color:#15803D;padding:6px 2px 2px;">🥗 An Lasagne-Tagen wird grüner Salat + Dressing automatisch mitproduziert · 🔒 Lasagne-Menge ist am Vortag ab 12:00 Uhr fixiert</div>`;
   }
-  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">Werte mit blauem Rahmen sind Vorschläge (Wetter, Feiertage, Ferien & Verkaufsdaten berücksichtigt) — bei Bedarf einfach überschreiben. Orange = geändert, noch nicht gespeichert.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">
+    🔵 Blau = KI-Vorschlag (Vorwoche + Wetter + Ferien) — antippen für Begründung &nbsp;·&nbsp; 🟠 Orange = geändert, noch nicht gespeichert<br>
+    Kleine Zahl darunter = tatsächliche Menge Vorwoche &nbsp;·&nbsp; 🔥 = Vorwoche ausverkauft &nbsp;·&nbsp; 📦 = Vorwoche viel übrig
+  </div>`;
 
   if(!isHistoric){
     html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
@@ -5784,13 +5823,13 @@ async function renderKitchen(){
   const nwKwNum=getIsoWeekNumber(nwWeekDates[1]);
   const nwWeekLabelShort = kitchenWeekOffset===0?'Diese Woche':(kitchenWeekOffset===1?'Nächste Woche':`KW ${nwKwNum}`);
   const nwLabel=nwWeekLabelShort+' '+new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-  const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E'};
+  const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E', supply:'#EC4899'};
   const ktab=(key,label)=>{
     const active=kitchenTab===key;
     const col=KTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchKitchenTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche'))}${ktab('plan','🗓️ Kochplan')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche'))}${ktab('plan','🗓️ Kochplan')}${ktab('supply','🥗 Beilagen')}</div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
