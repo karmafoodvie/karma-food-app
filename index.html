@@ -209,6 +209,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
     <div id="v-disposal" class="view"></div>
+    <div id="v-mengen" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-onboarding" class="view"></div>
   </div>
@@ -304,12 +305,9 @@ const KITCHEN_SUPPLY_IMAGES = {
 // Welche Beilage gehört zu welchem Gericht — für die Anzeige im Morgen-Tab & Beilagen-Matrix.
 // Keyword-basiert: Treffer auf Gerichtsname → Beilagen die dazu serviert werden.
 const DISH_BEILAGEN = [
-  { match: /BIRYANI/,             beilagen: ['Raita', 'Limetten', 'Petersilie'] },
-  { match: /\bBOWL\b|LENTIL|LINSEN.*BOWL/,  beilagen: ['Sauce Bowl/Salat', 'Dressing'] },
-  { match: /LASAGNE/,             beilagen: ['Lasagne Dressing', 'Salat (zur Lasagne)'] },
-  { match: /SALAT|WOCHENSALAT/,   beilagen: ['Dressing'] },
-  { match: /LASAGNE/,             beilagen: ['Salat (zur Lasagne)'] },
-  { match: /CURRY|DAL/,           beilagen: ['Reis', 'Limetten'] },
+  { match: /BIRYANI/,                      beilagen: ['Raita'] },
+  { match: /\bBOWL\b|LENTIL|LINSEN.*BOWL/, beilagen: ['Sauce Bowl/Salat'] },
+  { match: /LASAGNE/,                      beilagen: ['Lasagne Dressing'] },
 ];
 function getDishBeilagen(dishName){
   if(!dishName) return [];
@@ -318,7 +316,7 @@ function getDishBeilagen(dishName){
   return hit ? hit.beilagen : [];
 }
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
-const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat (zur Lasagne)':'#A21CAF','Raita':'#15803D'};
+const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Sauce Bowl/Salat':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Lasagne Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat (zur Lasagne)':'#A21CAF','Raita':'#15803D'};
 // Ausgeschriebene Allergen-Namen statt Buchstaben-Codes — Mitarbeitende kennen die Buchstaben nicht auswendig
 const ALLERGEN_NAMES={A:'Gluten',C:'Sellerie',F:'Soja',G:'Milch',L:'Sesam',M:'Senf',N:'Nüsse'};
 
@@ -1154,11 +1152,11 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding'};
+  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding};
+  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -1537,9 +1535,13 @@ async function renderHome(){
         const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
         const allNames=[...namesMain,...namesDressing];
         const zutaten=(d.zutaten||'').replace(/\n/g,' ').trim();
+        const dishSrc=getDishImage(d.name);
+        const dishVisual=dishSrc
+          ? `<img src="${dishSrc}" alt="" style="width:48px;height:48px;border-radius:8px;object-fit:cover;margin:0 auto 3px;">`
+          : `<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
         return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
           <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
-            <div style="font-size:20px;">${getDishEmoji(d.name)}</div>
+            ${dishVisual}
             <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
             <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
           </div>
@@ -3253,18 +3255,32 @@ async function loadOrgDashboard(){
     const nextWeek=getWeekdayDates(1);
     const nwFrom=nextWeek[1], nwTo=nextWeek[5];
     const nextWeekForecast=await api(`forecast_qty?forecast_date=gte.${nwFrom}&forecast_date=lte.${nwTo}&select=store_id&limit=1`).catch(()=>[]);
-    if(!(nextWeekForecast||[]).length){
-      const todayWd=(new Date().getDay()+6)%7; // Mo=0 ... So=6
-      const isFriday=todayWd===4;
-      const isThuOrLater=todayWd>=3;
-      const urgent=isFriday;
-      reminderHtml=`<div onclick="goTo('orgForecast')" style="display:flex;align-items:center;gap:10px;background:${urgent?'#FEF2F2':'#FFFBEB'};border:1px solid ${urgent?'#FECACA':'#FDE68A'};border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
-        <span style="font-size:18px;">📅</span>
+    const todayWd=(new Date().getDay()+6)%7; // Mo=0...So=6
+    const isFriday=todayWd===4;
+    const currentHour=new Date().getHours();
+    const isFridayPastDeadline=isFriday && currentHour>=10;
+    const forecastExists=(nextWeekForecast||[]).length>0;
+
+    if(!forecastExists){
+      // Kein Forecast angelegt — immer anzeigen, freitags rot + dringend
+      const urgent=todayWd>=3;
+      reminderHtml=`<div onclick="goTo('orgForecast')" style="display:flex;align-items:center;gap:10px;background:${isFridayPastDeadline?'#FEF2F2':urgent?'#FFFBEB':'#F0F9FF'};border:2px solid ${isFridayPastDeadline?'#EF4444':urgent?'#F59E0B':'#0EA5E9'};border-radius:12px;padding:12px 14px;margin-bottom:14px;cursor:pointer;">
+        <span style="font-size:22px;">${isFridayPastDeadline?'🚨':'📅'}</span>
         <div style="flex:1;">
-          <div style="font-size:12.5px;font-weight:600;color:${urgent?'#991B1B':'#78350F'};">${urgent?'Heute fällig: ':''}Wochen-Forecast für nächste Woche noch nicht angelegt</div>
-          <div style="font-size:10.5px;color:${urgent?'#B45309':'#92660A'};">${isThuOrLater?'Spätestens heute erledigen':'Bis spätestens Freitag einplanen'}</div>
+          <div style="font-size:13px;font-weight:700;color:${isFridayPastDeadline?'#991B1B':urgent?'#78350F':'#0C4A6E'};">${isFridayPastDeadline?'⚠️ JETZT ERLEDIGEN — Forecast überfällig!':urgent?'Heute fällig: Forecast nächste Woche anlegen':'Forecast für nächste Woche noch offen'}</div>
+          <div style="font-size:11px;color:${isFridayPastDeadline?'#B91C1C':urgent?'#92660A':'#0369A1'};margin-top:2px;">${isFridayPastDeadline?'Küche wartet — KI-Vorschläge prüfen & speichern':urgent?'Bis Freitag 10:00 Uhr — KI-Vorschläge sind bereits bereit':'Freitag bis 10:00 Uhr einplanen'}</div>
         </div>
-        <span style="color:${urgent?'#991B1B':'#B45309'};">→</span>
+        <span style="font-size:16px;color:${isFridayPastDeadline?'#991B1B':urgent?'#B45309':'#0369A1'};">→</span>
+      </div>`;
+    } else if(isFriday && currentHour<10){
+      // Forecast existiert aber es ist noch freitags vor 10 — Bestätigungs-Reminder
+      reminderHtml=`<div onclick="goTo('orgForecast')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1.5px solid #22C55E;border-radius:12px;padding:12px 14px;margin-bottom:14px;cursor:pointer;">
+        <span style="font-size:22px;">✅</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:#166534;">Forecast nächste Woche angelegt</div>
+          <div style="font-size:11px;color:#15803D;margin-top:2px;">Bitte noch einmal prüfen & bestätigen — bis 10:00 Uhr</div>
+        </div>
+        <span style="font-size:16px;color:#166534;">→</span>
       </div>`;
     }
 
@@ -5192,7 +5208,7 @@ async function renderPack(){
     return;
   }
   if(transporterSubTab==='beilagen'){
-    html+=await renderBeilagenTableHtml();
+    html+=await renderTransporterBeilagenHtml();
     el.innerHTML=html;
     translateEl(el);
     return;
@@ -5464,6 +5480,58 @@ async function sendTransportNote(){
 }
 
 // ---- ENTSORGUNG (Filiale) ----
+let mengenTab = 'forecast'; // 'forecast' | 'disposal'
+
+function goToMengen(tab){
+  mengenTab = tab || 'forecast';
+  goTo('mengen');
+}
+window.goToMengen = goToMengen;
+
+async function renderMengen(){
+  const el = document.getElementById('v-mengen');
+  // Tab-Bar in Boldonse via tabBarHtml
+  const tabBar = tabBarHtml([
+    {key:'forecast', label:'📅 Forecast'},
+    {key:'disposal', label:'🗑️ Entsorgung'}
+  ], mengenTab, 'goToMengen', '#0EA5E9');
+  el.innerHTML = tabBar + '<div id="mengen-content"></div>';
+  translateEl(el);
+
+  // Render target view into mengen-content directly
+  const target = document.getElementById('mengen-content');
+  if(mengenTab === 'forecast'){
+    activeOrderTab = 'forecast';
+    // Use a temporary container so renderOrder's backToHomeHtml etc are isolated
+    const tmp = document.createElement('div');
+    tmp.id = 'v-order';
+    tmp.style.display = 'none';
+    const real = document.getElementById('v-order');
+    real.id = '__v_order_saved';
+    document.body.appendChild(tmp);
+    await renderOrder();
+    target.innerHTML = tmp.innerHTML;
+    tmp.remove();
+    real.id = 'v-order';
+    // Re-attach: inputs with oninput/onchange still work via inline handlers
+    // Remove back-button if present inside content
+    target.querySelectorAll('[onclick*="goTo(\'home\'"]').forEach(b=>b.style.display='none');
+  } else {
+    const tmp = document.createElement('div');
+    tmp.id = 'v-disposal';
+    tmp.style.display = 'none';
+    const real = document.getElementById('v-disposal');
+    real.id = '__v_disposal_saved';
+    document.body.appendChild(tmp);
+    await renderDisposal();
+    target.innerHTML = tmp.innerHTML;
+    tmp.remove();
+    real.id = 'v-disposal';
+    target.querySelectorAll('[onclick*="goTo(\'home\'"]').forEach(b=>b.style.display='none');
+  }
+}
+window.renderMengen = renderMengen;
+
 async function renderDisposal(){
   const el=document.getElementById('v-disposal');
   const today=new Date().toISOString().split('T')[0];
@@ -5730,7 +5798,72 @@ async function updateSamosaQty(input){
 }
 window.updateSamosaQty=updateSamosaQty;
 
-async function renderBeilagenTableHtml(){
+async function renderTransporterBeilagenHtml(){
+  // Bild 3 Struktur: Artikel als Zeilen, Stores als Spalten, Foto vorne, abhakbar
+  const stores=await api('stores?select=id,name&order=id');
+  const storeList=stores.filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
+  const today=new Date().toISOString().split('T')[0];
+  const todayWd=new Date().getDay(); // 0=So..6=Sa
+  const weekdayNum=todayWd===0?7:todayWd; // 1=Mo..7=So
+
+  const baseline=await api(`kitchen_supply_baseline?weekday=eq.${weekdayNum}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
+  const weekDates=getWeekdayDates();
+  const fromDate=weekDates[1], toDate=weekDates[5];
+  const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
+  const valMap={};
+  (weekVals||[]).forEach(d=>{
+    if(!valMap[d.supply_date])valMap[d.supply_date]={};
+    if(!valMap[d.supply_date][d.store_id])valMap[d.supply_date][d.store_id]={};
+    valMap[d.supply_date][d.store_id][d.article_name]=d;
+  });
+
+  const allArticles=[...new Set(baseline.map(b=>b.article_name))];
+  if(!allArticles.length) return '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Beilagen für heute hinterlegt.</div>';
+
+  // Tabelle: Beilage | Store1 | Store2 | Store3 | Store4
+  let html=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+    <thead><tr style="border-bottom:1.5px solid var(--border);">
+      <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Beilage</th>
+      ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
+    </tr></thead><tbody>`;
+
+  allArticles.forEach(name=>{
+    const unit=baseline.find(b=>b.article_name===name)?.unit||'';
+    const img=KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:
+      `<span style="font-size:20px;">${getDishEmoji(name)}</span>`;
+
+    const cells=storeList.map(st=>{
+      const b=baseline.find(x=>x.store_id===st.id&&x.article_name===name);
+      const rec=(valMap[today]?.[st.id]||{})[name];
+      const val=rec?rec.qty:(b?b.base_qty:null);
+      const packed=!!rec?.eingepackt;
+      const adjusted=!!rec?.is_adjusted;
+      if(val==null) return `<td style="text-align:center;color:var(--border);padding:8px 4px;">–</td>`;
+      return `<td style="text-align:center;padding:6px 4px;">
+        <div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(name)}','${today}',${val},${packed})"
+          style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
+          <span style="font-size:13px;font-weight:${adjusted?'700':'600'};color:${adjusted?'#C2410C':(packed?'var(--green)':'#1a1a18')};">${val%1===0?val:val}</span>
+          <span style="font-size:10px;color:${packed?'var(--green)':'var(--muted)'};">${packed?'✓ ok':'○'}</span>
+        </div>
+      </td>`;
+    }).join('');
+
+    html+=`<tr style="border-bottom:0.5px solid var(--border);">
+      <td style="padding:8px 6px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${img}
+          <div style="font-size:12px;font-weight:600;color:${ARTICLE_COLORS[name]||'#1a1a18'};">${name}<div style="font-size:10px;font-weight:400;color:var(--muted);">${unit}</div></div>
+        </div>
+      </td>
+      ${cells}
+    </tr>`;
+  });
+  html+='</tbody></table></div>';
+  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Antippen zum Abhaken · orange = von Filiale angepasst</div>`;
+  return html;
+}
+
+async function renderBeilagenTableHtml(mode='kueche'){
     // BEILAGEN — kompakte Wochenmatrix: Artikel als Zeilen, Tage Mo–Fr als Spalten.
     // Gesamtsumme aller Stores pro Zelle — eine Seite, kein Scrollen nötig.
     const stores=await api('stores?select=id,name&order=id');
@@ -5782,18 +5915,19 @@ async function renderBeilagenTableHtml(){
         const dateStr=weekDates[wd];
         const isToday=wd===todayWeekday;
         const dayItems=baseline.filter(b=>b.weekday===wd && b.article_name===name);
-        let sum=0; let adjusted=false;
+        let sum=0; let adjusted=false; const storeQtys=[];
         storeList.forEach(st=>{
           const b=dayItems.find(x=>x.store_id===st.id);
           const rec=(valMap[dateStr]?.[st.id]||{})[name];
           const val=rec?rec.qty:(b?b.base_qty:null);
-          if(val!=null) sum+=parseFloat(val)||0;
+          if(val!=null){ sum+=parseFloat(val)||0; storeQtys.push({storeName:st.name.split(' · ')[1]||st.name.split(' ')[0], val:Number.isInteger(val)?val:Math.round(val*100)/100, color:STORE_COLORS[st.id]||'#888'}); }
           if(rec?.is_adjusted) adjusted=true;
         });
         if(!sum && !dayItems.length) return `<td style="color:var(--border);font-size:11px;padding:6px 4px;">–</td>`;
         const sumDisplay=Number.isInteger(sum)?sum:Math.round(sum*100)/100;
         const allPacked=isToday && storeList.every(st=>{ const rec=(valMap[dateStr]?.[st.id]||{})[name]; return !rec||!!rec.eingepackt; });
-        return `<td style="font-size:12px;font-weight:${isToday?'700':'500'};color:${adjusted?'#C2410C':(isToday?'#9D174D':'#1a1a18')};${isToday?'background:#FDF4FF;':''}padding:6px 4px;">${sumDisplay}${adjusted?'*':''}<div style="font-size:9px;color:${allPacked?'var(--green)':'var(--muted)'};">${isToday?(allPacked?'✓':'○'):''}</div></td>`;
+        const breakdown=mode==='transporter' && storeQtys.length>1?`<div style="margin-top:2px;">${storeQtys.map(s=>`<div style="font-size:8px;color:${s.color};line-height:1.4;">${s.storeName}: ${s.val}</div>`).join('')}</div>`:'';
+        return `<td style="font-size:12px;font-weight:${isToday?'700':'500'};color:${adjusted?'#C2410C':(isToday?'#9D174D':'#1a1a18')};${isToday?'background:#FDF4FF;':''}padding:6px 4px;vertical-align:top;">${sumDisplay}${adjusted?'*':''}<div style="font-size:9px;color:${allPacked?'var(--green)':'var(--muted)'};">${isToday?(allPacked?'✓':'○'):''}</div>${breakdown}</td>`;
       }).join('');
       html+=`<tr style="border-top:0.5px solid var(--border);">
         <td style="font-size:11px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};padding:7px 8px;">${img}${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></td>
@@ -5941,6 +6075,13 @@ async function renderKitchen(){
     });
   }
 
+  if(kitchenTab==='supply'){
+    html+=await renderBeilagenTableHtml('kueche');
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
   if(kitchenTab==='forecast'){
     // FORECAST — Portionsmengen aller Filialen für die ganze Woche, wie das Excel-Vorbild.
     // Ab 13:00 Uhr automatisch auf die nächste Woche umgeschaltet (siehe kitchenWeekOffset oben).
@@ -5983,15 +6124,7 @@ async function renderKitchen(){
       </div>`;
     }
 
-    // Beilagen (Bowl Sauce, Limetten, Dressing etc.) mit Mengen ebenfalls hier zeigen, pro Tag
-    const supplyBaseline=await api('kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty').catch(()=>[]);
-    const supplyToday=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty`).catch(()=>[]);
-    const supplyValMap={}; // [date][article_name][store_id] = qty
-    (supplyToday||[]).forEach(r=>{
-      if(!supplyValMap[r.supply_date])supplyValMap[r.supply_date]={};
-      if(!supplyValMap[r.supply_date][r.article_name])supplyValMap[r.supply_date][r.article_name]={};
-      supplyValMap[r.supply_date][r.article_name][r.store_id]=r.qty;
-    });
+
 
     for(let wd=1; wd<=5; wd++){
       const wdStr=WEEKDAY_STR[wd];
@@ -6033,27 +6166,7 @@ async function renderKitchen(){
         html+=`<div style="font-size:10px;color:#0369A1;padding:2px 4px 8px;">* von Filiale angepasst</div>`;
       }
 
-      // Beilagen für diesen Tag, mit Mengen — direkt darunter statt in einem separaten Tab
-      const dayBaseline=supplyBaseline.filter(b=>b.weekday===wd);
-      const beilagenNames=[...new Set(dayBaseline.map(b=>b.article_name))];
-      if(beilagenNames.length){
-        html+=`<div class="card" style="margin:-2px 0 12px;"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr>
-          <th style="text-align:left;">Beilage</th>
-          ${storeList.map(s=>`<th data-no-translate style="color:${STORE_COLORS[s.id]||'#888'};font-size:10.5px;">${s.name.split(' ')[0]}</th>`).join('')}
-        </tr></thead><tbody>`;
-        beilagenNames.forEach(name=>{
-          const color=ARTICLE_COLORS[name]||'#444';
-          html+=`<tr><td data-no-translate style="font-size:11.5px;font-weight:600;color:${color};">${name}</td>
-            ${storeList.map(s=>{
-              const b=dayBaseline.find(x=>x.store_id===s.id && x.article_name===name);
-              if(!b) return '<td style="color:var(--border);">·</td>';
-              const val=supplyValMap[dateStr]?.[name]?.[s.id] ?? b.base_qty;
-              return `<td style="font-size:11.5px;">${formatQty(val)}</td>`;
-            }).join('')}
-          </tr>`;
-        });
-        html+='</tbody></table></div></div>';
-      }
+      // Beilagen nur im Beilagen-Tab sichtbar, nicht hier
       // Zutaten optional aufklappbar — ohne die Seite zu verlassen (kein Zurück-Klick nötig)
       const dayDishObjs=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${wdStr}`])||[];
       const dayDetailId=`nw_zut_${wd}`;
