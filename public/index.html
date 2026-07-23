@@ -441,6 +441,70 @@ function toggleOnboardingStep(stepId){
 }
 window.toggleOnboardingStep=toggleOnboardingStep;
 
+// ---- Q&A-SUCHE mit Sprachfunktion (durchsucht FAQ + Store Guide, kein externer KI-Dienst) ----
+function startQaVoiceInput(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ showToast('Sprachfunktion wird von diesem Browser leider nicht unterstützt'); return; }
+  const btn=document.getElementById('qa-voice-btn');
+  const rec=new SR();
+  rec.lang='de-AT';
+  rec.interimResults=false;
+  rec.maxAlternatives=1;
+  if(btn){ btn.textContent='🔴'; btn.style.background='#FEE2E2'; }
+  rec.onresult=(e)=>{
+    const text=e.results[0][0].transcript;
+    const input=document.getElementById('qa-search-input');
+    if(input){ input.value=text; }
+    runQaSearch();
+  };
+  rec.onerror=()=>{ showToast('Konnte nichts verstehen — bitte nochmal versuchen'); };
+  rec.onend=()=>{ if(btn){ btn.textContent='🎤'; btn.style.background='var(--green-light)'; } };
+  rec.start();
+}
+window.startQaVoiceInput=startQaVoiceInput;
+
+async function runQaSearch(){
+  const q=(document.getElementById('qa-search-input')?.value||'').trim().toLowerCase();
+  const resultsEl=document.getElementById('qa-search-results');
+  if(!resultsEl) return;
+  if(!q){ resultsEl.innerHTML=''; return; }
+  resultsEl.innerHTML='<div style="font-size:12px;color:var(--muted);padding:6px 2px;">Suche…</div>';
+
+  const guideEntries=await api(`guide_eintraege?or=(store_id.is.null,store_id.eq.${currentStore?.id||'null'})&select=titel,inhalt,kategorie`).catch(()=>[]);
+
+  const words=q.split(/\s+/).filter(w=>w.length>2);
+  const score=(text)=>{
+    const t=(text||'').toLowerCase();
+    if(t.includes(q)) return 100;
+    return words.reduce((s,w)=>s+(t.includes(w)?10:0),0);
+  };
+
+  const candidates=[];
+  FAQ_ITEMS.forEach(item=>{
+    const s=score(item.q)+score(item.a)*0.5;
+    if(s>0) candidates.push({type:'faq', title:item.q, body:item.a, score:s});
+  });
+  (guideEntries||[]).forEach(g=>{
+    const s=score(g.titel)+score(g.inhalt)*0.5;
+    if(s>0) candidates.push({type:'guide', title:g.titel, body:g.inhalt, score:s});
+  });
+  candidates.sort((a,b)=>b.score-a.score);
+  const top=candidates.slice(0,5);
+
+  if(!top.length){
+    resultsEl.innerHTML=`<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;padding:12px;font-size:12.5px;color:#78350F;">
+      Dazu hab ich nichts gefunden. Am besten direkt bei den <a href="#" onclick="event.preventDefault();document.getElementById('v-hilfe').scrollIntoView();" style="color:#78350F;text-decoration:underline;">Ansprechpartnern</a> oben nachfragen.
+    </div>`;
+    return;
+  }
+  resultsEl.innerHTML=top.map(r=>`
+    <div class="card" style="padding:10px 12px;margin-bottom:6px;">
+      <div style="font-size:12.5px;font-weight:600;">${r.type==='faq'?'❓':'📖'} ${r.title}</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:4px;line-height:1.4;">${r.body}</div>
+    </div>`).join('');
+}
+window.runQaSearch=runQaSearch;
+
 function showOnboardingDayForm(editId, dayNum, titel, inhalt){
   const wrap=document.getElementById('onb-day-form');
   wrap.style.display='block';
@@ -490,6 +554,17 @@ window.deleteOnboardingDay=deleteOnboardingDay;
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
   let html=backToHomeHtml();
+
+  // Q&A-Suche mit Sprachfunktion — durchsucht FAQ + Store Guide, kein externer KI-Dienst nötig
+  html+=`<div class="card" style="padding:14px;margin-bottom:14px;border:1.5px solid var(--green);">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;">🔎 Frage stellen</div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="qa-search-input" placeholder="z.B. Bankomat funktioniert nicht" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')runQaSearch()">
+      <button id="qa-voice-btn" onclick="startQaVoiceInput()" style="width:44px;flex-shrink:0;border:none;border-radius:10px;background:var(--green-light);color:var(--green);font-size:18px;cursor:pointer;">🎤</button>
+      <button onclick="runQaSearch()" style="padding:10px 16px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:14px;font-weight:500;cursor:pointer;">Suchen</button>
+    </div>
+    <div id="qa-search-results" style="margin-top:10px;"></div>
+  </div>`;
   html+=`<div onclick="goTo('onboarding')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
     <span style="font-size:18px;">🌱</span>
     <div style="flex:1;">
@@ -1593,7 +1668,7 @@ function renderOrderSection(cats, label, color, icon){
     <div style="font-size:10px;color:var(--muted);">zuständig für diese Lieferung</div></div>
   </div>`;
   cats.forEach(cat=>{
-    const items=articles.filter(a=>a.category===cat && !(!isOrg && orderEingepackt[a.id]));
+    const items=articles.filter(a=>a.category===cat);
     if(!items.length) return;
     html+=`<div class="section-lbl">${cat}</div><div class="card">`;
     const handledGroups=new Set();
@@ -1624,7 +1699,9 @@ function renderOrderSection(cats, label, color, icon){
         `:`
         <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
           <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
-          <span class="qty-val${v>0?' has-val':''}" id="q${a.id}">${v}</span>
+          <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0"
+            onclick="this.select()" onchange="setQty(${a.id},this.value)"
+            style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
           <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
         </div>
         `}
@@ -1664,7 +1741,9 @@ function renderVariantGroupRow(groupKey, groupItems){
       </select>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;${(!r.articleId||!selVerf)?'opacity:0.3;pointer-events:none;':''}">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},-1)">−</button>
-        <span class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}">${v}</span>
+        <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}" value="${v}" min="0"
+          onclick="this.select()" onchange="setVariantQty('${groupKey}',${i},this.value)"
+          style="width:40px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:5px 2px;font-size:14px;">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},1)">+</button>
       </div>
       ${rows.length>1?`<button onclick="variantRemove('${groupKey}',${i})" style="background:none;border:none;color:#DC2626;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;">✕</button>`:`<span style="width:18px;flex-shrink:0;"></span>`}
@@ -2575,7 +2654,9 @@ async function renderForecastOrderTab(el, tabHtml){
     });
     const remaining=LASAGNE_SIZES.filter(s=>!revealedOrder.includes(s.k));
     if(remaining.length){
-      h+=`<button onclick="addLasagneSize('${escAttr(cellKey)}','${remaining[0].k}')" style="font-size:8px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:5px;padding:1px 4px;cursor:pointer;">+ Größe</button>`;
+      h+=`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;">${remaining.map(s=>
+        `<button onclick="addLasagneSize('${escAttr(cellKey)}','${s.k}')" style="font-size:7.5px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:5px;padding:1px 4px;cursor:pointer;white-space:nowrap;">+ ${s.l.split('·')[0]}</button>`
+      ).join('')}</div>`;
     }
     h+='</div>';
     return h;
@@ -2721,8 +2802,15 @@ window.switchOrderTab=switchOrderTab;
 function adj(id,d){
   orderQtys[id]=Math.max(0,(orderQtys[id]||0)+d);
   const el=document.getElementById('q'+id);
-  if(el){el.textContent=orderQtys[id];el.className='qty-val'+(orderQtys[id]>0?' has-val':'');}
+  if(el){el.value=orderQtys[id];el.className='qty-val'+(orderQtys[id]>0?' has-val':'');}
 }
+function setQty(id,val){
+  const n=Math.max(0, parseInt(val)||0);
+  orderQtys[id]=n;
+  const el=document.getElementById('q'+id);
+  if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'');}
+}
+window.setQty=setQty;
 async function submitOrder(){
   const today=new Date().toISOString().split('T')[0];
   const tab=ORDER_TABS[activeOrderTab];
@@ -2842,13 +2930,15 @@ async function toggleCl(templateId){
 // ---- ORGANISATION VIEW (PIN 9999) ----
 async function renderManagement(){
   const el=document.getElementById('v-management');
-  const maengelOffen=await api(`maengel?status=neq.behoben&select=id`).catch(()=>[]);
+  const maengelOffen=await api(`maengel?status=neq.behoben&select=id,status`).catch(()=>[]);
+  const anzOffen=(maengelOffen||[]).filter(m=>(m.status||'offen')==='offen').length;
+  const anzInBearbeitung=(maengelOffen||[]).filter(m=>m.status==='in_bearbeitung').length;
   el.innerHTML=`
     ${pageHeaderHtml('🗂️','Management','Alles, was Organisation braucht — an einem Ort','#2B3A67')}
     ${(maengelOffen||[]).length?`<div onclick="goTo('maengel')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
       <span style="font-size:18px;">🔧</span>
       <div style="flex:1;">
-        <div style="font-size:12.5px;font-weight:600;color:#991B1B;">${maengelOffen.length} offene Meldung${maengelOffen.length===1?'':'en'}</div>
+        <div style="font-size:12.5px;font-weight:600;color:#991B1B;">${maengelOffen.length} Meldung${maengelOffen.length===1?'':'en'} — ${anzOffen} offen${anzInBearbeitung?`, ${anzInBearbeitung} in Bearbeitung`:''}</div>
         <div style="font-size:10.5px;color:#B45309;">Antippen für Übersicht</div>
       </div>
       <span style="color:#991B1B;">→</span>
