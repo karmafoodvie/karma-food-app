@@ -1235,7 +1235,9 @@ const DISH_IMAGE_MAP = [
   { match: /BIRYANI|\bBOWL\b/,         src: '/images/dishes/bowl.jpg' },
   { match: /\bDAL\b|LINSEN/,           src: '/images/dishes/dal.jpg' },
   { match: /CURRY/,                     src: '/images/dishes/curry.jpg' },
-  { match: /SALAT|SALAD|WOCHENSALAT/,  src: '/images/dishes/bowl.jpg' },
+  { match: /WOCHENSALAT/,              src: '/images/dishes/bowl.jpg' },
+  { match: /SALAT LASAGNE|LASAGNE.*SALAT/, src: '/images/kitchen-supply/salat-lasagne.jpg' },
+  { match: /SALAT|SALAD/,                src: '/images/dishes/salat.jpg' },
   { match: /REIS|RICE|BASMATI/,        src: '/images/dishes/reis.jpg' },
   { match: /SAMOSA/,                   src: '/images/dishes/samosa.jpg' },
   { match: /CHAI/,                     src: '/images/dishes/masala-chai.jpg' },
@@ -5818,7 +5820,11 @@ async function renderKitchen(){
   const nextCookDayLabel=nextCookDay.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
   // Ab 13:00 Uhr zeigt "Nächste Woche" wirklich die kommende Woche (vorher die laufende) — Wording
   // im Tab passt sich automatisch mit an, damit nie unklar ist, welche Woche gerade gemeint ist.
-  const kitchenWeekOffset = kitchenForecastManualOffset ?? (new Date().getHours()>=13 ? 1 : 0);
+  // Freitag ab 13:00 Uhr → Nächste Woche (Küche plant voraus), sonst immer Diese Woche
+  const _now = new Date();
+  const _isFriday = _now.getDay() === 5;
+  const _isPastNoon = _now.getHours() >= 13;
+  const kitchenWeekOffset = kitchenForecastManualOffset ?? (_isFriday && _isPastNoon ? 1 : 0);
   const nwWeekDates=getWeekdayDates(kitchenWeekOffset);
   const nwKwNum=getIsoWeekNumber(nwWeekDates[1]);
   const nwWeekLabelShort = kitchenWeekOffset===0?'Diese Woche':(kitchenWeekOffset===1?'Nächste Woche':`KW ${nwKwNum}`);
@@ -5829,7 +5835,11 @@ async function renderKitchen(){
     const col=KTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchKitchenTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast','📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche'))}${ktab('plan','🗓️ Kochplan')}${ktab('supply','🥗 Beilagen')}</div>`;
+  // Tab-Labels: Forecast zeigt immer die korrekte Woche mit Datum Mo–Fr
+  const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+  const forecastTabLabel=`📅 ${kitchenWeekOffset===0?'Diese Woche':'Nächste Woche'}<br><span style="font-size:10px;font-weight:400;">${forecastDateRange}</span>`;
+  const menuTabLabel=`🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche ${CURRENT_MENU_WOCHE}</span>`;
+  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}</div>`;
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
@@ -6281,6 +6291,78 @@ async function renderMorgenKoch(el, tabHtml){
     </div>`;
   });
 
+  // Beilagen für morgen — Salat Lasagne + alle anderen Beilagen aus kitchen_supply_baseline
+  const tomorrowWdShort = tomorrowWd; // 'mo','di' etc.
+  const supplyBaseline = await api(`kitchen_supply_baseline?weekday=eq.${tomorrowWdShort}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
+  const supplyToday = await api(`kitchen_supply_today?supply_date=eq.${tomorrowStr}&select=store_id,article_name,qty,is_adjusted`).catch(()=>[]);
+  const supplyValMap = {}; // store_id -> article_name -> rec
+  (supplyToday||[]).forEach(d=>{
+    if(!supplyValMap[d.store_id]) supplyValMap[d.store_id]={};
+    supplyValMap[d.store_id][d.article_name]=d;
+  });
+  // Alle Artikel für morgen sammeln
+  const tomorrowArticles = {};
+  (supplyBaseline||[]).forEach(b=>{
+    if(!tomorrowArticles[b.article_name]) tomorrowArticles[b.article_name]={unit:b.unit, stores:{}};
+    tomorrowArticles[b.article_name].stores[b.store_id]=b.base_qty;
+  });
+  // Salat Lasagne: Stadtplatz (3400) bekommt jeden Tag, Wien-Stores nur wenn Lasagne im Menü
+  const tomorrowDishNamesLower = dishNames.map(d=>d.toLowerCase());
+  const hasLasagne = tomorrowDishNamesLower.some(n=>n.includes('lasagne'));
+  const wienerStores = storeList.filter(s=>s.id!=='3400');
+  const stadtplatz = storeList.find(s=>s.id==='3400');
+  // Salat Lasagne immer für Stadtplatz, für Wien nur wenn Lasagne am Menü
+  const salatLasagneStores = [];
+  if(stadtplatz) salatLasagneStores.push(stadtplatz);
+  if(hasLasagne) wienerStores.forEach(s=>salatLasagneStores.push(s));
+
+  if(Object.keys(tomorrowArticles).length || salatLasagneStores.length){
+    html+=`<div style="font-size:12px;font-weight:700;color:#EC4899;margin:14px 0 6px;">🥗 Beilagen für morgen</div>`;
+    html+=`<div class="card"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Artikel</th>
+      ${storeList.map(s=>`<th data-no-translate style="color:${STORE_COLORS[s.id]||'#888'};font-size:11px;">${s.name.split(' ')[0]}</th>`).join('')}
+      <th>Σ</th>
+    </tr></thead><tbody>`;
+
+    // Salat Lasagne Zeile
+    if(salatLasagneStores.length){
+      const salatImg = `<img src="/images/kitchen-supply/salat-lasagne.jpg" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;">`;
+      const salatCells = storeList.map(s=>{
+        const isSalatStore = salatLasagneStores.find(ss=>ss.id===s.id);
+        return isSalatStore
+          ? `<td style="font-weight:600;color:#166534;">1</td>`
+          : `<td style="color:var(--border);">–</td>`;
+      }).join('');
+      html+=`<tr>
+        <td style="font-size:12px;font-weight:600;">${salatImg}Salat Lasagne<div style="font-size:9px;color:var(--muted);">Behälter${!hasLasagne?' · nur 3400':''}</div></td>
+        ${salatCells}
+        <td style="font-weight:700;color:#166534;">${salatLasagneStores.length}</td>
+      </tr>`;
+    }
+
+    // Andere Beilagen
+    Object.entries(tomorrowArticles).forEach(([name, data])=>{
+      let total=0;
+      const cells = storeList.map(s=>{
+        const override = (supplyValMap[s.id]||{})[name];
+        const qty = override ? override.qty : (data.stores[s.id]||null);
+        const adjusted = override?.is_adjusted;
+        if(qty) total+=qty;
+        return qty!=null
+          ? `<td style="font-weight:${adjusted?'700':'500'};color:${adjusted?'#C2410C':'#1a1a18'};">${formatQty(qty)}</td>`
+          : `<td style="color:var(--border);">–</td>`;
+      }).join('');
+      const img = KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;">`:'' ;
+      html+=`<tr>
+        <td style="font-size:12px;font-weight:600;">${img}${name}<div style="font-size:9px;color:var(--muted);">${data.unit||''}</div></td>
+        ${cells}
+        <td style="font-weight:700;color:#3B6D11;">${total?formatQty(total):'–'}</td>
+      </tr>`;
+    });
+
+    html+='</tbody></table></div>';
+  }
+
   html+=`<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 4px 16px;">Wenn ein Store die Menge ändert, wird diese Seite automatisch aktualisiert.</div>`;
   html+=`<button onclick="renderKitchen()" style="width:100%;padding:10px;background:var(--green-light);color:var(--green);border:none;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;">🔄 Aktualisieren</button>`;
 
@@ -6300,7 +6382,7 @@ async function renderMenuWoche(el, tabHtml){
   (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
 
   let html = tabHtml;
-  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} · aktuelles Menü — alle Gerichte mit Zutaten</div>`;
+  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} von 4 · aktuelles Menü mit Zutaten & Allergenen</div>`;
 
   DAYS_ORDER.forEach(day=>{
     const key = `w${woche}_${day}`;
