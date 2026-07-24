@@ -2543,6 +2543,19 @@ function isLasagneLocked(dateStr){
 }
 // Liest die tatsächlichen Hauptgerichte (ohne Salat) für einen Wochentag aus dem rotierenden Menü,
 // statt aus der statischen weekly_menu-Tabelle — sonst sind Forecast-Spalten (z.B. "Lasagne") veraltet/falsch.
+function getSalatNameForDate(dateStr){
+  const woche = dateStr ? getMenuWocheForDate(dateStr) : CURRENT_MENU_WOCHE;
+  // Salat hat keinen fixen Wochentag-Key — er ist täglich gleich pro Woche
+  // Wir nehmen den Mo-Eintrag als Referenz (Salat ändert sich wöchentlich, nicht täglich)
+  const days = ['mo','di','mi','do','fr'];
+  for(const day of days){
+    const entries = (typeof MENU_DATA!=='undefined' && MENU_DATA[`w${woche}_${day}`]) || [];
+    const salatEntry = entries.find(e=>e.slot==='salat');
+    if(salatEntry?.name) return salatEntry.name;
+  }
+  return 'Salat';
+}
+
 function getMenuWocheForDate(dateStr){
   if(!dateStr) return CURRENT_MENU_WOCHE;
   const start = new Date(MENU_WOCHE_START); start.setHours(0,0,0,0);
@@ -2769,7 +2782,8 @@ async function renderForecastOrderTab(el, tabHtml){
     const wdStr=WEEKDAY_STR[wd];
     const dateStr=weekDates[wd];
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
-    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    const salatName=getSalatNameForDate(dateStr);
+    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
     allDishes.forEach(dish=>{
       if(!(fMap[dateStr]||{})[dish]) suggestionJobs.push({dateStr, dish, wdStr});
     });
@@ -2781,7 +2795,8 @@ async function renderForecastOrderTab(el, tabHtml){
     const wdStr=WEEKDAY_STR[wd];
     const dateStr=weekDates[wd];
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
-    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    const salatName=getSalatNameForDate(dateStr);
+    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
     const lastWeekDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
     allDishes.forEach(dish=>{
       const category=mapDishNameToCategory(dish);
@@ -3449,7 +3464,8 @@ async function renderOrgForecast(){
     const dateStr=weekDates[wd];
     const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
-    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    const salatName=getSalatNameForDate(dateStr);
+    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
     const {reason}=getDayModifiers(dateStr, 'lb', refWeather, calendarEvents, zeroSettings);
     const isToday=new Date().toISOString().split('T')[0]===dateStr;
 
@@ -5684,8 +5700,7 @@ async function renderDisposal(){
   const menuDishes=getMenuDishNamesForDay(weekday); // [Gericht A, Gericht B] dieser Woche
   // Echter Salatname aus dem Menü holen (Slot 'salat')
   const todayMenuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${weekday}`])||[];
-  const salatEntry=todayMenuEntries.find(e=>e.slot==='salat');
-  const salatName=salatEntry?.name||'Salat';
+  const salatName=getSalatNameForDate(today);
   const daySlots=[
     {k:'salat', l:'Salat', name:salatName},
     ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', l: `Gericht ${i+1}`, name})),
@@ -6267,7 +6282,8 @@ async function renderKitchen(){
       const wdStr=WEEKDAY_STR[wd];
       const dishNames=getMenuDishNamesForDay(wdStr, dateStr); // aus dem aktuell laufenden Menü
       const hasLasagne=dishNames.some(n=>n.includes('Lasagne'));
-      const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
+      const salatName=getSalatNameForDate(dateStr);
+    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
       const isToday=wd===todayWeekday;
       const dateStr=weekDates[wd];
       const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
