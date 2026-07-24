@@ -2818,7 +2818,6 @@ async function renderForecastOrderTab(el, tabHtml){
   });
 
   // Kompaktes Eingabefeld für eine Zelle (Tag × Gericht)
-  const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'klein',l:'Kl.·8'}];
   function cellInput(dateStr, dish, lockedNote){
     const rec=(fMap[dateStr]||{})[dish];
     const manual=rec?.source==='manual';
@@ -3436,8 +3435,8 @@ async function renderOrgForecast(){
 
   // Woche-Switcher oben
   const weekSwitcher=`<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
-    <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===0?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===0?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===0?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:13px;cursor:pointer;">📅 Diese Woche</button>
-    <button onclick="orgForecastWeekOffset=1;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===1?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===1?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===1?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:13px;cursor:pointer;">📅 Nächste Woche</button>
+    <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===0?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===0?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===0?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Diese Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(0)[1].slice(5,10)}.–${getWeekdayDates(0)[5].slice(5,10)}.</span></button>
+    <button onclick="orgForecastWeekOffset=1;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===1?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===1?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===1?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Nächste Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(1)[1].slice(5,10)}.–${getWeekdayDates(1)[5].slice(5,10)}.</span></button>
   </div>
   <div style="font-size:11px;color:var(--muted);margin:0 0 12px;text-align:center;">${weekLabel}</div>`;
 
@@ -3756,8 +3755,16 @@ async function orgFcSaveAll(){
   }
 
   if(btn){ btn.disabled=false; btn.textContent='💾 Alle speichern'; }
-  if(errors) showToast(`${saved} gespeichert, ${errors} Fehler`);
-  else showToast(`✓ ${saved} Mengen gespeichert — Basis für nächste Woche!`);
+  if(errors){
+    showToast(`${saved} gespeichert, ${errors} Fehler`);
+  } else {
+    showToast(`✓ ${saved} Mengen gespeichert!`);
+    // Automatisch auf Nächste Woche switchen damit Vorschläge sofort sichtbar sind
+    setTimeout(()=>{
+      orgForecastWeekOffset=1;
+      renderOrgForecast();
+    }, 1200);
+  }
 }
 window.orgFcSaveAll=orgFcSaveAll;
 window.orgForecastWeekOffset=orgForecastWeekOffset;
