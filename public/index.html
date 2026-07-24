@@ -210,6 +210,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-kitchen" class="view"></div>
     <div id="v-disposal" class="view"></div>
     <div id="v-mengen" class="view"></div>
+    <div id="v-kitchenDaily" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-onboarding" class="view"></div>
   </div>
@@ -217,6 +218,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <nav id="bottomnav">
     <button class="nav-btn active" onclick="goTo('home')" id="nav-home">
       <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Start
+    </button>
+    <button class="nav-btn" onclick="goTo('kitchenDaily')" id="nav-kitchen-daily" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>Daily
     </button>
     <button class="nav-btn" onclick="goTo('order')" id="nav-order">
       <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>Bestellen
@@ -1119,6 +1123,7 @@ async function loginAs(store){
     document.getElementById('nav-check').style.display='none';
     document.getElementById('nav-disposal').style.display='none';
     document.getElementById('nav-kontrolle').style.display='none';
+    document.getElementById('nav-kitchen-daily').style.display='flex';
     document.getElementById('nav-org-sweets').style.display='flex';
     document.getElementById('nav-org-kueche').style.display='flex';
     document.getElementById('nav-org-transporter').style.display='flex';
@@ -1130,7 +1135,7 @@ async function loginAs(store){
   const savedView=localStorage.getItem('kf_view')||'home';
   // Only restore views that make sense for this role
   const orgViews=['management','maengel'];
-  const kitchenExtraViews=['pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
+  const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
   const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende'];
   const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
   goTo(allowedViews.includes(savedView)?savedView:'home');
@@ -1192,6 +1197,7 @@ function goTo(v, noPush=false){
     else if(v==='hygieneSchulung' || v==='schulung') navId='nav-org-hygiene';
     else if(v==='maengel') navId='nav-org-schaeden';
     // Alte Tabs (Sweets, Küche etc.) behalten ihre IDs
+    else if(v==='kitchenDaily') navId='nav-kitchen-daily';
     else if(v==='sweets') navId='nav-org-sweets';
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
@@ -1200,11 +1206,11 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -1573,18 +1579,27 @@ async function renderHome(){
         const allNames=[...namesMain,...namesDressing];
         const zutaten=(d.zutaten||'').replace(/\n/g,' ').trim();
         const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
+        // Beilage/Sauce für dieses Gericht
+        const beilagen=getDishBeilagen(d.name);
+        const sauceNames=beilagen.filter(b=>b.toLowerCase().includes('sauce')||b.toLowerCase().includes('dressing')||b.toLowerCase().includes('raita'));
+        const isKitchen=currentStore?.id==='kitchen';
         return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
-          <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
+          <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;position:relative;">
             ${dishVisual}
             <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
             <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
+            ${isKitchen?`<button onclick="event.stopPropagation();openZutatenEdit('${escAttr(d.name)}')" style="position:absolute;top:4px;right:4px;background:none;border:none;font-size:12px;cursor:pointer;opacity:0.5;" title="Zutaten bearbeiten">✏️</button>`:''}
           </div>
           <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
             <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
           </div>
           <div id="dish-allergen-${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px;">
             <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:3px;">ZUTATEN:</div>
-            <div style="font-size:10px;color:var(--sub);line-height:1.5;">${zutaten||'Keine Zutaten hinterlegt'}</div>
+            <div style="font-size:10px;color:var(--sub);line-height:1.5;" data-no-translate>${zutaten||'Keine Zutaten hinterlegt'}</div>
+            ${sauceNames.length?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border);">
+              <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:2px;">SAUCE / DRESSING:</div>
+              <div style="font-size:10px;color:var(--sub);">${sauceNames.join(', ')}</div>
+            </div>`:''}
           </div>
         </div>`;
       }).join('')}</div>`;
@@ -1636,6 +1651,13 @@ async function renderHome(){
     <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
     ${currentStore?.id==='kitchen'?`
+    <div onclick="goTo('kitchenDaily')" style="background:#1D5E3A;border-radius:12px;padding:12px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:700;color:#fff;font-size:16px;font-family:'Boldonse',sans-serif;">🏪 Daily Business</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.8);margin-top:2px;">Gerichte · Allergene · Mengen · Entsorgung</div>
+      </div>
+      <span style="color:#D4FF3F;font-size:22px;">→</span>
+    </div>
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
@@ -1683,6 +1705,50 @@ function toggleDishAllergeneCard(i){
   if(el) el.style.display = el.style.display==='none' ? 'block' : 'none';
 }
 window.toggleDishAllergeneCard=toggleDishAllergeneCard;
+
+async function openZutatenEdit(dishName){
+  const rows=await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=zutaten,allergene_codes').catch(()=>[]);
+  const current=rows?.[0];
+  const currentZutaten=current?.zutaten||'';
+  const currentAllergene=(current?.allergene_codes||[]).join(', ');
+  const overlay=document.createElement('div');
+  overlay.id='zutaten-edit-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;';
+  const safeDish=dishName.replace(/'/g,"\'").replace(/"/g,'&quot;');
+  overlay.innerHTML='<div style="background:#fff;border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:80vh;overflow-y:auto;">'
+    +'<div style="font-size:15px;font-weight:700;margin-bottom:4px;">'+dishName+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Zutaten anpassen</div>'
+    +'<label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">ZUTATEN</label>'
+    +'<textarea id="edit-zutaten-field" placeholder="Zutaten eingeben..." style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;min-height:100px;font-family:inherit;resize:vertical;">'+currentZutaten+'</textarea>'
+    +'<div style="font-size:10px;color:var(--muted);margin:4px 0 12px;">Allergencodes: G=Gluten, M=Milch, Ei=Ei, N=Nüsse, Sf=Senf, So=Soja, Sl=Sellerie, Se=Sesam</div>'
+    +'<label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">ALLERGENE (Codes)</label>'
+    +'<input id="edit-allergene-field" type="text" value="'+currentAllergene+'" placeholder="z.B. G, M, Sf" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;">'
+    +'<div style="display:flex;gap:8px;margin-top:14px;">'
+    +'<button onclick="document.getElementById('zutaten-edit-overlay').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:13px;cursor:pointer;">Abbrechen</button>'
+    +'<button onclick="saveZutatenEdit(''+safeDish+'')" style="flex:2;padding:11px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">✓ Speichern</button>'
+    +'</div></div>';
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('edit-zutaten-field')?.focus(),100);
+}
+window.openZutatenEdit=openZutatenEdit;
+
+async function saveZutatenEdit(dishName){
+  const zutaten=document.getElementById('edit-zutaten-field')?.value.trim()||'';
+  const allergeneRaw=document.getElementById('edit-allergene-field')?.value.trim()||'';
+  const allergene_codes=allergeneRaw?allergeneRaw.split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean):[];
+  try{
+    const existing=await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=id').catch(()=>[]);
+    if(existing?.length){
+      await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName),{method:'PATCH',body:JSON.stringify({zutaten,allergene_codes,aktualisiert_am:new Date().toISOString()})});
+    } else {
+      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten,allergene_codes,verantwortlich:currentStore?.name||'Küche',aktualisiert_am:new Date().toISOString()}])});
+    }
+    document.getElementById('zutaten-edit-overlay')?.remove();
+    showToast('✓ Zutaten gespeichert');
+    renderHome();
+  } catch(e){ showToast('Fehler beim Speichern'); }
+}
+window.saveZutatenEdit=saveZutatenEdit;
 
 async function markMonthlyCleaningDone(){
   const monthKey=new Date().toISOString().slice(0,7);
@@ -5545,6 +5611,20 @@ async function renderPack(){
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
 
+  // KC Abholbereit-Banner
+  const kcPickup=await api('kc_pickup_ready?date=eq.'+today+'&select=ready_at,message').catch(()=>[]);
+  if(kcPickup?.length){
+    const readyTime=new Date(kcPickup[0].ready_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'});
+    html+=`<div style="background:#F3E8FF;border:2px solid #A855F7;border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:28px;">📦</span>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:700;color:#6B21A8;font-family:'Boldonse',sans-serif;">Shop Produkte abholbereit!</div>
+        <div style="font-size:11px;color:#7E22CE;margin-top:2px;">Ines hat alles eingepackt · seit ${readyTime} Uhr</div>
+      </div>
+      <button onclick="kcPickupDone()" style="background:#A855F7;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">Abgeholt ✓</button>
+    </div>`;
+  }
+
   html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Zahl antippen = als eingepackt markieren</div>`;
 
   let hasAny=false;
@@ -5714,7 +5794,7 @@ async function renderKCOverview(el, tabHtml, storeList){
     html+=`<div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:13px;background:var(--green-light);border-radius:10px;">✓ Aktuell überall genug Bestand — kein Nachbestell-Bedarf</div>`;
   }
 
-  html+=`<div style="font-size:10px;color:var(--muted);padding:8px 2px 4px;">+X = Nachbestellbedarf (SOLL − IST) · Zahl antippen setzt IST auf SOLL, also "eingepackt & geliefert"</div>`;
+  html+=`<div style="font-size:10px;color:var(--muted);padding:8px 2px 4px;">+X = Nachbestellbedarf (SOLL − IST) · Zahl antippen setzt IST auf SOLL</div>`;
 
   if(noAction.length){
     html+=`<details style="margin-top:10px;">
@@ -5724,9 +5804,57 @@ async function renderKCOverview(el, tabHtml, storeList){
     html+='</tbody></table></div></div></details>';
   }
 
+  // "Alles erledigt" Button — erscheint immer, Michi wird benachrichtigt
+  html+=`<div style="margin-top:16px;">
+    <button onclick="kcAllesErledigt()" style="width:100%;padding:13px;background:#A855F7;color:#fff;border:none;border-radius:12px;font-family:'Boldonse',sans-serif;font-size:14px;cursor:pointer;">
+      📦 Alles eingepackt — Michi benachrichtigen
+    </button>
+    <div style="font-size:10px;color:var(--muted);text-align:center;padding:5px 0;">Schickt Michi eine Benachrichtigung zur Abholung</div>
+  </div>`;
+
   el.innerHTML=html;
   translateEl(el);
 }
+
+async function kcAllesErledigt(){
+  const btn=document.querySelector('button[onclick="kcAllesErledigt()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Wird gesendet…'; }
+  try{
+    // 1. Eintrag in DB für Transporter sichtbar machen
+    const today=new Date().toISOString().split('T')[0];
+    await api('kc_pickup_ready?date=eq.'+today,{method:'DELETE'}).catch(()=>{});
+    await api('kc_pickup_ready',{method:'POST',body:JSON.stringify([{
+      date:today,
+      store_id:currentStore?.id||'kitchen',
+      ready_at:new Date().toISOString(),
+      message:'Shop Produkte eingepackt und abholbereit 📦'
+    }])}).catch(()=>{});
+
+    // 2. EmailJS Benachrichtigung an Michi
+    await emailjs.send('service_xla195w','template_9uiq1wf',{
+      subject:'📦 Shop Produkte abholbereit',
+      message:'Hallo Michi,\n\nInes hat die Shop Produkte eingepackt. Alles ist abholbereit!\n\n'+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})+' Uhr',
+      to_email:'tini@karmafood.at'
+    }).catch(()=>{});
+
+    if(btn){ btn.style.background='var(--green)'; btn.textContent='✓ Michi wurde benachrichtigt!'; btn.disabled=false; }
+    showToast('✓ Benachrichtigung gesendet — Michi weiß Bescheid!');
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='📦 Alles eingepackt — Michi benachrichtigen'; }
+    showToast('Gespeichert (Email evtl. nicht gesendet)');
+  }
+}
+window.kcAllesErledigt=kcAllesErledigt;
+
+async function kcPickupDone(){
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    await api('kc_pickup_ready?date=eq.'+today,{method:'DELETE'});
+    showToast('✓ Abholung bestätigt');
+    renderPack();
+  }catch(e){ showToast('Fehler'); }
+}
+window.kcPickupDone=kcPickupDone;
 
 function switchPackTab(t){activePackTab=t;renderPack();}
 window.switchPackTab=switchPackTab;
@@ -6269,6 +6397,92 @@ async function renderBeilagenTableHtml(mode='kueche'){
     return html;
   }
 
+
+async function renderKitchenDaily(){
+  const el=document.getElementById('v-kitchenDaily');
+  if(!el) return;
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+
+  const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
+  const todayDate=new Date().toISOString().split('T')[0];
+  const wd=new Date().getDay();
+  const wdStr=WEEKDAY_STR[wd]||'mo';
+  const woche=getMenuWocheForDate(todayDate);
+  const menuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${woche}_${wdStr}`])||[];
+  const dishNames=getMenuDishNamesForDay(wdStr, todayDate);
+  const salatName=getSalatNameForDate(todayDate);
+
+  let html=backToHomeHtml();
+  html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
+  html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ GERICHTE HEUTE</div>`;
+
+  // Dish cards — klickbar mit Allergenen (gleich wie Store-Startseite)
+  const dishes=[
+    {cat:'SALAT', name:salatName, slot:'salat'},
+    ...(dishNames[0]?[{cat:'GERICHT 1', name:dishNames[0], slot:'gericht2'}]:[]),
+    ...(dishNames[1]?[{cat:'GERICHT 2', name:dishNames[1], slot:'gericht3'}]:[]),
+  ];
+
+  html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">`;
+  dishes.forEach((d,i)=>{
+    const entry=menuEntries.find(e=>e.name===d.name||e.slot===d.slot);
+    const allergene=entry?.allergene?.main?.length?entry.allergene.main.join(', '):(entry?.allergene_codes?.length?entry.allergene_codes.join(', '):'');
+    const zutaten=entry?.zutaten||'';
+    const detailId=`kd-detail-${i}`;
+    html+=`<div style="flex:1;min-width:130px;display:flex;flex-direction:column;">
+      <div onclick="const d=document.getElementById('${detailId}');d.style.display=d.style.display==='none'?'block':'none'"
+        style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
+        <div style="font-size:26px;line-height:1;margin-bottom:4px;">${getDishEmoji(d.name)}</div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;">${d.cat}</div>
+        <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:2px;line-height:1.3;">${d.name}</div>
+        <div style="font-size:9px;margin-top:4px;background:${allergene?'#FFF7ED':'var(--surface-1)'};color:${allergene?'#C2410C':'var(--muted)'};border-radius:4px;padding:2px 4px;">${allergene||'keine Allergene'}</div>
+      </div>
+      <div id="${detailId}" style="display:none;background:var(--card);border:0.5px solid var(--border);border-radius:8px;margin-top:4px;padding:8px 10px;font-size:10px;color:var(--muted);" data-no-translate>${zutaten||'Keine Zutaten hinterlegt'}</div>
+    </div>`;
+  });
+  html+='</div>';
+
+  // Entsorgung shortcut
+  html+=`<div onclick="goTo('disposal')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🗑️</span>
+    <div><div style="font-size:13px;font-weight:600;">Entsorgung / Food Waste</div><div style="font-size:11px;color:var(--muted);">Restmengen eintragen</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
+  // Mengen heute pro Store
+  const todayFc=await api(`forecast_qty?forecast_date=eq.${todayDate}&select=store_id,dish_name,qty,groesse`).catch(()=>[]);
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
+
+  if(todayFc&&todayFc.length){
+    html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin:4px 0 8px;">📊 MENGEN HEUTE</div>`;
+    html+=`<div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
+      <thead><tr>
+        <th style="text-align:left;font-size:11px;">Gericht</th>
+        ${storeList.map(s=>`<th data-no-translate style="font-size:11px;color:${STORE_COLORS[s.id]||'#888'};">${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
+        <th style="font-size:11px;">Σ</th>
+      </tr></thead><tbody>`;
+    const allDishes=[salatName,...dishNames,REIS_DISH_NAME].filter(Boolean);
+    allDishes.forEach(dish=>{
+      const cat=mapDishNameToCategory(dish);
+      let total=0;
+      const cells=storeList.map(s=>{
+        const recs=todayFc.filter(f=>f.store_id===s.id&&mapDishNameToCategory(f.dish_name)===cat);
+        const qty=recs.reduce((a,b)=>a+(b.qty||0),0);
+        total+=qty;
+        return `<td style="text-align:center;font-size:12px;">${qty>0?formatQty(qty):'–'}</td>`;
+      }).join('');
+      html+=`<tr><td data-no-translate style="font-size:11px;font-weight:600;">${getDishEmoji(dish)} ${dish}</td>${cells}<td style="font-weight:700;font-size:12px;color:var(--green);">${total>0?formatQty(total):'–'}</td></tr>`;
+    });
+    html+='</tbody></table></div>';
+  } else {
+    html+=`<div style="background:var(--surface-1);border-radius:10px;padding:12px;text-align:center;color:var(--muted);font-size:12px;">Noch keine Mengen für heute geplant</div>`;
+  }
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderKitchenDaily=renderKitchenDaily;
 
 async function renderKitchenDailyHtml(){
   // Daily Business: Store-Ansicht für Kitchen 3400 Kassenbereich
