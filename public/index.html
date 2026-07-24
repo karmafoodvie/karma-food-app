@@ -2879,30 +2879,28 @@ async function renderForecastOrderTab(el, tabHtml){
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
     const dateStr=weekDates[wd];
-    const dishNames=getMenuDishNamesForDay(wdStr, dateStr); // [Gericht2-Name, Gericht3-Name] aus dem aktuell laufenden Menü
-    const isToday=wd===todayWeekday;
+    const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
+    const salatName=getSalatNameForDate(dateStr);
+    const isToday=wd===todayWeekday && forecastWeekOffset===0; // nur markieren wenn aktuelle Woche
     const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
     const g2=dishNames[0]||null, g3=dishNames[1]||null;
     const reisName=REIS_DISH_NAME;
     const rowLasagne=[g2,g3].some(n=>n && n.includes('Lasagne'));
     if(rowLasagne) anyLasagne=true;
-    const lasagneLock=rowLasagne && isLasagneLocked(dateStr);
 
     html+=`<tr style="${isToday?`background:${tab.color}0d;`:''}">
       <td style="padding:6px 6px;vertical-align:top;">
-        <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍 heute':''}</div>
+        <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍':''}</div>
         ${dayReasonMap[dateStr]?`<div style="font-size:9.5px;color:var(--muted);line-height:1.3;">${dayReasonMap[dateStr]}</div>`:''}
       </td>
-      <td style="padding:6px 3px;text-align:center;vertical-align:top;">${cellInput(dateStr,'Salat')}</td>
-      <td style="padding:6px 3px;text-align:center;vertical-align:top;">
+      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">${cellInput(dateStr, salatName)}</td>
+      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">
         ${g2?cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
-        ${g2?`<div data-no-translate style="font-size:8.5px;color:var(--muted);margin-top:2px;line-height:1.2;">${g2}</div>`:''}
       </td>
-      <td style="padding:6px 3px;text-align:center;vertical-align:top;">
+      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">
         ${g3?cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
-        ${g3?`<div data-no-translate style="font-size:8.5px;color:var(--muted);margin-top:2px;line-height:1.2;">${g3}</div>`:''}
       </td>
-      <td style="padding:6px 3px;text-align:center;vertical-align:top;">${reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>'}</td>
+      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">${reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>'}</td>
     </tr>`;
   }
   html+='</tbody></table></div></div>';
@@ -3633,9 +3631,9 @@ async function updateForecastQtyOrg(inputEl){
   const dateStr=inputEl.dataset.date;
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
   try{
-    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'});
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,source:'manual'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'manual'}])});
     }
     inputEl.style.borderColor='#F97316';
     inputEl.style.background='#FFF7ED';
@@ -3718,7 +3716,9 @@ async function orgFcSaveAll(){
     const qty=inp.value===''?null:parseFloat(inp.value);
     if(!store||!dish||!dateStr||qty==null) continue;
     try{
-      await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'});
+      // Delete both with and without groesse to handle legacy NULL records
+      await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
+      await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'manual'}])});
       inp.style.borderColor='#22C55E';
       inp.style.background='#F0FDF4';
