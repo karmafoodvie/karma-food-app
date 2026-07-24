@@ -248,6 +248,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="nav-btn" onclick="goTo('management')" id="nav-org-management" style="display:none;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span id="navlabel-management">Management</span>
     </button>
+    <!-- ORG ZENTRALE NAV — 5 feste Tabs -->
+    <button class="nav-btn" onclick="goTo('home')" id="nav-org-ueberblick" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Überblick
+    </button>
+    <button class="nav-btn" onclick="goTo('broadcast')" id="nav-org-msg" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Nachricht
+    </button>
+    <button class="nav-btn" onclick="goTo('orgForecast')" id="nav-org-mengen" style="display:none;">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Mengen
+    </button>
+    <button class="nav-btn" onclick="goTo('hygieneSchulung')" id="nav-org-hygiene" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Hygiene
+    </button>
+    <button class="nav-btn" onclick="goTo('maengel')" id="nav-org-schaeden" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Schäden
+    </button>
 
   </nav>
 </div>
@@ -1073,18 +1089,25 @@ async function loginAs(store){
   const col=STORE_COLORS[store.id]||'#1D9E75';
   av.style.background=col+'30'; av.style.color=col;
   if(store.id==='zentrale'){
+    // Store-Tabs ausblenden
     document.getElementById('nav-order').style.display='none';
     document.getElementById('nav-forecast').style.display='none';
     document.getElementById('nav-check').style.display='none';
     document.getElementById('nav-disposal').style.display='none';
     document.getElementById('nav-kontrolle').style.display='none';
-    // Organisation zeigt jetzt nur noch Management (Tini) — Team/Nooru/Michi sind zu Kitchen 3400
-    // gewandert, da die Küche vor Ort eigenständig arbeitet und nicht über Organisation laufen muss.
+    document.getElementById('nav-home').style.display='none';
+    // Alte Org-Tabs ausblenden
     document.getElementById('nav-org-sweets').style.display='none';
     document.getElementById('nav-org-kueche').style.display='none';
     document.getElementById('nav-org-transporter').style.display='none';
     document.getElementById('nav-org-kc').style.display='none';
-    document.getElementById('nav-org-management').style.display='flex';
+    document.getElementById('nav-org-management').style.display='none';
+    // Neue 5 Org-Tabs einblenden
+    document.getElementById('nav-org-ueberblick').style.display='flex';
+    document.getElementById('nav-org-msg').style.display='flex';
+    document.getElementById('nav-org-mengen').style.display='flex';
+    document.getElementById('nav-org-hygiene').style.display='flex';
+    document.getElementById('nav-org-schaeden').style.display='flex';
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
   } else if(store.id==='kitchen'){
@@ -1161,11 +1184,18 @@ function goTo(v, noPush=false){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   let navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
   if(currentStore?.id==='zentrale'){
-    if(v==='sweets') navId='nav-org-sweets';
+    // Neue 5-Tab Org-Nav
+    if(v==='home') navId='nav-org-ueberblick';
+    else if(v==='broadcast' || v==='msg') navId='nav-org-msg';
+    else if(v==='orgForecast' || v==='forecastReview') navId='nav-org-mengen';
+    else if(v==='hygieneSchulung' || v==='schulung') navId='nav-org-hygiene';
+    else if(v==='maengel') navId='nav-org-schaeden';
+    // Alte Tabs (Sweets, Küche etc.) behalten ihre IDs
+    else if(v==='sweets') navId='nav-org-sweets';
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
     else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
-    else if(v==='management' || v==='hygieneSchulung' || v==='orgForecast' || v==='guide' || v==='forecastReview' || v==='verfuegbarkeit' || v==='msg' || v==='dailycheck' || v==='kontrolle') navId='nav-org-management';
+    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle') navId='nav-org-management';
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
@@ -3362,6 +3392,8 @@ async function editOrgRoleName(ev, key, currentName){
 }
 window.editOrgRoleName=editOrgRoleName;
 
+let orgForecastWeekOffset = 0; // 0 = diese Woche, 1 = nächste Woche
+
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
   el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
@@ -3369,23 +3401,36 @@ async function renderOrgForecast(){
 
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
-  const weekDates=getWeekdayDates();
+
+  // Wochenauswahl — diese oder nächste Woche
+  const weekDates=getWeekdayDates(orgForecastWeekOffset);
   const fromDate=weekDates[1], toDate=weekDates[5];
+  const weekLabel=new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})
+    +' – '+new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+
+  // Woche-Switcher oben
+  const weekSwitcher=`<div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;">
+    <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===0?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===0?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===0?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:13px;cursor:pointer;">📅 Diese Woche</button>
+    <button onclick="orgForecastWeekOffset=1;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===1?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===1?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===1?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:13px;cursor:pointer;">📅 Nächste Woche</button>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin:-10px 0 12px;text-align:center;">${weekLabel}</div>`;
 
   const [allForecasts, calendarEvents, refWeather]=await Promise.all([
-    api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,source`).catch(()=>[]),
+    api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
     getCalendarEvents(),
     fetchWeatherForStore('lb', fromDate, toDate)
   ]);
+  // fMap[date][store][dish][groesse] = rec
   const fMap={};
   (allForecasts||[]).forEach(f=>{
     if(!fMap[f.forecast_date])fMap[f.forecast_date]={};
     if(!fMap[f.forecast_date][f.store_id])fMap[f.forecast_date][f.store_id]={};
-    fMap[f.forecast_date][f.store_id][f.dish_name]=f;
+    if(!fMap[f.forecast_date][f.store_id][f.dish_name])fMap[f.forecast_date][f.store_id][f.dish_name]={};
+    fMap[f.forecast_date][f.store_id][f.dish_name][f.groesse||'gross']=f;
   });
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
-  let html='';
+  let html=weekSwitcher;
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
@@ -3405,11 +3450,46 @@ async function renderOrgForecast(){
     storeList.forEach(s=>{
       html+=`<tr><td style="text-align:left;font-size:11.5px;" data-no-translate>${s.name.split(' ')[0]}</td>`;
       allDishes.forEach(dish=>{
-        const rec=((fMap[dateStr]||{})[s.id]||{})[dish];
-        const manual=rec?.source==='manual';
-        html+=`<td><input type="number" step="0.25" value="${rec?.qty??''}" placeholder="–" data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
-          onchange="updateForecastQtyOrg(this)"
-          style="width:44px;text-align:center;border:1.5px solid ${manual?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':'#fff'};"></td>`;
+        const isLasagne=dish.toUpperCase().includes('LASAGNE');
+        if(isLasagne){
+          // Lasagne: Größen wie bei Store-Ansicht
+          const sizes=LASAGNE_SIZES; // [{k:'gross',l:'G·18'},{k:'mittel',l:'M·12'},{k:'klein',l:'K·8'}]
+          const cellKey=`${dateStr}|${dish}|${s.id}`;
+          // Welche Größen haben bereits Werte?
+          const dateRecs=Object.values(((fMap[dateStr]||{})[s.id]||{})[dish]||{});
+          const existingSizes=new Set(dateRecs.map(f=>f.groesse||'gross'));
+          let lasHtml='<td style="min-width:80px;padding:4px 3px;">';
+          sizes.forEach(sz=>{
+            const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
+            if(rec||sz.k==='gross'){
+              const manual=rec?.source==='manual';
+              lasHtml+=`<div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">
+                <span style="font-size:9px;color:var(--muted);min-width:14px;">${sz.l.split('·')[0]}</span>
+                <input type="number" step="0.25" value="${rec?.qty??''}" placeholder="–"
+                  data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
+                  onchange="updateForecastQtyOrgGroesse(this)"
+                  style="width:40px;text-align:center;border:1.5px solid ${manual?'#F97316':'var(--border)'};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':'#fff'};">
+              </div>`;
+            }
+          });
+          // + Buttons für fehlende Größen
+          const missing=sizes.filter(sz=>sz.k!=='gross'&&!existingSizes.has(sz.k));
+          if(missing.length){
+            lasHtml+=`<div style="display:flex;gap:2px;flex-wrap:wrap;">`;
+            missing.forEach(sz=>{
+              lasHtml+=`<button onclick="addOrgLasagneSize('${cellKey}','${sz.k}')" style="font-size:7px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:4px;padding:1px 3px;cursor:pointer;">+${sz.l.split('·')[0]}</button>`;
+            });
+            lasHtml+='</div>';
+          }
+          lasHtml+='</td>';
+          html+=lasHtml;
+        } else {
+          const rec=((((fMap[dateStr]||{})[s.id]||{})[dish])||{})['gross'];
+          const manual=rec?.source==='manual';
+          html+=`<td><input type="number" step="0.25" value="${rec?.qty??''}" placeholder="–" data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
+            onchange="updateForecastQtyOrg(this)"
+            style="width:44px;text-align:center;border:1.5px solid ${manual?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':'#fff'};"></td>`;
+        }
       });
       html+='</tr>';
     });
@@ -3438,6 +3518,39 @@ async function updateForecastQtyOrg(inputEl){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 window.updateForecastQtyOrg=updateForecastQtyOrg;
+window.renderOrgForecast=renderOrgForecast;
+window.orgForecastWeekOffset=orgForecastWeekOffset;
+
+async function updateForecastQtyOrgGroesse(inputEl){
+  const storeId=inputEl.dataset.store;
+  const dish=inputEl.dataset.dish;
+  const dateStr=inputEl.dataset.date;
+  const groesse=inputEl.dataset.groesse||'gross';
+  const qty=inputEl.value===''?null:parseFloat(inputEl.value);
+  try{
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'});
+    if(qty!=null){
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'manual'}])});
+    }
+    inputEl.style.borderColor='#F97316';
+    inputEl.style.background='#FFF7ED';
+    showToast('✔ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.updateForecastQtyOrgGroesse=updateForecastQtyOrgGroesse;
+
+function addOrgLasagneSize(cellKey, sizeKey){
+  const btn=document.querySelector(`[onclick="addOrgLasagneSize('${cellKey}','${sizeKey}')"]`);
+  if(!btn) return;
+  const [dateStr, dish, storeId]=cellKey.split('|');
+  const sz=LASAGNE_SIZES.find(s=>s.k===sizeKey);
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;align-items:center;gap:2px;margin-bottom:2px;';
+  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:14px;">${sz?.l.split('·')[0]||sizeKey}</span><input type="number" step="0.25" placeholder="–" data-store="${storeId}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}" onchange="updateForecastQtyOrgGroesse(this)" style="width:40px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:3px 1px;">`;
+  btn.parentElement.replaceChild(wrap, btn);
+  wrap.querySelector('input')?.focus();
+}
+window.addOrgLasagneSize=addOrgLasagneSize;
 
 async function renderBroadcast(){
   const el=document.getElementById('v-broadcast');
