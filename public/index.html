@@ -3435,11 +3435,11 @@ async function renderOrgForecast(){
     +' – '+new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
   // Woche-Switcher oben
-  const weekSwitcher=`<div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;">
+  const weekSwitcher=`<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
     <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===0?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===0?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===0?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:13px;cursor:pointer;">📅 Diese Woche</button>
     <button onclick="orgForecastWeekOffset=1;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===1?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===1?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===1?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:13px;cursor:pointer;">📅 Nächste Woche</button>
   </div>
-  <div style="font-size:11px;color:var(--muted);margin:-10px 0 12px;text-align:center;">${weekLabel}</div>`;
+  <div style="font-size:11px;color:var(--muted);margin:0 0 12px;text-align:center;">${weekLabel}</div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
   const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
@@ -3628,10 +3628,24 @@ async function renderOrgForecast(){
     html+='</tbody></table></div></div>';
   }
 
-  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">
-    🔵 Blau = automatischer Vorschlag (Vorwoche + Entsorgung + Wetter) — Tooltip zeigt Begründung<br>
-    🟠 Orange = manuell angepasst · Änderungen wirken sofort auf Store & Küche
+  // Zähle wie viele Felder noch leer sind
+  const totalCells=document.querySelectorAll('#orgfc-content input[type=number]').length;
+
+  html+=`<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+    <div style="font-size:12px;font-weight:600;color:#1D4ED8;margin-bottom:6px;">💡 Tipp — Erstmalige Befüllung</div>
+    <div style="font-size:11px;color:#1E40AF;margin-bottom:8px;">
+      ${orgForecastWeekOffset===0
+        ? 'Trage diese Woche deine Mengen ein — sie werden automatisch als Basis für nächste Woche verwendet.'
+        : 'Sobald du diese Woche Mengen eingetragen hast, erscheinen hier blaue Vorschläge für nächste Woche.'}
+    </div>
+    ${orgForecastWeekOffset===0 ? `<button onclick="orgFcAutoFill()" style="background:#2B3A67;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">⚡ Mengen aus Übersicht übernehmen</button>` : ''}
+  </div>
+  <div style="font-size:10.5px;color:var(--muted);padding:4px 2px 8px;">
+    🔵 Blau = Vorschlag (Vorwoche + Entsorgung + Wetter) · Tooltip = Begründung · 🟠 Orange = manuell angepasst
   </div>`;
+
+  html+=`<button id="orgfc-save-btn" onclick="orgFcSaveAll()" style="width:100%;padding:13px;background:#2B3A67;color:#fff;border:none;border-radius:12px;font-family:'Boldonse',sans-serif;font-size:14px;cursor:pointer;margin-top:8px;">💾 Alle speichern</button>`;
+  html+=`<div style="font-size:10px;color:var(--muted);text-align:center;padding:6px 0 16px;">Gespeicherte Mengen = Basis für nächste Woche</div>`;
 
   document.getElementById('orgfc-content').innerHTML=html;
   translateEl(el);
@@ -3659,6 +3673,93 @@ async function updateForecastQtyOrg(inputEl){
 }
 window.updateForecastQtyOrg=updateForecastQtyOrg;
 window.renderOrgForecast=renderOrgForecast;
+
+// Auto-Fill: holt die zuletzt bekannten Mengen aus forecast_qty und befüllt alle leeren Inputs
+async function orgFcAutoFill(){
+  // Lade die letzten 4 Wochen Forecast-Daten für alle Stores
+  const today=new Date();
+  const pastDate=new Date(today.getTime()-28*86400000).toISOString().split('T')[0];
+  const todayStr=today.toISOString().split('T')[0];
+  const rows=await api(`forecast_qty?forecast_date=gte.${pastDate}&forecast_date=lte.${todayStr}&select=store_id,forecast_date,dish_name,qty,groesse&order=forecast_date.desc`).catch(()=>[]);
+
+  if(!rows||!rows.length){
+    showToast('Noch keine historischen Mengen vorhanden — bitte manuell eintragen.');
+    return;
+  }
+
+  // Für jeden Input: finde die letzte bekannte Menge für Store+Gericht+Größe+Wochentag
+  const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
+  let filled=0;
+  inputs.forEach(inp=>{
+    if(inp.value) return; // bereits ausgefüllt
+    const store=inp.dataset.store;
+    const dish=inp.dataset.dish;
+    const groesse=inp.dataset.groesse||'gross';
+    const dateStr=inp.dataset.date;
+    if(!store||!dish||!dateStr) return;
+
+    const targetWd=new Date(dateStr+'T00:00:00').getDay();
+    // Suche letzten Eintrag für denselben Store + Gericht + Größe + Wochentag
+    const match=rows.find(r=>{
+      if(r.store_id!==store) return false;
+      if(r.dish_name!==dish) return false;
+      if((r.groesse||'gross')!==groesse) return false;
+      const rWd=new Date(r.forecast_date+'T00:00:00').getDay();
+      return rWd===targetWd;
+    });
+
+    if(match){
+      inp.value=match.qty;
+      inp.style.borderColor='#0EA5E9';
+      inp.style.background='#F0F9FF';
+      // Label "Vorschlag" darunter
+      const lbl=inp.nextElementSibling;
+      if(!lbl||!lbl.textContent.includes('Vorschlag')){
+        const d=document.createElement('div');
+        d.style.cssText='font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;';
+        d.textContent='Vorschlag';
+        inp.parentNode.insertBefore(d, inp.nextSibling);
+      }
+      filled++;
+    }
+  });
+
+  if(filled>0){
+    showToast(`✓ ${filled} Felder befüllt — bitte prüfen und speichern`);
+  } else {
+    showToast('Keine passenden historischen Mengen gefunden für die leeren Felder.');
+  }
+}
+window.orgFcAutoFill=orgFcAutoFill;
+
+// Alle sichtbaren Org-Forecast Inputs auf einmal speichern
+async function orgFcSaveAll(){
+  const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
+  let saved=0; let errors=0;
+  const btn=document.getElementById('orgfc-save-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Speichert…'; }
+
+  for(const inp of inputs){
+    const store=inp.dataset.store;
+    const dish=inp.dataset.dish;
+    const dateStr=inp.dataset.date;
+    const groesse=inp.dataset.groesse||'gross';
+    const qty=inp.value===''?null:parseFloat(inp.value);
+    if(!store||!dish||!dateStr||qty==null) continue;
+    try{
+      await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'manual'}])});
+      inp.style.borderColor='#22C55E';
+      inp.style.background='#F0FDF4';
+      saved++;
+    }catch(e){ errors++; }
+  }
+
+  if(btn){ btn.disabled=false; btn.textContent='💾 Alle speichern'; }
+  if(errors) showToast(`${saved} gespeichert, ${errors} Fehler`);
+  else showToast(`✓ ${saved} Mengen gespeichert — Basis für nächste Woche!`);
+}
+window.orgFcSaveAll=orgFcSaveAll;
 window.orgForecastWeekOffset=orgForecastWeekOffset;
 
 async function updateForecastQtyOrgGroesse(inputEl){
