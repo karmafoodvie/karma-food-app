@@ -3604,6 +3604,8 @@ async function renderOrgForecast(){
       html+='</tr>';
     });
     html+='</tbody></table></div></div>';
+    // Pro-Tag Speichern Button
+    html+=`<button onclick="orgFcSaveDay('${dateStr}')" style="width:100%;padding:8px;background:#2B3A67;color:#fff;border:none;border-radius:8px;font-size:12px;font-family:'Boldonse',sans-serif;cursor:pointer;margin-bottom:16px;">💾 ${dateLabel} speichern</button>`;
   }
 
   // Zähle wie viele Felder noch leer sind
@@ -3748,6 +3750,33 @@ async function orgFcSaveAll(){
   }
 }
 window.orgFcSaveAll=orgFcSaveAll;
+
+async function orgFcSaveDay(dateStr){
+  const inputs=[...document.querySelectorAll('#orgfc-content input[type=number]')].filter(inp=>inp.dataset.date===dateStr);
+  if(!inputs.length){ showToast('Keine Felder für diesen Tag'); return; }
+  const btn=document.querySelector('button[onclick="orgFcSaveDay(\''+dateStr+'\'")');
+  if(btn){ btn.disabled=true; btn.textContent='Speichert…'; }
+  let saved=0, errors=0;
+  for(const inp of inputs){
+    const store=inp.dataset.store;
+    const dish=inp.dataset.dish;
+    const groesse=inp.dataset.groesse||'gross';
+    const qty=inp.value===''?null:parseFloat(inp.value);
+    if(!store||!dish||qty==null) continue;
+    try{
+      await api('forecast_qty?store_id=eq.'+store+'&dish_name=eq.'+encodeURIComponent(dish)+'&forecast_date=eq.'+dateStr+'&groesse=eq.'+groesse,{method:'DELETE'}).catch(()=>{});
+      await api('forecast_qty?store_id=eq.'+store+'&dish_name=eq.'+encodeURIComponent(dish)+'&forecast_date=eq.'+dateStr+'&groesse=is.null',{method:'DELETE'}).catch(()=>{});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'manual'}])});
+      inp.style.borderColor='#22C55E'; inp.style.background='#F0FDF4';
+      saved++;
+    }catch(e){ errors++; }
+  }
+  if(btn){ btn.disabled=false; btn.style.background='#22C55E'; btn.textContent='✓ Gespeichert!';
+    setTimeout(()=>{ btn.style.background='#2B3A67'; btn.textContent='💾 '+btn.textContent.replace('✓ Gespeichert!','').trim()+' speichern'; }, 2000);
+  }
+  if(errors) showToast(saved+' gespeichert, '+errors+' Fehler');
+}
+window.orgFcSaveDay=orgFcSaveDay;
 window.orgForecastWeekOffset=orgForecastWeekOffset;
 
 async function updateForecastQtyOrgGroesse(inputEl){
@@ -5516,6 +5545,18 @@ async function submitSchichtende(){
 }
 
 // ---- PACK ----
+async function allesEingepacktMichi(){
+  const btn=document.getElementById('michi-alles-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Wird gespeichert…'; }
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    await api('orders?order_date=eq.'+today,{method:'PATCH',body:JSON.stringify({eingepackt:true})});
+    showToast('✓ Alles als eingepackt markiert!');
+    renderPack();
+  }catch(e){ showToast('Fehler'); if(btn){ btn.disabled=false; btn.textContent='✅ Alles eingepackt'; } }
+}
+window.allesEingepacktMichi=allesEingepacktMichi;
+
 async function toggleOrderEingepackt(articleId, storeId, currentPacked){
   const today=new Date().toISOString().split('T')[0];
   try{
@@ -5630,6 +5671,14 @@ async function renderPack(){
     });
     html+='</tbody></table></div></div>';
   });
+
+  // "Alles eingepackt" Button für Michi
+  html+=`<div style="margin:16px 0 8px;">
+    <button id="michi-alles-btn" onclick="allesEingepacktMichi()" style="width:100%;padding:13px;background:#F97316;color:#fff;border:none;border-radius:12px;font-family:'Boldonse',sans-serif;font-size:14px;cursor:pointer;">
+      ✅ Alles eingepackt
+    </button>
+    <div style="font-size:10px;color:var(--muted);text-align:center;padding:4px 0;">Markiert alle Artikel als eingepackt</div>
+  </div>`;
 
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
   const geldwechselOffen=await api('geldwechsel?status=eq.offen&select=*&order=erstellt_am.asc').catch(()=>[]);
@@ -6937,10 +6986,16 @@ async function renderMorgenKoch(el, tabHtml){
 
   const forecasts = await api(`forecast_qty?forecast_date=eq.${tomorrowStr}&select=store_id,dish_name,qty,source,changed_at,groesse`).catch(()=>[]);
   const fMap = {};
+  const fMapByCat = {}; // fallback: lookup by category if dish name doesn't match
   (forecasts||[]).forEach(f=>{
     if(!fMap[f.dish_name]) fMap[f.dish_name]={};
     if(!fMap[f.dish_name][f.store_id]) fMap[f.dish_name][f.store_id]=[];
     fMap[f.dish_name][f.store_id].push(f);
+    // Also index by category for cross-week matching
+    const cat=mapDishNameToCategory(f.dish_name);
+    if(!fMapByCat[cat]) fMapByCat[cat]={};
+    if(!fMapByCat[cat][f.store_id]) fMapByCat[cat][f.store_id]=[];
+    fMapByCat[cat][f.store_id].push(f);
   });
 
   // Get tomorrow's menu dishes from MENU_DATA
@@ -7004,7 +7059,8 @@ async function renderMorgenKoch(el, tabHtml){
   </tr></thead><tbody>`;
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
-    const storeData = fMap[dish]||{};
+    const cat=mapDishNameToCategory(dish, dishObj.slot);
+    const storeData = (Object.keys(fMap[dish]||{}).length ? fMap[dish] : fMapByCat[cat]) || {};
     const isLasagne=dish.includes('Lasagne');
     const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
     const hasData = total>0;
