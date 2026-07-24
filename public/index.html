@@ -3417,8 +3417,8 @@ async function renderOrgForecast(){
 
   const [allForecasts, calendarEvents, refWeather]=await Promise.all([
     api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
-    getCalendarEvents(),
-    fetchWeatherForStore('lb', fromDate, toDate)
+    getCalendarEvents().catch(()=>[]),
+    fetchWeatherForStore('lb', fromDate, toDate).catch(()=>({}))
   ]);
   // fMap[date][store][dish][groesse] = rec
   const fMap={};
@@ -3432,6 +3432,7 @@ async function renderOrgForecast(){
 
   let html=weekSwitcher;
 
+  try {
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
     const dateStr=weekDates[wd];
@@ -3500,6 +3501,11 @@ async function renderOrgForecast(){
 
   document.getElementById('orgfc-content').innerHTML=html;
   translateEl(el);
+  } catch(err) {
+    console.error('renderOrgForecast error:', err);
+    const c=document.getElementById('orgfc-content');
+    if(c) c.innerHTML=`<div style="padding:1rem;color:#DC2626;">Fehler beim Laden: ${err.message}</div>`;
+  }
 }
 
 async function updateForecastQtyOrg(inputEl){
