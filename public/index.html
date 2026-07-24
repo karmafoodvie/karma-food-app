@@ -5535,6 +5535,21 @@ async function renderPack(){
   const today=new Date().toISOString().split('T')[0];
   let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
 
+  // KC Abholbereit-Banner — immer oben sichtbar auf allen Transporter-Tabs
+  const kcPickupTop=await api('kc_pickup_ready?date=eq.'+today+'&select=ready_at,message').catch(()=>[]);
+  if(kcPickupTop?.length){
+    const readyTime=new Date(kcPickupTop[0].ready_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'});
+    html+=`<div style="background:#F3E8FF;border:2.5px solid #A855F7;border-radius:14px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:32px;">📦</span>
+      <div style="flex:1;">
+        <div style="font-size:16px;font-weight:700;color:#6B21A8;font-family:'Boldonse',sans-serif;">Shop Produkte abholbereit!</div>
+        <div style="font-size:12px;color:#7E22CE;margin-top:3px;">Ines hat alles eingepackt · seit ${readyTime} Uhr</div>
+        <div style="font-size:11px;color:#9333EA;margin-top:2px;">Bitte im KC vorbeischauen und mitnehmen 🚚</div>
+      </div>
+      <button onclick="kcPickupDone()" style="background:#A855F7;color:#fff;border:none;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Abgeholt ✓</button>
+    </div>`;
+  }
+
   // Drei Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
@@ -5561,20 +5576,6 @@ async function renderPack(){
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
-
-  // KC Abholbereit-Banner
-  const kcPickup=await api('kc_pickup_ready?date=eq.'+today+'&select=ready_at,message').catch(()=>[]);
-  if(kcPickup?.length){
-    const readyTime=new Date(kcPickup[0].ready_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'});
-    html+=`<div style="background:#F3E8FF;border:2px solid #A855F7;border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:28px;">📦</span>
-      <div style="flex:1;">
-        <div style="font-size:14px;font-weight:700;color:#6B21A8;font-family:'Boldonse',sans-serif;">Shop Produkte abholbereit!</div>
-        <div style="font-size:11px;color:#7E22CE;margin-top:2px;">Ines hat alles eingepackt · seit ${readyTime} Uhr</div>
-      </div>
-      <button onclick="kcPickupDone()" style="background:#A855F7;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;">Abgeholt ✓</button>
-    </div>`;
-  }
 
   html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Zahl antippen = als eingepackt markieren</div>`;
 
@@ -5785,9 +5786,11 @@ async function kcAllesErledigt(){
     }])}).catch(()=>{});
 
     // 2. EmailJS Benachrichtigung an Michi
+    // Email an Tini (Michi hat kein Email-Feld im System — Tini leitet weiter)
+    // In-App: Badge auf Transporter-Button ist die primäre Notification für Michi
     await emailjs.send('service_xla195w','template_9uiq1wf',{
-      subject:'📦 Shop Produkte abholbereit',
-      message:'Hallo Michi,\n\nInes hat die Shop Produkte eingepackt. Alles ist abholbereit!\n\n'+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})+' Uhr',
+      subject:'📦 Shop Produkte abholbereit — bitte Michi informieren',
+      message:'Hallo,\n\nInes (KC/Shop Produkte) hat alles eingepackt. Michi kann abholen!\n\nZeit: '+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})+' Uhr',
       to_email:'tini@karmafood.at'
     }).catch(()=>{});
 
