@@ -1579,30 +1579,20 @@ async function renderHome(){
         const allNames=[...namesMain,...namesDressing];
         const zutaten=(d.zutaten||'').replace(/\n/g,' ').trim();
         const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
-        // Beilage/Sauce für dieses Gericht
-        const beilagen=getDishBeilagen(d.name);
-        const sauceNames=beilagen.filter(b=>b.toLowerCase().includes('sauce')||b.toLowerCase().includes('dressing')||b.toLowerCase().includes('raita'));
-        const isKitchen=currentStore?.id==='kitchen';
-        return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
-          <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;position:relative;">
+                return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
+          <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
             ${dishVisual}
             <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
             <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
-            ${isKitchen?('<button onclick="event.stopPropagation();openZutatenEdit(\'' + escAttr(d.name) + '\')" style="position:absolute;top:4px;right:4px;background:none;border:none;font-size:12px;cursor:pointer;opacity:0.5;" title="Zutaten bearbeiten">✏️</button>'):''}
           </div>
           <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
             <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
           </div>
           <div id="dish-allergen-${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px;">
             <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:3px;">ZUTATEN:</div>
-            <div style="font-size:10px;color:var(--sub);line-height:1.5;" data-no-translate>${zutaten||'Keine Zutaten hinterlegt'}</div>
-            ${sauceNames.length?`<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border);">
-              <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:2px;">SAUCE / DRESSING:</div>
-              <div style="font-size:10px;color:var(--sub);">${sauceNames.join(', ')}</div>
-            </div>`:''}
+            <div style="font-size:10px;color:var(--sub);line-height:1.5;">${zutaten||'Keine Zutaten hinterlegt'}</div>
           </div>
-        </div>`;
-      }).join('')}</div>`;
+        </div>`;`;
     })()}
     <div class="home-card" onclick="goTo('disposal')" style="margin-bottom:6px;padding:8px 10px;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
       <div style="font-size:13px;font-weight:500;">🗑️ Entsorgung / Food Waste</div>
@@ -1706,49 +1696,6 @@ function toggleDishAllergeneCard(i){
 }
 window.toggleDishAllergeneCard=toggleDishAllergeneCard;
 
-async function openZutatenEdit(dishName){
-  const rows=await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=zutaten,allergene_codes').catch(()=>[]);
-  const current=rows?.[0];
-  const currentZutaten=current?.zutaten||'';
-  const currentAllergene=(current?.allergene_codes||[]).join(', ');
-  const overlay=document.createElement('div');
-  overlay.id='zutaten-edit-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-end;';
-  const safeDish=dishName.replace(/'/g,"\'").replace(/"/g,'&quot;');
-  overlay.innerHTML='<div style="background:#fff;border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:80vh;overflow-y:auto;">'
-    +'<div style="font-size:15px;font-weight:700;margin-bottom:4px;">'+dishName+'</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Zutaten anpassen</div>'
-    +'<label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">ZUTATEN</label>'
-    +'<textarea id="edit-zutaten-field" placeholder="Zutaten eingeben..." style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;min-height:100px;font-family:inherit;resize:vertical;">'+currentZutaten+'</textarea>'
-    +'<div style="font-size:10px;color:var(--muted);margin:4px 0 12px;">Allergencodes: G=Gluten, M=Milch, Ei=Ei, N=Nüsse, Sf=Senf, So=Soja, Sl=Sellerie, Se=Sesam</div>'
-    +'<label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">ALLERGENE (Codes)</label>'
-    +'<input id="edit-allergene-field" type="text" value="'+currentAllergene+'" placeholder="z.B. G, M, Sf" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;">'
-    +'<div style="display:flex;gap:8px;margin-top:14px;">'
-    +'<button onclick="document.getElementById('zutaten-edit-overlay').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:13px;cursor:pointer;">Abbrechen</button>'
-    +'<button onclick="saveZutatenEdit(''+safeDish+'')" style="flex:2;padding:11px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">✓ Speichern</button>'
-    +'</div></div>';
-  document.body.appendChild(overlay);
-  setTimeout(()=>document.getElementById('edit-zutaten-field')?.focus(),100);
-}
-window.openZutatenEdit=openZutatenEdit;
-
-async function saveZutatenEdit(dishName){
-  const zutaten=document.getElementById('edit-zutaten-field')?.value.trim()||'';
-  const allergeneRaw=document.getElementById('edit-allergene-field')?.value.trim()||'';
-  const allergene_codes=allergeneRaw?allergeneRaw.split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean):[];
-  try{
-    const existing=await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=id').catch(()=>[]);
-    if(existing?.length){
-      await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName),{method:'PATCH',body:JSON.stringify({zutaten,allergene_codes,aktualisiert_am:new Date().toISOString()})});
-    } else {
-      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten,allergene_codes,verantwortlich:currentStore?.name||'Küche',aktualisiert_am:new Date().toISOString()}])});
-    }
-    document.getElementById('zutaten-edit-overlay')?.remove();
-    showToast('✓ Zutaten gespeichert');
-    renderHome();
-  } catch(e){ showToast('Fehler beim Speichern'); }
-}
-window.saveZutatenEdit=saveZutatenEdit;
 
 async function markMonthlyCleaningDone(){
   const monthKey=new Date().toISOString().slice(0,7);
