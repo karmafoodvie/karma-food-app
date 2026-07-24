@@ -2543,8 +2543,18 @@ function isLasagneLocked(dateStr){
 }
 // Liest die tatsächlichen Hauptgerichte (ohne Salat) für einen Wochentag aus dem rotierenden Menü,
 // statt aus der statischen weekly_menu-Tabelle — sonst sind Forecast-Spalten (z.B. "Lasagne") veraltet/falsch.
-function getMenuDishNamesForDay(wdStr){
-  const entries = (typeof MENU_DATA!=='undefined' && MENU_DATA[`w${CURRENT_MENU_WOCHE}_${wdStr}`]) || [];
+function getMenuWocheForDate(dateStr){
+  if(!dateStr) return CURRENT_MENU_WOCHE;
+  const start = new Date(MENU_WOCHE_START); start.setHours(0,0,0,0);
+  const d = new Date(dateStr+'T00:00:00'); d.setHours(0,0,0,0);
+  const diffDays = Math.round((d - start) / 86400000);
+  if(diffDays < 0) return 1;
+  return (Math.floor(diffDays / 7) % 4) + 1;
+}
+
+function getMenuDishNamesForDay(wdStr, dateStr){
+  const woche = dateStr ? getMenuWocheForDate(dateStr) : CURRENT_MENU_WOCHE;
+  const entries = (typeof MENU_DATA!=='undefined' && MENU_DATA[`w${woche}_${wdStr}`]) || [];
   return [...new Set(entries.filter(e=>e.slot!=='salat').map(e=>e.name).filter(Boolean))];
 }
 
@@ -2757,9 +2767,9 @@ async function renderForecastOrderTab(el, tabHtml){
   const suggestionJobs=[]; // {wd, dish}
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
-    const dishNames=getMenuDishNamesForDay(wdStr);
-    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
     const dateStr=weekDates[wd];
+    const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
+    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
     allDishes.forEach(dish=>{
       if(!(fMap[dateStr]||{})[dish]) suggestionJobs.push({dateStr, dish, wdStr});
     });
@@ -2769,9 +2779,9 @@ async function renderForecastOrderTab(el, tabHtml){
   const lastWeekQtyMap={}; // lastWeekQtyMap[dateStr][dish] = {qty, disposal}
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
-    const dishNames=getMenuDishNamesForDay(wdStr);
-    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
     const dateStr=weekDates[wd];
+    const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
+    const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
     const lastWeekDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
     allDishes.forEach(dish=>{
       const category=mapDishNameToCategory(dish);
@@ -2884,9 +2894,9 @@ async function renderForecastOrderTab(el, tabHtml){
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
-    const dishNames=getMenuDishNamesForDay(wdStr); // [Gericht2-Name, Gericht3-Name] aus dem aktuell laufenden Menü
-    const isToday=wd===todayWeekday;
     const dateStr=weekDates[wd];
+    const dishNames=getMenuDishNamesForDay(wdStr, dateStr); // [Gericht2-Name, Gericht3-Name] aus dem aktuell laufenden Menü
+    const isToday=wd===todayWeekday;
     const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
     const g2=dishNames[0]||null, g3=dishNames[1]||null;
     const reisName=REIS_DISH_NAME;
@@ -3438,7 +3448,7 @@ async function renderOrgForecast(){
     const wdStr=WEEKDAY_STR[wd];
     const dateStr=weekDates[wd];
     const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
-    const dishNames=getMenuDishNamesForDay(wdStr);
+    const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
     const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
     const {reason}=getDayModifiers(dateStr, 'lb', refWeather, calendarEvents, zeroSettings);
     const isToday=new Date().toISOString().split('T')[0]===dateStr;
@@ -6255,7 +6265,7 @@ async function renderKitchen(){
 
     for(let wd=1; wd<=5; wd++){
       const wdStr=WEEKDAY_STR[wd];
-      const dishNames=getMenuDishNamesForDay(wdStr); // aus dem aktuell laufenden Menü
+      const dishNames=getMenuDishNamesForDay(wdStr, dateStr); // aus dem aktuell laufenden Menü
       const hasLasagne=dishNames.some(n=>n.includes('Lasagne'));
       const allDishes=['Salat', ...dishNames, REIS_DISH_NAME].filter(Boolean);
       const isToday=wd===todayWeekday;
