@@ -2817,39 +2817,35 @@ async function renderForecastOrderTab(el, tabHtml){
   // eigene Darstellung mit einer Zeile pro verwendeter Größe + "+ Größe"-Button für weitere.
   function lasagneCellInput(dateStr, dish, lockedNote, autoVal){
     const records=(fRecordsMap[dateStr]||{})[dish]||[];
+    // Labels fix: Groß·18, Mit.·12, Kl.·8
+    const LABELS={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
     if(isHistoric){
-      if(!records.length) return `<div style="width:56px;margin:0 auto;text-align:center;font-size:13px;color:var(--border);">–</div>`;
-      return `<div style="font-size:10px;text-align:center;line-height:1.5;">${records.map(r=>`${formatQty(r.qty)}× ${(LASAGNE_SIZES.find(s=>s.k===r.groesse)||LASAGNE_SIZES[0]).l.split('·')[0]}`).join('<br>')}</div>`;
+      return `<div style="font-size:10px;text-align:left;line-height:1.8;">${LASAGNE_SIZES.map(s=>{
+        const r=records.find(x=>x.groesse===s.k);
+        return `<div style="display:flex;align-items:center;gap:4px;"><span style="font-size:8px;color:var(--muted);min-width:54px;">${LABELS[s.k]}</span><span>${r?formatQty(r.qty):'–'}</span></div>`;
+      }).join('')}</div>`;
     }
     if(lockedNote){
-      if(!records.length) return `<div title="${lockedNote}" style="width:56px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:10px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 –</div>`;
-      return `<div title="${lockedNote}" style="font-size:9.5px;text-align:center;background:#F3F4F6;border-radius:6px;padding:3px 2px;line-height:1.5;">🔒 ${records.map(r=>`${formatQty(r.qty)}×${(LASAGNE_SIZES.find(s=>s.k===r.groesse)||LASAGNE_SIZES[0]).l.split('·')[0]}`).join(', ')}</div>`;
+      return `<div title="${lockedNote}" style="font-size:10px;text-align:left;line-height:1.8;background:#F3F4F6;border-radius:6px;padding:3px 5px;">${LASAGNE_SIZES.map(s=>{
+        const r=records.find(x=>x.groesse===s.k);
+        return `<div style="display:flex;align-items:center;gap:4px;"><span style="font-size:8px;color:var(--muted);min-width:54px;">${LABELS[s.k]}</span><span>🔒 ${r?formatQty(r.qty):'–'}</span></div>`;
+      }).join('')}</div>`;
     }
-    const cellKey=dateStr+'|'+dish;
-    if(!lasagneExtraSizes[cellKey]) lasagneExtraSizes[cellKey]=new Set();
-    const shownSizes=records.length?records.map(r=>r.groesse):['gross'];
-    const revealedOrder=LASAGNE_SIZES.map(s=>s.k).filter(k=>shownSizes.includes(k)||lasagneExtraSizes[cellKey].has(k));
-    let h='<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">';
-    revealedOrder.forEach(sizeKey=>{
-      const rec=records.find(r=>r.groesse===sizeKey);
-      const isDefaultEmptyRow=sizeKey==='gross' && !rec && revealedOrder.length===1;
-      const val=rec ? rec.qty : (isDefaultEmptyRow ? autoVal : null);
-      const isSuggestion=isDefaultEmptyRow && autoVal!=null;
+    // Immer alle 3 Größen fix anzeigen
+    let h='<div style="display:flex;flex-direction:column;gap:4px;">';
+    LASAGNE_SIZES.forEach(sz=>{
+      const rec=records.find(r=>r.groesse===sz.k);
+      const val=rec ? rec.qty : (sz.k==='gross' && autoVal!=null ? autoVal : '');
+      const isSugg=sz.k==='gross' && !rec && autoVal!=null;
       const manual=rec?.source==='manual';
-      const sizeLabel=(LASAGNE_SIZES.find(s=>s.k===sizeKey)||LASAGNE_SIZES[0]).l;
-      h+=`<div style="display:flex;align-items:center;gap:3px;">
-        <input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}" data-original="${val??''}"
+      h+=`<div style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:8px;color:var(--muted);min-width:54px;white-space:nowrap;">${LABELS[sz.k]}</span>
+        <input type="number" step="0.25" value="${val}" placeholder="–"
+          data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
           oninput="markForecastDirty(this)"
-          style="width:38px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">
-        <span style="font-size:7.5px;color:var(--sub);white-space:nowrap;">${sizeLabel}</span>
+          style="width:40px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(isSugg?'#F0F9FF':'#fff')};">
       </div>`;
     });
-    const remaining=LASAGNE_SIZES.filter(s=>!revealedOrder.includes(s.k));
-    if(remaining.length){
-      h+=`<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;">${remaining.map(s=>
-        `<button data-add-size="${escAttr(cellKey)}|${s.k}" onclick="addLasagneSize('${escAttr(cellKey)}','${s.k}')" style="font-size:7.5px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:5px;padding:1px 4px;cursor:pointer;white-space:nowrap;">+ ${s.l.split('·')[0]}</button>`
-      ).join('')}</div>`;
-    }
     h+='</div>';
     return h;
   }
@@ -2953,8 +2949,9 @@ async function saveForecastChanges(){
       const newQty=parseFloat(input.value);
       if(isNaN(newQty)) continue;
       const g=groesse||'gross';
-      // Alle bestehenden Einträge für diesen Store+Datum+Gericht löschen (egal welche groesse)
-      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
+      // Pro Größe einzeln löschen+schreiben — andere Größen bleiben erhalten!
+      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${g}`,{method:'DELETE'}).catch(()=>{});
+      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
       if(newQty>0){
         await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse:g,source:'manual',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
       }
@@ -3541,34 +3538,27 @@ async function renderOrgForecast(){
           const cellKey=`${dateStr}|${dish}|${s.id}`;
           // Welche Größen haben bereits Werte?
           const dateRecs=Object.values(((fMap[dateStr]||{})[s.id]||{})[dish]||{});
-          const existingSizes=new Set(dateRecs.map(f=>f.groesse||'gross'));
-          let lasHtml='<td style="min-width:80px;padding:4px 3px;">';
+          const LBLS_ORG={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
+          let lasHtml='<td style="min-width:110px;padding:4px 3px;">';
           sizes.forEach(sz=>{
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
-            if(rec||sz.k==='gross'){
+            // Immer alle 3 Größen anzeigen
+            // Immer alle 3 Größen anzeigen
               const manual=rec?.source==='manual';
               const lasSugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, sz.k) : null;
               const lasVal=rec?.qty??lasSugg?.qty??'';
               const lasIsSugg=!rec && lasSugg!=null;
-              lasHtml+=`<div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">
-                <span style="font-size:9px;color:var(--muted);min-width:14px;">${sz.l.split('·')[0]}</span>
+              const LBLS={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
+              lasHtml+=`<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">
+                <span style="font-size:8px;color:var(--muted);min-width:54px;white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
                   onchange="updateForecastQtyOrgGroesse(this)"
                   title="${escAttr(lasSugg?.reason||'')}"
                   style="width:40px;text-align:center;border:1.5px solid ${manual?'#F97316':(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(lasIsSugg?'#F0F9FF':'#fff')};">
               </div>`;
-            }
           });
-          // + Buttons für fehlende Größen
-          const missing=sizes.filter(sz=>sz.k!=='gross'&&!existingSizes.has(sz.k));
-          if(missing.length){
-            lasHtml+=`<div style="display:flex;gap:2px;flex-wrap:wrap;">`;
-            missing.forEach(sz=>{
-              lasHtml+=`<button onclick="addOrgLasagneSize('${cellKey}','${sz.k}')" style="font-size:7px;color:var(--muted);background:none;border:1px dashed var(--border);border-radius:4px;padding:1px 3px;cursor:pointer;">+${sz.l.split('·')[0]}</button>`;
-            });
-            lasHtml+='</div>';
-          }
+          // Alle 3 Größen fix — keine + Buttons mehr nötig
           lasHtml+='</td>';
           html+=lasHtml;
         } else {
@@ -3744,8 +3734,10 @@ async function updateForecastQtyOrgGroesse(inputEl){
   const groesse=inputEl.dataset.groesse||'gross';
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
   try{
-    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'});
-    if(qty!=null){
+    // Nur diese Größe löschen — andere Größen bleiben erhalten
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
+    if(qty!=null && qty>0){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'manual'}])});
     }
     inputEl.style.borderColor='#F97316';
