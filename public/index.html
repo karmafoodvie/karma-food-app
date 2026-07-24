@@ -6270,6 +6270,82 @@ async function renderBeilagenTableHtml(mode='kueche'){
   }
 
 
+async function renderKitchenDailyHtml(){
+  // Daily Business: Store-Ansicht für Kitchen 3400 Kassenbereich
+  // Zeigt: heutigen Tag mit Gerichten + Allergenen (wie Store-Startseite "Während der Schicht")
+  const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
+  const todayDate=new Date().toISOString().split('T')[0];
+  const wd=new Date().getDay();
+  const wdStr=WEEKDAY_STR[wd]||'mo';
+  const dishNames=getMenuDishNamesForDay(wdStr, todayDate);
+  const salatName=getSalatNameForDate(todayDate);
+
+  let html=`<div style="font-size:14px;font-weight:600;padding:2px 0 10px;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
+
+  // Heutige Gerichte mit Allergenen
+  html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ WÄHREND DER SCHICHT</div>`;
+  html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">`;
+
+  const allDishes=[{cat:'SALAT',name:salatName},{...dishNames[0]&&{cat:'GERICHT 1',name:dishNames[0]}},{...dishNames[1]&&{cat:'GERICHT 2',name:dishNames[1]}}].filter(d=>d.name);
+
+  // Load allergene for today's dishes
+  const woche=getMenuWocheForDate(todayDate);
+  const menuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${woche}_${wdStr}`])||[];
+
+  allDishes.forEach(d=>{
+    const entry=menuEntries.find(e=>e.name===d.name);
+    const allergene=entry?.allergene?.main?.join(', ')||entry?.allergene_codes?.join(', ')||'keine Allergene angegeben';
+    html+=`<div style="flex:1;min-width:130px;background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;">
+      <div style="font-size:26px;line-height:1;margin-bottom:4px;">${getDishEmoji(d.name)}</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;">${d.cat}</div>
+      <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:2px;line-height:1.3;">${d.name}</div>
+      <div style="font-size:9px;color:${allergene==='keine Allergene angegeben'?'var(--muted)':'#C2410C'};margin-top:4px;background:${allergene==='keine Allergene angegeben'?'var(--surface-1)':' #FFF7ED'};border-radius:4px;padding:2px 4px;">${allergene}</div>
+    </div>`;
+  });
+  html+='</div>';
+
+  // Entsorgung
+  html+=`<div onclick="goTo('disposal')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🗑️</span>
+    <div><div style="font-size:13px;font-weight:600;">Entsorgung / Food Waste</div><div style="font-size:11px;color:var(--muted);">Restmengen eintragen</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
+  // Forecast Mengen für heute
+  const todayFc=await api(`forecast_qty?forecast_date=eq.${todayDate}&select=store_id,dish_name,qty,groesse`).catch(()=>[]);
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
+  if(todayFc&&todayFc.length){
+    html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin:12px 0 8px;">📊 MENGEN HEUTE</div>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Gericht</th>
+      ${storeList.map(s=>`<th data-no-translate style="font-size:11px;color:${STORE_COLORS[s.id]||'#888'};">${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
+    </tr></thead><tbody>`;
+    const dishes=[salatName,...dishNames,REIS_DISH_NAME].filter(Boolean);
+    dishes.forEach(dish=>{
+      const cat=mapDishNameToCategory(dish);
+      const isLas=dish.toUpperCase().includes('LASAGNE');
+      html+=`<tr><td data-no-translate style="font-size:11px;font-weight:600;">${getDishEmoji(dish)} ${dish}</td>`;
+      storeList.forEach(s=>{
+        const recs=todayFc.filter(f=>f.store_id===s.id&&f.dish_name===dish);
+        if(!recs.length){
+          // Try by category
+          const catRecs=todayFc.filter(f=>f.store_id===s.id&&mapDishNameToCategory(f.dish_name)===cat);
+          const qty=catRecs.reduce((a,b)=>a+(b.qty||0),0);
+          html+=`<td style="text-align:center;font-size:12px;">${qty>0?formatQty(qty):'–'}</td>`;
+        } else {
+          const qty=recs.reduce((a,b)=>a+(b.qty||0),0);
+          html+=`<td style="text-align:center;font-size:12px;">${formatQty(qty)}</td>`;
+        }
+      });
+      html+='</tr>';
+    });
+    html+='</tbody></table></div></div>';
+  }
+
+  return html;
+}
+
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam: Nooru / Dinesh</div>`;
@@ -6289,7 +6365,7 @@ async function renderKitchen(){
   const nwKwNum=getIsoWeekNumber(nwWeekDates[1]);
   const nwWeekLabelShort = kitchenWeekOffset===0?'Diese Woche':(kitchenWeekOffset===1?'Nächste Woche':`KW ${nwKwNum}`);
   const nwLabel=nwWeekLabelShort+' '+new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-  const KTAB_COLORS = {morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E', supply:'#EC4899'};
+  const KTAB_COLORS = {daily:'#1D5E3A', morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E', supply:'#EC4899'};
   const ktab=(key,label)=>{
     const active=kitchenTab===key;
     const col=KTAB_COLORS[key];
@@ -6297,9 +6373,17 @@ async function renderKitchen(){
   };
   // Tab-Labels: Forecast zeigt immer die korrekte Woche mit Datum Mo–Fr
   const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-  const forecastTabLabel=`📅 ${kitchenWeekOffset===0?'Diese Woche':'Nächste Woche'}<br><span style="font-size:10px;font-weight:400;">${forecastDateRange}</span>`;
-  const menuTabLabel=`🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche ${CURRENT_MENU_WOCHE}</span>`;
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}</div>`;
+  const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style="font-size:10px;font-weight:400;">'+forecastDateRange+'</span>';
+  const menuTabLabel='🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche '+CURRENT_MENU_WOCHE+'</span>';
+  html+=`<div class="cl-tabs">${ktab('daily','🏪 Daily')}${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}</div>`;
+
+  if(kitchenTab==='daily'){
+    // Daily Business — Store-Ansicht für Kassenbereich (Während der Schicht)
+    html+=await renderKitchenDailyHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   if(kitchenTab==='morgen'){
     await renderMorgenKoch(el, html);
