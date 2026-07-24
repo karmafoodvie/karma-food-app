@@ -1162,7 +1162,13 @@ window.loadNotifBadge=loadNotifBadge;
 async function loadAll(){
   // Badge wiederherstellen wenn noch nicht abgeholt
   const _badgeToday=new Date().toISOString().split('T')[0];
-  api('kc_pickup_ready?date=eq.'+_badgeToday+'&select=id').then(r=>{ if(r?.length) setTimeout(showKcPickupBadge, 500); }).catch(()=>{});
+  api('kc_pickup_ready?date=eq.'+_badgeToday+'&select=id').then(r=>{
+    if(r?.length){
+      setTimeout(showKcPickupBadge, 500);
+      // Wenn Michi als Transporter eingeloggt ist → direkt auf Info-Tab
+      if(activePackTab==='transporter') transporterSubTab='info';
+    }
+  }).catch(()=>{});
   const today=new Date().toISOString().split('T')[0];
   articles=await api('articles?select=*&order=sort_order');
   await autoReactivateExpiredArticles();
@@ -5535,27 +5541,45 @@ async function renderPack(){
   const today=new Date().toISOString().split('T')[0];
   let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
 
-  // KC Abholbereit-Banner — immer oben sichtbar auf allen Transporter-Tabs
   const kcPickupTop=await api('kc_pickup_ready?date=eq.'+today+'&select=ready_at,message').catch(()=>[]);
-  if(kcPickupTop?.length){
-    const readyTime=new Date(kcPickupTop[0].ready_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'});
-    html+=`<div style="background:#F3E8FF;border:2.5px solid #A855F7;border-radius:14px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:32px;">📦</span>
-      <div style="flex:1;">
-        <div style="font-size:16px;font-weight:700;color:#6B21A8;font-family:'Boldonse',sans-serif;">Shop Produkte abholbereit!</div>
-        <div style="font-size:12px;color:#7E22CE;margin-top:3px;">Ines hat alles eingepackt · seit ${readyTime} Uhr</div>
-        <div style="font-size:11px;color:#9333EA;margin-top:2px;">Bitte im KC vorbeischauen und mitnehmen 🚚</div>
-      </div>
-      <button onclick="kcPickupDone()" style="background:#A855F7;color:#fff;border:none;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Abgeholt ✓</button>
-    </div>`;
-  }
 
   // Drei Tabs — Boldonse via tabBarHtml helper
-  html+=tabBarHtml([
-    {key:'bestellliste', label:'📦 Bestellliste'},
-    {key:'samosas',      label:'🥟 Samosas'},
-    {key:'beilagen',     label:'🥗 Beilagen'}
-  ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
+  // Info-Tab mit Badge wenn KC abholbereit
+  const infoTabLabel='📬 Info'+(kcPickupTop?.length?'<span style="position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;padding:0 2px;">1</span>':'');
+
+  html+=`<div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;">`;
+  [{key:'info',label:infoTabLabel},{key:'bestellliste',label:'📦 Bestellliste'},{key:'samosas',label:'🥟 Samosas'},{key:'beilagen',label:'🥗 Beilagen'}].forEach(t=>{
+    const active=transporterSubTab===t.key;
+    const col='#F97316';
+    html+=`<button onclick="switchTransporterSubTab('${t.key}')" style="position:relative;flex-shrink:0;padding:8px 12px;border-radius:10px;border:${active?'2px solid '+col:'1.5px solid var(--border)'};background:${active?col:'var(--card)'};color:${active?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;font-size:13px;cursor:pointer;">${t.label}</button>`;
+  });
+  html+='</div>';
+
+  if(transporterSubTab==='info'){
+    if(kcPickupTop?.length){
+      const readyTime=new Date(kcPickupTop[0].ready_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'});
+      html+=`<div style="background:#F3E8FF;border:2.5px solid #A855F7;border-radius:14px;padding:20px 16px;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-size:40px;">📦</span>
+          <div>
+            <div style="font-size:18px;font-weight:700;color:#6B21A8;font-family:'Boldonse',sans-serif;">Shop Produkte abholbereit!</div>
+            <div style="font-size:13px;color:#7E22CE;margin-top:4px;">Ines hat alles eingepackt · seit ${readyTime} Uhr</div>
+            <div style="font-size:12px;color:#9333EA;margin-top:2px;">Bitte im KC vorbeischauen 🚚</div>
+          </div>
+        </div>
+        <button onclick="kcPickupDone()" style="width:100%;padding:13px;background:#A855F7;color:#fff;border:none;border-radius:12px;font-family:'Boldonse',sans-serif;font-size:15px;cursor:pointer;">✓ Abgeholt — erledigt!</button>
+      </div>`;
+    } else {
+      html+=`<div style="text-align:center;padding:2rem 1rem;color:var(--muted);">
+        <div style="font-size:40px;margin-bottom:8px;">✅</div>
+        <div style="font-size:14px;font-weight:600;">Keine offenen Infos</div>
+        <div style="font-size:12px;margin-top:4px;">Alles erledigt!</div>
+      </div>`;
+    }
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   if(transporterSubTab==='samosas'){
     html+=await renderSamosaTableHtml();
