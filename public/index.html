@@ -2804,12 +2804,13 @@ async function renderForecastOrderTab(el, tabHtml){
     const lwQty=lwData?.qty;
     const lwIcon=lwData?.soldOutEarly?'🔥':(lwData?.leftover>5?'📦':'•');
     const suggReason=autoSuggestion?.reason||'';
-    const numberInput=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
+    // Vorwoche-Info nur als Tooltip (title) — kein div darunter damit Layout sauber bleibt
+    const lwTitle=lwQty!=null?` Vorwoche: ${lwIcon} ${formatQty(lwQty)} Bhlt`:'';
+    const fullTitle=escAttr((suggReason+lwTitle).trim());
+    return `<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
       oninput="markForecastDirty(this)"
-      title="${escAttr(suggReason)}"
+      title="${fullTitle}"
       style="width:48px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
-    const lwHtml=lwQty!=null?`<div style="font-size:8.5px;color:var(--muted);margin-top:1px;text-align:center;" title="Vorwoche: ${formatQty(lwQty)} Behälter">${lwIcon} ${formatQty(lwQty)}</div>`:'';
-    return numberInput+lwHtml;
   }
 
   // Lasagne kann in mehreren Behälter-Größen gleichzeitig gebraucht werden (z.B. 2x Groß + 1x Klein) —
@@ -2950,17 +2951,12 @@ async function saveForecastChanges(){
       const dishName=input.dataset.dish;
       const groesse=input.dataset.groesse;
       const newQty=parseFloat(input.value);
-      if(groesse){
-        await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${groesse}`,{method:'DELETE'});
-        if(!isNaN(newQty) && newQty>0){
-          await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse,source:'manual',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
-        }
-      }else{
-        if(isNaN(newQty)) continue;
-        const existing=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&select=groesse`).catch(()=>[]);
-        const existingGroesse=existing?.[0]?.groesse||'gross';
-        await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'});
-        await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse:existingGroesse,source:'manual',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
+      if(isNaN(newQty)) continue;
+      const g=groesse||'gross';
+      // Alle bestehenden Einträge für diesen Store+Datum+Gericht löschen (egal welche groesse)
+      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
+      if(newQty>0){
+        await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse:g,source:'manual',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
       }
     }
     showToast('✓ Änderungen gespeichert — Küche wird informiert');
