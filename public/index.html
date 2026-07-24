@@ -6386,24 +6386,49 @@ async function renderKitchenDaily(){
   const dishNames=getMenuDishNamesForDay(wdStr, todayDate);
   const salatName=getSalatNameForDate(todayDate);
 
-  let html=backToHomeHtml();
-  html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
-  html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ GERICHTE HEUTE</div>`;
+  // Checklist Status
+  const [wekToday,reinToday,kuehlToday]=await Promise.all([
+    api('wareneingang?store_id=eq.kitchen&datum=eq.'+todayDate+'&select=id').catch(()=>[]),
+    api('reinigungsprotokoll?store_id=eq.kitchen&datum=eq.'+todayDate+'&select=reinigung_erledigt,desinfektion_erledigt').catch(()=>[]),
+    api('kuehleinrichtungen?store_id=eq.kitchen&datum=eq.'+todayDate+'&select=id').catch(()=>[])
+  ]);
+  const wekDone=(wekToday||[]).length>0;
+  const reinR=(reinToday||[])[0];
+  const reinCount=reinR?(reinR.reinigung_erledigt?1:0)+(reinR.desinfektion_erledigt?1:0):0;
+  const kuehlDone=(kuehlToday||[]).length>0;
 
-  // Dish cards — klickbar mit Allergenen (gleich wie Store-Startseite)
+  let html=backToHomeHtml();
+  html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 10px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
+
+  // ☀️ Let's start the shift
+  html+=`<div onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:600;color:#fff;font-size:14px;">☀️ Let's start the shift!</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px;">Daily Check-up starten</div>
+      </div>
+      <span style="color:#fff;font-size:18px;">→</span>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
+      ${wekDone?'<span class="badge badge-ok" style="font-size:10px;">Wareneingang ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Wareneingang</span>'}
+      ${kuehlDone?'<span class="badge badge-ok" style="font-size:10px;">Kühlung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Kühlung</span>'}
+    </div>
+  </div>`;
+
+  // ☕ Gerichte heute — klickbar mit Allergenen+Zutaten
+  html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ WÄHREND DER SCHICHT</div>`;
   const dishes=[
     {cat:'SALAT', name:salatName, slot:'salat'},
     ...(dishNames[0]?[{cat:'GERICHT 1', name:dishNames[0], slot:'gericht2'}]:[]),
     ...(dishNames[1]?[{cat:'GERICHT 2', name:dishNames[1], slot:'gericht3'}]:[]),
   ];
-
   html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">`;
   dishes.forEach((d,i)=>{
     const entry=menuEntries.find(e=>e.name===d.name||e.slot===d.slot);
     const allergene=entry?.allergene?.main?.length?entry.allergene.main.join(', '):(entry?.allergene_codes?.length?entry.allergene_codes.join(', '):'');
     const zutaten=entry?.zutaten||'';
-    const detailId=`kd-detail-${i}`;
-    html+=`<div style="flex:1;min-width:130px;display:flex;flex-direction:column;">
+    const detailId='kd-detail-'+i;
+    html+=`<div style="flex:1;min-width:120px;display:flex;flex-direction:column;">
       <div onclick="const d=document.getElementById('${detailId}');d.style.display=d.style.display==='none'?'block':'none'"
         style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
         <div style="font-size:26px;line-height:1;margin-bottom:4px;">${getDishEmoji(d.name)}</div>
@@ -6416,42 +6441,20 @@ async function renderKitchenDaily(){
   });
   html+='</div>';
 
-  // Entsorgung shortcut
-  html+=`<div onclick="goTo('disposal')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">🗑️</span>
-    <div><div style="font-size:13px;font-weight:600;">Entsorgung / Food Waste</div><div style="font-size:11px;color:var(--muted);">Restmengen eintragen</div></div>
-    <span style="margin-left:auto;color:var(--muted);">→</span>
+  // 🌙 Let's wrap up the shift
+  html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">🌙 NACH DER SCHICHT</div>`;
+  html+=`<div onclick="goTo('schichtende')" style="background:#E0521F;border-radius:12px;padding:10px 14px;cursor:pointer;margin-bottom:6px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-weight:600;color:#fff;font-size:14px;">🌙 Let's wrap up the shift!</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:1px;">Schicht abschließen</div>
+      </div>
+      <span style="color:#fff;font-size:18px;">→</span>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
+      ${reinCount===2?'<span class="badge badge-ok" style="font-size:10px;">Reinigung & Desinfektion ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Reinigung & Desinfektion</span>'}
+    </div>
   </div>`;
-
-  // Mengen heute pro Store
-  const todayFc=await api(`forecast_qty?forecast_date=eq.${todayDate}&select=store_id,dish_name,qty,groesse`).catch(()=>[]);
-  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
-  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
-
-  if(todayFc&&todayFc.length){
-    html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin:4px 0 8px;">📊 MENGEN HEUTE</div>`;
-    html+=`<div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
-      <thead><tr>
-        <th style="text-align:left;font-size:11px;">Gericht</th>
-        ${storeList.map(s=>`<th data-no-translate style="font-size:11px;color:${STORE_COLORS[s.id]||'#888'};">${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
-        <th style="font-size:11px;">Σ</th>
-      </tr></thead><tbody>`;
-    const allDishes=[salatName,...dishNames,REIS_DISH_NAME].filter(Boolean);
-    allDishes.forEach(dish=>{
-      const cat=mapDishNameToCategory(dish);
-      let total=0;
-      const cells=storeList.map(s=>{
-        const recs=todayFc.filter(f=>f.store_id===s.id&&mapDishNameToCategory(f.dish_name)===cat);
-        const qty=recs.reduce((a,b)=>a+(b.qty||0),0);
-        total+=qty;
-        return `<td style="text-align:center;font-size:12px;">${qty>0?formatQty(qty):'–'}</td>`;
-      }).join('');
-      html+=`<tr><td data-no-translate style="font-size:11px;font-weight:600;">${getDishEmoji(dish)} ${dish}</td>${cells}<td style="font-weight:700;font-size:12px;color:var(--green);">${total>0?formatQty(total):'–'}</td></tr>`;
-    });
-    html+='</tbody></table></div>';
-  } else {
-    html+=`<div style="background:var(--surface-1);border-radius:10px;padding:12px;text-align:center;color:var(--muted);font-size:12px;">Noch keine Mengen für heute geplant</div>`;
-  }
 
   el.innerHTML=html;
   translateEl(el);
