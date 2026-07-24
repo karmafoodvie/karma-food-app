@@ -3441,12 +3441,21 @@ async function renderOrgForecast(){
   </div>
   <div style="font-size:11px;color:var(--muted);margin:-10px 0 12px;text-align:center;">${weekLabel}</div>`;
 
-  const [allForecasts, calendarEvents, refWeather]=await Promise.all([
+  // Vorwoche-Daten für lernfähigen Forecast
+  const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
+  const prevToDate=getWeekdayDates(orgForecastWeekOffset-1)[5];
+
+  const [allForecasts, calendarEvents, refWeather, prevForecasts, prevDisposals]=await Promise.all([
     api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
     getCalendarEvents().catch(()=>[]),
-    fetchWeatherForStore('lb', fromDate, toDate).catch(()=>({}))
+    fetchWeatherForStore('lb', fromDate, toDate).catch(()=>({})),
+    // Vorwoche Forecast (Basis für Vorschlag)
+    api(`forecast_qty?forecast_date=gte.${prevFromDate}&forecast_date=lte.${prevToDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
+    // Vorwoche Entsorgung (war zu viel / zu wenig?)
+    api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${prevToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time`).catch(()=>[])
   ]);
-  // fMap[date][store][dish][groesse] = rec
+
+  // fMap[date][store][dish][groesse] = rec (aktuelle/geplante Woche)
   const fMap={};
   (allForecasts||[]).forEach(f=>{
     if(!fMap[f.forecast_date])fMap[f.forecast_date]={};
@@ -3454,6 +3463,72 @@ async function renderOrgForecast(){
     if(!fMap[f.forecast_date][f.store_id][f.dish_name])fMap[f.forecast_date][f.store_id][f.dish_name]={};
     fMap[f.forecast_date][f.store_id][f.dish_name][f.groesse||'gross']=f;
   });
+
+  // prevFcMap[date][store][dish][groesse] = qty (Vorwoche Forecast-Basis)
+  const prevFcMap={};
+  (prevForecasts||[]).forEach(f=>{
+    if(!prevFcMap[f.forecast_date])prevFcMap[f.forecast_date]={};
+    if(!prevFcMap[f.forecast_date][f.store_id])prevFcMap[f.forecast_date][f.store_id]={};
+    if(!prevFcMap[f.forecast_date][f.store_id][f.dish_name])prevFcMap[f.forecast_date][f.store_id][f.dish_name]={};
+    prevFcMap[f.forecast_date][f.store_id][f.dish_name][f.groesse||'gross']=f.qty;
+  });
+
+  // prevDispMap[store][dish] = {leftover, soldOutEarly} aggregiert über Vorwoche
+  const prevDispMap={};
+  (prevDisposals||[]).forEach(d=>{
+    if(!prevDispMap[d.store_id])prevDispMap[d.store_id]={};
+    const cat=mapDishNameToCategory(d.dish_name);
+    const prev=prevDispMap[d.store_id][cat]||{leftover:0,soldOutEarly:false,count:0};
+    prev.leftover+=(d.leftover_qty||0);
+    if(d.sold_out_time) prev.soldOutEarly=true;
+    prev.count++;
+    prevDispMap[d.store_id][cat]=prev;
+  });
+
+  // Berechne Org-Vorschlag für Store+Datum+Dish
+  function computeOrgSuggestion(storeId, dish, dateStr, groesse){
+    // 1. Vorwoche gleicher Wochentag gleicher Store — als Basis
+    const prevDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[dish]?.[groesse||'gross'])||null;
+    if(prevQty==null) return null; // keine Vorwoche-Daten
+
+    let qty=prevQty;
+    let reasons=[];
+    reasons.push(`Vorwoche: ${formatQty(prevQty)} Bhlt`);
+
+    // 2. Entsorgung Vorwoche — war zu viel oder zu wenig?
+    const cat=mapDishNameToCategory(dish);
+    const disp=prevDispMap[storeId]?.[cat];
+    if(disp){
+      if(disp.soldOutEarly){
+        qty=Math.round((qty+0.25)*4)/4;
+        reasons.push('🔥 +0.25 (Vorwoche ausverkauft)');
+      } else if(disp.leftover>10){
+        qty=Math.max(0.25, Math.round((qty-0.5)*4)/4);
+        reasons.push('📦 -0.5 (viel übrig)');
+      } else if(disp.leftover>5){
+        qty=Math.max(0.25, Math.round((qty-0.25)*4)/4);
+        reasons.push('📦 -0.25 (etwas übrig)');
+      }
+    } else {
+      reasons.push('⚪ keine Entsorgung → 1:1 übernommen');
+    }
+
+    // 3. Wetter der kommenden Woche
+    const weather=refWeather?.[dateStr];
+    if(weather){
+      const temp=weather.temp_max||weather.temp||0;
+      if(temp>=28 && qty>0){
+        qty=Math.max(0.25, Math.round((qty-0.25)*4)/4);
+        reasons.push(`☀️ -0.25 (${temp}°C warm)`);
+      } else if(temp<=10 && qty>0){
+        qty=Math.round((qty+0.25)*4)/4;
+        reasons.push(`🥶 +0.25 (${temp}°C kalt)`);
+      }
+    }
+
+    return {qty, reason: reasons.join(' · ')};
+  }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
   let html=weekSwitcher;
@@ -3491,12 +3566,16 @@ async function renderOrgForecast(){
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
             if(rec||sz.k==='gross'){
               const manual=rec?.source==='manual';
+              const lasSugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, sz.k) : null;
+              const lasVal=rec?.qty??lasSugg?.qty??'';
+              const lasIsSugg=!rec && lasSugg!=null;
               lasHtml+=`<div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">
                 <span style="font-size:9px;color:var(--muted);min-width:14px;">${sz.l.split('·')[0]}</span>
-                <input type="number" step="0.25" value="${rec?.qty??''}" placeholder="–"
+                <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
                   onchange="updateForecastQtyOrgGroesse(this)"
-                  style="width:40px;text-align:center;border:1.5px solid ${manual?'#F97316':'var(--border)'};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':'#fff'};">
+                  title="${escAttr(lasSugg?.reason||'')}"
+                  style="width:40px;text-align:center;border:1.5px solid ${manual?'#F97316':(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(lasIsSugg?'#F0F9FF':'#fff')};">
               </div>`;
             }
           });
@@ -3514,9 +3593,18 @@ async function renderOrgForecast(){
         } else {
           const rec=((((fMap[dateStr]||{})[s.id]||{})[dish])||{})['gross'];
           const manual=rec?.source==='manual';
-          html+=`<td><input type="number" step="0.25" value="${rec?.qty??''}" placeholder="–" data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
-            onchange="updateForecastQtyOrg(this)"
-            style="width:44px;text-align:center;border:1.5px solid ${manual?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':'#fff'};"></td>`;
+          const sugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, 'gross') : null;
+          const displayVal=rec?.qty??sugg?.qty??'';
+          const isSugg=!rec && sugg!=null;
+          const title=sugg?.reason||'';
+          html+=`<td style="vertical-align:top;padding:3px;">
+            <input type="number" step="0.25" value="${displayVal}" placeholder="–"
+              data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
+              onchange="updateForecastQtyOrg(this)"
+              title="${escAttr(title)}"
+              style="width:44px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSugg?'#F0F9FF':'#fff')};">
+            ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
+          </td>`;
         }
       });
       html+='</tr>';
@@ -3524,7 +3612,10 @@ async function renderOrgForecast(){
     html+='</tbody></table></div></div>';
   }
 
-  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Orange = manuell angepasst (von einem Store oder von dir hier). Änderungen wirken sich sofort auf Store- und Küchen-Ansicht aus.</div>`;
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">
+    🔵 Blau = automatischer Vorschlag (Vorwoche + Entsorgung + Wetter) — Tooltip zeigt Begründung<br>
+    🟠 Orange = manuell angepasst · Änderungen wirken sofort auf Store & Küche
+  </div>`;
 
   document.getElementById('orgfc-content').innerHTML=html;
   translateEl(el);
