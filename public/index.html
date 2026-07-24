@@ -3467,13 +3467,15 @@ async function renderOrgForecast(){
     fMap[f.forecast_date][f.store_id][f.dish_name][f.groesse||'gross']=f;
   });
 
-  // prevFcMap[date][store][dish][groesse] = qty
+  // prevFcMap[date][store][CATEGORY][groesse] = qty
+  // Kategorie statt Gerichtsname — damit auch bei wechselndem Menü die Vorwoche gefunden wird
   const prevFcMap={};
   (prevForecasts||[]).forEach(f=>{
+    const cat=mapDishNameToCategory(f.dish_name);
     if(!prevFcMap[f.forecast_date])prevFcMap[f.forecast_date]={};
     if(!prevFcMap[f.forecast_date][f.store_id])prevFcMap[f.forecast_date][f.store_id]={};
-    if(!prevFcMap[f.forecast_date][f.store_id][f.dish_name])prevFcMap[f.forecast_date][f.store_id][f.dish_name]={};
-    prevFcMap[f.forecast_date][f.store_id][f.dish_name][f.groesse||'gross']=f.qty;
+    if(!prevFcMap[f.forecast_date][f.store_id][cat])prevFcMap[f.forecast_date][f.store_id][cat]={};
+    prevFcMap[f.forecast_date][f.store_id][cat][f.groesse||'gross']=f.qty;
   });
 
   // prevDispMap[store][category] = {leftover, soldOutEarly}
@@ -3508,8 +3510,8 @@ async function renderOrgForecast(){
     const cat=mapDishNameToCategory(dish);
     const prevDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
 
-    // Vorwoche Forecast (nur confirmed/manual — source='manual' oder existiert in DB)
-    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[dish]?.[groesse||'gross'])||null;
+    // Vorwoche Forecast — lookup via Kategorie (nicht dish_name, da Gerichte wöchentlich wechseln)
+    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[cat]?.[groesse||'gross'])||null;
     if(prevQty==null) return null; // Noch keine History → kein Vorschlag, leer lassen
 
     let qty=prevQty;
@@ -6043,8 +6045,11 @@ const MENU_SLOTS=[{k:'salat',l:'Salat'},{k:'gericht2',l:'Gericht 2'},{k:'gericht
 let kitchenTab='morgen';
 let kitchenForecastManualOffset=null; // null = automatisch (13-Uhr-Regel), sonst manuell per Vorherige/Nächste gesetzt
 function changeKitchenForecastWeek(d){
-  const base = kitchenForecastManualOffset ?? (new Date().getHours()>=13?1:0);
-  kitchenForecastManualOffset = base + d;
+  const _nowCKFW=new Date(); const _isFridayCKFW=_nowCKFW.getDay()===5;
+  const base = kitchenForecastManualOffset ?? (_isFridayCKFW && _nowCKFW.getHours()>=13?1:0);
+  const next = base + d;
+  // Nicht weiter als -1 (letzte Woche) oder +2 (übernächste Woche) erlauben
+  kitchenForecastManualOffset = Math.max(-1, Math.min(2, next));
   renderKitchen();
 }
 window.changeKitchenForecastWeek=changeKitchenForecastWeek;
@@ -6460,8 +6465,9 @@ async function renderKitchen(){
 
     html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 2px;">
       <button onclick="changeKitchenForecastWeek(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">← Vorherige</button>
-      <div style="text-align:center;">
+      <div style="text-align:center;cursor:pointer;" onclick="kitchenForecastManualOffset=null;renderKitchen()" title="Klick: zurück zur automatischen Woche">
         <div style="font-size:13px;font-weight:600;">${nwLabel}</div>
+        <div style="font-size:9px;color:var(--muted);">tippen zum Zurücksetzen</div>
       </div>
       <button onclick="changeKitchenForecastWeek(1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">Nächste →</button>
     </div>
