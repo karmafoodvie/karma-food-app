@@ -6651,8 +6651,8 @@ async function renderKitchen(){
   };
   // Tab-Labels: Forecast zeigt immer die korrekte Woche mit Datum Mo–Fr
   const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-  const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style=\'font-size:10px;font-weight:400;\'>'+forecastDateRange+'</span>';
-  const menuTabLabel='🗓️ Menüs<br><span style=\'font-size:10px;font-weight:400;\'>Woche '+CURRENT_MENU_WOCHE+'</span>';
+  const forecastTabLabel=(kitchenWeekOffset===0?'📅 Diese Woche':'📅 Nächste Woche');
+  const menuTabLabel='🗓️ Menüs Woche '+CURRENT_MENU_WOCHE;
   html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}</div>`;
 
   if(kitchenTab==='morgen'){
@@ -6813,12 +6813,12 @@ async function renderKitchen(){
 
     for(let wd=1; wd<=5; wd++){
       const wdStr=WEEKDAY_STR[wd];
-      const dishNames=getMenuDishNamesForDay(wdStr, dateStr); // aus dem aktuell laufenden Menü
+      const dateStr=weekDates[wd];
+      const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
       const hasLasagne=dishNames.some(n=>n.includes('Lasagne'));
       const salatName=getSalatNameForDate(dateStr);
-    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
+      const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
       const isToday=wd===todayWeekday;
-      const dateStr=weekDates[wd];
       const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
       html+=`<div class="section-lbl" style="${isToday?'color:#0EA5E9;font-weight:700;':''}">${WEEKDAY_NAMES[wd]} · ${dateLabel}${isToday?' — heute':''}${hasLasagne?' · 🥗 grüner Salat automatisch':''}</div>`;
