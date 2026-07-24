@@ -2337,7 +2337,6 @@ const STORE_COORDS = {
 let _weatherCache = {}; // storeId -> {dateStr -> {tempMax, precipProb}}
 let _calendarEventsCache = null; // alle calendar_events, einmal pro Sitzung geladen
 let _forecastSettingsCache = {}; // storeId -> settings row
-let _salesHistoryCache = {}; // storeId -> {category -> [{sale_date, qty}, ...]}
 
 // Bricht Anfragen (Supabase & externe wie Wetter) nach einer festen Zeit ab, statt die Seite bei einer
 // langsamen/gestörten Verbindung (Mittagsstoßzeit, schlechtes WLAN) unbegrenzt hängen zu lassen.
@@ -2431,21 +2430,6 @@ async function getForecastSettings(storeId){
 
 // Holt die GESAMTE Verkaufshistorie einer Filiale in EINER Anfrage (statt einer eigenen Anfrage pro
 // Gericht/Tag) — wichtig für Stabilität bei vielen gleichzeitigen Zugriffen / schlechter Verbindung.
-async function getSalesHistoryForStore(storeId){
-  if(_salesHistoryCache[storeId]) return _salesHistoryCache[storeId];
-  const cacheKey=`sales_hist_${storeId}`;
-  const stored=cacheGet(cacheKey);
-  if(stored){ _salesHistoryCache[storeId]=stored; return stored; }
-  const rows = await api(`sales_history?store_id=eq.${storeId}&order=sale_date.desc&limit=3000&select=sale_date,dish_category,qty`).catch(()=>[]);
-  const byCategory={};
-  (rows||[]).forEach(r=>{
-    if(!byCategory[r.dish_category]) byCategory[r.dish_category]=[];
-    byCategory[r.dish_category].push(r);
-  });
-  _salesHistoryCache[storeId]=byCategory;
-  cacheSet(cacheKey, byCategory);
-  return byCategory;
-}
 
 // Ermittelt Wetter- und Kalender-Zuschläge/Abschläge für einen Tag, inkl. lesbarer Begründung
 function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings){
@@ -2499,43 +2483,7 @@ function mapDishNameToCategory(dishName, slot){
   return 'Special';
 }
 
-function computeAutoSuggestion(storeId, dishName, weekdayStr, dateStr, weatherMap, calendarEvents, settings, salesHistoryByCategory, lastWeekDisposalByDate){
-  // Basis ist jetzt die VORWOCHE (letztes tatsächliches Vorkommen), NICHT ein Mehrwochen-Schnitt.
-  // Bei volatilem Sommerwetter reagiert ein langer Durchschnitt zu träge — die letzte Woche ist
-  // der ehrlichste Anhaltspunkt, kombiniert mit Wetter/Feiertag der kommenden Woche.
-  const category=mapDishNameToCategory(dishName);
-  const history=salesHistoryByCategory?.[category]||[];
-  const weekdayMatches=history.filter(h=>WEEKDAY_STR[new Date(h.sale_date+'T00:00:00').getDay()]===weekdayStr);
-  if(!weekdayMatches.length) return null;
-  const lastWeek=weekdayMatches[0]; // bereits nach Datum absteigend sortiert -> [0] = letztes Vorkommen
-  const baseQtyPortionen=lastWeek.qty;
-  // sales_history ist in VERKAUFTEN PORTIONEN, die Forecast-Anzeige ist aber in BEHÄLTERN
-  // (gleiche Umrechnung wie im Entsorgung-Modul: 1 Behälter = 20 Portionen).
-  const baseQty=baseQtyPortionen/20;
 
-  if(!dateStr || !weatherMap || !calendarEvents || !settings){
-    return Math.round(baseQty*4)/4; // Fallback: alte Signatur ohne Wetter/Kalender
-  }
-  const {pct:weatherPct, reason:weatherReason}=getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings);
-
-  // Korrektur anhand der Entsorgung derselben Kategorie genau eine Woche zuvor: viel übrig -> zusätzlich
-  // reduzieren, früh ausverkauft -> zusätzlich erhöhen. Das ist die ehrliche Rückmeldung "hat die letzte
-  // Zahl gestimmt?", statt sich nur auf Wetterdaten zu verlassen.
-  let dispPct=0, dispReason='';
-  const targetDate=new Date(dateStr+'T00:00:00');
-  const lastWeekDateStr=new Date(targetDate.getTime()-7*86400000).toISOString().split('T')[0];
-  const dispRec=lastWeekDisposalByDate?.[lastWeekDateStr]?.[category];
-  if(dispRec){
-    if(dispRec.soldOutEarly){ dispPct+=10; dispReason='🔥 Vorwoche ausverkauft'; }
-    else if(dispRec.leftoverPortionen>5){ dispPct-=10; dispReason='🍽️ Vorwoche viel übrig'; }
-  }
-
-  const totalPct=weatherPct+dispPct;
-  const adjustedQty=Math.round((baseQty*(1+totalPct/100))*4)/4;
-  const baseLabel=`Basis: Vorwoche ${Math.round(baseQty*4)/4} Behälter (${weekdayStr})`;
-  const reasonParts=[weatherReason, dispReason].filter(Boolean).join(' · ');
-  return {qty: adjustedQty, reason: reasonParts ? `${baseLabel} · ${reasonParts}` : baseLabel};
-}
 function isLasagneLocked(dateStr){
   const cutoff=new Date(dateStr+'T12:00:00');
   cutoff.setDate(cutoff.getDate()-1); // Vortag, 12:00 Uhr
@@ -2747,24 +2695,30 @@ async function renderForecastOrderTab(el, tabHtml){
   const fMap={};
   Object.keys(fRecordsMap).forEach(d=>{ fMap[d]={}; Object.keys(fRecordsMap[d]).forEach(dish=>{ fMap[d][dish]=fRecordsMap[d][dish][0]; }); });
 
-  // Wetter, Feiertage/Ferien, Filial-Einstellungen & GESAMTE Verkaufshistorie einmal laden
-  // (statt pro Zelle einzeln nachzufragen — wichtig bei vielen Zellen/schlechter Verbindung)
+  // Vorwoche forecast_qty + Entsorgung + Wetter — kein Sales History mehr
   const lastWeekFrom=new Date(new Date(fromDate+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
   const lastWeekTo=new Date(new Date(toDate+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
-  const [weatherMap, calendarEvents, fcSettings, salesHistory, lastWeekDisposalRaw] = await Promise.all([
+  const [weatherMap, calendarEvents, fcSettings, lastWeekFcRaw, lastWeekDisposalRaw] = await Promise.all([
     fetchWeatherForStore(currentStore.id, fromDate, toDate),
     getCalendarEvents(),
     getForecastSettings(currentStore.id),
-    getSalesHistoryForStore(currentStore.id),
+    api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${lastWeekFrom}&forecast_date=lte.${lastWeekTo}&select=forecast_date,dish_name,qty,groesse`).catch(()=>[]),
     api(`disposal?store_id=eq.${currentStore.id}&disposal_date=gte.${lastWeekFrom}&disposal_date=lte.${lastWeekTo}&select=disposal_date,dish_name,leftover_qty,sold_out_time`).catch(()=>[])
   ]);
-  // Entsorgung der Vorwoche nach Datum & Kategorie gruppieren — Grundlage für die Korrektur
-  // "hat die letzte Zahl gestimmt?" statt sich nur auf Wetterdaten zu verlassen.
+  // Vorwoche Forecast nach Datum & Kategorie — Basis für Vorschlag
+  const lastWeekFcByDate={};
+  (lastWeekFcRaw||[]).forEach(f=>{
+    const cat=mapDishNameToCategory(f.dish_name);
+    if(!lastWeekFcByDate[f.forecast_date])lastWeekFcByDate[f.forecast_date]={};
+    if(!lastWeekFcByDate[f.forecast_date][cat])lastWeekFcByDate[f.forecast_date][cat]={};
+    lastWeekFcByDate[f.forecast_date][cat][f.groesse||'gross']=f.qty;
+  });
+  // Entsorgung der Vorwoche nach Datum & Kategorie
   const lastWeekDisposalByDate={};
   (lastWeekDisposalRaw||[]).forEach(d=>{
     const cat=mapDishNameToCategory(d.dish_name);
-    if(!lastWeekDisposalByDate[d.disposal_date]) lastWeekDisposalByDate[d.disposal_date]={};
-    const ex=lastWeekDisposalByDate[d.disposal_date][cat]||{leftoverPortionen:0, soldOutEarly:false};
+    if(!lastWeekDisposalByDate[d.disposal_date])lastWeekDisposalByDate[d.disposal_date]={};
+    const ex=lastWeekDisposalByDate[d.disposal_date][cat]||{leftoverPortionen:0,soldOutEarly:false};
     ex.leftoverPortionen+=(d.leftover_qty||0);
     ex.soldOutEarly=ex.soldOutEarly||!!d.sold_out_time;
     lastWeekDisposalByDate[d.disposal_date][cat]=ex;
@@ -2800,21 +2754,33 @@ async function renderForecastOrderTab(el, tabHtml){
     const lastWeekDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
     allDishes.forEach(dish=>{
       const category=mapDishNameToCategory(dish);
-      const history=(salesHistory||{})[category]||[];
-      const lastEntry=history.find(h=>h.sale_date===lastWeekDateStr);
+      const prevQty=(lastWeekFcByDate[lastWeekDateStr]?.[category]?.['gross'])||null;
       const dispRec=(lastWeekDisposalByDate[lastWeekDateStr]||{})[category];
       if(!lastWeekQtyMap[dateStr]) lastWeekQtyMap[dateStr]={};
       lastWeekQtyMap[dateStr][dish]={
-        qty: lastEntry ? Math.round((lastEntry.qty/20)*4)/4 : null,
+        qty: prevQty,
         soldOutEarly: dispRec?.soldOutEarly||false,
         leftover: dispRec?.leftoverPortionen||0
       };
     });
   }
   suggestionJobs.forEach(j=>{
-    const result=computeAutoSuggestion(currentStore.id, j.dish, j.wdStr, j.dateStr, weatherMap, calendarEvents, fcSettings, salesHistory, lastWeekDisposalByDate);
+    const cat=mapDishNameToCategory(j.dish);
+    const prevDateStr=new Date(new Date(j.dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+    const prevQty=(lastWeekFcByDate[prevDateStr]?.[cat]?.['gross'])||null;
+    if(prevQty==null){ if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={}; suggestionMap[j.dateStr][j.dish]=null; return; }
+    let qty=prevQty;
+    const reasons=[`Vorwoche: ${formatQty(prevQty)} Bhlt`];
+    const disp=(lastWeekDisposalByDate[prevDateStr]||{})[cat];
+    if(disp){
+      if(disp.soldOutEarly){ qty=Math.round((qty+0.25)*4)/4; reasons.push('🔥 +0.25 ausverkauft'); }
+      else if(disp.leftoverPortionen>10){ qty=Math.max(0.25,Math.round((qty-0.5)*4)/4); reasons.push('📦 −0.5 viel übrig'); }
+      else if(disp.leftoverPortionen>4){ qty=Math.max(0.25,Math.round((qty-0.25)*4)/4); reasons.push('📦 −0.25 etwas übrig'); }
+    }
+    const {pct:wPct,reason:wReason}=getDayModifiers(j.dateStr, currentStore.id, weatherMap, calendarEvents, fcSettings);
+    if(wPct!==0){ qty=Math.max(0.25,Math.round((qty*(1+wPct/100))*4)/4); if(wReason)reasons.push(wReason); }
     if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={};
-    suggestionMap[j.dateStr][j.dish]=result;
+    suggestionMap[j.dateStr][j.dish]={qty,reason:reasons.join(' · ')};
   });
 
   // Kompaktes Eingabefeld für eine Zelle (Tag × Gericht)
@@ -2888,14 +2854,18 @@ async function renderForecastOrderTab(el, tabHtml){
   }
 
   let anyLasagne=false;
+  // Spaltenheader: echter Salatname + echte Gerichtsnamen von Montag dieser Woche
+  const _headerDate=weekDates[1];
+  const _headerSalat=getSalatNameForDate(_headerDate);
+  const _headerDishes=getMenuDishNamesForDay(WEEKDAY_STR[1], _headerDate);
   html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
     <thead>
       <tr>
         <th style="text-align:left;">Tag</th>
-        <th style="color:#A21CAF;">Salat</th>
-        <th data-no-translate>Gericht 2</th>
-        <th data-no-translate>Gericht 3</th>
-        <th>Reis</th>
+        <th style="color:#A21CAF;font-size:10px;" data-no-translate>${_headerSalat||'Salat'}</th>
+        <th data-no-translate style="font-size:10px;">${_headerDishes[0]||'Gericht 2'}</th>
+        <th data-no-translate style="font-size:10px;">${_headerDishes[1]||'Gericht 3'}</th>
+        <th style="font-size:10px;">Reis</th>
       </tr>
       <tr style="background:var(--surface-1);">
         <td style="font-size:9px;color:var(--muted);padding:2px 6px;">Behälter</td>
@@ -3489,7 +3459,7 @@ async function renderOrgForecast(){
     prevDispMap[d.store_id][cat]=prev;
   });
 
-  // prevDisposalByDate[date][category] = {leftoverPortionen, soldOutEarly} — für computeAutoSuggestion
+  // prevDisposalByDate[date][category] = {leftoverPortionen, soldOutEarly}
   const prevDisposalByDate={};
   (prevDisposals||[]).forEach(d=>{
     if(!prevDisposalByDate[d.disposal_date])prevDisposalByDate[d.disposal_date]={};
