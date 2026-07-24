@@ -248,6 +248,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="nav-btn" onclick="goTo('management')" id="nav-org-management" style="display:none;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span id="navlabel-management">Management</span>
     </button>
+    <!-- ORG ZENTRALE NAV — 5 feste Tabs -->
+    <button class="nav-btn" onclick="goTo('home')" id="nav-org-ueberblick" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Überblick
+    </button>
+    <button class="nav-btn" onclick="goTo('broadcast')" id="nav-org-msg" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>Nachricht
+    </button>
+    <button class="nav-btn" onclick="goTo('orgForecast')" id="nav-org-mengen" style="display:none;">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Mengen
+    </button>
+    <button class="nav-btn" onclick="goTo('hygieneSchulung')" id="nav-org-hygiene" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Hygiene
+    </button>
+    <button class="nav-btn" onclick="goTo('maengel')" id="nav-org-schaeden" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Schäden
+    </button>
 
   </nav>
 </div>
@@ -1073,18 +1089,25 @@ async function loginAs(store){
   const col=STORE_COLORS[store.id]||'#1D9E75';
   av.style.background=col+'30'; av.style.color=col;
   if(store.id==='zentrale'){
+    // Store-Tabs ausblenden
     document.getElementById('nav-order').style.display='none';
     document.getElementById('nav-forecast').style.display='none';
     document.getElementById('nav-check').style.display='none';
     document.getElementById('nav-disposal').style.display='none';
     document.getElementById('nav-kontrolle').style.display='none';
-    // Organisation zeigt jetzt nur noch Management (Tini) — Team/Nooru/Michi sind zu Kitchen 3400
-    // gewandert, da die Küche vor Ort eigenständig arbeitet und nicht über Organisation laufen muss.
+    document.getElementById('nav-home').style.display='none';
+    // Alte Org-Tabs ausblenden
     document.getElementById('nav-org-sweets').style.display='none';
     document.getElementById('nav-org-kueche').style.display='none';
     document.getElementById('nav-org-transporter').style.display='none';
     document.getElementById('nav-org-kc').style.display='none';
-    document.getElementById('nav-org-management').style.display='flex';
+    document.getElementById('nav-org-management').style.display='none';
+    // Neue 5 Org-Tabs einblenden
+    document.getElementById('nav-org-ueberblick').style.display='flex';
+    document.getElementById('nav-org-msg').style.display='flex';
+    document.getElementById('nav-org-mengen').style.display='flex';
+    document.getElementById('nav-org-hygiene').style.display='flex';
+    document.getElementById('nav-org-schaeden').style.display='flex';
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
   } else if(store.id==='kitchen'){
@@ -1161,11 +1184,18 @@ function goTo(v, noPush=false){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   let navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
   if(currentStore?.id==='zentrale'){
-    if(v==='sweets') navId='nav-org-sweets';
+    // Neue 5-Tab Org-Nav
+    if(v==='home') navId='nav-org-ueberblick';
+    else if(v==='broadcast' || v==='msg') navId='nav-org-msg';
+    else if(v==='orgForecast' || v==='forecastReview') navId='nav-org-mengen';
+    else if(v==='hygieneSchulung' || v==='schulung') navId='nav-org-hygiene';
+    else if(v==='maengel') navId='nav-org-schaeden';
+    // Alte Tabs (Sweets, Küche etc.) behalten ihre IDs
+    else if(v==='sweets') navId='nav-org-sweets';
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
     else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
-    else if(v==='management' || v==='hygieneSchulung' || v==='orgForecast' || v==='guide' || v==='forecastReview' || v==='verfuegbarkeit' || v==='msg' || v==='dailycheck' || v==='kontrolle') navId='nav-org-management';
+    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle') navId='nav-org-management';
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
