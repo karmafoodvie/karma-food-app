@@ -876,7 +876,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.0.5';
+const APP_VERSION = '6.0.6';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1875,6 +1875,16 @@ async function renderHome(){
 
     <!-- PHASE 2: WÄHREND DER SCHICHT -->
     <div class="section-lbl" style="margin-top:4px;margin-bottom:4px;">☕ Während der Schicht</div>
+    ${(()=>{
+      const _todayStrHome=new Date().toISOString().split('T')[0];
+      const _laufendeWocheHome=getMenuWocheForDate(_todayStrHome);
+      const _WC={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
+      const _wc=_WC[_laufendeWocheHome]||'var(--green)';
+      return `<div style="display:flex;align-items:center;justify-content:center;gap:8px;background:${_wc}18;border:1.5px solid ${_wc};border-radius:12px;padding:8px 14px;margin-bottom:8px;">
+        <span style="font-size:16px;">🗓️</span>
+        <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:14px;color:${_wc};">Woche ${_laufendeWocheHome}</span>
+      </div>`;
+    })()}
     ${uebergabeNotiz?`<div style="background:#FFF7ED;border:1px solid #F97316;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11px;"><strong style="color:#E0521F;">📋 Übergabe gestern:</strong> ${uebergabeNotiz}</div>`:''}
     ${(()=>{
       const todayMenu=getTodayMenu()||[];
@@ -6757,6 +6767,12 @@ async function renderKitchenDaily(){
   const salatName=getSalatNameForDate(todayDate);
 
   let html=backToHomeHtml();
+  const _WOCHE_COLORS_KD={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
+  const _wColKD=_WOCHE_COLORS_KD[woche]||'var(--green)';
+  html+=`<div style="display:flex;align-items:center;justify-content:center;gap:8px;background:${_wColKD}18;border:1.5px solid ${_wColKD};border-radius:12px;padding:9px 14px;margin-bottom:12px;">
+    <span style="font-size:18px;">🗓️</span>
+    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:15px;color:${_wColKD};">Woche ${woche}</span>
+  </div>`;
   html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
   html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ GERICHTE HEUTE</div>`;
 
@@ -6839,6 +6855,14 @@ async function renderKitchenDailyHtml(){
   const salatName=getSalatNameForDate(todayDate);
 
   let html=`<div style="font-size:14px;font-weight:600;padding:2px 0 10px;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
+
+  const _WOCHE_COLORS_KD={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
+  const _kdWoche=getMenuWocheForDate(todayDate);
+  const _kdWCol=_WOCHE_COLORS_KD[_kdWoche]||'var(--green)';
+  html+=`<div style="display:flex;align-items:center;justify-content:center;gap:8px;background:${_kdWCol}18;border:1.5px solid ${_kdWCol};border-radius:12px;padding:9px 14px;margin-bottom:12px;">
+    <span style="font-size:18px;">🗓️</span>
+    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:15px;color:${_kdWCol};">Woche ${_kdWoche}</span>
+  </div>`;
 
   // Heutige Gerichte mit Allergenen
   html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ WÄHREND DER SCHICHT</div>`;
