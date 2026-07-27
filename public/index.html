@@ -876,7 +876,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.0.6';
+const APP_VERSION = '6.0.7';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1880,9 +1880,8 @@ async function renderHome(){
       const _laufendeWocheHome=getMenuWocheForDate(_todayStrHome);
       const _WC={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
       const _wc=_WC[_laufendeWocheHome]||'var(--green)';
-      return `<div style="display:flex;align-items:center;justify-content:center;gap:8px;background:${_wc}18;border:1.5px solid ${_wc};border-radius:12px;padding:8px 14px;margin-bottom:8px;">
-        <span style="font-size:16px;">🗓️</span>
-        <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:14px;color:${_wc};">Woche ${_laufendeWocheHome}</span>
+      return `<div style="display:inline-flex;align-items:center;background:#fff;border:1.5px solid ${_wc};border-radius:8px;padding:3px 10px;margin-bottom:8px;">
+        <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${_laufendeWocheHome}</span>
       </div>`;
     })()}
     ${uebergabeNotiz?`<div style="background:#FFF7ED;border:1px solid #F97316;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11px;"><strong style="color:#E0521F;">📋 Übergabe gestern:</strong> ${uebergabeNotiz}</div>`:''}
@@ -5227,9 +5226,8 @@ async function renderWaehrend(){
   const _wCol=_WOCHE_COLORS[_laufendeWoche]||'var(--green)';
 
   let html=backToHomeHtml();
-  html+=`<div style="display:flex;align-items:center;justify-content:center;gap:8px;background:${_wCol}18;border:1.5px solid ${_wCol};border-radius:12px;padding:9px 14px;margin-bottom:12px;">
-    <span style="font-size:18px;">🗓️</span>
-    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:15px;color:${_wCol};">Woche ${_laufendeWoche}</span>
+  html+=`<div style="display:inline-flex;align-items:center;background:#fff;border:1.5px solid ${_wCol};border-radius:8px;padding:3px 10px;margin-bottom:12px;">
+    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${_laufendeWoche}</span>
   </div>`;
   html+=`<div style="background:var(--green-light);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
     <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:4px;">☕ Daily Check-up erledigt!</div>
@@ -5705,7 +5703,7 @@ async function renderSchichtende(){
   const tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
 
   // Alle Daten parallel laden
-  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, ordersToday, kcSubToday, forecastTomorrow] = await Promise.all([
+  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, ordersToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow] = await Promise.all([
     api('checklist_templates?list_type=eq.abschluss&select=id').catch(()=>[]),
     api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`).catch(()=>[]),
     api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=id`).catch(()=>[]),
@@ -5716,7 +5714,8 @@ async function renderSchichtende(){
     api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=article_id`).catch(()=>[]),
     api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=id`).catch(()=>[]),
-    api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${tomorrow}&select=id`).catch(()=>[])
+    api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${tomorrow}&select=id`).catch(()=>[]),
+    api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${tomorrow}&is_adjusted=eq.true&select=id&limit=1`).catch(()=>[])
   ]);
 
   const clDoneIds=new Set((clDoneToday||[]).map(x=>x.template_id));
@@ -5731,7 +5730,7 @@ async function renderSchichtende(){
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
-    {id:'wochensalat', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen', done:(wochensalatToday||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
+    {id:'wochensalat', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen — oder alternativ: Beilagen für morgen anpassen', done:(wochensalatToday||[]).length>0 || (beilagenAdjustedTomorrow||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
@@ -5745,7 +5744,7 @@ async function renderSchichtende(){
     abschluss: {emoji:'💡', label:'Abschluss-Checkliste (optionale Hilfe)', sub:`${clDoneCount} von ${clTotal} Punkten — kein Pflichtschritt`, link:'check'},
     entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
     forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', link:'order', orderTab:'forecast'},
-    wochensalat: {emoji:'🥗', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen', link:'order', orderTab:'kueche'},
+    wochensalat: {emoji:'🥗', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen — oder: Beilagen für morgen anpassen', link:'order', orderTab:'kueche'},
     dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
     reinigung_protokoll: {emoji:'🧽', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', link:null},
     sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Bestellung für morgen', link:'order', orderTab:'sweets'},
@@ -5756,7 +5755,7 @@ async function renderSchichtende(){
 
   const requiredSteps=schritte.filter(s=>!s.optional);
   const open=schritte.filter(s=>!s.done);
-  const done=schritte.filter(s=>s.done);
+  const done=schritte.filter(s=>s.done && !s.optional);
   const requiredOpen=requiredSteps.filter(s=>!s.done);
   const allDone=requiredOpen.length===0; // optionale Schritte (Abschluss-Checkliste) blockieren den Abschluss nicht
   const alreadySubmitted=(uebergabeToday||[]).length>0 && allDone;
@@ -5784,6 +5783,9 @@ async function renderSchichtende(){
 
   // OFFENE SCHRITTE — nach Themen gruppiert, damit es nicht wie eine riesige Liste wirkt
   if(open.length>0){
+    if(requiredOpen.length>0){
+      html+=`<div style="font-size:12px;font-weight:600;color:var(--sub);margin:2px 0 2px;">🔓 Das fehlt noch (${requiredOpen.length}):</div>`;
+    }
     const GROUP_ORDER=['kueche','bestellungen','sonstiges'];
     GROUP_ORDER.forEach(g=>{
       const groupSteps=open.filter(s=>s.group===g && !s.optional);
@@ -6381,11 +6383,13 @@ async function renderDisposal(){
     html+=`<tr style="${isDone?'background:#F0FDF4;':''}">
       <td data-no-translate style="font-size:12px;"><div style="display:flex;align-items:center;gap:7px;">${dishImgHtml(dishName,38)}<div>${isDone?'<span style="color:var(--green);margin-right:2px;">✓</span>':''}<span style="font-weight:600;">${dishName}</span><div style="font-size:10px;color:var(--muted);">${s.l}</div></div></div></td>
       <td>
-        <input type="time" value="${soldOut}"
-          onclick="if(!this.value){const n=new Date();this.value=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');updateSoldOutTime('${s.k}','${dishNameSafe}',this.value);}"
-          onchange="updateSoldOutTime('${s.k}','${dishNameSafe}',this.value)"
-          style="width:88px;padding:5px;border:1.5px solid ${soldOut?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;background:${soldOut?'#FEF2F2':'#fff'};color:${soldOut?'#991B1B':'#1a1a18'};">
-        ${soldOut?`<button onclick="clearSoldOutTime('${s.k}','${dishNameSafe}')" title="Zeit löschen" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;">✕</button>`:'<span style="font-size:10px;color:var(--muted);">antippen</span>'}
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input type="text" inputmode="numeric" value="${soldOut}" placeholder="hh:mm" maxlength="5"
+            oninput="formatTimeTextInput(this)"
+            onchange="commitSoldOutTimeText('${s.k}','${dishNameSafe}',this)"
+            style="width:56px;padding:5px;border:1.5px solid ${soldOut?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;background:${soldOut?'#FEF2F2':'#fff'};color:${soldOut?'#991B1B':'#1a1a18'};">
+          ${soldOut?`<button onclick="clearSoldOutTime('${s.k}','${dishNameSafe}')" title="Zeit löschen" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;">✕</button>`:`<button onclick="updateSoldOutTime('${s.k}','${dishNameSafe}',(()=>{const n=new Date();return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');})())" title="Jetzt eintragen" style="font-size:10px;color:var(--green);background:var(--green-light);border:none;border-radius:5px;padding:3px 6px;cursor:pointer;white-space:nowrap;">jetzt</button>`}
+        </div>
       </td>
       <td>
         <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid ${isDone?'var(--green)':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;">
@@ -6428,6 +6432,26 @@ async function clearSoldOutTime(slot, dishName){
   await updateSoldOutTime(slot, dishName, null);
   renderDisposal();
 }
+
+// Tippbare Uhrzeit statt Scroll-Rad: während des Tippens automatisch "hh:mm" formatieren
+function formatTimeTextInput(el){
+  let digits=el.value.replace(/[^0-9]/g,'').slice(0,4);
+  if(digits.length>=3){ digits=digits.slice(0,2)+':'+digits.slice(2); }
+  el.value=digits;
+}
+window.formatTimeTextInput=formatTimeTextInput;
+
+function commitSoldOutTimeText(slot, dishName, el){
+  const raw=el.value.trim();
+  if(!raw){ updateSoldOutTime(slot, dishName, null); return; }
+  const m=raw.match(/^(\d{1,2}):?(\d{2})$/);
+  if(!m){ showToast('Bitte als hh:mm eingeben, z.B. 13:45'); return; }
+  const hh=parseInt(m[1],10), mm=parseInt(m[2],10);
+  if(hh>23||mm>59){ showToast('Ungültige Uhrzeit'); return; }
+  const formatted=String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+  updateSoldOutTime(slot, dishName, formatted);
+}
+window.commitSoldOutTimeText=commitSoldOutTimeText;
 
 async function updateSoldOutTime(slot, dishName, value){
   const today=new Date().toISOString().split('T')[0];
@@ -6769,9 +6793,8 @@ async function renderKitchenDaily(){
   let html=backToHomeHtml();
   const _WOCHE_COLORS_KD={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
   const _wColKD=_WOCHE_COLORS_KD[woche]||'var(--green)';
-  html+=`<div style="display:flex;align-items:center;justify-content:center;gap:8px;background:${_wColKD}18;border:1.5px solid ${_wColKD};border-radius:12px;padding:9px 14px;margin-bottom:12px;">
-    <span style="font-size:18px;">🗓️</span>
-    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:15px;color:${_wColKD};">Woche ${woche}</span>
+  html+=`<div style="display:inline-flex;align-items:center;background:#fff;border:1.5px solid ${_wColKD};border-radius:8px;padding:3px 10px;margin-bottom:12px;">
+    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${woche}</span>
   </div>`;
   html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
   html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ GERICHTE HEUTE</div>`;
@@ -6859,9 +6882,8 @@ async function renderKitchenDailyHtml(){
   const _WOCHE_COLORS_KD={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
   const _kdWoche=getMenuWocheForDate(todayDate);
   const _kdWCol=_WOCHE_COLORS_KD[_kdWoche]||'var(--green)';
-  html+=`<div style="display:flex;align-items:center;justify-content:center;gap:8px;background:${_kdWCol}18;border:1.5px solid ${_kdWCol};border-radius:12px;padding:9px 14px;margin-bottom:12px;">
-    <span style="font-size:18px;">🗓️</span>
-    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:15px;color:${_kdWCol};">Woche ${_kdWoche}</span>
+  html+=`<div style="display:inline-flex;align-items:center;background:#fff;border:1.5px solid ${_kdWCol};border-radius:8px;padding:3px 10px;margin-bottom:12px;">
+    <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${_kdWoche}</span>
   </div>`;
 
   // Heutige Gerichte mit Allergenen
