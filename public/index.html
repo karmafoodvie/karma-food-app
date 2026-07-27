@@ -876,7 +876,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.0.8';
+const APP_VERSION = '6.0.9';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3853,6 +3853,56 @@ async function renderOrgForecast(){
   }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
+  // Kopiert Mengen aus der aktuell laufenden Woche in die angezeigte (nächste) Woche —
+  // Zuordnung erfolgt über die Position im Tag (Salat/Gericht1/Gericht2/Reis), nicht über den
+  // Gerichtsnamen, da sich Gerichte wöchentlich ändern. Füllt nur leere Felder, überschreibt nichts.
+  async function orgFcCopyFromCurrentWeek(){
+    if(orgForecastWeekOffset!==1){ showToast('Nur bei "Nächste Woche" verfügbar'); return; }
+    let filled=0;
+    for(let wd=1; wd<=5; wd++){
+      const wdStr=WEEKDAY_STR[wd];
+      const targetDateStr=weekDates[wd];
+      const prevDateStr=prevFromDate ? new Date(new Date(targetDateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0] : null;
+      if(!prevDateStr) continue;
+      const prevDishNames=getMenuDishNamesForDay(wdStr, prevDateStr);
+      const prevSalatName=getSalatNameForDate(prevDateStr);
+      const prevAllDishes=[prevSalatName, ...prevDishNames, REIS_DISH_NAME].filter(Boolean);
+
+      storeList.forEach(st=>{
+        prevAllDishes.forEach((prevDishName, idx)=>{
+          const prevRecs=(prevForecasts||[]).filter(f=>f.store_id===st.id && f.forecast_date===prevDateStr && f.dish_name===prevDishName);
+          if(!prevRecs.length) return;
+          // Ziel-Input(s) an derselben Position (Store + Wochentag) in der angezeigten Woche finden
+          const targetInputs=[...document.querySelectorAll(`#orgfc-content input[data-store="${st.id}"][data-date="${targetDateStr}"]`)];
+          // Gruppiere Ziel-Inputs nach Gericht (data-dish), in Tabellen-Reihenfolge — Position idx entspricht derselben Spalte
+          const dishOrder=[...new Set(targetInputs.map(i=>i.dataset.dish))];
+          const targetDish=dishOrder[idx];
+          if(!targetDish) return;
+          const cellInputs=targetInputs.filter(i=>i.dataset.dish===targetDish);
+          cellInputs.forEach(inp=>{
+            if(inp.value!=='') return; // nicht überschreiben
+            const groesse=inp.dataset.groesse||'gross';
+            const match=prevRecs.find(r=>(r.groesse||'gross')===groesse) || (cellInputs.length===1?prevRecs[0]:null);
+            if(!match) return;
+            inp.value=match.qty;
+            inp.dataset.copied='1';
+            inp.style.borderColor='#0D9488';
+            inp.style.background='#F0FDFA';
+            const lbl=inp.nextElementSibling;
+            if(lbl && lbl.textContent && lbl.textContent.includes('Vorschlag')) lbl.remove();
+            filled++;
+          });
+        });
+      });
+    }
+    if(filled>0){
+      showToast(`✓ ${filled} Felder von dieser Woche übertragen — bitte prüfen und speichern`);
+    } else {
+      showToast('Keine passenden Mengen aus dieser Woche gefunden (oder alles schon befüllt).');
+    }
+  }
+  window.orgFcCopyFromCurrentWeek=orgFcCopyFromCurrentWeek;
+
   let html=weekSwitcher;
 
   try {
@@ -3888,10 +3938,11 @@ async function renderOrgForecast(){
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
             // Immer alle 3 Größen anzeigen
             // Immer alle 3 Größen anzeigen
-              const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
+              const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org'||rec?.source==='copied';
               const isOrgSet=rec?.source==='org';
-              const manualColorLas=isOrgSet?'#2B3A67':'#F97316';
-              const manualBgLas=isOrgSet?'#EEF1F8':'#FFF7ED';
+              const isCopiedSet=rec?.source==='copied';
+              const manualColorLas=isOrgSet?'#2B3A67':(isCopiedSet?'#0D9488':'#F97316');
+              const manualBgLas=isOrgSet?'#EEF1F8':(isCopiedSet?'#F0FDFA':'#FFF7ED');
               const lasSugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, sz.k) : null;
               const lasVal=rec?.qty??lasSugg?.qty??'';
               const lasIsSugg=!rec && lasSugg!=null;
@@ -3901,7 +3952,7 @@ async function renderOrgForecast(){
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
                   onchange="updateForecastQtyOrgGroesse(this)"
-                  title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':''))}"
+                  title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
                   style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">
               </div>`;
           });
@@ -3910,14 +3961,15 @@ async function renderOrgForecast(){
           html+=lasHtml;
         } else {
           const rec=((((fMap[dateStr]||{})[s.id]||{})[dish])||{})['gross'];
-          const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
+          const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org'||rec?.source==='copied';
           const isOrgSet=rec?.source==='org';
-          const manualColor=isOrgSet?'#2B3A67':'#F97316';
-          const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
+          const isCopiedSet=rec?.source==='copied';
+          const manualColor=isOrgSet?'#2B3A67':(isCopiedSet?'#0D9488':'#F97316');
+          const manualBg=isOrgSet?'#EEF1F8':(isCopiedSet?'#F0FDFA':'#FFF7ED');
           const sugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, 'gross') : null;
           const displayVal=rec?.qty??sugg?.qty??'';
           const isSugg=!rec && sugg!=null;
-          const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'');
+          const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
@@ -3944,9 +3996,10 @@ async function renderOrgForecast(){
         : 'Sobald du diese Woche Mengen eingetragen hast, erscheinen hier blaue Vorschläge für nächste Woche.'}
     </div>
     ${orgForecastWeekOffset===0 ? `<button onclick="orgFcAutoFill()" style="background:#2B3A67;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">⚡ Mengen aus Übersicht übernehmen</button>` : ''}
+    ${orgForecastWeekOffset===1 ? `<button onclick="orgFcCopyFromCurrentWeek()" style="background:#0D9488;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">📋 Daten von dieser Woche übertragen</button>` : ''}
   </div>
   <div style="font-size:10.5px;color:var(--muted);padding:4px 2px 8px;">
-    🔵 Blau = Vorschlag (Vorwoche + Entsorgung + Wetter) · Tooltip = Begründung · 🟠 Orange = von Filiale angepasst · 🟣 Navy = von Operations gesetzt
+    🔵 Blau = Vorschlag (Vorwoche + Entsorgung + Wetter) · Tooltip = Begründung · 🟠 Orange = von Filiale angepasst · 🟣 Navy = von Operations gesetzt · 🟢 Teal = von Vorwoche übertragen
   </div>`;
 
   html+=`<button id="orgfc-save-btn" onclick="orgFcSaveAll()" style="width:100%;padding:13px;background:#2B3A67;color:#fff;border:none;border-radius:12px;font-family:'Boldonse',sans-serif;font-size:14px;cursor:pointer;margin-top:8px;">💾 Alle speichern</button>`;
@@ -3971,6 +4024,7 @@ async function updateForecastQtyOrg(inputEl){
     if(qty!=null){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
     }
+    inputEl.dataset.copied='0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
@@ -4051,11 +4105,12 @@ async function orgFcSaveAll(){
     const groesse=inp.dataset.groesse||'gross';
     const qty=inp.value===''?null:parseFloat(inp.value);
     if(!store||!dish||!dateStr||qty==null) continue;
+    const src=inp.dataset.copied==='1'?'copied':'org';
     try{
       // Delete both with and without groesse to handle legacy NULL records
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
       inp.style.borderColor='#22C55E';
       inp.style.background='#F0FDF4';
       saved++;
@@ -4090,6 +4145,7 @@ async function updateForecastQtyOrgGroesse(inputEl){
     if(qty!=null && qty>0){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
+    inputEl.dataset.copied='0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
