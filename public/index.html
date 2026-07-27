@@ -876,7 +876,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.0.7';
+const APP_VERSION = '6.0.8';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3119,7 +3119,10 @@ async function renderForecastOrderTab(el, tabHtml){
   // Kompaktes Eingabefeld für eine Zelle (Tag × Gericht)
   function cellInput(dateStr, dish, lockedNote){
     const rec=(fMap[dateStr]||{})[dish];
-    const manual=rec?.source==='manual';
+    const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
+    const isOrgSet=rec?.source==='org';
+    const manualColor=isOrgSet?'#2B3A67':'#F97316';
+    const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
     const autoSuggestion=(suggestionMap[dateStr]||{})[dish];
     const autoVal=autoSuggestion?.qty ?? autoSuggestion; // Kompatibilität falls einfacher Zahlenwert
     const val=rec ? rec.qty : autoVal;
@@ -3128,7 +3131,7 @@ async function renderForecastOrderTab(el, tabHtml){
     if(isLasagne) return lasagneCellInput(dateStr, dish, lockedNote, autoVal);
     if(isHistoric){
       // Historie: nur Anzeige, nicht mehr veraenderbar
-      return `<div style="width:48px;margin:0 auto;text-align:center;font-size:13px;font-weight:600;color:${manual?'#F97316':'#1a1a18'};">${val!=null?formatQty(val):'–'}</div>`;
+      return `<div style="width:48px;margin:0 auto;text-align:center;font-size:13px;font-weight:600;color:${manual?manualColor:'#1a1a18'};">${val!=null?formatQty(val):'–'}</div>`;
     }
     if(lockedNote){
       return `<div title="${lockedNote}" style="width:48px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div>`;
@@ -3139,11 +3142,12 @@ async function renderForecastOrderTab(el, tabHtml){
     const suggReason=autoSuggestion?.reason||'';
     // Vorwoche-Info nur als Tooltip (title) — kein div darunter damit Layout sauber bleibt
     const lwTitle=lwQty!=null?` Vorwoche: ${lwIcon} ${formatQty(lwQty)} Bhlt`:'';
-    const fullTitle=escAttr((suggReason+lwTitle).trim());
+    const orgTitle=isOrgSet?' · von Operations gesetzt':'';
+    const fullTitle=escAttr((suggReason+lwTitle+orgTitle).trim());
     return `<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
       oninput="markForecastDirty(this)"
       title="${fullTitle}"
-      style="width:48px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSuggestion?'#F0F9FF':'#fff')};">`;
+      style="width:48px;text-align:center;border:1.5px solid ${manual?manualColor:(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSuggestion?'#F0F9FF':'#fff')};">`;
   }
 
   // Lasagne kann in mehreren Behälter-Größen gleichzeitig gebraucht werden (z.B. 2x Groß + 1x Klein) —
@@ -3170,13 +3174,16 @@ async function renderForecastOrderTab(el, tabHtml){
       const rec=records.find(r=>r.groesse===sz.k);
       const val=rec ? rec.qty : (sz.k==='gross' && autoVal!=null ? autoVal : '');
       const isSugg=sz.k==='gross' && !rec && autoVal!=null;
-      const manual=rec?.source==='manual';
+      const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
+      const isOrgSet=rec?.source==='org';
+      const manualColor=isOrgSet?'#2B3A67':'#F97316';
+      const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
       h+=`<div style="display:flex;align-items:center;gap:4px;">
         <span style="font-size:8px;color:var(--muted);min-width:54px;white-space:nowrap;">${LABELS[sz.k]}</span>
         <input type="number" step="0.25" value="${val}" placeholder="–"
           data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
           oninput="markForecastDirty(this)"
-          style="width:40px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(isSugg?'#F0F9FF':'#fff')};">
+          style="width:40px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
       </div>`;
     });
     h+='</div>';
@@ -3239,7 +3246,7 @@ async function renderForecastOrderTab(el, tabHtml){
     html+=`<div style="font-size:10.5px;color:#15803D;padding:6px 2px 2px;">🥗 An Lasagne-Tagen wird grüner Salat + Dressing automatisch mitproduziert · 🔒 Lasagne-Menge ist am Vortag ab 12:00 Uhr fixiert</div>`;
   }
   html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">
-    🔵 Blau = KI-Vorschlag (Vorwoche + Wetter + Ferien) — antippen für Begründung &nbsp;·&nbsp; 🟠 Orange = geändert, noch nicht gespeichert<br>
+    🔵 Blau = KI-Vorschlag (Vorwoche + Wetter + Ferien) — antippen für Begründung &nbsp;·&nbsp; 🟠 Orange = von dir angepasst &nbsp;·&nbsp; 🟣 Navy = von Operations gesetzt<br>
     Kleine Zahl darunter = tatsächliche Menge Vorwoche &nbsp;·&nbsp; 🔥 = Vorwoche ausverkauft &nbsp;·&nbsp; 📦 = Vorwoche viel übrig
   </div>`;
 
@@ -3286,7 +3293,7 @@ async function saveForecastChanges(){
       await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${g}`,{method:'DELETE'}).catch(()=>{});
       await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
       if(newQty>0){
-        await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse:g,source:'manual',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
+        await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse:g,source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
       }
     }
     showToast('✓ Änderungen gespeichert — Küche wird informiert');
@@ -3881,7 +3888,10 @@ async function renderOrgForecast(){
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
             // Immer alle 3 Größen anzeigen
             // Immer alle 3 Größen anzeigen
-              const manual=rec?.source==='manual';
+              const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
+              const isOrgSet=rec?.source==='org';
+              const manualColorLas=isOrgSet?'#2B3A67':'#F97316';
+              const manualBgLas=isOrgSet?'#EEF1F8':'#FFF7ED';
               const lasSugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, sz.k) : null;
               const lasVal=rec?.qty??lasSugg?.qty??'';
               const lasIsSugg=!rec && lasSugg!=null;
@@ -3891,8 +3901,8 @@ async function renderOrgForecast(){
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
                   onchange="updateForecastQtyOrgGroesse(this)"
-                  title="${escAttr(lasSugg?.reason||'')}"
-                  style="width:40px;text-align:center;border:1.5px solid ${manual?'#F97316':(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?'#FFF7ED':(lasIsSugg?'#F0F9FF':'#fff')};">
+                  title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':''))}"
+                  style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">
               </div>`;
           });
           // Alle 3 Größen fix — keine + Buttons mehr nötig
@@ -3900,17 +3910,20 @@ async function renderOrgForecast(){
           html+=lasHtml;
         } else {
           const rec=((((fMap[dateStr]||{})[s.id]||{})[dish])||{})['gross'];
-          const manual=rec?.source==='manual';
+          const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
+          const isOrgSet=rec?.source==='org';
+          const manualColor=isOrgSet?'#2B3A67':'#F97316';
+          const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
           const sugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, 'gross') : null;
           const displayVal=rec?.qty??sugg?.qty??'';
           const isSugg=!rec && sugg!=null;
-          const title=sugg?.reason||'';
+          const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'');
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
               onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
-              style="width:44px;text-align:center;border:1.5px solid ${manual?'#F97316':(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?'#FFF7ED':(isSugg?'#F0F9FF':'#fff')};">
+              style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
             ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
           </td>`;
         }
@@ -3933,7 +3946,7 @@ async function renderOrgForecast(){
     ${orgForecastWeekOffset===0 ? `<button onclick="orgFcAutoFill()" style="background:#2B3A67;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">⚡ Mengen aus Übersicht übernehmen</button>` : ''}
   </div>
   <div style="font-size:10.5px;color:var(--muted);padding:4px 2px 8px;">
-    🔵 Blau = Vorschlag (Vorwoche + Entsorgung + Wetter) · Tooltip = Begründung · 🟠 Orange = manuell angepasst
+    🔵 Blau = Vorschlag (Vorwoche + Entsorgung + Wetter) · Tooltip = Begründung · 🟠 Orange = von Filiale angepasst · 🟣 Navy = von Operations gesetzt
   </div>`;
 
   html+=`<button id="orgfc-save-btn" onclick="orgFcSaveAll()" style="width:100%;padding:13px;background:#2B3A67;color:#fff;border:none;border-radius:12px;font-family:'Boldonse',sans-serif;font-size:14px;cursor:pointer;margin-top:8px;">💾 Alle speichern</button>`;
@@ -3956,10 +3969,10 @@ async function updateForecastQtyOrg(inputEl){
   try{
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'manual'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
     }
-    inputEl.style.borderColor='#F97316';
-    inputEl.style.background='#FFF7ED';
+    inputEl.style.borderColor='#2B3A67';
+    inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
@@ -4042,7 +4055,7 @@ async function orgFcSaveAll(){
       // Delete both with and without groesse to handle legacy NULL records
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'manual'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
       inp.style.borderColor='#22C55E';
       inp.style.background='#F0FDF4';
       saved++;
@@ -4075,10 +4088,10 @@ async function updateForecastQtyOrgGroesse(inputEl){
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null && qty>0){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'manual'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
-    inputEl.style.borderColor='#F97316';
-    inputEl.style.background='#FFF7ED';
+    inputEl.style.borderColor='#2B3A67';
+    inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
@@ -7108,7 +7121,7 @@ async function renderKitchen(){
       if(!fMap[f.forecast_date][f.store_id][f.dish_name])fMap[f.forecast_date][f.store_id][f.dish_name]=[];
       fMap[f.forecast_date][f.store_id][f.dish_name].push(f);
     });
-    const anyAdjusted=(weekForecasts||[]).some(f=>f.source==='manual');
+    const anyAdjusted=(weekForecasts||[]).some(f=>f.source==='manual'||f.source==='store'||f.source==='org');
     const nwOverrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
     const nwOverrideMap = {};
     (nwOverrides||[]).forEach(e=>{ nwOverrideMap[e.gericht]=e; });
@@ -7151,10 +7164,12 @@ async function renderKitchen(){
           const recs=(fMap[dateStr]?.[st.id]||{})[dish];
           if(!recs||!recs.length) return '<td style="color:var(--border);">·</td>';
           const total=recs.reduce((a,r)=>a+(r.qty||0),0);
-          const manual=recs.some(r=>r.source==='manual');
+          const manual=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
+          const isOrgSet=recs.some(r=>r.source==='org');
+          const manualCellColor=isOrgSet?'#2B3A67':'#0369A1';
           const isLasagneDish=dish.includes('Lasagne');
           const breakdown=(isLasagneDish && recs.length>1)?`<div style="font-size:8.5px;color:var(--muted);">${recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join(' + ')}</div>`:'';
-          return `<td style="font-weight:${manual?'700':'400'};color:${manual?'#0369A1':'#1a1a18'};font-size:12px;">${formatQty(total)}${manual?'*':''}${breakdown}</td>`;
+          return `<td style="font-weight:${manual?'700':'400'};color:${manual?manualCellColor:'#1a1a18'};font-size:12px;">${formatQty(total)}${manual?'*':''}${breakdown}</td>`;
         }).join('');
         html+=`<tr>
           <td data-no-translate style="color:${STORE_COLORS[st.id]||'#888'};font-size:12px;">${st.name.split(' ')[0]}</td>
@@ -7162,9 +7177,13 @@ async function renderKitchen(){
         </tr>`;
       });
       html+='</tbody></table></div></div>';
-      const hasAnyAdjusted=storeList.some(st=>allDishes.some(dish=>(fMap[dateStr]?.[st.id]||{})[dish]?.source==='manual'));
-      if(hasAnyAdjusted){
-        html+=`<div style="font-size:10px;color:#0369A1;padding:2px 4px 8px;">* von Filiale angepasst</div>`;
+      const hasStoreAdjusted=storeList.some(st=>allDishes.some(dish=>((fMap[dateStr]?.[st.id]||{})[dish]||[]).some(r=>r.source==='manual'||r.source==='store')));
+      const hasOrgAdjusted=storeList.some(st=>allDishes.some(dish=>((fMap[dateStr]?.[st.id]||{})[dish]||[]).some(r=>r.source==='org')));
+      if(hasStoreAdjusted||hasOrgAdjusted){
+        html+=`<div style="font-size:10.5px;padding:3px 4px 8px;display:flex;gap:12px;flex-wrap:wrap;">
+          ${hasStoreAdjusted?`<span style="color:#0369A1;font-weight:600;">* von Filiale angepasst</span>`:''}
+          ${hasOrgAdjusted?`<span style="color:#2B3A67;font-weight:600;">* von Operations angepasst</span>`:''}
+        </div>`;
       }
 
       // Beilagen nur im Beilagen-Tab sichtbar, nicht hier
@@ -7449,9 +7468,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const cells=storeList.map(s=>{
       const recs=storeData[s.id]||[];
       const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
-      const changed=recs.some(r=>r.source==='manual');
+      const changed=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
+      const changedByOrg=recs.some(r=>r.source==='org');
+      const changedColor=changedByOrg?'#2B3A67':'#0369A1';
       const sizeLabel=isLasagne&&recs.length?recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join('+'):null;
-      return `<td style="font-weight:${changed?'700':'400'};color:${changed?'#0369A1':(qty?'#1a1a18':'var(--border)')};">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
+      return `<td style="font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
     }).join('');
     html+=`<tr onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
       <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
