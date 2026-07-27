@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.1.2';
+const APP_VERSION = '6.1.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2336,7 +2336,7 @@ function renderOrder(){
   html+=renderOrderSection(tab.cats, tab.title, tab.color, tab.icon);
 
   if(activeOrderTab==='transporter'){
-    html+=`<div class="section-lbl" style="margin-top:14px;">💶 Geldwechsel</div>
+    html+=`<div class="section-lbl" style="margin-top:14px;">📬 An Transporter</div>
     <div class="card" style="padding:12px;">
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Braucht ihr Wechselgeld? Michi bringt's beim nächsten Mal mit.</div>
       <div style="display:flex;gap:8px;">
@@ -2348,8 +2348,16 @@ function renderOrder(){
         </select>
       </div>
       <input type="text" id="geldwechsel-detail" placeholder="Genaue Stückelung, z.B. 2× 10€, 20× 0,50€" style="width:100%;margin-top:8px;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
-      <button onclick="requestGeldwechsel()" style="margin-top:8px;width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;">Anfragen</button>
+      <button onclick="requestGeldwechsel()" style="margin-top:8px;width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;">💶 Wechselgeld anfragen</button>
       <div id="geldwechsel-list" style="margin-top:10px;"></div>
+      <div style="border-top:0.5px solid var(--border);margin-top:12px;padding-top:10px;">
+        <button onclick="toggleTransporterNoteForm()" id="tn-toggle-btn" style="width:100%;background:none;border:1.5px dashed var(--border);color:var(--sub);border-radius:8px;padding:8px;font-size:13px;font-weight:500;cursor:pointer;">➕ Notiz an Transporter</button>
+        <div id="tn-form" style="display:none;margin-top:8px;">
+          <textarea id="tn-text" placeholder="z.B. Bitte Servietten aus Ausstellungsstraße mitnehmen..." style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;min-height:70px;resize:vertical;font-family:inherit;font-size:13px;box-sizing:border-box;"></textarea>
+          <button onclick="sendTransporterNote()" style="margin-top:6px;width:100%;background:#F97316;color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;">Senden</button>
+        </div>
+        <div id="tn-list" style="margin-top:8px;"></div>
+      </div>
     </div>`;
   }
 
@@ -2366,7 +2374,7 @@ function renderOrder(){
   <button class="submit-btn" id="order-submit-btn" style="background:${tab.color};" onclick="submitOrder()">${tab.title} abschicken ✓</button>`;
   el.innerHTML=html;
   translateEl(el);
-  if(activeOrderTab==='transporter') loadGeldwechselList();
+  if(activeOrderTab==='transporter'){ loadGeldwechselList(); loadTransporterNoteList(); }
 }
 
 async function renderKCOrderTab(el, tabHtml){
@@ -3158,19 +3166,20 @@ async function renderForecastOrderTab(el, tabHtml){
     // Labels fix: Groß·18, Mit.·12, Kl.·8
     const LABELS={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
     if(isHistoric){
-      return `<div style="font-size:10px;text-align:left;line-height:1.8;">${LASAGNE_SIZES.map(s=>{
+      return `<div style="display:grid;grid-template-columns:52px 32px;gap:3px 4px;font-size:10px;text-align:left;">${LASAGNE_SIZES.map(s=>{
         const r=records.find(x=>x.groesse===s.k);
-        return `<div style="display:flex;align-items:center;gap:4px;"><span style="font-size:8px;color:var(--muted);min-width:54px;">${LABELS[s.k]}</span><span>${r?formatQty(r.qty):'–'}</span></div>`;
+        return `<span style="font-size:8px;color:var(--muted);">${LABELS[s.k]}</span><span>${r?formatQty(r.qty):'–'}</span>`;
       }).join('')}</div>`;
     }
     if(lockedNote){
-      return `<div title="${lockedNote}" style="font-size:10px;text-align:left;line-height:1.8;background:#F3F4F6;border-radius:6px;padding:3px 5px;">${LASAGNE_SIZES.map(s=>{
+      return `<div title="${lockedNote}" style="display:grid;grid-template-columns:52px 32px;gap:3px 4px;font-size:10px;text-align:left;background:#F3F4F6;border-radius:6px;padding:4px 6px;">${LASAGNE_SIZES.map(s=>{
         const r=records.find(x=>x.groesse===s.k);
-        return `<div style="display:flex;align-items:center;gap:4px;"><span style="font-size:8px;color:var(--muted);min-width:54px;">${LABELS[s.k]}</span><span>🔒 ${r?formatQty(r.qty):'–'}</span></div>`;
+        return `<span style="font-size:8px;color:var(--muted);">${LABELS[s.k]}</span><span>🔒 ${r?formatQty(r.qty):'–'}</span>`;
       }).join('')}</div>`;
     }
-    // Immer alle 3 Größen fix anzeigen
-    let h='<div style="display:flex;flex-direction:column;gap:4px;">';
+    // Immer alle 3 Größen fix anzeigen — Grid statt Flex, damit Label-Spalte und Eingabefeld-Spalte
+    // exakt untereinander ausgerichtet sind, unabhängig von der Textlänge des Labels.
+    let h='<div style="display:grid;grid-template-columns:52px 40px;gap:4px 4px;align-items:center;">';
     LASAGNE_SIZES.forEach(sz=>{
       const rec=records.find(r=>r.groesse===sz.k);
       const val=rec ? rec.qty : (sz.k==='gross' && autoVal!=null ? autoVal : '');
@@ -3179,13 +3188,11 @@ async function renderForecastOrderTab(el, tabHtml){
       const isOrgSet=rec?.source==='org';
       const manualColor=isOrgSet?'#2B3A67':'#F97316';
       const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
-      h+=`<div style="display:flex;align-items:center;gap:4px;">
-        <span style="font-size:8px;color:var(--muted);min-width:54px;white-space:nowrap;">${LABELS[sz.k]}</span>
+      h+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LABELS[sz.k]}</span>
         <input type="number" step="0.25" value="${val}" placeholder="–"
           data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
           oninput="markForecastDirty(this)"
-          style="width:40px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
-      </div>`;
+          style="width:40px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">`;
     });
     h+='</div>';
     return h;
@@ -3938,10 +3945,14 @@ async function renderOrgForecast(){
           // Welche Größen haben bereits Werte?
           const dateRecs=Object.values(((fMap[dateStr]||{})[s.id]||{})[dish]||{});
           const LBLS_ORG={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
+          const storeLocked=isLasagneLocked(dateStr);
           let lasHtml='<td style="min-width:110px;padding:4px 3px;">';
+          if(storeLocked){
+            lasHtml+=`<div title="Für Filialen gesperrt (Vortag ab 12:00) — Operations kann trotzdem anpassen" style="font-size:8.5px;color:#2B3A67;font-weight:600;margin-bottom:3px;">🔓 trotz Sperre änderbar</div>`;
+          }
+          lasHtml+='<div style="display:grid;grid-template-columns:52px 40px;gap:3px 4px;align-items:center;">';
           sizes.forEach(sz=>{
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
-            // Immer alle 3 Größen anzeigen
             // Immer alle 3 Größen anzeigen
               const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org'||rec?.source==='copied';
               const isOrgSet=rec?.source==='org';
@@ -3952,17 +3963,15 @@ async function renderOrgForecast(){
               const lasVal=rec?.qty??lasSugg?.qty??'';
               const lasIsSugg=!rec && lasSugg!=null;
               const LBLS={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
-              lasHtml+=`<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">
-                <span style="font-size:8px;color:var(--muted);min-width:54px;white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
+              lasHtml+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
                   onchange="updateForecastQtyOrgGroesse(this)"
                   title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
-                  style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">
-              </div>`;
+                  style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">`;
           });
           // Alle 3 Größen fix — keine + Buttons mehr nötig
-          lasHtml+='</td>';
+          lasHtml+='</div></td>';
           html+=lasHtml;
         } else {
           const rec=((((fMap[dateStr]||{})[s.id]||{})[dish])||{})['gross'];
@@ -4167,14 +4176,17 @@ window.addOrgLasagneSize=addOrgLasagneSize;
 async function renderBroadcast(){
   const el=document.getElementById('v-broadcast');
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
-  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
+  const allStoresList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
+  const storeList=allStoresList.filter(s=>s.id!=='kitchen'); // Kitchen kommt als eigene "Team"-Option, nicht doppelt
 
   let html=backToHomeHtml();
-  html+=pageHeaderHtml('📣','Nachricht an Stores','An alle Filialen oder eine bestimmte — poppt beim nächsten Öffnen auf.','#2B3A67');
+  html+=pageHeaderHtml('📣','Nachricht an Stores','An alle Filialen, das Team, den Transporter oder eine bestimmte Filiale.','#2B3A67');
   html+=`<div class="card" style="padding:14px;">
     <div style="font-weight:500;margin-bottom:8px;">An wen?</div>
     <select id="bc-target" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
       <option value="">📢 Alle Filialen</option>
+      <option value="team">👥 Team (Küche)</option>
+      <option value="transporter">🚚 Transporter</option>
       ${storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
     </select>
     <div style="font-weight:500;margin-bottom:8px;">Nachricht</div>
@@ -4182,7 +4194,7 @@ async function renderBroadcast(){
     <div style="font-weight:500;margin-bottom:6px;">Sichtbarkeit</div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Poppt in jedem Fall beim nächsten Öffnen einmal auf. Zusätzlich als Hinweis auf der Startseite anzeigen bis:</div>
     <input type="date" id="bc-until" min="${new Date().toISOString().split('T')[0]}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;box-sizing:border-box;">
-    <div style="font-size:10.5px;color:var(--muted);margin-bottom:12px;">Leer lassen = nur einmaliges Popup, kein dauerhafter Hinweis.</div>
+    <div style="font-size:10.5px;color:var(--muted);margin-bottom:12px;">Leer lassen = nur einmaliges Popup, kein dauerhafter Hinweis. Gilt bei Transporter als Anzeigedauer im Info-Tab.</div>
     <button class="submit-btn" onclick="sendBroadcast()">📢 Senden — poppt beim nächsten Öffnen auf</button>
   </div>
   <div class="section-lbl" style="margin-top:18px;">Gesendete Nachrichten</div>
@@ -4190,11 +4202,12 @@ async function renderBroadcast(){
 
   el.innerHTML=html;
   translateEl(el);
-  loadBroadcastHistory(storeList);
+  loadBroadcastHistory(allStoresList);
 }
 
 async function sendBroadcast(){
-  const target=document.getElementById('bc-target').value||null;
+  const rawTarget=document.getElementById('bc-target').value||null;
+  const target=rawTarget==='team'?'kitchen':rawTarget; // "Team" ist intern die Küche — nutzt denselben Mechanismus wie Kitchen-Login
   const message=document.getElementById('bc-message').value.trim();
   const showUntil=document.getElementById('bc-until')?.value||null;
   if(!message){ showToast('Bitte Nachricht eingeben'); return; }
@@ -4216,7 +4229,8 @@ async function loadBroadcastHistory(storeList){
   if(!broadcasts?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Nachrichten gesendet.</div>'; return; }
 
   wrap.innerHTML=broadcasts.map(b=>{
-    const targetLabel=b.target_store_id?storeMap[b.target_store_id]||b.target_store_id:'📢 Alle Filialen';
+    const isTransporter=b.target_store_id==='transporter';
+    const targetLabel=isTransporter?'🚚 Transporter':(b.target_store_id==='kitchen'?'👥 Team (Küche)':(b.target_store_id?storeMap[b.target_store_id]||b.target_store_id:'📢 Alle Filialen'));
     const targetStores=b.target_store_id?[b.target_store_id]:storeList.map(s=>s.id);
     const readSet=new Set(reads.filter(r=>r.broadcast_id===b.id).map(r=>r.store_id));
     const readCount=targetStores.filter(id=>readSet.has(id)).length;
@@ -4227,7 +4241,7 @@ async function loadBroadcastHistory(storeList){
         <span style="font-size:10.5px;color:var(--muted);">${new Date(b.created_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div style="font-size:13px;color:#1a1a18;margin-top:4px;">${b.message}</div>
-      <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">👁️ Gelesen: ${readCount}/${targetStores.length}</div>
+      ${isTransporter?'':`<div style="font-size:10.5px;color:var(--muted);margin-top:6px;">👁️ Gelesen: ${readCount}/${targetStores.length}</div>`}
       ${myReplies.length?`<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:6px;">
         ${myReplies.map(r=>`<div style="font-size:12px;color:var(--sub);margin-top:4px;"><strong data-no-translate>${storeMap[r.store_id]||r.store_id}:</strong> ${r.reply}</div>`).join('')}
       </div>`:''}
@@ -5672,6 +5686,45 @@ async function setGeldwechselStatus(id, newStatus){
 }
 window.setGeldwechselStatus=setGeldwechselStatus;
 
+// Freie Notiz von Filiale an Transporter — nutzt dieselbe transporter_tasks-Tabelle wie die
+// Organisation-Aufgaben, damit alles gesammelt im selben Info-Tab bei Michi ankommt.
+function toggleTransporterNoteForm(){
+  const form=document.getElementById('tn-form');
+  const btn=document.getElementById('tn-toggle-btn');
+  const showing=form.style.display==='block';
+  form.style.display=showing?'none':'block';
+  btn.style.display=showing?'block':'none';
+  if(!showing) document.getElementById('tn-text').focus();
+}
+window.toggleTransporterNoteForm=toggleTransporterNoteForm;
+
+async function sendTransporterNote(){
+  const text=document.getElementById('tn-text').value.trim();
+  if(!text){ showToast('Bitte Notiz eingeben'); return; }
+  const todayStr=new Date().toISOString().split('T')[0];
+  try{
+    await api('transporter_tasks',{method:'POST',body:JSON.stringify([{task_date:todayStr,text,created_by:currentStore.name}])});
+    showToast('✓ An Transporter gesendet');
+    document.getElementById('tn-text').value='';
+    document.getElementById('tn-form').style.display='none';
+    document.getElementById('tn-toggle-btn').style.display='block';
+    loadTransporterNoteList();
+  }catch(e){console.error(e);showToast('Fehler beim Senden');}
+}
+window.sendTransporterNote=sendTransporterNote;
+
+async function loadTransporterNoteList(){
+  const wrap=document.getElementById('tn-list');
+  if(!wrap) return;
+  const rows=await api(`transporter_tasks?created_by=eq.${encodeURIComponent(currentStore.name)}&done=eq.false&select=*&order=created_at.desc&limit=5`).catch(()=>[]);
+  if(!rows?.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 0;border-top:0.5px solid var(--border);">
+    <span style="font-size:12px;color:var(--sub);">${r.text}</span>
+    <span style="font-size:10px;color:var(--muted);white-space:nowrap;">offen</span>
+  </div>`).join('');
+}
+window.loadTransporterNoteList=loadTransporterNoteList;
+
 async function sendMangelMeldung(){
   const betreff=document.getElementById('mangel-betreff')?.value?.trim();
   const text=document.getElementById('mangel-text')?.value?.trim();
@@ -6085,7 +6138,13 @@ async function renderPack(){
   }
 
   const today=new Date().toISOString().split('T')[0];
-  const openTasksCount=(await api(`transporter_tasks?done=eq.false&select=id`).catch(()=>[]))?.length||0;
+  const [openTasksRaw, transporterBcRaw]=await Promise.all([
+    api(`transporter_tasks?done=eq.false&select=id`).catch(()=>[]),
+    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[])
+  ]);
+  const _tbDismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
+  const unreadBcCount=(transporterBcRaw||[]).filter(b=>!_tbDismissed.includes(b.id) && (!b.show_until || b.show_until>=today)).length;
+  const openTasksCount=(openTasksRaw?.length||0)+unreadBcCount;
   let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
 
   // Vier Tabs — Boldonse via tabBarHtml helper
@@ -6793,11 +6852,31 @@ window.updateSamosaQty=updateSamosaQty;
 // Info-Tab für Michi (Transporter): zeigt Aufgaben, die Tini/Ines in Organisation eingetragen haben,
 // datumsverknüpft — heutige/überfällige zuerst, dann kommende. Direkt abhakbar, kein Umweg über Organisation.
 async function renderTransporterInfoTabHtml(){
-  const tasks=await api('transporter_tasks?select=*&order=task_date.asc').catch(()=>[]);
   const todayStr=new Date().toISOString().split('T')[0];
+  const [tasks, broadcastsRaw]=await Promise.all([
+    api('transporter_tasks?select=*&order=task_date.asc').catch(()=>[]),
+    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[])
+  ]);
+  const dismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
+  const broadcasts=(broadcastsRaw||[]).filter(b=>{
+    if(dismissed.includes(b.id)) return false;
+    if(b.show_until && b.show_until<todayStr) return false;
+    return true;
+  });
   let html='';
+  if(broadcasts.length){
+    html+=`<div class="section-lbl">📣 Nachricht von Organisation</div>`;
+    html+=broadcasts.map(b=>`<div class="card" style="padding:12px;margin-bottom:8px;border:1.5px solid #0EA5E9;background:#F0F9FF;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+        <span style="font-size:10.5px;color:var(--muted);">${new Date(b.created_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})} · ${b.created_by||'Organisation'}</span>
+        <button onclick="dismissTransporterBroadcast(${b.id})" style="font-size:10.5px;color:var(--muted);background:none;border:none;cursor:pointer;">✕ ausblenden</button>
+      </div>
+      <div style="font-size:14px;color:#0C4A6E;margin-top:4px;">${b.message}</div>
+    </div>`).join('');
+  }
   if(!tasks?.length){
-    return `<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Aktuell keine offenen Aufgaben von Organisation. 🎉</div>`;
+    html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Aktuell keine offenen Aufgaben von Organisation. 🎉</div>`;
+    return html;
   }
   const open=tasks.filter(t=>!t.done);
   const done=tasks.filter(t=>t.done);
@@ -6818,6 +6897,7 @@ async function renderTransporterInfoTabHtml(){
       </div>
     </div>`;
   };
+  html+=`<div class="section-lbl" style="margin-top:${broadcasts.length?'14px':'0'};">📋 Aufgaben</div>`;
   if(open.length){
     html+=open.map(renderTask).join('');
   } else {
@@ -6828,6 +6908,14 @@ async function renderTransporterInfoTabHtml(){
   }
   return html;
 }
+
+function dismissTransporterBroadcast(id){
+  const dismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
+  if(!dismissed.includes(id)) dismissed.push(id);
+  localStorage.setItem('kf_transporter_bc_dismissed', JSON.stringify(dismissed));
+  renderPack();
+}
+window.dismissTransporterBroadcast=dismissTransporterBroadcast;
 
 async function renderTransporterBeilagenHtml(){
   // Bild 3 Struktur: Artikel als Zeilen, Stores als Spalten, Foto vorne, abhakbar
