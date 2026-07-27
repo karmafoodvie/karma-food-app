@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.1.1';
+const APP_VERSION = '6.1.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3277,24 +3277,42 @@ window.markForecastDirty=markForecastDirty;
 
 // Sammelt alle geänderten Zellen (auch mehrere Lasagne-Größen gleichzeitig) und speichert sie in
 // einem Rutsch — erst danach EIN Re-Render, damit keine parallel eingegebenen Werte verloren gehen.
+// Bei Lasagne: pro Tag/Gericht ALLE 3 Größen zusammen lesen, EINMAL löschen, EINMAL neu schreiben —
+// verhindert, dass beim sequenziellen Einzel-Speichern eine bereits gespeicherte Größe verloren geht.
 async function saveForecastChanges(){
   const inputs=[...document.querySelectorAll('#forecast-table-wrap input[data-dish]')].filter(i=>i.value!==i.dataset.original);
   if(!inputs.length){ showToast('Keine Änderungen'); return; }
   const btn=document.getElementById('forecast-save-btn');
   if(btn){ btn.disabled=true; btn.textContent='Speichert …'; }
   try{
-    for(const input of inputs){
-      const dateStr=input.dataset.date;
-      const dishName=input.dataset.dish;
-      const groesse=input.dataset.groesse;
-      const newQty=parseFloat(input.value);
-      if(isNaN(newQty)) continue;
-      const g=groesse||'gross';
-      // Pro Größe einzeln löschen+schreiben — andere Größen bleiben erhalten!
-      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=eq.${g}`,{method:'DELETE'}).catch(()=>{});
-      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
-      if(newQty>0){
-        await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty:newQty,groesse:g,source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()}])});
+    // Nach Tag+Gericht gruppieren
+    const groupKeys=new Set(inputs.map(i=>i.dataset.date+'|||'+i.dataset.dish));
+    for(const key of groupKeys){
+      const [dateStr, dishName]=key.split('|||');
+      const isLasagneDish=dishName.includes('Lasagne');
+      const rowsToInsert=[];
+      if(isLasagneDish){
+        // Alle 3 Größen-Inputs dieser Zelle einsammeln (nicht nur die geänderte), sonst geht beim
+        // Speichern eine bereits eingetragene Größe verloren.
+        const allSizeInputs=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)];
+        allSizeInputs.forEach(inp=>{
+          const qty=parseFloat(inp.value);
+          if(!isNaN(qty) && qty>0){
+            rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:inp.dataset.groesse||'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
+          }
+        });
+      } else {
+        const inp=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)][0];
+        const qty=inp?parseFloat(inp.value):NaN;
+        if(!isNaN(qty) && qty>0){
+          rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
+        }
+      }
+      // Erst ALLE bestehenden Datensätze für diesen Tag+Gericht löschen (alle Größen inkl. NULL) ...
+      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
+      // ... dann alle aktuellen Werte (alle Größen) in EINEM Rutsch neu schreiben — atomar statt sequenziell
+      if(rowsToInsert.length){
+        await api('forecast_qty',{method:'POST',body:JSON.stringify(rowsToInsert)});
       }
     }
     showToast('✓ Änderungen gespeichert — Küche wird informiert');
