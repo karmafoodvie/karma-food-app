@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.1.5';
+const APP_VERSION = '6.1.6';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -905,7 +905,8 @@ window.goToGuideEntry=goToGuideEntry;
 let clDone = {};
 let stockData = {};
 let activePackTab = 'transporter';
-let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen'
+let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen' | 'info'
+let transporterInfoAutoShown = false; // einmal pro Sitzung automatisch auf Info springen, wenn was offen ist
 function switchTransporterSubTab(t){ transporterSubTab=t; renderPack(); }
 window.switchTransporterSubTab=switchTransporterSubTab;
 function goToPackTab(tab){ activePackTab=tab; goTo('pack'); }
@@ -1772,7 +1773,8 @@ async function renderHome(){
     const todayDate=new Date().toISOString().split('T')[0];
     const dayIdx=(new Date().getDay()+6)%7; // Mon=0 ... Sun=6
     const isWeekday=dayIdx<5;
-    isKCDay=dayIdx===1||dayIdx===3; // Dienstag oder Donnerstag
+    const realWeekday=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
+    isKCDay=realWeekday===2||realWeekday===4; // Shop-Produkte-Bestellung: Dienstag & Donnerstag (2x/Woche)
     const reminders=[];
 
     try{
@@ -4191,6 +4193,8 @@ async function renderBroadcast(){
     </select>
     <div style="font-weight:500;margin-bottom:8px;">Nachricht</div>
     <textarea id="bc-message" placeholder="z.B. Bitte morgen extra Servietten mitbestellen..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
+    <div style="font-weight:500;margin-bottom:6px;">Dein Name</div>
+    <input type="text" id="bc-name" placeholder="Tini / Ines" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
     <div style="font-weight:500;margin-bottom:6px;">Sichtbarkeit</div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Poppt in jedem Fall beim nächsten Öffnen einmal auf. Zusätzlich als Hinweis auf der Startseite anzeigen bis:</div>
     <input type="date" id="bc-until" min="${new Date().toISOString().split('T')[0]}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;box-sizing:border-box;">
@@ -4209,10 +4213,11 @@ async function sendBroadcast(){
   const rawTarget=document.getElementById('bc-target').value||null;
   const target=rawTarget==='team'?'kitchen':rawTarget; // "Team" ist intern die Küche — nutzt denselben Mechanismus wie Kitchen-Login
   const message=document.getElementById('bc-message').value.trim();
+  const name=document.getElementById('bc-name')?.value.trim()||currentStore?.name||'Organisation';
   const showUntil=document.getElementById('bc-until')?.value||null;
   if(!message){ showToast('Bitte Nachricht eingeben'); return; }
   try{
-    await api('org_broadcasts',{method:'POST',body:JSON.stringify([{message, target_store_id:target, created_by:currentStore?.name||'Organisation', show_until:showUntil}])});
+    await api('org_broadcasts',{method:'POST',body:JSON.stringify([{message, target_store_id:target, created_by:name, show_until:showUntil}])});
     showToast('✔ Nachricht gesendet');
     renderBroadcast();
   }catch(e){console.error(e);showToast('Fehler beim Senden');}
@@ -6145,6 +6150,10 @@ async function renderPack(){
   const _tbDismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
   const unreadBcCount=(transporterBcRaw||[]).filter(b=>!_tbDismissed.includes(b.id) && (!b.show_until || b.show_until>=today)).length;
   const openTasksCount=(openTasksRaw?.length||0)+unreadBcCount;
+  if(openTasksCount>0 && !transporterInfoAutoShown){
+    transporterInfoAutoShown=true;
+    transporterSubTab='info';
+  }
   let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
 
   // Vier Tabs — Boldonse via tabBarHtml helper
