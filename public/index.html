@@ -6658,7 +6658,7 @@ async function renderBeilagenTableHtml(mode='kueche'){
       html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:7px 10px;margin-bottom:8px;font-size:11px;color:#C2410C;">⚠️ Anpassung diese Woche — * markiert</div>`;
     }
 
-    html+=`<div class="card" style="overflow-x:auto;padding:0;"><table class="pack-table" style="width:100%;min-width:260px;">
+    html+=`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;min-width:260px;border-collapse:separate;border-spacing:0;">
       <thead><tr>
         <th style="text-align:left;font-size:11px;padding:8px 8px;">Artikel</th>
         ${activeDays.map(wd=>{
@@ -6690,11 +6690,12 @@ async function renderBeilagenTableHtml(mode='kueche'){
         return `<td style="font-size:12px;font-weight:${isToday?'700':'500'};color:${adjusted?'#C2410C':(isToday?'#9D174D':'#1a1a18')};${isToday?'background:#FDF4FF;':''}padding:6px 4px;vertical-align:top;">${sumDisplay}${adjusted?'*':''}<div style="font-size:9px;color:${allPacked?'var(--green)':'var(--muted)'};">${isToday?(allPacked?'✓':'○'):''}</div>${breakdown}</td>`;
       }).join('');
       html+=`<tr style="border-top:0.5px solid var(--border);">
-        <td style="font-size:11px;font-weight:600;color:${ARTICLE_COLORS[name]||'#444'};padding:7px 8px;">${img}${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></td>
-        ${cells}
+        <td style="padding:10px 10px;vertical-align:middle;">
+          <div style="display:flex;align-items:center;gap:7px;">${img}<div><div style="font-size:12px;font-weight:600;color:${ARTICLE_COLORS[name]||'#1a1a18'};">${name}</div><div style="font-size:9px;font-weight:400;color:var(--muted);margin-top:1px;">${unit}</div></div></div>
+        </td>${cells}
       </tr>`;
     });
-    html+='</tbody></table></div>';
+    html+='</tbody></table></div></div>';
     html+=`<div style="font-size:10px;color:var(--muted);padding:5px 2px;">Pink = heute · * = Filiale hat angepasst · ✓ = eingepackt bestätigt</div>`;
     return html;
   }
@@ -7152,9 +7153,12 @@ async function renderKitchen(){
       if(!hasAny){
         html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Einträge</div>`;
       }else{
-        html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Gericht</th>`;
-        storeList.forEach(s=>html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
-        html+='</tr></thead><tbody>';
+        html+=`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+        <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:separate;border-spacing:0;">
+        <thead><tr style="background:var(--surface-1);">
+        <th style="text-align:left;padding:9px 10px;font-size:11px;font-weight:700;color:var(--sub);border-bottom:1px solid var(--border);">Gericht</th>`;
+        storeList.forEach(s=>html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};padding:9px 6px;font-size:11px;font-weight:700;border-bottom:1px solid var(--border);" data-no-translate>${s.name.split(' ')[0]}</th>`);
+        html+='<th style="padding:9px 6px;font-size:11px;font-weight:700;color:var(--green);border-bottom:1px solid var(--border);">Σ</th></tr></thead><tbody>';
         MENU_SLOTS.forEach(s=>{
           const slotData=dayData[s.k];
           if(!slotData) return;
@@ -7319,7 +7323,10 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const validDishObjs=menuDishes.filter(d=>d.name&&!d.name.startsWith('ÖL'));
   // Lasagne-Legende: einmalig oben, kompakt, damit Mitarbeitende die Größen verstehen
   const hasAnyLasagne=validDishObjs.some(d=>d.name.includes('Lasagne'));
-  html+=`<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;color:var(--muted);text-transform:uppercase;margin:0 0 8px;">Gerichte &amp; Mengen</div>`;
+  html+=`<div style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;">
+    <span style="font-size:18px;">🍽️</span>
+    <span style="font-size:14px;font-weight:800;color:#1a1a18;letter-spacing:-0.01em;">Gerichte &amp; Mengen</span>
+  </div>`;
   if(hasAnyLasagne){
     html+=`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:4px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:3px 8px;">
@@ -7336,7 +7343,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       </div>
     </div>`;
   }
-  html+=`<div style="background:var(--card);border:0.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;">
+  html+=`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:12px;">
   <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:separate;border-spacing:0;">
   <thead><tr style="background:var(--surface-1);">
     <th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--sub);border-bottom:0.5px solid var(--border);">Gericht</th>
@@ -7426,52 +7433,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   if(stadtplatz) salatLasagneStores.push(stadtplatz);
   if(hasLasagne) wienerStores.forEach(s=>salatLasagneStores.push(s));
 
-  if(Object.keys(tomorrowArticles).length || salatLasagneStores.length){
-    html+=`<div style="font-size:12px;font-weight:700;color:#EC4899;margin:14px 0 6px;">🥗 Beilagen für morgen</div>`;
-    html+=`<div class="card"><table class="pack-table" style="width:100%;"><thead><tr>
-      <th style="text-align:left;">Artikel</th>
-      ${storeList.map(s=>`<th data-no-translate style="color:${STORE_COLORS[s.id]||'#888'};font-size:11px;">${s.name.split(' ')[0]}</th>`).join('')}
-      <th>Σ</th>
-    </tr></thead><tbody>`;
-
-    // Salat Lasagne Zeile
-    if(salatLasagneStores.length){
-      const salatImg = `<img src="/images/kitchen-supply/salat-lasagne.jpg" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;">`;
-      const salatCells = storeList.map(s=>{
-        const isSalatStore = salatLasagneStores.find(ss=>ss.id===s.id);
-        return isSalatStore
-          ? `<td style="font-weight:600;color:#166534;">1</td>`
-          : `<td style="color:var(--border);">–</td>`;
-      }).join('');
-      html+=`<tr>
-        <td style="font-size:12px;font-weight:600;">${salatImg}Salat Lasagne<div style="font-size:9px;color:var(--muted);">Behälter${!hasLasagne?' · nur 3400':''}</div></td>
-        ${salatCells}
-        <td style="font-weight:700;color:#166534;">${salatLasagneStores.length}</td>
-      </tr>`;
-    }
-
-    // Andere Beilagen
-    Object.entries(tomorrowArticles).forEach(([name, data])=>{
-      let total=0;
-      const cells = storeList.map(s=>{
-        const override = (supplyValMap[s.id]||{})[name];
-        const qty = override ? override.qty : (data.stores[s.id]||null);
-        const adjusted = override?.is_adjusted;
-        if(qty) total+=qty;
-        return qty!=null
-          ? `<td style="font-weight:${adjusted?'700':'500'};color:${adjusted?'#C2410C':'#1a1a18'};">${formatQty(qty)}</td>`
-          : `<td style="color:var(--border);">–</td>`;
-      }).join('');
-      const img = KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;">`:'' ;
-      html+=`<tr>
-        <td style="font-size:12px;font-weight:600;">${img}${name}<div style="font-size:9px;color:var(--muted);">${data.unit||''}</div></td>
-        ${cells}
-        <td style="font-weight:700;color:#3B6D11;">${total?formatQty(total):'–'}</td>
-      </tr>`;
-    });
-
-    html+='</tbody></table></div>';
-  }
+  // Beilagen für morgen entfernt (nicht benötigt)
 
   // Beilagen für morgen — zum Abhaken für die Küche (Prep)
   const _wdMap={'mo':1,'di':2,'mi':3,'do':4,'fr':5,'sa':6,'so':7}; const tomorrowWdNum = _wdMap[tomorrowWd]||1;
@@ -7485,11 +7447,15 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const allBeilagenMorgen=[...new Set((beilagenBaselineMorgen||[]).map(b=>b.article_name))];
 
   if(allBeilagenMorgen.length){
-    html+=`<div style="font-size:12px;font-weight:700;color:#EC4899;margin:14px 0 8px;">🥗 Beilagen vorbereiten</div>`;
-    html+=`<div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
-      <thead><tr>
-        <th style="text-align:left;font-size:11px;">Artikel</th>
-        ${storeList.map(s=>`<th style="font-size:11px;color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
+    html+=`<div style="display:flex;align-items:center;gap:8px;margin:20px 0 10px;">
+      <span style="font-size:18px;">🥗</span>
+      <span style="font-size:14px;font-weight:800;color:#1a1a18;letter-spacing:-0.01em;">Beilagen vorbereiten</span>
+    </div>`;
+    html+=`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+    <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:separate;border-spacing:0;">
+      <thead><tr style="background:var(--surface-1);">
+        <th style="text-align:left;font-size:11px;padding:9px 10px;font-weight:700;color:var(--sub);border-bottom:1px solid var(--border);">Artikel</th>
+        ${storeList.map(s=>`<th style="font-size:11px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};padding:9px 6px;border-bottom:1px solid var(--border);" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
       </tr></thead><tbody>`;
     allBeilagenMorgen.forEach(name=>{
       const unit=(beilagenBaselineMorgen||[]).find(b=>b.article_name===name)?.unit||'';
@@ -7514,7 +7480,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
         </td>${cells}
       </tr>`;
     });
-    html+='</tbody></table></div>';
+    html+='</tbody></table></div></div>';
   }
 
   html+=`<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px 4px 16px;">Wenn ein Store die Menge ändert, wird diese Seite automatisch aktualisiert.</div>`;
