@@ -206,6 +206,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-hygieneSchulung" class="view"></div>
     <div id="v-orgForecast" class="view"></div>
     <div id="v-broadcast" class="view"></div>
+    <div id="v-transporterTasks" class="view"></div>
     <div id="v-msg" class="view"></div>
     <div id="v-sweets" class="view"></div>
     <div id="v-kitchen" class="view"></div>
@@ -876,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.0.9';
+const APP_VERSION = '6.1.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1212,11 +1213,11 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -3517,6 +3518,13 @@ async function renderManagement(){
         <span class="org-btn-sub">Portionsmengen aller Filialen direkt überschreiben</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('transporterTasks')" style="border-color:#F97316;">
+      <span class="org-btn-icon">🚚</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#F97316;">Aufgaben für Transporter</span>
+        <span class="org-btn-sub">Aufgaben mit Datum verknüpfen — erscheint direkt bei Michi im Info-Tab</span>
+      </div>
+    </button>
 
     <div class="section-lbl" style="margin-top:16px;">🔧 Meldungen & Kontrolle</div>
     <button class="org-btn" onclick="goTo('maengel')" style="border-color:#0F6E56;">
@@ -3853,52 +3861,31 @@ async function renderOrgForecast(){
   }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
-  // Kopiert Mengen aus der aktuell laufenden Woche in die angezeigte (nächste) Woche —
-  // Zuordnung erfolgt über die Position im Tag (Salat/Gericht1/Gericht2/Reis), nicht über den
-  // Gerichtsnamen, da sich Gerichte wöchentlich ändern. Füllt nur leere Felder, überschreibt nichts.
+  // Überträgt Mengen aus der vorherigen (aktuell laufenden) Woche in die angezeigte nächste Woche —
+  // nutzt dieselbe Zuordnung wie die blauen Vorschläge (computeOrgSuggestion, über Kategorie statt
+  // Gerichtsname, da sich Gerichte wöchentlich ändern). Füllt nur leere Felder, überschreibt nichts.
   async function orgFcCopyFromCurrentWeek(){
     if(orgForecastWeekOffset!==1){ showToast('Nur bei "Nächste Woche" verfügbar'); return; }
+    const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
     let filled=0;
-    for(let wd=1; wd<=5; wd++){
-      const wdStr=WEEKDAY_STR[wd];
-      const targetDateStr=weekDates[wd];
-      const prevDateStr=prevFromDate ? new Date(new Date(targetDateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0] : null;
-      if(!prevDateStr) continue;
-      const prevDishNames=getMenuDishNamesForDay(wdStr, prevDateStr);
-      const prevSalatName=getSalatNameForDate(prevDateStr);
-      const prevAllDishes=[prevSalatName, ...prevDishNames, REIS_DISH_NAME].filter(Boolean);
-
-      storeList.forEach(st=>{
-        prevAllDishes.forEach((prevDishName, idx)=>{
-          const prevRecs=(prevForecasts||[]).filter(f=>f.store_id===st.id && f.forecast_date===prevDateStr && f.dish_name===prevDishName);
-          if(!prevRecs.length) return;
-          // Ziel-Input(s) an derselben Position (Store + Wochentag) in der angezeigten Woche finden
-          const targetInputs=[...document.querySelectorAll(`#orgfc-content input[data-store="${st.id}"][data-date="${targetDateStr}"]`)];
-          // Gruppiere Ziel-Inputs nach Gericht (data-dish), in Tabellen-Reihenfolge — Position idx entspricht derselben Spalte
-          const dishOrder=[...new Set(targetInputs.map(i=>i.dataset.dish))];
-          const targetDish=dishOrder[idx];
-          if(!targetDish) return;
-          const cellInputs=targetInputs.filter(i=>i.dataset.dish===targetDish);
-          cellInputs.forEach(inp=>{
-            if(inp.value!=='') return; // nicht überschreiben
-            const groesse=inp.dataset.groesse||'gross';
-            const match=prevRecs.find(r=>(r.groesse||'gross')===groesse) || (cellInputs.length===1?prevRecs[0]:null);
-            if(!match) return;
-            inp.value=match.qty;
-            inp.dataset.copied='1';
-            inp.style.borderColor='#0D9488';
-            inp.style.background='#F0FDFA';
-            const lbl=inp.nextElementSibling;
-            if(lbl && lbl.textContent && lbl.textContent.includes('Vorschlag')) lbl.remove();
-            filled++;
-          });
-        });
-      });
-    }
+    inputs.forEach(inp=>{
+      if(inp.value!=='') return; // nicht überschreiben
+      const store=inp.dataset.store, dish=inp.dataset.dish, dateStr=inp.dataset.date, groesse=inp.dataset.groesse||'gross';
+      if(!store||!dish||!dateStr) return;
+      const sugg=computeOrgSuggestion(store, dish, dateStr, groesse);
+      if(!sugg || sugg.qty==null) return;
+      inp.value=sugg.qty;
+      inp.dataset.copied='1';
+      inp.style.borderColor='#0D9488';
+      inp.style.background='#F0FDFA';
+      const lbl=inp.nextElementSibling;
+      if(lbl && lbl.textContent && lbl.textContent.includes('Vorschlag')) lbl.remove();
+      filled++;
+    });
     if(filled>0){
-      showToast(`✓ ${filled} Felder von dieser Woche übertragen — bitte prüfen und speichern`);
+      showToast(`✓ ${filled} Felder von letzter Woche übertragen — bitte prüfen und speichern`);
     } else {
-      showToast('Keine passenden Mengen aus dieser Woche gefunden (oder alles schon befüllt).');
+      showToast('Keine passenden Mengen aus letzter Woche gefunden.');
     }
   }
   window.orgFcCopyFromCurrentWeek=orgFcCopyFromCurrentWeek;
@@ -3988,19 +3975,12 @@ async function renderOrgForecast(){
   // Zähle wie viele Felder noch leer sind
   const totalCells=document.querySelectorAll('#orgfc-content input[type=number]').length;
 
-  html+=`<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
-    <div style="font-size:12px;font-weight:600;color:#1D4ED8;margin-bottom:6px;">💡 Tipp — Erstmalige Befüllung</div>
-    <div style="font-size:11px;color:#1E40AF;margin-bottom:8px;">
-      ${orgForecastWeekOffset===0
-        ? 'Trage diese Woche deine Mengen ein — sie werden automatisch als Basis für nächste Woche verwendet.'
-        : 'Sobald du diese Woche Mengen eingetragen hast, erscheinen hier blaue Vorschläge für nächste Woche.'}
-    </div>
-    ${orgForecastWeekOffset===0 ? `<button onclick="orgFcAutoFill()" style="background:#2B3A67;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">⚡ Mengen aus Übersicht übernehmen</button>` : ''}
-    ${orgForecastWeekOffset===1 ? `<button onclick="orgFcCopyFromCurrentWeek()" style="background:#0D9488;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;">📋 Daten von dieser Woche übertragen</button>` : ''}
-  </div>
-  <div style="font-size:10.5px;color:var(--muted);padding:4px 2px 8px;">
-    🔵 Blau = Vorschlag (Vorwoche + Entsorgung + Wetter) · Tooltip = Begründung · 🟠 Orange = von Filiale angepasst · 🟣 Navy = von Operations gesetzt · 🟢 Teal = von Vorwoche übertragen
-  </div>`;
+  if(orgForecastWeekOffset===0){
+    html+=`<button onclick="orgFcAutoFill()" style="background:#2B3A67;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;">⚡ Mengen aus Übersicht übernehmen</button>`;
+  } else {
+    html+=`<button onclick="orgFcCopyFromCurrentWeek()" style="background:#0D9488;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;">📋 Daten von vorheriger Woche übertragen</button>`;
+  }
+  html+=`<div style="font-size:10px;color:var(--muted);padding:2px 2px 8px;">🔵 Vorschlag &nbsp;·&nbsp; 🟠 Filiale &nbsp;·&nbsp; 🟣 Operations &nbsp;·&nbsp; 🟢 übertragen</div>`;
 
   html+=`<button id="orgfc-save-btn" onclick="orgFcSaveAll()" style="width:100%;padding:13px;background:#2B3A67;color:#fff;border:none;border-radius:12px;font-family:'Boldonse',sans-serif;font-size:14px;cursor:pointer;margin-top:8px;">💾 Alle speichern</button>`;
   html+=`<div style="font-size:10px;color:var(--muted);text-align:center;padding:6px 0 16px;">Gespeicherte Mengen = Basis für nächste Woche</div>`;
@@ -4236,6 +4216,87 @@ async function loadBroadcastHistory(storeList){
     </div>`;
   }).join('');
 }
+// ---- AUFGABEN FÜR TRANSPORTER (Organisation → Michi, Datum-verknüpft) ----
+async function renderTransporterTasks(){
+  const el=document.getElementById('v-transporterTasks');
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🚚','Aufgaben für Transporter','Mit einem Datum verknüpfen — erscheint direkt bei Michi im Info-Tab.','#F97316');
+  const today=new Date().toISOString().split('T')[0];
+  html+=`<div class="card" style="padding:14px;">
+    <div style="font-weight:500;margin-bottom:8px;">Datum</div>
+    <input type="date" id="tt-date" value="${today}" min="${today}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="font-weight:500;margin-bottom:8px;">Aufgabe</div>
+    <textarea id="tt-text" placeholder="z.B. Bitte zusätzlich 2 Kisten Gläser von Börse nach Laurenzerberg bringen..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
+    <div style="font-weight:500;margin-bottom:6px;">Dein Name</div>
+    <input type="text" id="tt-name" placeholder="Tini / Ines" value="${currentStore?.name&&currentStore.name!=='Organisation'?currentStore.name:''}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
+    <button class="submit-btn" onclick="saveTransporterTask()">➕ Aufgabe hinzufügen</button>
+  </div>
+  <div class="section-lbl" style="margin-top:18px;">Alle Aufgaben</div>
+  <div id="tt-list"></div>`;
+  el.innerHTML=html;
+  translateEl(el);
+  loadTransporterTasksList();
+}
+window.renderTransporterTasks=renderTransporterTasks;
+
+async function saveTransporterTask(){
+  const dateStr=document.getElementById('tt-date').value;
+  const text=document.getElementById('tt-text').value.trim();
+  const name=document.getElementById('tt-name').value.trim()||currentStore?.name||'Organisation';
+  if(!dateStr||!text){ showToast('Bitte Datum und Aufgabe ausfüllen'); return; }
+  try{
+    await api('transporter_tasks',{method:'POST',body:JSON.stringify([{task_date:dateStr,text,created_by:name}])});
+    showToast('✔ Aufgabe hinzugefügt');
+    document.getElementById('tt-text').value='';
+    loadTransporterTasksList();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveTransporterTask=saveTransporterTask;
+
+async function loadTransporterTasksList(){
+  const wrap=document.getElementById('tt-list');
+  if(!wrap) return;
+  const tasks=await api('transporter_tasks?select=*&order=task_date.asc').catch(()=>[]);
+  if(!tasks?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Aufgaben eingetragen.</div>'; return; }
+  const todayStr=new Date().toISOString().split('T')[0];
+  wrap.innerHTML=tasks.map(t=>{
+    const isPast=t.task_date<todayStr && !t.done;
+    const dateLabel=new Date(t.task_date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+    return `<div class="card" style="padding:12px;margin-bottom:8px;${t.done?'opacity:0.55;':''}${isPast?'border-color:#FCA5A5;':''}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+        <span style="font-size:12px;font-weight:700;color:${isPast?'#DC2626':'#F97316'};">${dateLabel}${isPast?' · überfällig':''}</span>
+        <button onclick="deleteTransporterTask(${t.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
+      </div>
+      <div style="font-size:13px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${t.text}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <span style="font-size:10.5px;color:var(--muted);">von ${t.created_by||'Organisation'}</span>
+        <div class="cl-item" onclick="toggleTransporterTaskDone(${t.id},${!t.done})" style="padding:0;">
+          <div class="check-box${t.done?' done':''}">${t.done?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+          <span class="cl-text" style="font-size:11px;">erledigt</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleTransporterTaskDone(id, done){
+  try{
+    await api(`transporter_tasks?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({done})});
+    if(document.getElementById('tt-list')){ loadTransporterTasksList(); }
+    else { renderPack(); }
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.toggleTransporterTaskDone=toggleTransporterTaskDone;
+
+async function deleteTransporterTask(id){
+  if(!confirm('Diese Aufgabe wirklich löschen?')) return;
+  try{
+    await api(`transporter_tasks?id=eq.${id}`,{method:'DELETE'});
+    loadTransporterTasksList();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen');}
+}
+window.deleteTransporterTask=deleteTransporterTask;
+
 let broadcastQueue=[];
 async function checkForBroadcasts(){
   if(!currentStore || currentStore.id==='zentrale') return;
@@ -6006,14 +6067,23 @@ async function renderPack(){
   }
 
   const today=new Date().toISOString().split('T')[0];
+  const openTasksCount=(await api(`transporter_tasks?done=eq.false&select=id`).catch(()=>[]))?.length||0;
   let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
 
-  // Drei Tabs — Boldonse via tabBarHtml helper
+  // Vier Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
     {key:'samosas',      label:'🥟 Samosas'},
-    {key:'beilagen',     label:'🥗 Beilagen'}
+    {key:'beilagen',     label:'🥗 Beilagen'},
+    {key:'info',         label:`📋 Info${openTasksCount?` (${openTasksCount})`:''}`}
   ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
+
+  if(transporterSubTab==='info'){
+    html+=await renderTransporterInfoTabHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   if(transporterSubTab==='samosas'){
     html+=await renderSamosaTableHtml();
@@ -6701,6 +6771,45 @@ async function updateSamosaQty(input){
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 window.updateSamosaQty=updateSamosaQty;
+
+// Info-Tab für Michi (Transporter): zeigt Aufgaben, die Tini/Ines in Organisation eingetragen haben,
+// datumsverknüpft — heutige/überfällige zuerst, dann kommende. Direkt abhakbar, kein Umweg über Organisation.
+async function renderTransporterInfoTabHtml(){
+  const tasks=await api('transporter_tasks?select=*&order=task_date.asc').catch(()=>[]);
+  const todayStr=new Date().toISOString().split('T')[0];
+  let html='';
+  if(!tasks?.length){
+    return `<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Aktuell keine offenen Aufgaben von Organisation. 🎉</div>`;
+  }
+  const open=tasks.filter(t=>!t.done);
+  const done=tasks.filter(t=>t.done);
+  const renderTask=t=>{
+    const isToday=t.task_date===todayStr;
+    const isPast=t.task_date<todayStr;
+    const dateLabel=new Date(t.task_date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+    const badgeColor=isPast&&!t.done?'#DC2626':(isToday?'#F97316':'var(--muted)');
+    return `<div class="card" style="padding:12px;margin-bottom:8px;${t.done?'opacity:0.5;':''}${isPast&&!t.done?'border:1.5px solid #FCA5A5;':(isToday&&!t.done?'border:1.5px solid #F97316;':'')}">
+      <div style="font-size:12px;font-weight:700;color:${badgeColor};">${dateLabel}${isPast&&!t.done?' · überfällig':(isToday?' · heute':'')}</div>
+      <div style="font-size:14px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${t.text}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <span style="font-size:10.5px;color:var(--muted);">von ${t.created_by||'Organisation'}</span>
+        <div class="cl-item" onclick="toggleTransporterTaskDone(${t.id},${!t.done})" style="padding:0;">
+          <div class="check-box${t.done?' done':''}">${t.done?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+          <span class="cl-text" style="font-size:12px;">erledigt</span>
+        </div>
+      </div>
+    </div>`;
+  };
+  if(open.length){
+    html+=open.map(renderTask).join('');
+  } else {
+    html+=`<div class="card" style="padding:16px;text-align:center;color:var(--green);font-size:13px;">Alle Aufgaben erledigt ✓</div>`;
+  }
+  if(done.length){
+    html+=`<div class="section-lbl" style="margin-top:14px;">✓ Erledigt</div>${done.map(renderTask).join('')}`;
+  }
+  return html;
+}
 
 async function renderTransporterBeilagenHtml(){
   // Bild 3 Struktur: Artikel als Zeilen, Stores als Spalten, Foto vorne, abhakbar
