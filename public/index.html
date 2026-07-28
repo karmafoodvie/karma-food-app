@@ -201,6 +201,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-kontrolle" class="view"></div>
     <div id="v-guide" class="view"></div>
     <div id="v-forecastReview" class="view"></div>
+    <div id="v-healthcheck" class="view"></div>
     <div id="v-oeffnungHilfe" class="view"></div>
     <div id="v-reinigungHilfe" class="view"></div>
     <div id="v-hygieneSchulung" class="view"></div>
@@ -883,7 +884,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.4.6';
+const APP_VERSION = '6.5.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1241,11 +1242,11 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
   if(renders[v]) renders[v]();
 }
 function goToReminder(tab, orderTab){
@@ -3773,10 +3774,138 @@ async function renderManagement(){
         <span class="org-btn-title" style="color:#0EA5E9;">Prognose-Rückblick</span>
         <span class="org-btn-sub">Vergangene Daten mit Wetter & Feiertagen abgleichen</span>
       </div>
+    </button>
+
+    <div class="section-lbl" style="margin-top:16px;">🩺 System</div>
+    <button class="org-btn" onclick="goTo('healthcheck')" style="border-color:#15803D;">
+      <span class="org-btn-icon">🩺</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#15803D;">System-Check</span>
+        <span class="org-btn-sub">Alle Tabellen & Zugriffsrechte prüfen, Gleichzeitigkeits-Test</span>
+      </div>
     </button>`;
   translateEl(el);
 }
 window.renderManagement=renderManagement;
+
+// ══════════════════════════════════════════════════════════════════════════
+// SYSTEM-CHECK — Health-Check über alle Tabellen + Gleichzeitigkeits-Test.
+// Grund: mehrere Tabellen (order_submissions, kitchen_supply_today, geldwechsel)
+// hatten diese Woche fehlende Zugriffsrechte, die erst auffielen, als eine
+// Filiale zufällig genau diese Funktion zuerst benutzt hat. Dieser Check soll
+// das proaktiv vorab zeigen, statt reaktiv über Fehlermeldungen von Filialen.
+// ══════════════════════════════════════════════════════════════════════════
+const HEALTHCHECK_READ_TABLES=['allergene_rezepturen','articles','calendar_events','checklist_done',
+  'checklist_templates','disposal','forecast_qty','forecast_settings','geldwechsel','guide_eintraege',
+  'hygiene_notifications','hygiene_schulungen','kc_pickup_ready','kc_stock','kc_submissions',
+  'kitchen_supply_baseline','kitchen_supply_today','kuehleinrichtungen','maengel','monthly_cleaning_done',
+  'onboarding_program','order_submissions','orders','org_broadcast_reads','org_broadcast_replies',
+  'org_broadcasts','org_roles','reinigungsprotokoll','rezept_zutaten','sales_history','samosa_baseline',
+  'samosa_today','schicht_uebergabe','schulungen','schulungsthemen','special_orders','stock',
+  'store_scores','stores','transporter_tasks','wareneingang','wochensalat_restbestand','zutaten'];
+
+// Nur Tabellen ohne Fremdschlüssel-Risiko (z.B. orders/kc_stock brauchen eine ECHTE article_id —
+// die testen wir hier bewusst nicht, um keine Fehler durch falsche IDs vorzutäuschen).
+const HEALTHCHECK_WRITE_TABLES=[
+  {table:'order_submissions', payload:{store_id:'ZZ_HEALTHCHECK', order_date:'2000-01-01', tab:'test'}},
+  {table:'kitchen_supply_today', payload:{store_id:'ZZ_HEALTHCHECK', supply_date:'2000-01-01', article_name:'__test__', qty:0}},
+  {table:'geldwechsel', payload:{store_id:'ZZ_HEALTHCHECK', betrag:0, format:'test', detail:'test', status:'offen'}},
+  {table:'forecast_qty', payload:{store_id:'ZZ_HEALTHCHECK', forecast_date:'2000-01-01', dish_name:'__test__', qty:0}},
+  {table:'transporter_tasks', payload:{task_date:'2000-01-01', text:'__healthcheck__', created_by:'System-Check'}},
+  {table:'disposal', payload:{store_id:'ZZ_HEALTHCHECK', disposal_date:'2000-01-01', slot:'test', dish_name:'__test__', leftover_qty:0}},
+];
+
+async function renderHealthCheck(){
+  const el=document.getElementById('v-healthcheck');
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🩺','System-Check','Proaktiv prüfen statt auf Fehlermeldungen warten','#15803D')+`
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-weight:600;margin-bottom:4px;">1️⃣ Lese-Zugriff — alle ${HEALTHCHECK_READ_TABLES.length} Tabellen</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Prüft, ob jede Tabelle grundsätzlich lesbar ist.</div>
+      <button class="submit-btn" onclick="runHealthCheckRead()">▶️ Lese-Check starten</button>
+      <div id="hc-read-results" style="margin-top:10px;"></div>
+    </div>
+    <div class="card" style="padding:14px;margin-bottom:12px;">
+      <div style="font-weight:600;margin-bottom:4px;">2️⃣ Schreib-Zugriff — ${HEALTHCHECK_WRITE_TABLES.length} Kern-Tabellen</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Schreibt eine Test-Zeile (Kennung "ZZ_HEALTHCHECK") und löscht sie sofort wieder.</div>
+      <button class="submit-btn" onclick="runHealthCheckWrite()">▶️ Schreib-Check starten</button>
+      <div id="hc-write-results" style="margin-top:10px;"></div>
+    </div>
+    <div class="card" style="padding:14px;">
+      <div style="font-weight:600;margin-bottom:4px;">3️⃣ Gleichzeitigkeits-Test</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Simuliert 5 parallele Speicherungen auf denselben Eintrag — prüft, ob's dabei zu Konflikten/Fehlern kommt.</div>
+      <button class="submit-btn" onclick="runHealthCheckConcurrency()">▶️ Gleichzeitigkeits-Test starten</button>
+      <div id="hc-concurrency-results" style="margin-top:10px;"></div>
+    </div>`;
+  translateEl(el);
+}
+window.renderHealthCheck=renderHealthCheck;
+
+function hcResultRow(name, ok, detail){
+  return `<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px;">
+    <span>${ok?'✅':'❌'}</span>
+    <div style="flex:1;"><span data-no-translate style="font-weight:600;">${name}</span>${detail?`<div style="color:${ok?'var(--muted)':'#DC2626'};font-size:11px;margin-top:1px;">${detail}</div>`:''}</div>
+  </div>`;
+}
+
+async function runHealthCheckRead(){
+  const wrap=document.getElementById('hc-read-results');
+  wrap.innerHTML='<div style="text-align:center;color:var(--muted);padding:8px;">Prüfe…</div>';
+  let html=''; let okCount=0;
+  for(const table of HEALTHCHECK_READ_TABLES){
+    try{
+      await api(`${table}?select=*&limit=1`);
+      html+=hcResultRow(table,true);
+      okCount++;
+    }catch(e){
+      html+=hcResultRow(table,false,(e?.message||String(e)).slice(0,150));
+    }
+  }
+  wrap.innerHTML=`<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:${okCount===HEALTHCHECK_READ_TABLES.length?'#15803D':'#DC2626'};">${okCount} von ${HEALTHCHECK_READ_TABLES.length} lesbar</div>${html}`;
+}
+window.runHealthCheckRead=runHealthCheckRead;
+
+async function runHealthCheckWrite(){
+  const wrap=document.getElementById('hc-write-results');
+  wrap.innerHTML='<div style="text-align:center;color:var(--muted);padding:8px;">Prüfe…</div>';
+  let html=''; let okCount=0;
+  for(const {table,payload} of HEALTHCHECK_WRITE_TABLES){
+    try{
+      const inserted=await api(table,{method:'POST',body:JSON.stringify([payload])});
+      const newId=inserted?.[0]?.id;
+      // Sofort wieder aufräumen — Test-Zeile darf nirgends stehen bleiben
+      if(newId) await api(`${table}?id=eq.${newId}`,{method:'DELETE'}).catch(()=>{});
+      html+=hcResultRow(table,true,'schreiben & löschen erfolgreich');
+      okCount++;
+    }catch(e){
+      html+=hcResultRow(table,false,(e?.message||String(e)).slice(0,150));
+    }
+  }
+  wrap.innerHTML=`<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:${okCount===HEALTHCHECK_WRITE_TABLES.length?'#15803D':'#DC2626'};">${okCount} von ${HEALTHCHECK_WRITE_TABLES.length} beschreibbar</div>${html}`;
+}
+window.runHealthCheckWrite=runHealthCheckWrite;
+
+async function runHealthCheckConcurrency(){
+  const wrap=document.getElementById('hc-concurrency-results');
+  wrap.innerHTML='<div style="text-align:center;color:var(--muted);padding:8px;">Simuliere 5 parallele Speicherungen…</div>';
+  const testKey={store_id:'ZZ_HEALTHCHECK', order_date:'2000-01-01', tab:'concurrency_test'};
+  // Sauber starten
+  await api(`order_submissions?store_id=eq.ZZ_HEALTHCHECK&order_date=eq.2000-01-01&tab=eq.concurrency_test`,{method:'DELETE'}).catch(()=>{});
+  const attempts=Array.from({length:5}, (_,i)=>
+    api('order_submissions',{method:'POST',body:JSON.stringify([testKey])})
+      .then(()=>({ok:true,i}))
+      .catch(e=>({ok:false,i,error:(e?.message||String(e)).slice(0,150)}))
+  );
+  const results=await Promise.all(attempts);
+  const succeeded=results.filter(r=>r.ok).length;
+  const failed=results.filter(r=>!r.ok);
+  // Aufräumen
+  await api(`order_submissions?store_id=eq.ZZ_HEALTHCHECK&order_date=eq.2000-01-01&tab=eq.concurrency_test`,{method:'DELETE'}).catch(()=>{});
+  let html=`<div style="font-size:12px;font-weight:600;margin-bottom:6px;">${succeeded} von 5 gleichzeitigen Versuchen erfolgreich</div>`;
+  html+=`<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Das ist erwartbar und in Ordnung — wichtig ist nur, dass keiner davon die Datenbank in einen kaputten Zustand bringt (z.B. doppelte Zeilen).</div>`;
+  failed.forEach(f=>{ html+=hcResultRow(`Versuch ${f.i+1}`,false,f.error); });
+  wrap.innerHTML=html;
+}
+window.runHealthCheckConcurrency=runHealthCheckConcurrency;
 function renderOrg(){ goTo('management'); } // alter Einstiegspunkt, leitet nur noch weiter
 window.renderOrg=renderOrg;
 
@@ -5883,6 +6012,16 @@ async function setGeldwechselStatus(id, newStatus){
 }
 window.setGeldwechselStatus=setGeldwechselStatus;
 
+// Sonderbestellung als erledigt markieren — anders als Geldwechsel gibt es hier kein Status-Feld,
+// deshalb wird der Eintrag beim Erledigen einfach entfernt (genau wie eine abgehakte Notiz).
+async function dismissSpecialOrder(id){
+  try{
+    await api(`special_orders?id=eq.${id}`,{method:'DELETE'});
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.dismissSpecialOrder=dismissSpecialOrder;
+
 // Freie Notiz von Filiale an Transporter — nutzt dieselbe transporter_tasks-Tabelle wie die
 // Organisation-Aufgaben, damit alles gesammelt im selben Info-Tab bei Michi ankommt.
 function toggleTransporterNoteForm(){
@@ -6403,7 +6542,7 @@ async function renderPack(){
     html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#9A3412;">📋 Ansicht eines vergangenen Tages — nur Anzeige, "eingepackt" kann hier nicht mehr geändert werden.</div>`;
   }
   const allOrdRaw=await api(`orders?order_date=eq.${bestellDateStr}&select=store_id,article_id,quantity,eingepackt`);
-  const specRaw=await api(`special_orders?order_date=eq.${bestellDateStr}&select=store_id,note`).catch(()=>[]);
+  const specRaw=await api(`special_orders?order_date=eq.${bestellDateStr}&select=id,store_id,note`).catch(()=>[]);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
@@ -6475,7 +6614,7 @@ async function renderPack(){
   }
   if(specs.length){
     html+=`<div class="section-lbl">📝 Sonderbestellungen</div><div class="card">`;
-    specs.forEach(s=>{const store=stores.find(x=>x.id===s.store_id);const col=STORE_COLORS[s.store_id]||'#888';html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;"><span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;margin-top:3px;"></span><div><div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div><div style="font-size:13px;color:var(--sub);">${s.note}</div></div></div>`;});
+    specs.forEach(s=>{const store=stores.find(x=>x.id===s.store_id);const col=STORE_COLORS[s.store_id]||'#888';html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;"><span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span><div style="flex:1;"><div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div><div style="font-size:13px;color:var(--sub);">${s.note}</div></div><button onclick="dismissSpecialOrder(${s.id})" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;">✓ erledigt</button></div>`;});
     html+='</div>';
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
