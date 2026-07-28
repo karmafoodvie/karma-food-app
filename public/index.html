@@ -593,7 +593,7 @@ async function saveOnboardingDay(editId){
     }
     showToast('✓ Gespeichert');
     renderOnboarding();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveOnboardingDay=saveOnboardingDay;
 
@@ -844,7 +844,7 @@ async function saveGuideEntry(id){
     else await api('guide_eintraege',{method:'POST',body:JSON.stringify([payload])});
     showToast('✔ Gespeichert');
     renderGuide();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 async function deleteGuideEntry(id){
@@ -883,7 +883,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.3.9';
+const APP_VERSION = '6.4.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1621,7 +1621,7 @@ async function saveGemuese(dishName, newGemuese){
       await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten:merged,allergene_codes:[]}])});
     }
     showToast(`✔ Gemüse für ${dishName} gespeichert`);
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 // Foto, wie das Gericht fertig serviert aussieht — hilft neuen Mitarbeitenden, die das Gericht noch
@@ -2069,7 +2069,7 @@ async function markMonthlyCleaningDone(){
     await api('monthly_cleaning_done',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,month_key:monthKey}])});
     showToast('✓ Danke — bis nächsten Monat!');
     renderHome();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.markMonthlyCleaningDone=markMonthlyCleaningDone;
 
@@ -2165,7 +2165,7 @@ async function saveVerfModal(id){
     closeVerfModal();
     if(cb) cb();
     showToast('❌ Als nicht lieferbar markiert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveVerfModal=saveVerfModal;
 
@@ -2192,7 +2192,7 @@ async function toggleArticleVerfuegbar(id, current){
     await api(`articles?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({verfuegbar:true, verfuegbar_hinweis:null, verfuegbar_bis:null})});
     articles=await api('articles?select=*&order=sort_order');
     refresh();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 // ---- ORDER ----
@@ -2528,7 +2528,7 @@ async function updateIstBestandStore(articleId, value){
     }
     showToast('✓ Gespeichert');
     renderOrder();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateIstBestandStore=updateIstBestandStore;
 
@@ -2722,7 +2722,7 @@ async function updateKuecheQty(input){
     }])});
     showToast(isAdjusted?'✓ Angepasst — Küche wird informiert':'✓ Gespeichert (Grundmenge)');
     renderOrder();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateKuecheQty=updateKuecheQty;
 
@@ -2738,7 +2738,7 @@ async function toggleKuecheEingepackt(storeId, articleName, dateStr, currentQty,
       store_id:storeId, supply_date:dateStr, article_name:articleName, qty, is_adjusted:isAdjusted, eingepackt:!isPacked
     }])});
     renderPack();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.toggleKuecheEingepackt=toggleKuecheEingepackt;
 
@@ -3307,13 +3307,13 @@ async function renderForecastOrderTab(el, tabHtml){
     const isLastRow=wd===5;
     const rowBorder=isLastRow?'':'border-bottom:1px solid var(--border);';
     // Echter Gerichtname direkt bei der jeweiligen Zelle — ändert sich täglich, deshalb nicht mehr
-    // im (fixen) Spaltenkopf, sondern hier pro Tag/Zelle. Fixe Höhe (grid-template-rows), damit die
-    // Eingabefelder in jeder Zeile exakt auf derselben Höhe stehen, egal wie lang der Name ist.
-    const cellWrap=(labelHtml, inputHtml)=>`<div style="display:grid;grid-template-rows:30px auto;justify-items:center;align-items:end;">
-        <div style="display:flex;align-items:flex-end;justify-content:center;">${labelHtml}</div>
+    // im (fixen) Spaltenkopf, sondern hier pro Tag/Zelle. Fixe Höhe + sauberes Abschneiden mit "…"
+    // bei zu langen Namen (line-clamp), damit garantiert nie in die nächste Zeile überläuft.
+    const cellWrap=(labelHtml, inputHtml)=>`<div style="display:grid;grid-template-rows:34px auto;row-gap:4px;justify-items:center;align-items:end;overflow:hidden;">
+        <div style="display:flex;align-items:flex-end;justify-content:center;overflow:hidden;width:100%;">${labelHtml}</div>
         <div>${inputHtml}</div>
       </div>`;
-    const dishLabel=(name)=>name?`<div data-no-translate style="font-size:8px;color:var(--muted);line-height:1.2;max-width:64px;text-align:center;">${name}</div>`:'';
+    const dishLabel=(name)=>name?`<div data-no-translate title="${escAttr(name)}" style="font-size:8px;color:var(--muted);line-height:1.15;max-width:66px;text-align:center;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;">${name}</div>`:'';
 
     html+=`<tr style="${isToday?`background:${tab.color}0d;`:''}">
       <td style="padding:6px 6px;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
@@ -3459,7 +3459,7 @@ async function saveForecastChanges(){
     renderOrder();
   }catch(e){
     console.error(e);
-    showToast('Fehler beim Speichern');
+    showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
     if(btn){ btn.disabled=false; btn.textContent='💾 Änderungen speichern'; }
   }
 }
@@ -3496,7 +3496,7 @@ async function submitWochensalat(){
       changed_by:currentStore.name, changed_at:new Date().toISOString()
     }])});
     showToast('✓ Wochensalat-Meldung gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.submitWochensalat=submitWochensalat;
 
@@ -3563,7 +3563,8 @@ async function submitOrder(){
     setTimeout(()=>goTo(goBackToSchichtende?'schichtende':'home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
   }catch(e){
     console.error(e);
-    showToast('❌ Fehler beim Speichern — bitte nochmal versuchen');
+    const detail=(e?.message||String(e)).slice(0,140);
+    showToast(`❌ Fehler beim Speichern: ${detail}`, true);
     if(btn){ btn.disabled=false; btn.textContent=originalLabel; btn.style.opacity='1'; }
   }
 }
@@ -3898,7 +3899,7 @@ async function editOrgRoleName(ev, key, currentName){
   try{
     await api(`org_roles?role_key=eq.${key}`,{method:'PATCH',body:JSON.stringify({person_name:name.trim()})});
     loadOrgRolesRow();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.editOrgRoleName=editOrgRoleName;
 
@@ -4182,7 +4183,7 @@ async function updateForecastQtyOrg(inputEl){
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateForecastQtyOrg=updateForecastQtyOrg;
 window.renderOrgForecast=renderOrgForecast;
@@ -4303,7 +4304,7 @@ async function updateForecastQtyOrgGroesse(inputEl){
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateForecastQtyOrgGroesse=updateForecastQtyOrgGroesse;
 
@@ -4439,7 +4440,7 @@ async function saveTransporterTask(){
     showToast('✔ Aufgabe hinzugefügt');
     document.getElementById('tt-text').value='';
     loadTransporterTasksList();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveTransporterTask=saveTransporterTask;
 
@@ -4477,7 +4478,7 @@ async function toggleTransporterTaskDone(id, done){
     await api(`transporter_tasks?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({done})});
     if(document.getElementById('tt-list')){ loadTransporterTasksList(); }
     else { renderPack(); }
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.toggleTransporterTaskDone=toggleTransporterTaskDone;
 
@@ -5110,7 +5111,7 @@ async function saveHygieneSchulung(){
     await api('hygiene_schulungen',{method:'POST',body:JSON.stringify([{name,stores:storesStr,datum,durchgefuehrt_von:trainer,inhalte:inhalteStr}])});
     showToast('✔ Schulung protokolliert');
     renderHygieneSchulung();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveHygieneSchulung=saveHygieneSchulung;
 
@@ -5544,7 +5545,7 @@ async function saveDailyCheckAll(){
     ]);
     showToast('✔ Daily Check-up gespeichert!');
     goTo('waehrend');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 async function renderWaehrend(){
@@ -5671,7 +5672,7 @@ async function toggleReinigungField(field, itemEl){
     const notizDraft=document.getElementById('uebergabe-text')?.value||'';
     await renderSchichtende();
     if(notizDraft){ const ta=document.getElementById('uebergabe-text'); if(ta && !ta.value) ta.value=notizDraft; }
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 async function saveKuehleinrichtungen(){
@@ -5683,7 +5684,7 @@ async function saveKuehleinrichtungen(){
     await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
     await api('kuehleinrichtungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,temp_klein:klein,temp_gross:gross,mitarbeiter:currentStore.name}])});
     showToast('✔ Gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 // ---- MÄNGEL / SCHADENSMELDUNG ----
@@ -5842,7 +5843,7 @@ async function requestGeldwechsel(){
     document.getElementById('geldwechsel-detail').value='';
     showToast('✓ Geldwechsel angefragt');
     loadGeldwechselList();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.requestGeldwechsel=requestGeldwechsel;
 
@@ -5867,7 +5868,7 @@ async function setGeldwechselStatus(id, newStatus){
     if(newStatus==='erledigt') patch.erledigt_am=new Date().toISOString();
     await api(`geldwechsel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
     renderPack();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.setGeldwechselStatus=setGeldwechselStatus;
 
@@ -6037,7 +6038,7 @@ async function saveMangelEdit(id){
     await appendMangelVerlauf(id, {t:'bearbeitet', text:'Meldung bearbeitet', autor:currentStore?.name||'—', zeit:new Date().toISOString()});
     openMangelDetail(id);
     renderMaengel();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveMangelEdit=saveMangelEdit;
 
@@ -6055,7 +6056,7 @@ async function sendMangelUpdate(id){
     await appendMangelVerlauf(id, {t:'kommentar', text, autor:currentStore?.name||'—', zeit:new Date().toISOString()});
     openMangelDetail(id); // Modal mit aktuellem Verlauf neu aufbauen
     renderMaengel();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.sendMangelUpdate=sendMangelUpdate;
 
@@ -6078,7 +6079,7 @@ async function setMangelStatus(id, newStatus){
     closeMangelDetail();
     renderMaengel();
     loadNotifBadge();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.setMangelStatus=setMangelStatus;
 
@@ -6279,7 +6280,7 @@ async function saveUebergabeNotiz(){
     await api('schicht_uebergabe',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,notiz}])});
     showToast('✔ Notiz gespeichert');
     renderSchichtende();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 async function submitSchichtende(){
@@ -6317,7 +6318,7 @@ async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty)
     await api(`orders?article_id=eq.${articleId}&store_id=eq.${storeId}&order_date=eq.${today}`,{method:'PATCH',body:JSON.stringify({eingepackt:newPacked})});
   }catch(e){
     console.error(e);
-    showToast('Fehler beim Speichern');
+    showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
     renderPack(); // bei Fehler echten Stand nachladen
   }
 }
@@ -6509,7 +6510,7 @@ async function toggleKcPacked(articleId, storeId, soll){
     await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:storeId,article_id:articleId,ist_bestand:soll,updated_date:today}])});
     showToast('✔ Eingepackt — IST-Bestand auf SOLL gesetzt');
     renderPack();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.toggleKcPacked=toggleKcPacked;
 
@@ -6657,7 +6658,7 @@ async function toggleArticleVerfuegbarPack(id, current){
     articles=await api('articles?select=*&order=sort_order');
     renderPack();
     showToast('✅ Wieder lieferbar');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 
@@ -6901,7 +6902,7 @@ async function updateSoldOutTime(slot, dishName, value){
     }
     showToast('✓ Gespeichert');
     renderDisposal();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateLeftover(slot, dishName, value){
   const today=new Date().toISOString().split('T')[0];
@@ -6915,7 +6916,7 @@ async function updateLeftover(slot, dishName, value){
       await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:soldOut,leftover_qty:v,note}])});
     }
     showToast('✓ Gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateDisposalNote(slot, dishName, value){
   const today=new Date().toISOString().split('T')[0];
@@ -6929,7 +6930,7 @@ async function updateDisposalNote(slot, dishName, value){
       await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:soldOut,leftover_qty:leftover,note}])});
     }
     showToast('✓ Notiz gespeichert');
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateSoldOutTime=updateSoldOutTime;
 window.updateLeftover=updateLeftover;
@@ -7062,7 +7063,7 @@ async function updateSamosaQty(input){
     await api('samosa_today',{method:'POST',body:JSON.stringify([{store_id:storeId,supply_date:dateStr,qty,is_adjusted:true}])});
     showToast('✔ Gespeichert');
     if(activePackTab==='transporter') renderPack();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateSamosaQty=updateSamosaQty;
 
@@ -7166,7 +7167,7 @@ async function saveTransporterTaskInline(){
     showToast('✔ An Michi hinterlassen');
     document.getElementById('tt-inline-text').value='';
     renderPack();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveTransporterTaskInline=saveTransporterTaskInline;
 
@@ -8203,7 +8204,7 @@ async function saveMenuDish(dishName, editKey){
     showToast(`✔ ${dishName} gespeichert`);
     // Refresh the view
     renderKitchen();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.changeWeek=changeWeek;
 window.switchKitchenTab=switchKitchenTab;
@@ -8514,7 +8515,7 @@ async function updateIstBestand(articleId, value){
       await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:kcLagerStoreId,article_id:articleId,ist_bestand:v,updated_date:today}])});
     }
     renderKCLager();
-  }catch(e){showToast('Fehler beim Speichern');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.switchKCTab=switchKCTab;
 window.switchKCStore=switchKCStore;
