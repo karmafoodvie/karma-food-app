@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.3.4';
+const APP_VERSION = '6.3.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3269,17 +3269,13 @@ async function renderForecastOrderTab(el, tabHtml){
   }
 
   let anyLasagne=false;
-  // Spaltenheader: echter Salatname + echte Gerichtsnamen von Montag dieser Woche
-  const _headerDate=weekDates[1];
-  const _headerSalat=getSalatNameForDate(_headerDate);
-  const _headerDishes=getMenuDishNamesForDay(WEEKDAY_STR[1], _headerDate);
   html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
     <thead>
       <tr>
         <th style="text-align:left;">Tag</th>
-        <th style="color:#A21CAF;font-size:10px;" data-no-translate>${_headerSalat||'Salat'}</th>
-        <th data-no-translate style="font-size:10px;">${_headerDishes[0]||'Gericht 2'}</th>
-        <th data-no-translate style="font-size:10px;">${_headerDishes[1]||'Gericht 3'}</th>
+        <th style="color:#A21CAF;font-size:10px;">Salat</th>
+        <th style="font-size:10px;">Gericht 1</th>
+        <th style="font-size:10px;">Gericht 2</th>
         <th style="font-size:10px;">Reis</th>
       </tr>
       <tr style="background:var(--surface-1);">
@@ -3302,18 +3298,22 @@ async function renderForecastOrderTab(el, tabHtml){
     const reisName=REIS_DISH_NAME;
     const rowLasagne=[g2,g3].some(n=>n && n.includes('Lasagne'));
     if(rowLasagne) anyLasagne=true;
+    // Echter Gerichtname direkt bei der jeweiligen Zelle — ändert sich täglich, deshalb nicht mehr
+    // im (fixen) Spaltenkopf, sondern hier pro Tag/Zelle, damit immer klar ist, welche Zahl zu
+    // welchem Gericht gehört.
+    const dishLabel=(name)=>name?`<div data-no-translate style="font-size:8px;color:var(--muted);line-height:1.2;margin-bottom:2px;max-width:60px;">${name}</div>`:'';
 
     html+=`<tr style="${isToday?`background:${tab.color}0d;`:''}">
       <td style="padding:6px 6px;vertical-align:top;">
         <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍':''}</div>
         ${dayReasonMap[dateStr]?`<div style="font-size:9.5px;color:var(--muted);line-height:1.3;">${dayReasonMap[dateStr]}</div>`:''}
       </td>
-      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">${cellInput(dateStr, salatName)}</td>
+      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">${dishLabel(salatName)}${cellInput(dateStr, salatName)}</td>
       <td style="padding:4px 3px;text-align:center;vertical-align:middle;">
-        ${g2?cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
+        ${g2?dishLabel(g2)+cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
       </td>
       <td style="padding:4px 3px;text-align:center;vertical-align:middle;">
-        ${g3?cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
+        ${g3?dishLabel(g3)+cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
       </td>
       <td style="padding:4px 3px;text-align:center;vertical-align:middle;">${reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>'}</td>
     </tr>`;
