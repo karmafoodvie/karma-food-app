@@ -883,7 +883,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.4.3';
+const APP_VERSION = '6.4.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3549,7 +3549,7 @@ async function submitOrder(){
     }
     // Zusätzlich als Upsert (nicht reines Insert): falls trotz obigem Löschen doch noch eine alte
     // Zeile übrig sein sollte, wird sie aktualisiert statt einen Konflikt zu werfen.
-    if(rows.length) await api('orders',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rows)});
+    if(rows.length) await api('orders?on_conflict=store_id,article_id,order_date',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rows)});
     // Abschick-Marker — unabhängig davon ob irgendeine Menge >0 war. Sonst zählt "bewusst überall 0
     // gewählt, weil von gestern noch alles da ist" nie als "erledigt" (genau der Bug, den ein Store
     // gemeldet hat: 0 bei Sweets gewählt, "Let's wrap up the shift" zeigte trotzdem "nicht erledigt").
