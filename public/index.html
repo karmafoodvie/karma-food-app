@@ -103,11 +103,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* PACK */
 .pack-tabs{display:flex;gap:8px;margin-bottom:14px;}
 .pack-tab{flex:1;padding:12px 8px;border:2px solid var(--border);border-radius:10px;background:var(--card);font-size:13px;font-weight:400;cursor:pointer;text-align:center;color:#1a1a18;}
-.pack-table{width:100%;border-collapse:collapse;font-size:12px;}
-.pack-table th{padding:6px;text-align:center;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);}
+.pack-table{width:100%;border-collapse:collapse;font-size:14px;}
+.pack-table th{padding:7px 5px;text-align:center;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);}
 .pack-table th:first-child{text-align:left;}
-.pack-table td{padding:7px 6px;border-bottom:1px solid var(--border);text-align:center;}
-.pack-table td:first-child{text-align:left;font-size:13px;}
+.pack-table td{padding:8px 6px;border-bottom:1px solid var(--border);text-align:center;}
+.pack-table td:first-child{text-align:left;font-size:14px;}
 
 /* HOME */
 .home-card{background:var(--card);border-radius:12px;border:1px solid var(--border);padding:14px;margin-bottom:10px;cursor:pointer;}
@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.1.7';
+const APP_VERSION = '6.2.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -912,9 +912,21 @@ function navBestellDate(delta){ transporterBestellDateOffset+=delta; renderPack(
 function navBestellToday(){ transporterBestellDateOffset=0; renderPack(); }
 window.navBestellDate=navBestellDate;
 window.navBestellToday=navBestellToday;
+let sweetsDateOffset = 0; // 0=heute, -1=gestern, ... für Sweets-Verlauf
+function navSweetsDate(delta){ sweetsDateOffset+=delta; renderSweets(); }
+function navSweetsToday(){ sweetsDateOffset=0; renderSweets(); }
+window.navSweetsDate=navSweetsDate;
+window.navSweetsToday=navSweetsToday;
 function switchTransporterSubTab(t){ transporterSubTab=t; renderPack(); }
 window.switchTransporterSubTab=switchTransporterSubTab;
-function goToPackTab(tab){ activePackTab=tab; goTo('pack'); }
+function goToPackTab(tab){
+  activePackTab=tab;
+  if(tab==='transporter'){
+    transporterSubTab='bestellliste'; // immer fix als Default, kein Auto-Sprung mehr
+    transporterBestellDateOffset=0; // immer heute beim frischen Öffnen
+  }
+  goTo('pack');
+}
 let lang = localStorage.getItem('kf_lang') || 'de';
 const tCache = {};
 
@@ -1196,6 +1208,7 @@ async function loadAll(){
 // ---- NAV ----
 function goTo(v, noPush=false){
   currentView=v;
+  if(v==='sweets') sweetsDateOffset=0; // immer heute beim frischen Öffnen
   localStorage.setItem('kf_view', v);
   if(!noPush) history.pushState({view:v, storeId:currentStore?.id}, '', location.pathname);
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('show'));
@@ -1339,8 +1352,7 @@ function renderZutatenEditable(text, dishSafeKey){
         +'<span contenteditable="true" spellcheck="false" data-orig="'+item.replace(/"/g,'&quot;')+'" '
         +'style="font-size:13px;flex:1;outline:none;border-bottom:1px dashed #ddd;padding:2px 3px;'+(isA?'font-weight:700;color:#92400E;':'')+'" '
         +'onblur="zdRowBlur(this)">'+item+'</span>'
-        +'<button class="zd-del" style="opacity:0;color:#DC2626;background:none;border:none;font-size:13px;cursor:pointer;padding:0 3px;flex-shrink:0;" '
-        +'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">✕</button>'
+        +'<button class="zd-del" style="opacity:0.6;color:#DC2626;background:#FEE2E2;border:none;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>'
         +'</div>';
     });
     html+='<div style="margin-top:3px;">'
@@ -1393,8 +1405,7 @@ function zdAttach(editor){
         +'<span contenteditable="true" spellcheck="false" data-orig="" '
         +'style="font-size:13px;flex:1;outline:none;border-bottom:1px dashed #ddd;padding:2px 3px;" '
         +'onblur="zdRowBlur(this)"></span>'
-        +'<button class="zd-del" style="opacity:0;color:#DC2626;background:none;border:none;font-size:13px;cursor:pointer;padding:0 3px;flex-shrink:0;" '
-        +'onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">✕</button>';
+        +'<button class="zd-del" style="opacity:0.6;color:#DC2626;background:#FEE2E2;border:none;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>';
       katDiv.insertBefore(row, btn.parentElement);
       zdAttach(katDiv); // re-attach for new del button
       row.querySelector('[contenteditable]').focus();
@@ -2340,6 +2351,10 @@ function renderOrder(){
     return;
   }
 
+  if(activeOrderTab==='transporter' || activeOrderTab==='sweets'){
+    html+=`<div id="yesterday-order-box"></div>`;
+  }
+
   html+=renderOrderSection(tab.cats, tab.title, tab.color, tab.icon);
 
   if(activeOrderTab==='transporter'){
@@ -2382,7 +2397,34 @@ function renderOrder(){
   el.innerHTML=html;
   translateEl(el);
   if(activeOrderTab==='transporter'){ loadGeldwechselList(); loadTransporterNoteList(); }
+  if(activeOrderTab==='transporter' || activeOrderTab==='sweets'){ loadYesterdayOrderBox(); }
 }
+
+// Zeigt der Filiale, was sie gestern bestellt hat — zum Abgleichen mit dem, was Michi tatsächlich
+// mitbringt (per Dayan-Feedback: früher mit Excel-Liste abgeglichen, jetzt direkt hier sichtbar).
+async function loadYesterdayOrderBox(){
+  const wrap=document.getElementById('yesterday-order-box');
+  if(!wrap) return;
+  const y=new Date(); y.setDate(y.getDate()-1);
+  const yStr=y.toISOString().split('T')[0];
+  const yLabel=y.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+  const tab=ORDER_TABS[activeOrderTab];
+  const rows=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${yStr}&select=article_id,quantity,eingepackt`).catch(()=>[]);
+  const tabArticleIds=new Set(articles.filter(a=>tab.cats.includes(a.category)).map(a=>a.id));
+  const items=(rows||[]).filter(r=>r.quantity>0 && tabArticleIds.has(r.article_id))
+    .map(r=>({name:articles.find(a=>a.id===r.article_id)?.name||'?', qty:r.quantity, packed:r.eingepackt}));
+  if(!items.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML=`<details style="margin-bottom:12px;">
+    <summary style="font-size:12.5px;color:${tab.color};font-weight:600;cursor:pointer;padding:8px 10px;background:${tab.color}12;border-radius:8px;">📋 Gestern bestellt (${yLabel}) — zum Abgleichen mit der Lieferung</summary>
+    <div class="card" style="margin-top:6px;">
+      ${items.map(it=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);font-size:13px;">
+        <span>${it.name}</span>
+        <span style="font-weight:600;">${formatQty(it.qty)} ${it.packed?'<span style="color:var(--green);font-size:11px;">✓ eingepackt</span>':'<span style="color:var(--muted);font-size:11px;">noch offen</span>'}</span>
+      </div>`).join('')}
+    </div>
+  </details>`;
+}
+window.loadYesterdayOrderBox=loadYesterdayOrderBox;
 
 async function renderKCOrderTab(el, tabHtml){
   const tab=ORDER_TABS.kc;
@@ -2649,7 +2691,7 @@ async function updateKuecheQty(input){
     await api('kitchen_supply_today',{method:'POST',body:JSON.stringify([{
       store_id:currentStore.id, supply_date:dateStr, article_name:articleName, qty:newQty,
       is_adjusted:isAdjusted, changed_by:currentStore.name, changed_at:isAdjusted?new Date().toISOString():null,
-      kitchen_notified:false
+      kitchen_notified:false, eingepackt:false
     }])});
     showToast(isAdjusted?'✓ Angepasst — Küche wird informiert':'✓ Gespeichert (Grundmenge)');
     renderOrder();
@@ -6125,12 +6167,25 @@ async function submitSchichtende(){
 }
 
 // ---- PACK ----
-async function toggleOrderEingepackt(articleId, storeId, currentPacked){
+async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty){
+  const newPacked=!currentPacked;
+  // Optimistisches UI-Update — sofort sichtbar, kein Warten auf vollen Reload
+  if(el){
+    el.style.fontWeight=newPacked?'400':'600';
+    el.style.color=newPacked?'#3B6D11':'#1a1a18';
+    el.style.background=newPacked?'#EAF3DE':'transparent';
+    el.style.textDecoration=newPacked?'line-through':'none';
+    el.textContent=qty+(newPacked?' ✓':'');
+    el.setAttribute('onclick',`toggleOrderEingepackt(${articleId},'${storeId}',${newPacked},this,${qty})`);
+  }
   const today=new Date().toISOString().split('T')[0];
   try{
-    await api(`orders?article_id=eq.${articleId}&store_id=eq.${storeId}&order_date=eq.${today}`,{method:'PATCH',body:JSON.stringify({eingepackt:!currentPacked})});
-    renderPack();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+    await api(`orders?article_id=eq.${articleId}&store_id=eq.${storeId}&order_date=eq.${today}`,{method:'PATCH',body:JSON.stringify({eingepackt:newPacked})});
+  }catch(e){
+    console.error(e);
+    showToast('Fehler beim Speichern');
+    renderPack(); // bei Fehler echten Stand nachladen
+  }
 }
 window.toggleOrderEingepackt=toggleOrderEingepackt;
 
@@ -6155,10 +6210,6 @@ async function renderPack(){
   const _tbDismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
   const unreadBcCount=(transporterBcRaw||[]).filter(b=>!_tbDismissed.includes(b.id) && (!b.show_until || b.show_until>=today)).length;
   const openTasksCount=(openTasksRaw?.length||0)+unreadBcCount;
-  if(openTasksCount>0 && !transporterInfoAutoShown){
-    transporterInfoAutoShown=true;
-    transporterSubTab='info';
-  }
   let html=pageHeaderHtml('🚚','Transporter',`${new Date().toLocaleDateString('de-AT')}`,'#F97316');
 
   // Vier Tabs — Boldonse via tabBarHtml helper
@@ -6250,7 +6301,7 @@ async function renderPack(){
         if(!v){ html+=`<td style="color:var(--border);">·</td>`; return; }
         const cellStyle=`display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
         html+=isBestellToday
-          ? `<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed})" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
+          ? `<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v})" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
           : `<td><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
       });
       html+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
@@ -7285,11 +7336,10 @@ async function renderKitchen(){
   const nwKwNum=getIsoWeekNumber(nwWeekDates[1]);
   const nwWeekLabelShort = kitchenWeekOffset===0?'Diese Woche':(kitchenWeekOffset===1?'Nächste Woche':`KW ${nwKwNum}`);
   const nwLabel=nwWeekLabelShort+' '+new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-  const KTAB_COLORS = {daily:'#1D5E3A', morgen:'#F97316', forecast:'#3B82F6', plan:'#22C55E', supply:'#EC4899'};
+  const KTAB_UNIFIED_COLOR='#1D5E3A'; // eine Farbe für alle Tabs — aktiv = knallig, inaktiv = grau maskiert
   const ktab=(key,label)=>{
     const active=kitchenTab===key;
-    const col=KTAB_COLORS[key];
-    return `<button class="cl-tab" onclick="switchKitchenTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
+    return `<button class="cl-tab" onclick="switchKitchenTab('${key}')" style="border-color:${active?KTAB_UNIFIED_COLOR:'#D9D9D6'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${KTAB_UNIFIED_COLOR};color:#fff;`:`background:#EDEDEA;color:#9B9B94;`}">${label}</button>`;
   };
   // Tab-Labels: Forecast zeigt immer die korrekte Woche mit Datum Mo–Fr
   const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
@@ -8141,15 +8191,24 @@ async function renderSweets(){
   let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
-  const today=new Date().toISOString().split('T')[0];
-  const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`);
+  const sweetsViewDate=new Date(); sweetsViewDate.setDate(sweetsViewDate.getDate()+sweetsDateOffset);
+  const sweetsDateStr=sweetsViewDate.toISOString().split('T')[0];
+  const isSweetsToday=sweetsDateOffset===0;
+  const allOrdRaw=await api(`orders?order_date=eq.${sweetsDateStr}&select=store_id,article_id,quantity`);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o.quantity;});
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
   const sweetsItems=articles.filter(a=>a.category==='Sweets');
-  const todayStr=new Date().toLocaleDateString('de-AT');
+  const sweetsDateLabel=sweetsViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
 
-  let html=tabsHtml+`<div style="font-size:12px;color:var(--muted);margin:10px 0;">Für morgen · Stand: ${todayStr}</div>`;
+  let html=tabsHtml+`<div class="card" style="padding:8px 10px;margin:10px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <button onclick="navSweetsDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
+    <div style="text-align:center;">
+      <div style="font-size:12.5px;font-weight:600;">${sweetsDateLabel}${isSweetsToday?' · heute':''}</div>
+      ${!isSweetsToday?`<div onclick="navSweetsToday()" style="font-size:10px;color:#EC4899;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
+    </div>
+    <button onclick="navSweetsDate(1)" ${isSweetsToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
+  </div>`;
   html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table">
     <thead><tr>
       <th style="text-align:left;">Sweets 🍰</th>`;
@@ -8177,7 +8236,7 @@ async function renderSweets(){
     html+=`<div style="display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid var(--border);gap:10px;">
       <span style="width:12px;height:12px;border-radius:50%;background:${col};flex-shrink:0;"></span>
       <span style="flex:1;font-size:13px;" data-no-translate>${s.name}</span>
-      <span class="badge ${hasOrder?'badge-ok':'badge-warn'}">${hasOrder?'✓ aktualisiert heute':'noch ausstehend'}</span>
+      <span class="badge ${hasOrder?'badge-ok':'badge-warn'}">${hasOrder?(isSweetsToday?'✓ aktualisiert heute':'✓ eingetragen'):'noch ausstehend'}</span>
     </div>`;
   });
   html+='</div>';
