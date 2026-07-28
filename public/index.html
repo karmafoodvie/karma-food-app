@@ -883,7 +883,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.4.1';
+const APP_VERSION = '6.4.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3396,7 +3396,7 @@ async function autoSaveForecastCell(inputEl){
     }
     await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
     if(rowsToInsert.length){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify(rowsToInsert)});
+      await api('forecast_qty',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
     }
     // Alle Inputs dieser Zelle als "gespeichert" (data-original nachziehen) markieren, Rand grün kurz aufblitzen
     const cellInputs=isLasagneDish
@@ -3452,7 +3452,7 @@ async function saveForecastChanges(){
       await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
       // ... dann alle aktuellen Werte (alle Größen) in EINEM Rutsch neu schreiben — atomar statt sequenziell
       if(rowsToInsert.length){
-        await api('forecast_qty',{method:'POST',body:JSON.stringify(rowsToInsert)});
+        await api('forecast_qty',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
       }
     }
     showToast('✓ Änderungen gespeichert — Küche wird informiert');
@@ -3536,9 +3536,16 @@ async function submitOrder(){
   if(btn){ btn.disabled=true; btn.textContent='Wird gespeichert…'; btn.style.opacity='0.7'; }
   try{
     for(const aid of tabArticleIds){
-      await api(`orders?store_id=eq.${currentStore.id}&article_id=eq.${aid}&order_date=eq.${today}`,{method:'DELETE'});
+      // WICHTIG: .catch() hier ist entscheidend — schlägt eine einzelne Löschung fehl (Netzwerk-
+      // Hänger etc.), darf das nicht die ganze Schleife abbrechen. Sonst behalten Artikel weiter
+      // hinten in der Liste ihre alte Zeile, die dann beim Einfügen mit der neuen kollidiert
+      // ("duplicate key value violates unique constraint orders_store_id_article_id_order_date") —
+      // genau der Fehler, den Börse gemeldet hat.
+      await api(`orders?store_id=eq.${currentStore.id}&article_id=eq.${aid}&order_date=eq.${today}`,{method:'DELETE'}).catch(e=>console.error('orders delete failed for article',aid,e));
     }
-    if(rows.length) await api('orders',{method:'POST',body:JSON.stringify(rows)});
+    // Zusätzlich als Upsert (nicht reines Insert): falls trotz obigem Löschen doch noch eine alte
+    // Zeile übrig sein sollte, wird sie aktualisiert statt einen Konflikt zu werfen.
+    if(rows.length) await api('orders',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rows)});
     // Abschick-Marker — unabhängig davon ob irgendeine Menge >0 war. Sonst zählt "bewusst überall 0
     // gewählt, weil von gestern noch alles da ist" nie als "erledigt" (genau der Bug, den ein Store
     // gemeldet hat: 0 bei Sweets gewählt, "Let's wrap up the shift" zeigte trotzdem "nicht erledigt").
