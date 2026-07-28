@@ -883,7 +883,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.4.4';
+const APP_VERSION = '6.4.6';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7201,7 +7201,12 @@ async function renderTransporterBeilagenHtml(){
     valMap[d.supply_date][d.store_id][d.article_name]=d;
   });
 
-  const allArticles=[...new Set(baseline.map(b=>b.article_name))];
+  // Artikel-Liste aus Grundmenge UND tatsächlich eingetragenen Werten zusammensetzen — sonst
+  // verschwindet ein Artikel ohne hinterlegte Grundmenge für heute komplett aus der Liste,
+  // obwohl eine Filiale ihn tatsächlich eingetragen hat.
+  const articleSetToday=new Set(baseline.map(b=>b.article_name));
+  (weekVals||[]).forEach(d=>{ if(d.supply_date===weekDates[weekdayNum<=5?weekdayNum:1]) articleSetToday.add(d.article_name); });
+  const allArticles=[...articleSetToday];
   if(!allArticles.length) return '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Beilagen für heute hinterlegt.</div>';
 
   // Tabelle: Beilage | Store1 | Store2 | Store3 | Store4
@@ -7267,11 +7272,17 @@ async function renderBeilagenTableHtml(mode='kueche'){
       valMap[d.supply_date][d.store_id][d.article_name]=d;
     });
 
-    if(!baseline?.length){
+    // Artikel-Liste aus Grundmenge UND tatsächlich eingetragenen Werten der ganzen Woche
+    // zusammensetzen — sonst verschwindet ein Artikel ohne hinterlegte Grundmenge komplett,
+    // obwohl eine Filiale ihn an einem Tag dieser Woche tatsächlich eingetragen hat.
+    const articleSetWeek=new Set((baseline||[]).map(b=>b.article_name));
+    (weekVals||[]).forEach(d=>articleSetWeek.add(d.article_name));
+
+    if(!baseline?.length && !articleSetWeek.size){
       return '<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Grundmengen hinterlegt.</div>';
     }
 
-    const allArticles=[...new Set(baseline.map(b=>b.article_name))];
+    const allArticles=[...articleSetWeek];
     const activeDays=[1,2,3,4,5].filter(wd=>
       baseline.some(b=>b.weekday===wd) || Object.keys(valMap[weekDates[wd]]||{}).length>0
     );
@@ -7703,12 +7714,12 @@ async function renderKitchen(){
           const recs=(fMap[dateStr]?.[st.id]||{})[dish];
           if(!recs||!recs.length) return '<td style="color:var(--border);">·</td>';
           const total=recs.reduce((a,r)=>a+(r.qty||0),0);
-          const manual=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
-          const isOrgSet=recs.some(r=>r.source==='org');
-          const manualCellColor=isOrgSet?'#2B3A67':'#0369A1';
+          // Nur Filial-Änderungen hervorheben — Operations-Anpassungen sehen aus wie jeder andere Wert,
+          // auf Wunsch von Tini (keine Sonderkennzeichnung mehr für "von Operations gesetzt").
+          const storeAdjusted=recs.some(r=>r.source==='manual'||r.source==='store');
           const isLasagneDish=dish.includes('Lasagne');
           const breakdown=(isLasagneDish && recs.length>1)?`<div style="font-size:8.5px;color:var(--muted);">${recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join(' + ')}</div>`:'';
-          return `<td style="font-weight:${manual?'700':'400'};color:${manual?manualCellColor:'#1a1a18'};font-size:12px;">${formatQty(total)}${manual?'*':''}${breakdown}</td>`;
+          return `<td style="font-weight:${storeAdjusted?'700':'400'};color:${storeAdjusted?'#F97316':'#1a1a18'};font-size:12px;">${formatQty(total)}${storeAdjusted?'*':''}${breakdown}</td>`;
         }).join('');
         html+=`<tr>
           <td data-no-translate style="color:${STORE_COLORS[st.id]||'#888'};font-size:12px;">${st.name.split(' ')[0]}</td>
@@ -7717,11 +7728,9 @@ async function renderKitchen(){
       });
       html+='</tbody></table></div></div>';
       const hasStoreAdjusted=storeList.some(st=>allDishes.some(dish=>((fMap[dateStr]?.[st.id]||{})[dish]||[]).some(r=>r.source==='manual'||r.source==='store')));
-      const hasOrgAdjusted=storeList.some(st=>allDishes.some(dish=>((fMap[dateStr]?.[st.id]||{})[dish]||[]).some(r=>r.source==='org')));
-      if(hasStoreAdjusted||hasOrgAdjusted){
-        html+=`<div style="font-size:10.5px;padding:3px 4px 8px;display:flex;gap:12px;flex-wrap:wrap;">
-          ${hasStoreAdjusted?`<span style="color:#0369A1;font-weight:600;">* von Filiale angepasst</span>`:''}
-          ${hasOrgAdjusted?`<span style="color:#2B3A67;font-weight:600;">* von Operations angepasst</span>`:''}
+      if(hasStoreAdjusted){
+        html+=`<div style="font-size:10.5px;padding:3px 4px 8px;">
+          <span style="color:#F97316;font-weight:600;">* von Filiale angepasst</span>
         </div>`;
       }
 
@@ -8102,7 +8111,13 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     if(!beilagenValMapMorgen[d.store_id])beilagenValMapMorgen[d.store_id]={};
     beilagenValMapMorgen[d.store_id][d.article_name]=d;
   });
-  const allBeilagenMorgen=[...new Set((beilagenBaselineMorgen||[]).map(b=>b.article_name))];
+  // Wichtig: Artikel-Liste aus BEIDEN Quellen zusammensetzen (Grundmenge UND tatsächlich
+  // eingetragene Werte) — sonst verschwindet ein Artikel wie "Sauce Bowl", den eine Filiale
+  // für diesen Tag eingetragen hat, komplett aus der Liste, nur weil es dafür keine
+  // hinterlegte Grundmenge für genau diesen Wochentag gibt.
+  const beilagenArticleSet=new Set((beilagenBaselineMorgen||[]).map(b=>b.article_name));
+  (beilagenTodayMorgen||[]).forEach(d=>beilagenArticleSet.add(d.article_name));
+  const allBeilagenMorgen=[...beilagenArticleSet];
 
   if(allBeilagenMorgen.length){
     html+=`<div style="display:flex;align-items:center;gap:8px;margin:20px 0 10px;">
