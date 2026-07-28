@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.3.3';
+const APP_VERSION = '6.3.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3479,14 +3479,20 @@ async function submitOrder(){
     // Abschick-Marker — unabhängig davon ob irgendeine Menge >0 war. Sonst zählt "bewusst überall 0
     // gewählt, weil von gestern noch alles da ist" nie als "erledigt" (genau der Bug, den ein Store
     // gemeldet hat: 0 bei Sweets gewählt, "Let's wrap up the shift" zeigte trotzdem "nicht erledigt").
-    await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.${activeOrderTab}`,{method:'DELETE'}).catch(()=>{});
-    await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:activeOrderTab}])}).catch(()=>{});
+    await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.${activeOrderTab}`,{method:'DELETE'}).catch(e=>console.error('order_submissions delete failed:',e));
+    let submissionMarkerFailed=false;
+    try{
+      await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:activeOrderTab}])});
+    }catch(e){
+      console.error('order_submissions insert failed:',e);
+      submissionMarkerFailed=true;
+    }
     if(note){
       await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
     }
     if(btn){ btn.textContent='✓ Gespeichert!'; btn.style.background='#15803D'; btn.style.opacity='1'; }
-    showToast('✓ '+tab.title+' erfolgreich abgeschickt!');
+    showToast(submissionMarkerFailed?'⚠️ Gespeichert, aber Status-Markierung fehlgeschlagen — bitte Tini Bescheid geben':'✓ '+tab.title+' erfolgreich abgeschickt!');
     const goBackToSchichtende=schichtendeReturnFlag;
     schichtendeReturnFlag=false;
     setTimeout(()=>goTo(goBackToSchichtende?'schichtende':'home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
