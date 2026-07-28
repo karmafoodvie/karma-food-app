@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.3.2';
+const APP_VERSION = '6.3.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1844,14 +1844,14 @@ async function renderHome(){
     if(isWeekday) gamificationHtml=await loadGamificationWidget(currentStore.id).catch(()=>'');
 
     try{
-      const [ordersToday, kcSubToday] = await Promise.all([
-        api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=article_id`).catch(()=>[]),
+      const [submissionsToday, kcSubToday] = await Promise.all([
+        api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=tab`).catch(()=>[]),
         api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${todayDate}&select=id`).catch(()=>[])
       ]);
-      const orderedIds=new Set((ordersToday||[]).map(o=>o.article_id));
-      transporterDone=articles.some(a=>TRANSPORTER_CATS.includes(a.category)&&orderedIds.has(a.id));
+      const submittedTabs=new Set((submissionsToday||[]).map(s=>s.tab));
+      transporterDone=submittedTabs.has('transporter');
       kcDone=(kcSubToday||[]).length>0;
-      sweetsDone=articles.some(a=>SWEETS_CATS.includes(a.category)&&orderedIds.has(a.id));
+      sweetsDone=submittedTabs.has('sweets');
 
       // Freitags-Reminder: Forecast für die kommende Woche checken, bevors ins Wochenende geht
       if(dayIdx===4){ // Freitag
@@ -3476,6 +3476,11 @@ async function submitOrder(){
       await api(`orders?store_id=eq.${currentStore.id}&article_id=eq.${aid}&order_date=eq.${today}`,{method:'DELETE'});
     }
     if(rows.length) await api('orders',{method:'POST',body:JSON.stringify(rows)});
+    // Abschick-Marker — unabhängig davon ob irgendeine Menge >0 war. Sonst zählt "bewusst überall 0
+    // gewählt, weil von gestern noch alles da ist" nie als "erledigt" (genau der Bug, den ein Store
+    // gemeldet hat: 0 bei Sweets gewählt, "Let's wrap up the shift" zeigte trotzdem "nicht erledigt").
+    await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.${activeOrderTab}`,{method:'DELETE'}).catch(()=>{});
+    await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:activeOrderTab}])}).catch(()=>{});
     if(note){
       await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
@@ -3701,12 +3706,13 @@ async function loadOrgDashboard(){
   const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
   const tomorrowStr=tomorrow.toISOString().split('T')[0];
   try{
-    const [stores, ordersToday, kcToday, forecastTomorrow, disposalToday] = await Promise.all([
+    const [stores, ordersToday, kcToday, forecastTomorrow, disposalToday, submissionsAllToday] = await Promise.all([
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
       api(`kc_submissions?order_date=eq.${today}&select=store_id`).catch(()=>[]),
       api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=eq.manual&select=store_id`).catch(()=>[]),
-      api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[])
+      api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[]),
+      api(`order_submissions?order_date=eq.${today}&select=store_id,tab`).catch(()=>[])
     ]);
     const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
     const kcSet=new Set((kcToday||[]).map(k=>k.store_id));
@@ -3748,7 +3754,8 @@ async function loadOrgDashboard(){
       </div>`;
     }
 
-    // Transporter/Sweets: mind. 1 bestellter Artikel der jeweiligen Kategorie heute
+    // Transporter/Sweets: Abschick-Marker (nicht "mind. 1 Artikel mit Menge>0") — sonst zählt
+    // "bewusst überall 0 gewählt" nie als erledigt.
     const dot=ok=>`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${ok?'#22C55E':'#EF4444'};"></span>`;
     const dotNeutral=`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#D9D9D6;" title="Heute nicht gefordert (nur Di & Do)"></span>`;
     const realWeekdayDash=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
@@ -3758,15 +3765,9 @@ async function loadOrgDashboard(){
       <th style="text-align:left;">Filiale</th><th>Shop${isKCDayDash?'':'<br><span style="font-size:8px;font-weight:400;">(heute nicht nötig)</span>'}</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th><th>Entsorgung</th>
     </tr></thead><tbody>`;
     storeList.forEach(s=>{
-      const storeOrders=(ordersToday||[]).filter(o=>o.store_id===s.id);
-      const transporterOk=storeOrders.some(o=>{
-        const a=articles.find(x=>x.id===o.article_id);
-        return a && TRANSPORTER_CATS.includes(a.category) && o.quantity>0;
-      });
-      const sweetsOk=storeOrders.some(o=>{
-        const a=articles.find(x=>x.id===o.article_id);
-        return a && SWEETS_CATS.includes(a.category) && o.quantity>0;
-      });
+      const storeSubmittedTabs=new Set((submissionsAllToday||[]).filter(sub=>sub.store_id===s.id).map(sub=>sub.tab));
+      const transporterOk=storeSubmittedTabs.has('transporter');
+      const sweetsOk=storeSubmittedTabs.has('sweets');
       const col=STORE_COLORS[s.id]||'#888';
       html+=`<tr>
         <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:${col};flex-shrink:0;"></span><span data-no-translate style="font-size:12.5px;font-weight:500;">${s.name.split(' ')[0]}</span></span></td>
@@ -6017,7 +6018,7 @@ async function renderSchichtende(){
   const tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
 
   // Alle Daten parallel laden
-  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, ordersToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow] = await Promise.all([
+  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, submissionsToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow] = await Promise.all([
     api('checklist_templates?list_type=eq.abschluss&select=id').catch(()=>[]),
     api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`).catch(()=>[]),
     api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=id`).catch(()=>[]),
@@ -6026,7 +6027,7 @@ async function renderSchichtende(){
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=id`).catch(()=>[]),
     api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
-    api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=article_id`).catch(()=>[]),
+    api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=tab`).catch(()=>[]),
     api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=id`).catch(()=>[]),
     api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${tomorrow}&select=id`).catch(()=>[]),
     api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${tomorrow}&is_adjusted=eq.true&select=id&limit=1`).catch(()=>[])
@@ -6035,8 +6036,9 @@ async function renderSchichtende(){
   const clDoneIds=new Set((clDoneToday||[]).map(x=>x.template_id));
   const clTotal=(clTemplates||[]).length;
   const clDoneCount=(clTemplates||[]).filter(t=>clDoneIds.has(t.id)).length;
-  const sweetsDone=(ordersToday||[]).some(o=>articles.find(a=>a.id===o.article_id&&a.category==='Sweets'));
-  const transporterDone=(ordersToday||[]).some(o=>articles.find(a=>a.id===o.article_id&&TRANSPORTER_CATS.includes(a.category)));
+  const submittedTabsSchichtende=new Set((submissionsToday||[]).map(s=>s.tab));
+  const sweetsDone=submittedTabsSchichtende.has('sweets');
+  const transporterDone=submittedTabsSchichtende.has('transporter');
   const kcDone=(kcSubToday||[]).length>0;
   const forecastDone=(forecastTomorrow||[]).length>0;
   const realWeekdaySchichtende=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
