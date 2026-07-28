@@ -883,7 +883,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.4.2';
+const APP_VERSION = '6.4.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1011,9 +1011,13 @@ async function setLang(l) {
 
 // ---- API ----
 async function api(path, opts={}) {
+  // WICHTIG: ...opts muss VOR headers/mode gespreadet werden — sonst überschreibt ein via opts.headers
+  // übergebener eigener Header (z.B. für Upsert) den kompletten Header-Objekt inkl. apikey/Authorization,
+  // statt nur damit zusammengeführt zu werden ("No API key found in request").
   const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...opts,
+    mode:'cors',
     headers: {'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
-    mode:'cors', ...opts
   }, 10000); // 10s Timeout — verhindert unendliches Hängenbleiben bei Netzwerkproblemen/Stoßzeit
   if (!res.ok) throw new Error(await res.text());
   const t = await res.text();
