@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.2.1';
+const APP_VERSION = '6.2.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1305,7 +1305,7 @@ function parseZutatenText(text){
   const lines=text.split('\n').filter(line=>{
     const l=line.trim().toUpperCase();
     return !l.startsWith('GEM') && !l.startsWith('GEW') && !l.startsWith('GRUNDZ')
-        && !l.startsWith('GETREIDE') && !l.startsWith('BEILAGE:')
+        && !l.startsWith('GETREIDE') && !l.startsWith('BEILAGE:') && !l.startsWith('ZUTATEN')
         && !l.startsWith('ÖL/') && !l.startsWith('DRESSING:') && l!=='';
   });
   const items=lines.join(',').split(',').map(s=>s.trim()).filter(Boolean);
@@ -1914,7 +1914,6 @@ async function renderHome(){
         const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
         const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
         const allNames=[...namesMain,...namesDressing];
-        const zutaten=(d.zutaten||'').replace(/\n/g,' ').trim();
         const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
                 return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
           <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
@@ -1926,8 +1925,8 @@ async function renderHome(){
             <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
           </div>
           <div id="dish-allergen-${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px;">
-            <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:3px;">ZUTATEN:</div>
-            <div style="font-size:10px;color:var(--sub);line-height:1.5;">${zutaten||'Keine Zutaten hinterlegt'}</div>
+            <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:5px;">🧂 ZUTATEN</div>
+            <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(d.zutaten)}</div>
           </div>
         </div>`;
       }).join('')}</div>`;
@@ -3444,7 +3443,9 @@ async function submitOrder(){
     .filter(([id,v])=>v>0 && tabArticleIds.has(parseInt(id)))
     .map(([id,qty])=>({store_id:currentStore.id,article_id:parseInt(id),quantity:qty,order_date:today}));
   const note=document.getElementById('special-note-'+activeOrderTab)?.value?.trim()||'';
-  if(!rows.length&&!note){showToast('Nichts eingetragen');return;}
+  // WICHTIG: kein Early-Return mehr wenn rows leer ist! Alles-auf-0-Setzen muss die vorherige
+  // Bestellung trotzdem löschen (sonst bleibt z.B. "3 Desserts" von heute Vormittag stehen, obwohl
+  // die Filiale um 12 Uhr auf 0 aktualisiert hat — genau der Bug, den Dayan gemeldet hat).
   const btn=document.getElementById('order-submit-btn');
   const originalLabel=btn?.textContent;
   if(btn){ btn.disabled=true; btn.textContent='Wird gespeichert…'; btn.style.opacity='0.7'; }
@@ -3727,9 +3728,12 @@ async function loadOrgDashboard(){
 
     // Transporter/Sweets: mind. 1 bestellter Artikel der jeweiligen Kategorie heute
     const dot=ok=>`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${ok?'#22C55E':'#EF4444'};"></span>`;
+    const dotNeutral=`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#D9D9D6;" title="Heute nicht gefordert (nur Di & Do)"></span>`;
+    const realWeekdayDash=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
+    const isKCDayDash=realWeekdayDash===2||realWeekdayDash===4; // Shop-Produkte nur Dienstag & Donnerstag
     let html=reminderHtml;
     html+=`<div class="section-lbl">📦 Bestellstatus heute</div><div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
-      <th style="text-align:left;">Filiale</th><th>Shop</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th><th>Entsorgung</th>
+      <th style="text-align:left;">Filiale</th><th>Shop${isKCDayDash?'':'<br><span style="font-size:8px;font-weight:400;">(heute nicht nötig)</span>'}</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th><th>Entsorgung</th>
     </tr></thead><tbody>`;
     storeList.forEach(s=>{
       const storeOrders=(ordersToday||[]).filter(o=>o.store_id===s.id);
@@ -3744,7 +3748,7 @@ async function loadOrgDashboard(){
       const col=STORE_COLORS[s.id]||'#888';
       html+=`<tr>
         <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:${col};flex-shrink:0;"></span><span data-no-translate style="font-size:12.5px;font-weight:500;">${s.name.split(' ')[0]}</span></span></td>
-        <td>${dot(kcSet.has(s.id))}</td>
+        <td>${isKCDayDash?dot(kcSet.has(s.id)):dotNeutral}</td>
         <td>${dot(forecastSet.has(s.id))}</td>
         <td>${dot(transporterOk)}</td>
         <td>${dot(sweetsOk)}</td>
@@ -5978,6 +5982,8 @@ async function renderSchichtende(){
   const transporterDone=(ordersToday||[]).some(o=>articles.find(a=>a.id===o.article_id&&TRANSPORTER_CATS.includes(a.category)));
   const kcDone=(kcSubToday||[]).length>0;
   const forecastDone=(forecastTomorrow||[]).length>0;
+  const realWeekdaySchichtende=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
+  const isKCDaySchichtende=realWeekdaySchichtende===2||realWeekdaySchichtende===4; // Shop-Produkte nur Di & Do
 
   const schritte=[
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
@@ -5987,7 +5993,7 @@ async function renderSchichtende(){
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
-    {id:'kc', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände der Shop-Produkte', done:kcDone, link:'order', orderTab:'kc', group:'bestellungen'},
+    ...(isKCDaySchichtende?[{id:'kc', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände der Shop-Produkte', done:kcDone, link:'order', orderTab:'kc', group:'bestellungen'}]:[]),
     {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null, group:'sonstiges'},
     {id:'abschluss', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten — optionale Hilfe`, done:clDoneCount===clTotal && clTotal>0, link:'check', group:'sonstiges', optional:true}
   ];
