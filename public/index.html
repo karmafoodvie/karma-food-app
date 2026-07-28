@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.1.6';
+const APP_VERSION = '6.1.7';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -907,6 +907,11 @@ let stockData = {};
 let activePackTab = 'transporter';
 let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen' | 'info'
 let transporterInfoAutoShown = false; // einmal pro Sitzung automatisch auf Info springen, wenn was offen ist
+let transporterBestellDateOffset = 0; // 0=heute, -1=gestern, ... für Bestellliste-Verlauf
+function navBestellDate(delta){ transporterBestellDateOffset+=delta; renderPack(); }
+function navBestellToday(){ transporterBestellDateOffset=0; renderPack(); }
+window.navBestellDate=navBestellDate;
+window.navBestellToday=navBestellToday;
 function switchTransporterSubTab(t){ transporterSubTab=t; renderPack(); }
 window.switchTransporterSubTab=switchTransporterSubTab;
 function goToPackTab(tab){ activePackTab=tab; goTo('pack'); }
@@ -6184,15 +6189,30 @@ async function renderPack(){
     return;
   }
 
-  // --- Bestellliste (Standard-Tab) ---
-  const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity,eingepackt`);
-  const specRaw=await api(`special_orders?order_date=eq.${today}&select=store_id,note`).catch(()=>[]);
+  // --- Bestellliste (Standard-Tab) — Datum wählbar, damit vergangene Tage nicht verloren gehen ---
+  const bestellViewDate=new Date(); bestellViewDate.setDate(bestellViewDate.getDate()+transporterBestellDateOffset);
+  const bestellDateStr=bestellViewDate.toISOString().split('T')[0];
+  const isBestellToday=transporterBestellDateOffset===0;
+  const bestellDateLabel=bestellViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+  html+=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <button onclick="navBestellDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
+    <div style="text-align:center;">
+      <div style="font-size:12.5px;font-weight:600;">${bestellDateLabel}${isBestellToday?' · heute':''}</div>
+      ${!isBestellToday?`<div onclick="navBestellToday()" style="font-size:10px;color:#F97316;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
+    </div>
+    <button onclick="navBestellDate(1)" ${isBestellToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
+  </div>`;
+  if(!isBestellToday){
+    html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#9A3412;">📋 Ansicht eines vergangenen Tages — nur Anzeige, "eingepackt" kann hier nicht mehr geändert werden.</div>`;
+  }
+  const allOrdRaw=await api(`orders?order_date=eq.${bestellDateStr}&select=store_id,article_id,quantity,eingepackt`);
+  const specRaw=await api(`special_orders?order_date=eq.${bestellDateStr}&select=store_id,note`).catch(()=>[]);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
 
-  // KC Abholbereit-Banner
-  const kcPickup=await api('kc_pickup_ready?date=eq.'+today+'&select=ready_at,message').catch(()=>[]);
+  // KC Abholbereit-Banner — nur für heute relevant
+  const kcPickup=isBestellToday?await api('kc_pickup_ready?date=eq.'+today+'&select=ready_at,message').catch(()=>[]):[];
   if(kcPickup?.length){
     const readyTime=new Date(kcPickup[0].ready_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'});
     html+=`<div style="background:#F3E8FF;border:2px solid #A855F7;border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
@@ -6228,7 +6248,10 @@ async function renderPack(){
         const v=rec?.quantity||0;
         const packed=!!rec?.eingepackt;
         if(!v){ html+=`<td style="color:var(--border);">·</td>`; return; }
-        html+=`<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed})" style="cursor:pointer;display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};">${v}${packed?' ✓':''}</span></td>`;
+        const cellStyle=`display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
+        html+=isBestellToday
+          ? `<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed})" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
+          : `<td><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
       });
       html+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
     });
