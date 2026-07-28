@@ -684,6 +684,12 @@ async function renderHilfe(){
 }
 const WEEKDAY_NAMES = {1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
 const WEEKDAY_STR = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'}; // Kurzform-Schlüssel für Wochentage, u.a. für MENU_DATA-Keys (w1_mo, w1_di, ...)
+// TEMPORÄR (auf Wunsch von Tini, 28.07.26): KI-Vorschlag im Store-Forecast-Tab deaktiviert, weil er
+// gemeldet wurde, manuell eingetragene 0en zu überschreiben/zurückzusetzen. Solange false, bleiben
+// Felder ohne gespeicherten Wert einfach leer (kein automatisch vorbefüllter Vorschlagswert mehr) —
+// eine manuelle Eingabe ist dann garantiert die einzige Quelle, die je in der Zelle steht.
+// Wieder auf true stellen, sobald die Ursache gefunden & gefixt ist.
+let FORECAST_SUGGESTIONS_ENABLED = false;
 const CL_TYPES = ['abschluss']; // 'oeffnung' & 'reinigung' bleiben als Daten bestehen, sind aber keine Pflicht-Tabs mehr — siehe renderOeffnungHelp()/renderReinigungHelp()
 const ALL_CL_TYPES = ['oeffnung','reinigung','abschluss']; // für das Laden der Templates/Fortschritts, inkl. optionaler Hilfe-Checklisten
 const CL_LABELS = {oeffnung:'Öffnung',reinigung:'Reinigung',abschluss:'Abschluss'};
@@ -877,7 +883,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.3.5';
+const APP_VERSION = '6.3.9';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3202,7 +3208,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const isOrgSet=rec?.source==='org';
     const manualColor=isOrgSet?'#2B3A67':'#F97316';
     const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
-    const autoSuggestion=(suggestionMap[dateStr]||{})[dish];
+    const autoSuggestion=FORECAST_SUGGESTIONS_ENABLED?(suggestionMap[dateStr]||{})[dish]:null;
     const autoVal=autoSuggestion?.qty ?? autoSuggestion; // Kompatibilität falls einfacher Zahlenwert
     const val=rec ? rec.qty : autoVal;
     const isSuggestion=!rec && autoVal!=null;
@@ -3224,7 +3230,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const orgTitle=isOrgSet?' · von Operations gesetzt':'';
     const fullTitle=escAttr((suggReason+lwTitle+orgTitle).trim());
     return `<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
-      oninput="markForecastDirty(this)"
+      oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
       title="${fullTitle}"
       style="width:48px;text-align:center;border:1.5px solid ${manual?manualColor:(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSuggestion?'#F0F9FF':'#fff')};">`;
   }
@@ -3261,7 +3267,7 @@ async function renderForecastOrderTab(el, tabHtml){
       h+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LABELS[sz.k]}</span>
         <input type="number" step="0.25" value="${val}" placeholder="–"
           data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
-          oninput="markForecastDirty(this)"
+          oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
           style="width:40px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">`;
     });
     h+='</div>';
@@ -3269,21 +3275,21 @@ async function renderForecastOrderTab(el, tabHtml){
   }
 
   let anyLasagne=false;
-  html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
+  html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;">
     <thead>
       <tr>
-        <th style="text-align:left;">Tag</th>
-        <th style="color:#A21CAF;font-size:10px;">Salat</th>
-        <th style="font-size:10px;">Gericht 1</th>
-        <th style="font-size:10px;">Gericht 2</th>
-        <th style="font-size:10px;">Reis</th>
+        <th style="text-align:left;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Tag</th>
+        <th style="color:#A21CAF;font-size:10px;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Salat</th>
+        <th style="font-size:10px;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht 1</th>
+        <th style="font-size:10px;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht 2</th>
+        <th style="font-size:10px;border-bottom:1.5px solid var(--border);">Reis</th>
       </tr>
       <tr style="background:var(--surface-1);">
-        <td style="font-size:9px;color:var(--muted);padding:2px 6px;">Behälter</td>
-        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
-        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
-        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
-        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">Behälter</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">↑ Vorw.</td>
+        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);">↑ Vorw.</td>
       </tr>
     </thead><tbody>`;
 
@@ -3298,24 +3304,30 @@ async function renderForecastOrderTab(el, tabHtml){
     const reisName=REIS_DISH_NAME;
     const rowLasagne=[g2,g3].some(n=>n && n.includes('Lasagne'));
     if(rowLasagne) anyLasagne=true;
+    const isLastRow=wd===5;
+    const rowBorder=isLastRow?'':'border-bottom:1px solid var(--border);';
     // Echter Gerichtname direkt bei der jeweiligen Zelle — ändert sich täglich, deshalb nicht mehr
-    // im (fixen) Spaltenkopf, sondern hier pro Tag/Zelle, damit immer klar ist, welche Zahl zu
-    // welchem Gericht gehört.
-    const dishLabel=(name)=>name?`<div data-no-translate style="font-size:8px;color:var(--muted);line-height:1.2;margin-bottom:2px;max-width:60px;">${name}</div>`:'';
+    // im (fixen) Spaltenkopf, sondern hier pro Tag/Zelle. Fixe Höhe (grid-template-rows), damit die
+    // Eingabefelder in jeder Zeile exakt auf derselben Höhe stehen, egal wie lang der Name ist.
+    const cellWrap=(labelHtml, inputHtml)=>`<div style="display:grid;grid-template-rows:30px auto;justify-items:center;align-items:end;">
+        <div style="display:flex;align-items:flex-end;justify-content:center;">${labelHtml}</div>
+        <div>${inputHtml}</div>
+      </div>`;
+    const dishLabel=(name)=>name?`<div data-no-translate style="font-size:8px;color:var(--muted);line-height:1.2;max-width:64px;text-align:center;">${name}</div>`:'';
 
     html+=`<tr style="${isToday?`background:${tab.color}0d;`:''}">
-      <td style="padding:6px 6px;vertical-align:top;">
+      <td style="padding:6px 6px;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
         <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍':''}</div>
         ${dayReasonMap[dateStr]?`<div style="font-size:9.5px;color:var(--muted);line-height:1.3;">${dayReasonMap[dateStr]}</div>`:''}
       </td>
-      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">${dishLabel(salatName)}${cellInput(dateStr, salatName)}</td>
-      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">
-        ${g2?dishLabel(g2)+cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
+      <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">${cellWrap(dishLabel(salatName), cellInput(dateStr, salatName))}</td>
+      <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
+        ${g2?cellWrap(dishLabel(g2), cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
       </td>
-      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">
-        ${g3?dishLabel(g3)+cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null):'<span style="color:var(--border);">·</span>'}
+      <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
+        ${g3?cellWrap(dishLabel(g3), cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
       </td>
-      <td style="padding:4px 3px;text-align:center;vertical-align:middle;">${reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>'}</td>
+      <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}">${cellWrap('', reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>')}</td>
     </tr>`;
   }
   html+='</tbody></table></div></div>';
@@ -3356,6 +3368,54 @@ window.markForecastDirty=markForecastDirty;
 // einem Rutsch — erst danach EIN Re-Render, damit keine parallel eingegebenen Werte verloren gehen.
 // Bei Lasagne: pro Tag/Gericht ALLE 3 Größen zusammen lesen, EINMAL löschen, EINMAL neu schreiben —
 // verhindert, dass beim sequenziellen Einzel-Speichern eine bereits gespeicherte Größe verloren geht.
+// Speichert eine einzelne Zelle sofort bei Verlassen des Feldes (onchange) — kein separater
+// "Speichern"-Klick mehr nötig. Grund: mehrfach gemeldet, dass eine bewusst eingetragene 0 beim
+// nächsten Öffnen wieder wie der alte Wert/Vorschlag aussah — Ursache war, dass der Store das Feld
+// verlassen hat, ohne den separaten Sammel-Button zu drücken (anders als überall sonst in der App,
+// wo Zahlenfelder sofort speichern). Der Sammel-Button bleibt zusätzlich bestehen für Batch-Eingabe.
+async function autoSaveForecastCell(inputEl){
+  const dateStr=inputEl.dataset.date;
+  const dishName=inputEl.dataset.dish;
+  if(!dateStr||!dishName) return;
+  const isLasagneDish=dishName.includes('Lasagne');
+  const rowsToInsert=[];
+  try{
+    if(isLasagneDish){
+      const allSizeInputs=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)];
+      allSizeInputs.forEach(inp=>{
+        const qty=parseFloat(inp.value);
+        if(!isNaN(qty) && qty>=0){
+          rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:inp.dataset.groesse||'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
+        }
+      });
+    } else {
+      const qty=parseFloat(inputEl.value);
+      if(!isNaN(qty) && qty>=0){
+        rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
+      }
+    }
+    await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
+    if(rowsToInsert.length){
+      await api('forecast_qty',{method:'POST',body:JSON.stringify(rowsToInsert)});
+    }
+    // Alle Inputs dieser Zelle als "gespeichert" (data-original nachziehen) markieren, Rand grün kurz aufblitzen
+    const cellInputs=isLasagneDish
+      ? [...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)]
+      : [inputEl];
+    cellInputs.forEach(inp=>{
+      inp.dataset.original=inp.value;
+      const prevBorder=inp.style.borderColor;
+      inp.style.borderColor='#22C55E';
+      setTimeout(()=>{ markForecastDirty(inp); }, 600);
+    });
+    showToast('✓ Gespeichert');
+  }catch(e){
+    console.error(e);
+    showToast('❌ Fehler beim Speichern — bitte nochmal versuchen');
+  }
+}
+window.autoSaveForecastCell=autoSaveForecastCell;
+
 async function saveForecastChanges(){
   const inputs=[...document.querySelectorAll('#forecast-table-wrap input[data-dish]')].filter(i=>i.value!==i.dataset.original);
   if(!inputs.length){ showToast('Keine Änderungen'); return; }
@@ -3374,14 +3434,17 @@ async function saveForecastChanges(){
         const allSizeInputs=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)];
         allSizeInputs.forEach(inp=>{
           const qty=parseFloat(inp.value);
-          if(!isNaN(qty) && qty>0){
+          // qty>=0 statt qty>0: eine bewusst eingetragene 0 ("brauche ich heute keinen") muss
+          // gespeichert werden, sonst erscheint beim nächsten Öffnen wieder der KI-Vorschlag und
+          // wirkt so, als würde sich der Wert von selbst "zurückkorrigieren".
+          if(!isNaN(qty) && qty>=0){
             rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:inp.dataset.groesse||'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
           }
         });
       } else {
         const inp=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)][0];
         const qty=inp?parseFloat(inp.value):NaN;
-        if(!isNaN(qty) && qty>0){
+        if(!isNaN(qty) && qty>=0){
           rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
         }
       }
@@ -3481,18 +3544,20 @@ async function submitOrder(){
     // gemeldet hat: 0 bei Sweets gewählt, "Let's wrap up the shift" zeigte trotzdem "nicht erledigt").
     await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.${activeOrderTab}`,{method:'DELETE'}).catch(e=>console.error('order_submissions delete failed:',e));
     let submissionMarkerFailed=false;
+    let submissionErrorDetail='';
     try{
       await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:activeOrderTab}])});
     }catch(e){
       console.error('order_submissions insert failed:',e);
       submissionMarkerFailed=true;
+      submissionErrorDetail=(e?.message||String(e)).slice(0,140);
     }
     if(note){
       await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
     }
     if(btn){ btn.textContent='✓ Gespeichert!'; btn.style.background='#15803D'; btn.style.opacity='1'; }
-    showToast(submissionMarkerFailed?'⚠️ Gespeichert, aber Status-Markierung fehlgeschlagen — bitte Tini Bescheid geben':'✓ '+tab.title+' erfolgreich abgeschickt!');
+    showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!', submissionMarkerFailed);
     const goBackToSchichtende=schichtendeReturnFlag;
     schichtendeReturnFlag=false;
     setTimeout(()=>goTo(goBackToSchichtende?'schichtende':'home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
@@ -4231,7 +4296,7 @@ async function updateForecastQtyOrgGroesse(inputEl){
     // Nur diese Größe löschen — andere Größen bleiben erhalten
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
-    if(qty!=null && qty>0){
+    if(qty!=null && qty>=0){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
     inputEl.dataset.copied='0';
@@ -6054,7 +6119,6 @@ async function renderSchichtende(){
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
-    {id:'wochensalat', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen — oder alternativ: Beilagen für morgen anpassen', done:(wochensalatToday||[]).length>0 || (beilagenAdjustedTomorrow||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
@@ -6068,7 +6132,6 @@ async function renderSchichtende(){
     abschluss: {emoji:'💡', label:'Abschluss-Checkliste (optionale Hilfe)', sub:`${clDoneCount} von ${clTotal} Punkten — kein Pflichtschritt`, link:'check'},
     entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
     forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', link:'order', orderTab:'forecast'},
-    wochensalat: {emoji:'🥗', label:'Wochensalat-Meldung', sub:'Restmenge & Bedarf für morgen — oder: Beilagen für morgen anpassen', link:'order', orderTab:'kueche'},
     dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
     reinigung_protokoll: {emoji:'🧽', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', link:null},
     sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Bestellung für morgen', link:'order', orderTab:'sweets'},
@@ -8477,7 +8540,7 @@ function renderLager(){
 }
 
 // ---- UTILS ----
-function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?6000:2500);}
 window.addEventListener('online',()=>{});
 
 initLogin().catch(console.error);
