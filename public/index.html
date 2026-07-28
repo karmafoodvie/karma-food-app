@@ -877,7 +877,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.2.6';
+const APP_VERSION = '6.3.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1285,6 +1285,12 @@ const GETREIDE_KEYWORDS = ['BASMATI','REIS','COUSCOUS','EBLY','QUINOA'];
 // ZUTATEN-VERWALTUNG — Kategorien, Inline-Edit, Global/Lokal-Dialog
 // ══════════════════════════════════════════════════════════════════════════
 
+// Stabiler Schlüssel für Zutaten-Overrides: Woche+Wochentag+Slot bleibt über die ganze
+// 4-Wochen-Rotation gleich, unabhängig vom (sich änderenden) Gerichtnamen.
+function zutatenKey(woche, tag, slot){
+  return (woche!=null && tag && slot) ? `${woche}_${tag}_${slot}` : null;
+}
+
 function guessZutatKat(name){
   const n=name.toLowerCase();
   if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
@@ -1428,7 +1434,7 @@ function zdAttach(editor){
 }
 
 // ── Global/Local Save Dialog ───────────────────────────────────────────────
-function showSaveDialog(dishName, newText, onSaved){
+function showSaveDialog(dishName, newText, onSaved, woche, tag, slot){
   const prev=document.getElementById('zd-save-dialog');
   if(prev) prev.remove();
   const overlay=document.createElement('div');
@@ -1439,11 +1445,11 @@ function showSaveDialog(dishName, newText, onSaved){
   sheet.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:4px;" data-no-translate>'+dishName+'</div>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:20px;">Wo soll die Änderung gespeichert werden?</div>'
     +'<button id="zd-save-local" style="width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:12px;font-size:14px;cursor:pointer;margin-bottom:10px;text-align:left;background:#fff;display:block;">'
-    +'<div style="font-weight:600;">Nur in diesem Rezept</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">Ändert ausschließlich '+dishName+'</div></button>'
+    +'<div style="font-weight:600;">Nur für dieses Rezept</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">Gilt für '+dishName+' — bleibt auch erhalten, wenn dieser Tag in 4 Wochen wiederkommt</div></button>'
     +'<button id="zd-save-global" style="width:100%;padding:13px 14px;border:1.5px solid var(--green);border-radius:12px;font-size:14px;cursor:pointer;margin-bottom:14px;text-align:left;background:var(--green-light);display:block;">'
     +'<div style="font-weight:600;color:var(--green);">Global für alle Rezepte</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">Aktualisiert alle Rezepte mit übereinstimmenden Zutaten</div></button>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">Aktualisiert zusätzlich alle anderen Rezepte mit übereinstimmenden Zutaten</div></button>'
     +'<button id="zd-save-cancel" style="width:100%;padding:11px;border:1px solid var(--border);border-radius:10px;font-size:13px;cursor:pointer;background:#fff;">Abbrechen</button>';
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
@@ -1454,33 +1460,43 @@ function showSaveDialog(dishName, newText, onSaved){
 
   document.getElementById('zd-save-local').addEventListener('click', async ()=>{
     close();
-    await zdSaveLocal(dishName, newText);
+    await zdSaveLocal(dishName, newText, woche, tag, slot);
     if(onSaved) onSaved();
   });
   document.getElementById('zd-save-global').addEventListener('click', async ()=>{
     close();
-    await zdSaveGlobal(dishName, newText);
+    await zdSaveGlobal(dishName, newText, woche, tag, slot);
     if(onSaved) onSaved();
   });
 }
 window.showSaveDialog=showSaveDialog;
 
-async function zdSaveLocal(dishName, text){
+async function zdSaveLocal(dishName, text, woche, tag, slot){
+  const key=zutatenKey(woche, tag, slot);
   try{
-    const ex=(await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=id').catch(()=>[]))[0];
+    let ex;
+    if(key){
+      ex=(await api('allergene_rezepturen?zkey=eq.'+encodeURIComponent(key)+'&select=id').catch(()=>[]))[0];
+    }
+    if(!ex){
+      // Fallback für Altbestand ohne zkey (bisher nach Gerichtname gespeichert)
+      ex=(await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=id').catch(()=>[]))[0];
+    }
+    const payload={gericht:dishName, zutaten:text, aktualisiert_am:new Date().toISOString()};
+    if(key) payload.zkey=key;
     if(ex){
-      await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName),{method:'PATCH',body:JSON.stringify({zutaten:text,aktualisiert_am:new Date().toISOString()})});
+      await api('allergene_rezepturen?id=eq.'+ex.id,{method:'PATCH',body:JSON.stringify(payload)});
     } else {
-      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten:text,allergene_codes:[],aktualisiert_am:new Date().toISOString()}])});
+      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{...payload, allergene_codes:[]}])});
     }
     showToast('✔ Gespeichert');
   }catch(e){ showToast('Fehler: '+(e.message||'unbekannt')); }
 }
 
-async function zdSaveGlobal(dishName, newText){
+async function zdSaveGlobal(dishName, newText, woche, tag, slot){
   try{
-    // 1. Save current dish
-    await zdSaveLocal(dishName, newText);
+    // 1. Save current dish (mit stabilem Schlüssel, falls vorhanden)
+    await zdSaveLocal(dishName, newText, woche, tag, slot);
     // 2. Find overlapping items and update other recipes
     const newItems=newText.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
     const all=await api('allergene_rezepturen?select=id,gericht,zutaten').catch(()=>[]);
@@ -1503,10 +1519,12 @@ async function zdSaveGlobal(dishName, newText){
 }
 
 // Open full-screen zutaten editor modal
-function openZutatenEditor(dishName, currentText){
+function openZutatenEditor(dishName, currentText, woche, tag, slot){
   const prev=document.getElementById('zd-editor-modal');
   if(prev) prev.remove();
   const safeKey=dishName.replace(/[^a-z0-9]/gi,'_').slice(0,30);
+  const DAY_LABEL_ZD={mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
+  const contextLabel=(woche&&tag)?`Woche ${woche} · ${DAY_LABEL_ZD[tag]||tag}`:'';
 
   const overlay=document.createElement('div');
   overlay.id='zd-editor-modal';
@@ -1518,7 +1536,8 @@ function openZutatenEditor(dishName, currentText){
   const hdr=document.createElement('div');
   hdr.style.cssText='position:sticky;top:0;background:#fff;padding:16px 16px 12px;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;z-index:1;';
   hdr.innerHTML='<div><div style="font-size:16px;font-weight:700;" data-no-translate>'+dishName+'</div>'
-    +'<div style="font-size:11px;color:var(--muted);">Zutaten bearbeiten • antippen zum Editieren</div></div>'
+    +(contextLabel?'<div style="font-size:11px;font-weight:600;color:var(--green);margin-top:1px;">'+contextLabel+'</div>':'')
+    +'<div style="font-size:11px;color:var(--muted);margin-top:1px;">Zutaten bearbeiten • antippen zum Editieren</div></div>'
     +'<button id="zd-modal-close" style="background:var(--surface-1);border:none;border-radius:50%;width:30px;height:30px;font-size:17px;cursor:pointer;line-height:1;flex-shrink:0;">✕</button>';
   sheet.appendChild(hdr);
 
@@ -1551,7 +1570,7 @@ function openZutatenEditor(dishName, currentText){
     const items=zdCollectItems(editor);
     const newText=items.join(', ');
     closeModal();
-    showSaveDialog(dishName, newText, ()=>renderKitchen());
+    showSaveDialog(dishName, newText, ()=>renderKitchen(), woche, tag, slot);
   });
 }
 window.openZutatenEditor=openZutatenEditor;
@@ -1777,9 +1796,13 @@ async function renderHome(){
   const el=document.getElementById('v-home');
   // Zutaten-Overrides einmal laden, damit die Gericht-Karten unten die vom Koch bearbeiteten
   // Zutaten zeigen — sonst sieht die Filiale immer nur den ursprünglichen Menü-Text.
-  const homeZutatenOverrideRaw=await api('allergene_rezepturen?select=gericht,zutaten').catch(()=>[]);
+  const homeZutatenOverrideRaw=await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
   const homeZutatenOverrideMap={};
-  (homeZutatenOverrideRaw||[]).forEach(r=>{ if(r.zutaten) homeZutatenOverrideMap[r.gericht]=r.zutaten; });
+  (homeZutatenOverrideRaw||[]).forEach(r=>{
+    if(!r.zutaten) return;
+    homeZutatenOverrideMap[r.gericht]=r.zutaten; // Fallback für Altbestand
+    if(r.zkey) homeZutatenOverrideMap[r.zkey]=r.zutaten; // stabiler Schlüssel hat Vorrang
+  });
 
   let remindersHtml='';
   let monthlyCleaningHtml='';
@@ -1918,7 +1941,8 @@ async function renderHome(){
         const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
         const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
         const allNames=[...namesMain,...namesDressing];
-        const zutatenMerged=homeZutatenOverrideMap[d.name]||d.zutaten;
+        const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
+        const zutatenMerged=(zKeyHome && homeZutatenOverrideMap[zKeyHome])||homeZutatenOverrideMap[d.name]||d.zutaten;
         const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
                 return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
           <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
@@ -4308,7 +4332,14 @@ async function renderTransporterTasks(){
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🚚','Aufgaben für Transporter','Mit einem Datum verknüpfen — erscheint direkt bei Michi im Info-Tab.','#F97316');
   const today=new Date().toISOString().split('T')[0];
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
   html+=`<div class="card" style="padding:14px;">
+    <div style="font-weight:500;margin-bottom:8px;">Betrifft Filiale</div>
+    <select id="tt-filiale" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;background:#fff;">
+      <option value="">🏢 Allgemein (Organisation)</option>
+      ${storeList.map(s=>`<option value="${escAttr(s.name)}">📍 ${s.name}</option>`).join('')}
+    </select>
     <div style="font-weight:500;margin-bottom:8px;">Datum</div>
     <input type="date" id="tt-date" value="${today}" min="${today}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
     <div style="font-weight:500;margin-bottom:8px;">Aufgabe</div>
@@ -4329,9 +4360,10 @@ async function saveTransporterTask(){
   const dateStr=document.getElementById('tt-date').value;
   const text=document.getElementById('tt-text').value.trim();
   const name=document.getElementById('tt-name').value.trim()||currentStore?.name||'Organisation';
+  const filiale=document.getElementById('tt-filiale')?.value||null;
   if(!dateStr||!text){ showToast('Bitte Datum und Aufgabe ausfüllen'); return; }
   try{
-    await api('transporter_tasks',{method:'POST',body:JSON.stringify([{task_date:dateStr,text,created_by:name}])});
+    await api('transporter_tasks',{method:'POST',body:JSON.stringify([{task_date:dateStr,text,created_by:name,filiale}])});
     showToast('✔ Aufgabe hinzugefügt');
     document.getElementById('tt-text').value='';
     loadTransporterTasksList();
@@ -4351,7 +4383,10 @@ async function loadTransporterTasksList(){
     return `<div class="card" style="padding:12px;margin-bottom:8px;${t.done?'opacity:0.55;':''}${isPast?'border-color:#FCA5A5;':''}">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
         <span style="font-size:12px;font-weight:700;color:${isPast?'#DC2626':'#F97316'};">${dateLabel}${isPast?' · überfällig':''}</span>
-        <button onclick="deleteTransporterTask(${t.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${t.filiale?`<span data-no-translate style="font-size:10px;font-weight:600;color:#0369A1;background:#F0F9FF;border-radius:20px;padding:2px 8px;white-space:nowrap;">📍 ${t.filiale}</span>`:''}
+          <button onclick="deleteTransporterTask(${t.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
+        </div>
       </div>
       <div style="font-size:13px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${t.text}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
@@ -4524,20 +4559,21 @@ async function renderAllergene(){
   const el=document.getElementById('v-allergene');
   const isOrg=currentStore?.id==='zentrale';
   el.innerHTML = isOrg ? `
+    <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1E40AF;">
+      ℹ️ Zutaten werden nicht mehr hier angelegt, sondern direkt beim jeweiligen Gericht in der Küche (Menüs-Tab oder "Heute"/Morgen-Tab → ✏️ Zutaten bearbeiten). Hier siehst du nur die Übersicht — zum Aufräumen doppelter/veralteter Einträge.
+    </div>
     <div class="card" style="padding:14px;">
-      <div style="font-weight:500;margin-bottom:10px;">Neues Gericht anlegen</div>
-      <input id="all-gericht" type="text" placeholder="Gericht (z.B. Dal)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
-      <textarea id="all-zutaten" placeholder="Zutaten (freier Text, für Mitarbeitende)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;min-height:60px;box-sizing:border-box;"></textarea>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+      <div style="font-weight:500;margin-bottom:10px;">Die 14 Allergene</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;">
         ${ALLERGENE.map(a=>`
-          <label style="font-size:12px;display:flex;align-items:center;gap:4px;background:var(--green-light);border-radius:8px;padding:5px 9px;cursor:pointer;">
-            <input type="checkbox" value="${a.code}" class="all-check-input">${a.code} – ${a.label}
-          </label>
+          <div style="font-size:12px;display:flex;align-items:baseline;gap:6px;">
+            <span class="badge" style="background:var(--green-light);color:var(--green);min-width:20px;text-align:center;flex-shrink:0;">${a.code}</span>
+            <span style="color:var(--sub);">${a.label}</span>
+          </div>
         `).join('')}
       </div>
-      <input id="all-verantwortlich" type="text" placeholder="Verantwortlich (Name)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;">
-      <button class="submit-btn" onclick="saveAllergenEntry()">Speichern</button>
     </div>
+    <div class="section-lbl" style="margin-top:14px;">Alle gespeicherten Rezept-Einträge</div>
     <div id="allergeneListAdmin"></div>
   ` : `
     <div class="card" style="padding:14px;">
@@ -5352,17 +5388,23 @@ async function renderDailyCheck(){
         <div class="check-box${wareOkDefault?' done':''}" id="wek-ware-ok-box" data-value="${wareOkDefault?'1':'0'}">${wareOkDefault?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
         <span class="cl-text">Ware in Ordnung</span>
       </div>
-      <div style="font-size:12px;font-weight:500;color:var(--sub);margin:10px 0 2px;">🌡️ Temperatur je Gericht (über 65° verpflichtend):</div>
+      <div style="font-size:12px;font-weight:500;color:var(--sub);margin:10px 0 2px;">🌡️ Temperatur je Gericht (über 65° verpflichtend, Ausnahmen siehe unten):</div>
       ${(()=>{
+        // TEMPORÄRE AUSNAHME (bis Herbstmenü): Der Wochensalat läuft aktuell auf dem "Gericht 1"-Slot
+        // und ist ein KALTES Gericht, kein heißes — braucht deshalb MAX 6°C statt der üblichen
+        // ≥65°C-Warmhalte-Regel für die anderen Gerichte. Sobald im Herbst das neue Menü kommt und
+        // der Wochensalat wieder regulär als Salat läuft, diese Ausnahme (DISH_TEMP_EXCEPTIONS) entfernen
+        // und wieder dieselbe Logik/Regel wie bei den anderen Gerichten anwenden.
         const menuDishes=getTodayDishNames();
         const chips=menuDishes.length>0?menuDishes:['Curry','Dal','Lasagne','Reis','Bowl','Special (Gulasch)','Special (Tofu)','Special (Meatballs)','Special (Chili sin carne)','Biryani'];
         const existingTemps=wek?.temperaturen||{};
         return chips.map((w,i)=>{
           const sel=wek ? (wek.ware||'').includes(w) : true;
           const tval=existingTemps[w] ?? '';
-          const fallbackVal=(tval!=='')?tval:(wek?.temperatur ?? wekPrev?.temperatur ?? '');
-          return `<div class="item-row" id="wek-temp-row-${i}" style="display:${sel?'flex':'none'};padding:8px 0;">
-            <div class="item-name" data-no-translate>${w}</div>
+          const exception=getDishTempException(w);
+          const fallbackVal=(tval!=='')?tval:(exception?'':(wek?.temperatur ?? wekPrev?.temperatur ?? ''));
+          return `<div class="item-row" id="wek-temp-row-${i}" data-max="${exception?exception.max:''}" style="display:${sel?'flex':'none'};padding:8px 0;">
+            <div class="item-name" data-no-translate>${w}${exception?`<div style="font-size:10px;color:#0369A1;font-weight:500;">❄️ Ausnahme: max. ${exception.max}°C</div>`:''}</div>
             <input id="wek-temp-${i}" data-dish="${w.replace(/"/g,'&quot;')}" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${fallbackVal}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
           </div>`;
         }).join('');
@@ -5514,13 +5556,30 @@ function toggleWareOkUI(){
   box.innerHTML=next?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':'';
 }
 
+// TEMPORÄRE AUSNAHME (bis Herbstmenü) — siehe Kommentar bei der Temperatur-Zeilen-Anzeige oben.
+// Danach diesen Eintrag entfernen, dann gilt für alle Gerichte wieder dieselbe ≥65°C-Regel.
+const DISH_TEMP_EXCEPTIONS = {
+  'Wochensalat': {max:6}
+};
+function getDishTempException(dishName){
+  const key=Object.keys(DISH_TEMP_EXCEPTIONS).find(k=>dishName.includes(k));
+  return key?DISH_TEMP_EXCEPTIONS[key]:null;
+}
+
 function checkWareneingangTemp(){
   const rows=document.querySelectorAll('[id^="wek-temp-row-"]');
   let anyLow=false;
   rows.forEach(row=>{
     if(row.style.display==='none') return;
     const v=parseFloat(row.querySelector('input')?.value);
-    if(!isNaN(v) && v<65) anyLow=true;
+    if(isNaN(v)) return;
+    const maxException=row.dataset.max;
+    if(maxException){
+      // Ausnahme-Gericht (z.B. Wochensalat): MAX-Regel statt MIN-Regel
+      if(v>parseFloat(maxException)) anyLow=true;
+    } else {
+      if(v<65) anyLow=true;
+    }
   });
   const wrap=document.getElementById('wek-massnahme-wrap');
   if(wrap) wrap.style.display=anyLow?'block':'none';
@@ -6940,9 +6999,10 @@ window.updateSamosaQty=updateSamosaQty;
 // datumsverknüpft — heutige/überfällige zuerst, dann kommende. Direkt abhakbar, kein Umweg über Organisation.
 async function renderTransporterInfoTabHtml(){
   const todayStr=new Date().toISOString().split('T')[0];
-  const [tasks, broadcastsRaw]=await Promise.all([
+  const [tasks, broadcastsRaw, stores]=await Promise.all([
     api('transporter_tasks?select=*&order=task_date.asc').catch(()=>[]),
-    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[])
+    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[]),
+    api('stores?select=id,name&order=id').catch(()=>[])
   ]);
   const dismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
   const broadcasts=(broadcastsRaw||[]).filter(b=>{
@@ -6950,7 +7010,25 @@ async function renderTransporterInfoTabHtml(){
     if(b.show_until && b.show_until<todayStr) return false;
     return true;
   });
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
   let html='';
+
+  // Direkter Schnell-Eintrag für Organisation — kein Umweg über Management nötig.
+  // Vorne immer wählbar: für welche Filiale das gilt (oder allgemein/Organisation).
+  if(currentStore?.id==='zentrale'){
+    const today=todayStr;
+    html+=`<div class="card" style="padding:12px;margin-bottom:14px;border:1.5px dashed #F97316;background:#FFF7ED;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:#9A3412;">➕ Notiz an Michi hinterlassen</div>
+      <select id="tt-inline-filiale" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;background:#fff;">
+        <option value="">🏢 Allgemein (Organisation)</option>
+        ${storeList.map(s=>`<option value="${escAttr(s.name)}">📍 ${s.name}</option>`).join('')}
+      </select>
+      <textarea id="tt-inline-text" placeholder="Was soll Michi tun?" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;min-height:60px;resize:vertical;font-family:inherit;font-size:13px;box-sizing:border-box;margin-bottom:8px;"></textarea>
+      <input type="date" id="tt-inline-date" value="${today}" min="${today}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;font-size:13px;">
+      <button onclick="saveTransporterTaskInline()" style="width:100%;background:#F97316;color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;">Hinterlassen</button>
+    </div>`;
+  }
+
   if(broadcasts.length){
     html+=`<div class="section-lbl">📣 Nachricht von Organisation</div>`;
     html+=broadcasts.map(b=>`<div class="card" style="padding:12px;margin-bottom:8px;border:1.5px solid #0EA5E9;background:#F0F9FF;">
@@ -6973,7 +7051,10 @@ async function renderTransporterInfoTabHtml(){
     const dateLabel=new Date(t.task_date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
     const badgeColor=isPast&&!t.done?'#DC2626':(isToday?'#F97316':'var(--muted)');
     return `<div class="card" style="padding:12px;margin-bottom:8px;${t.done?'opacity:0.5;':''}${isPast&&!t.done?'border:1.5px solid #FCA5A5;':(isToday&&!t.done?'border:1.5px solid #F97316;':'')}">
-      <div style="font-size:12px;font-weight:700;color:${badgeColor};">${dateLabel}${isPast&&!t.done?' · überfällig':(isToday?' · heute':'')}</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+        <span style="font-size:12px;font-weight:700;color:${badgeColor};">${dateLabel}${isPast&&!t.done?' · überfällig':(isToday?' · heute':'')}</span>
+        ${t.filiale?`<span data-no-translate style="font-size:10px;font-weight:600;color:#0369A1;background:#F0F9FF;border-radius:20px;padding:2px 8px;white-space:nowrap;">📍 ${t.filiale}</span>`:''}
+      </div>
       <div style="font-size:14px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${t.text}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
         <span style="font-size:10.5px;color:var(--muted);">von ${t.created_by||'Organisation'}</span>
@@ -7003,6 +7084,20 @@ function dismissTransporterBroadcast(id){
   renderPack();
 }
 window.dismissTransporterBroadcast=dismissTransporterBroadcast;
+
+async function saveTransporterTaskInline(){
+  const filiale=document.getElementById('tt-inline-filiale').value||null;
+  const text=document.getElementById('tt-inline-text').value.trim();
+  const dateStr=document.getElementById('tt-inline-date').value;
+  if(!text||!dateStr){ showToast('Bitte Notiz und Datum ausfüllen'); return; }
+  try{
+    await api('transporter_tasks',{method:'POST',body:JSON.stringify([{task_date:dateStr,text,created_by:currentStore?.name||'Organisation',filiale}])});
+    showToast('✔ An Michi hinterlassen');
+    document.getElementById('tt-inline-text').value='';
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.saveTransporterTaskInline=saveTransporterTaskInline;
 
 async function renderTransporterBeilagenHtml(){
   // Bild 3 Struktur: Artikel als Zeilen, Stores als Spalten, Foto vorne, abhakbar
@@ -7378,7 +7473,10 @@ async function renderKitchen(){
 
     const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
     const overrideMap = {};
-    (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
+    (overrides||[]).forEach(e=>{
+      overrideMap[e.gericht]=e; // Fallback für Altbestand
+      if(e.zkey) overrideMap[e.zkey]=e; // stabiler Schlüssel hat Vorrang
+    });
 
     // Week selector — jede Woche in eigener Farbe, damit man sie auf einen Blick unterscheidet.
     // Zusätzlich das reale Kalenderdatum darunter, damit Woche 1-4 nicht mit dem Monat verwechselt wird.
@@ -7409,7 +7507,8 @@ async function renderKitchen(){
         html+=`<div style="padding:10px 14px;font-size:12px;color:var(--muted);">–</div>`;
       } else {
         validDishes.forEach((dish,i)=>{
-          const override = overrideMap[dish.name];
+          const zKey=zutatenKey(selectedWoche, day, dish.slot);
+          const override = (zKey && overrideMap[zKey]) || overrideMap[dish.name];
           const zutaten = (override?.zutaten||dish.zutaten||'').replace(/\n/g,' ').trim();
           const allergenMain = dish.allergene?.main||[];
           const allergenDressing = dish.allergene?.dressing||[];
@@ -7435,7 +7534,7 @@ async function renderKitchen(){
             </div>
             <div id="${detailId}" style="display:none;background:#FAFAFA;border-top:0.5px solid var(--border);">
               ${renderZutatenReadOnly(zutaten)}
-              <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten)" data-dish="${dish.name}" data-zutaten="${zutaten.replace(/"/g,'&quot;')}" style="margin-top:8px;width:100%;padding:7px;border:1px dashed rgba(29,94,58,0.3);border-radius:8px;font-size:11px;color:var(--green);background:var(--green-light);cursor:pointer;">✏️ Zutaten bearbeiten</button>
+              <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${selectedWoche}, '${day}', '${dish.slot||''}')" data-dish="${dish.name}" data-zutaten="${zutaten.replace(/"/g,'&quot;')}" style="margin-top:8px;width:100%;padding:7px;border:1px dashed rgba(29,94,58,0.3);border-radius:8px;font-size:11px;color:var(--green);background:var(--green-light);cursor:pointer;">✏️ Zutaten bearbeiten</button>
             </div>
           </div>`;
         });
@@ -7712,7 +7811,10 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const dishNames = menuDishes.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
   const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
   const overrideMap = {};
-  (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
+  (overrides||[]).forEach(e=>{
+    overrideMap[e.gericht]=e; // Fallback für Altbestand
+    if(e.zkey) overrideMap[e.zkey]=e; // stabiler Schlüssel hat Vorrang
+  });
   // Load structured rezept_zutaten if available
   const rezeptZutatenRaw = await api('rezept_zutaten?select=gericht,menge,notiz,zutaten(id,name,kategorie,ist_allergen,allergen_code)').catch(()=>[]);
   const rezeptZutaten = {};
@@ -7807,11 +7909,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     </div>`;
   }
   html+=`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:12px;">
-  <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:separate;border-spacing:0;">
+  <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;">
   <thead><tr style="background:var(--surface-1);">
-    <th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--sub);border-bottom:0.5px solid var(--border);">Gericht</th>
-    ${storeList.map(s=>`<th data-no-translate style="padding:8px 6px;font-size:10px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};border-bottom:0.5px solid var(--border);white-space:nowrap;">${s.name.split(' ')[0]}</th>`).join('')}
-    <th style="padding:8px 6px;font-size:11px;font-weight:700;color:var(--green);border-bottom:0.5px solid var(--border);">Σ</th>
+    <th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--sub);border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht</th>
+    ${storeList.map((s,si)=>`<th data-no-translate style="padding:8px 6px;font-size:10px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};border-bottom:1.5px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}white-space:nowrap;">${s.name.split(' ')[0]}</th>`).join('')}
+    <th style="padding:8px 6px;font-size:11px;font-weight:700;color:var(--green);border-bottom:1.5px solid var(--border);border-left:1px solid var(--border);">Σ</th>
   </tr></thead><tbody>`;
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
@@ -7822,19 +7924,19 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
     const hasData = total>0;
     const detailId = `morgen_zut_${dIdx}`;
-    const cells=storeList.map(s=>{
+    const cells=storeList.map((s,si)=>{
       const recs=storeData[s.id]||[];
       const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
       const changed=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
       const changedByOrg=recs.some(r=>r.source==='org');
       const changedColor=changedByOrg?'#2B3A67':'#0369A1';
       const sizeLabel=isLasagne&&recs.length?recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join('+'):null;
-      return `<td style="font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
+      return `<td style="font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
     }).join('');
     html+=`<tr onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
-      <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
+      <td style="text-align:left;border-bottom:1px solid var(--border);border-right:1px solid var(--border);"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
       ${cells}
-      <td style="font-weight:700;color:${hasData?'var(--green)':'var(--muted)'};">${total>0?formatQty(total):'–'}</td>
+      <td style="font-weight:700;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${total>0?formatQty(total):'–'}</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
@@ -7860,16 +7962,24 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     </div>`;
   }
 
-  // Zutaten-Panels — eingeklappt unter der Tabelle, pro Gericht per Klick auf die Zeile sichtbar
+  // Zutaten-Panels — eingeklappt unter der Tabelle, pro Gericht per Klick auf die Zeile sichtbar.
+  // Stift-Icon oben rechts verankert (nicht als Button ganz unten) — direkter Bearbeitungs-Einstieg
+  // genau dort, wo der Koch heute tatsächlich arbeitet.
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
-    const override = overrideMap[dish];
+    const zKey=zutatenKey(_cookWoche, tomorrowWd, dishObj.slot);
+    const override = (zKey && overrideMap[zKey]) || overrideMap[dish];
     const zutaten = (override?.zutaten||dishObj.zutaten||'').replace(/\n/g,' ').trim();
-    const {gemuese, rest, getreide} = splitZutaten(zutaten);
     const detailId = `morgen_zut_${dIdx}`;
-    html+=`<div id="${detailId}" class="card" style="display:none;margin-top:-4px;margin-bottom:8px;padding:10px 14px;background:#FAFAFA;">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px;">${getDishEmoji(dish)} ${dish}</div>
-      ${renderZutatenReadOnly(zutaten)}
+    html+=`<div id="${detailId}" class="card" style="display:none;position:relative;margin-top:-4px;margin-bottom:8px;padding:12px 14px;background:#fff;border:1px solid var(--border);border-radius:12px;">
+      <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${_cookWoche}, '${tomorrowWd}', '${dishObj.slot||''}')" data-dish="${dish}" data-zutaten="${zutaten.replace(/"/g,'&quot;')}"
+        title="Zutaten bearbeiten"
+        style="position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;border:none;background:var(--green-light);color:var(--green);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✏️</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-right:36px;">
+        <span style="font-size:20px;">${getDishEmoji(dish)}</span>
+        <span style="font-size:13.5px;font-weight:700;" data-no-translate>${dish}</span>
+      </div>
+      <div style="font-size:11px;line-height:1.6;">${renderZutatenReadOnly(zutaten)}</div>
     </div>`;
   });
 
