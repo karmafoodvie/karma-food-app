@@ -888,7 +888,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.7';
+const APP_VERSION = '6.6.8';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6468,7 +6468,7 @@ async function renderSchichtende(){
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
-    {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:false, link:'order', orderTab:'kueche', group:'kueche', optional:true},
+    {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
@@ -7551,16 +7551,54 @@ async function renderTransporterBeilagenHtml(){
     valMap[d.supply_date][d.store_id][d.article_name]=d;
   });
 
+  // Essensmengen (Gerichte) für heute — Michi macht die Endkontrolle und braucht Gerichte + Beilagen
+  // zusammen an einer Stelle, statt zwischen Tabs wechseln zu müssen.
+  const fcToday=await api(`forecast_qty?forecast_date=eq.${today}&select=store_id,dish_name,qty,groesse,eingepackt`).catch(()=>[]);
+  const dishNamesToday=[...new Set((fcToday||[]).filter(f=>f.qty>0).map(f=>f.dish_name))];
+  let dishHtml='';
+  if(dishNamesToday.length){
+    dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte</div>
+      <div style="overflow-x:auto;margin-bottom:16px;"><table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="border-bottom:1.5px solid var(--border);">
+        <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Gericht</th>
+        ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
+      </tr></thead><tbody>`;
+    dishNamesToday.forEach(name=>{
+      const cells=storeList.map(st=>{
+        const recs=(fcToday||[]).filter(f=>f.store_id===st.id && f.dish_name===name);
+        if(!recs.length) return `<td style="text-align:center;color:var(--border);padding:8px 4px;">–</td>`;
+        const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
+        const packed=recs.every(r=>r.eingepackt);
+        return `<td style="text-align:center;padding:6px 4px;">
+          <div onclick="toggleForecastEingepackt('${st.id}','${escAttr(name)}','${today}',${packed})"
+            style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
+            <span style="font-size:13px;font-weight:600;color:${packed?'var(--green)':'#1a1a18'};">${formatQty(qty)}</span>
+            <span style="font-size:10px;color:${packed?'var(--green)':'var(--muted)'};">${packed?'✓ ok':'○'}</span>
+          </div>
+        </td>`;
+      }).join('');
+      dishHtml+=`<tr style="border-bottom:0.5px solid var(--border);">
+        <td style="padding:8px 6px;"><div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">${dishIcon(name)}</span>
+          <div style="font-size:12px;font-weight:600;" data-no-translate>${name}<div style="font-size:10px;font-weight:400;color:var(--muted);">Behälter</div></div>
+        </div></td>
+        ${cells}
+      </tr>`;
+    });
+    dishHtml+='</tbody></table></div>';
+  }
+
   // Artikel-Liste aus Grundmenge UND tatsächlich eingetragenen Werten zusammensetzen — sonst
   // verschwindet ein Artikel ohne hinterlegte Grundmenge für heute komplett aus der Liste,
   // obwohl eine Filiale ihn tatsächlich eingetragen hat.
   const articleSetToday=new Set(baseline.map(b=>b.article_name));
   (weekVals||[]).forEach(d=>{ if(d.supply_date===weekDates[weekdayNum<=5?weekdayNum:1]) articleSetToday.add(d.article_name); });
   const allArticles=[...articleSetToday];
-  if(!allArticles.length) return '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Beilagen für heute hinterlegt.</div>';
+  if(!allArticles.length && !dishNamesToday.length) return '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Gerichte oder Beilagen für heute hinterlegt.</div>';
+  if(!allArticles.length) return dishHtml;
 
   // Tabelle: Beilage | Store1 | Store2 | Store3 | Store4
-  let html=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+  let html=dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
     <thead><tr style="border-bottom:1.5px solid var(--border);">
       <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Beilage</th>
       ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
