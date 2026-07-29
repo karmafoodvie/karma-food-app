@@ -884,7 +884,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.0';
+const APP_VERSION = '6.6.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1380,19 +1380,10 @@ function renderZutatenReadOnly(text){
   const byKat=parseZutatenText(text);
   const sorted=ZUTAT_KAT_ORDER.filter(k=>byKat[k]).concat(Object.keys(byKat).filter(k=>!ZUTAT_KAT_ORDER.includes(k)));
   if(!sorted.length) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
-  let html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
-  sorted.forEach(kat=>{
-    const color=ZUTAT_KAT_COLOR[kat]||'#8A7F76';
-    (byKat[kat]||[]).forEach(item=>{
-      const isA=ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
-      html+=`<div style="background:${color};border-radius:12px;padding:10px 8px 8px;text-align:center;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;${isA?'box-shadow:inset 0 0 0 2px rgba(255,255,255,0.6);':''}">
-        <span style="font-size:26px;line-height:1;">${zutatEmoji(item)}</span>
-        <span style="font-size:10.5px;font-weight:700;color:#fff;line-height:1.15;">${item}</span>
-      </div>`;
-    });
-  });
-  html+='</div>';
-  return html;
+  return sorted.map(kat=>{
+    const rows=byKat[kat].map(item=>'<div style="padding:1px 0;font-size:12px;"><span style="color:var(--muted);margin-right:4px;">•</span>'+highlightAllergen(item)+'</div>').join('');
+    return '<div style="margin-bottom:7px;"><div style="font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">'+kat+'</div>'+rows+'</div>';
+  }).join('');
 }
 
 // Render editable ingredient list — uses contenteditable with data-dish
@@ -2175,7 +2166,7 @@ function renderVerfuegbarkeit(){
       const verfuegbar=a.verfuegbar!==false;
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
-          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
@@ -2312,7 +2303,7 @@ function renderOrderSection(cats, label, color, icon){
       const verfuegbar=a.verfuegbar!==false;
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
-          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+          ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
@@ -2377,7 +2368,7 @@ function renderVariantGroupRow(groupKey, groupItems){
   const canAddMore=rows.length<groupItems.length;
   return `<div class="item-row" style="flex-direction:column;align-items:stretch;gap:0;${allUnavailable?'opacity:0.35;pointer-events:none;':''}">
     <div style="display:flex;align-items:center;gap:10px;">
-      ${groupItems[0].image_url?`<img src="${groupItems[0].image_url}" alt="" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+      ${groupItems[0].image_url?`<img src="${groupItems[0].image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
       <div class="item-name">${g.label}</div>
     </div>
     ${rowsHtml}
@@ -2568,7 +2559,7 @@ async function renderKCOrderTab(el, tabHtml){
     const updatedLabel=rec?.updated_date ? new Date(rec.updated_date).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}) : '';
     const verfuegbar=a.verfuegbar!==false;
     html+=`<tr${(!isOrg && !verfuegbar)?' style="opacity:0.4;"':''}>
-      <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
+      <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
       <td>
         <input type="number" value="${ist}" onchange="updateIstBestandStore(${a.id}, this.value)" style="width:50px;text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:5px;font-size:12px;padding:5px;background:${updatedToday?'#F0FDF4':'#fff'};">
         ${updatedLabel?`<div style="font-size:9px;color:${updatedToday?'#22C55E':'var(--muted)'};margin-top:2px;">${updatedLabel}</div>`:''}
@@ -3593,7 +3584,7 @@ async function autoSaveForecastCell(inputEl){
     }
     await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
     if(rowsToInsert.length){
-      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify(rowsToInsert)});
     }
     // Alle Inputs dieser Zelle als "gespeichert" (data-original nachziehen) markieren, Rand grün kurz aufblitzen
     const cellInputs=isLasagneDish
@@ -3649,7 +3640,7 @@ async function saveForecastChanges(){
       await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
       // ... dann alle aktuellen Werte (alle Größen) in EINEM Rutsch neu schreiben — atomar statt sequenziell
       if(rowsToInsert.length){
-        await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
+        await api('forecast_qty',{method:'POST',body:JSON.stringify(rowsToInsert)});
       }
     }
     showToast('✓ Änderungen gespeichert — Küche wird informiert');
@@ -4506,7 +4497,7 @@ async function updateForecastQtyOrg(inputEl){
   try{
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
-      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
     }
     inputEl.dataset.copied='0';
     inputEl.style.borderColor='#2B3A67';
@@ -4594,7 +4585,7 @@ async function orgFcSaveAll(){
       // Delete both with and without groesse to handle legacy NULL records
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
-      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
       inp.style.borderColor='#22C55E';
       inp.style.background='#F0FDF4';
       saved++;
@@ -4627,7 +4618,7 @@ async function updateForecastQtyOrgGroesse(inputEl){
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null && qty>=0){
-      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
     inputEl.dataset.copied='0';
     inputEl.style.borderColor='#2B3A67';
@@ -6692,18 +6683,10 @@ async function renderPack(){
   // Vier Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
-    {key:'endkontrolle', label:'✅ Endkontrolle'},
     {key:'samosas',      label:'🥟 Samosas'},
-    {key:'beilagen',     label:'🥗 Beilagen'},
+    {key:'beilagen',     label:'🥗 Beilagen & Essen'},
     {key:'info',         label:`📋 Info${openTasksCount?` (${openTasksCount})`:''}`}
   ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
-
-  if(transporterSubTab==='endkontrolle'){
-    html+=await renderEndkontrolleHtml();
-    el.innerHTML=html;
-    translateEl(el);
-    return;
-  }
 
   if(transporterSubTab==='info'){
     html+=await renderTransporterInfoTabHtml();
@@ -6775,32 +6758,30 @@ async function renderPack(){
     const items=articles.filter(a=>a.category===cat&&storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0));
     if(!items.length) return;
     hasAny=true;
-    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div>`;
+    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th>Artikel</th>`;
+    storeList.forEach(s=>html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
+    html+=`<th style="color:${activeColor};">∑</th></tr></thead><tbody>`;
     items.forEach(a=>{
-      const relevantStores=storeList.filter(s=>((allOrd[a.id]||{})[s.id]?.quantity||0)>0);
-      const total=relevantStores.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
+      const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
-      html+=`<div class="card" style="margin-bottom:8px;overflow:hidden;">
-        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface-1);border-bottom:1px solid var(--border);">
-          <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:13px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
-          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
-          <span style="flex:1;font-size:13px;font-weight:600;">${a.name}</span>
-          <span style="font-size:12.5px;font-weight:700;color:${activeColor};background:${activeColor}15;padding:2px 8px;border-radius:6px;">∑ ${total}</span>
-        </div>`;
-      relevantStores.forEach(s=>{
+      html+=`<tr><td><div style="display:flex;align-items:center;gap:6px;">
+        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
+        ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+        <span>${a.name}</span>
+      </div></td>`;
+      storeList.forEach(s=>{
         const rec=(allOrd[a.id]||{})[s.id];
         const v=rec?.quantity||0;
         const packed=!!rec?.eingepackt;
-        const cellStyle=`display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:7px;font-weight:${packed?'400':'600'};font-size:12.5px;color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'var(--surface-1)'};text-decoration:${packed?'line-through':'none'};`;
-        html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-top:0.5px solid var(--border);">
-          <span data-no-translate style="font-size:12.5px;color:${STORE_COLORS[s.id]||'#888'};font-weight:500;">${s.name.split(' ')[0]}</span>
-          ${isBestellToday
-            ? `<span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span>`
-            : `<span style="${cellStyle}">${v}${packed?' ✓':''}</span>`}
-        </div>`;
+        if(!v){ html+=`<td style="color:var(--border);">·</td>`; return; }
+        const cellStyle=`display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
+        html+=isBestellToday
+          ? `<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
+          : `<td><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
       });
-      html+='</div>';
+      html+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
     });
+    html+='</tbody></table></div></div>';
   });
 
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
@@ -6843,7 +6824,7 @@ async function renderPack(){
       const verfuegbar=a.verfuegbar!==false;
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
-          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
@@ -6909,7 +6890,7 @@ async function renderKCOverview(el, tabHtml, storeList){
     let totalBedarf=0;
     let r=`<tr><td><div style="display:flex;align-items:center;gap:6px;">
       <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
-      ${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+      ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
       <span>${a.name}</span>
     </div></td>`;
     storeList.forEach(s=>{
@@ -8774,7 +8755,7 @@ async function renderSweets(){
         const verf=a.verfuegbar!==false;
         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);">
           <div style="display:flex;align-items:center;gap:8px;">
-            ${a.image_url?`<img src="${a.image_url}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+            ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
             <span style="font-size:13px;">${a.name}</span>
           </div>
           <button onclick="toggleArticleVerfuegbar(${a.id},${verf})" style="background:${verf?'var(--green-light)':'#FEE2E2'};color:${verf?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;">${verf?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
@@ -8803,7 +8784,7 @@ async function renderSweets(){
   });
   html+=`</tr></thead><tbody>`;
   sweetsItems.forEach(a=>{
-    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>`;
+    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>`;
     storeList.forEach(s=>{
       const v=(allOrd[a.id]||{})[s.id]||0;
       const hasOrder=sweetsItems.some(x=>(allOrd[x.id]||{})[s.id]>0);
