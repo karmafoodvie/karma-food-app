@@ -884,7 +884,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.5.2';
+const APP_VERSION = '6.5.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1353,6 +1353,27 @@ function renderZutatenReadOnly(text){
 }
 
 // Render editable ingredient list — uses contenteditable with data-dish
+// Sammelt alle jemals im Menü verwendeten Zutatennamen (über alle 4 Wochen) für Autovorschläge
+// beim Eintragen neuer Zutaten — wie bei der Bring-App: ein paar Buchstaben eintippen, Vorschläge
+// aus bereits bekannten Zutaten erscheinen. Wird einmal berechnet und zwischengespeichert.
+let _zutatenVocabCache=null;
+function getZutatenVocabulary(){
+  if(_zutatenVocabCache) return _zutatenVocabCache;
+  const set=new Set();
+  if(typeof MENU_DATA!=='undefined'){
+    Object.keys(MENU_DATA).forEach(key=>{
+      (MENU_DATA[key]||[]).forEach(dish=>{
+        (dish.zutaten||'').split(',').forEach(z=>{
+          const t=z.trim();
+          if(t) set.add(t);
+        });
+      });
+    });
+  }
+  _zutatenVocabCache=[...set].sort((a,b)=>a.localeCompare(b,'de'));
+  return _zutatenVocabCache;
+}
+
 function renderZutatenEditable(text, dishSafeKey){
   if(!text) text='';
   const byKat=parseZutatenText(text);
@@ -1386,7 +1407,8 @@ function zdCollectItems(editor){
   const items=[];
   editor.querySelectorAll('.zd-row').forEach(row=>{
     const span=row.querySelector('[contenteditable]');
-    const val=span&&span.textContent.trim();
+    const input=row.querySelector('.zd-new-input');
+    const val=(span&&span.textContent.trim())||(input&&input.value.trim());
     if(val) items.push(val);
   });
   return items;
@@ -1417,14 +1439,15 @@ function zdAttach(editor){
       const row=document.createElement('div');
       row.className='zd-row';
       row.style.cssText='display:flex;align-items:center;gap:6px;padding:2px 0;';
+      // Echtes <input> mit Datalist statt contenteditable — ermöglicht Autovorschläge aus bereits
+      // bekannten Zutaten (wie bei der Bring-App: tippen, Vorschlagsliste erscheint).
       row.innerHTML='<span style="color:var(--muted);font-size:11px;">•</span>'
-        +'<span contenteditable="true" spellcheck="false" data-orig="" '
-        +'style="font-size:13px;flex:1;outline:none;border-bottom:1px dashed #ddd;padding:2px 3px;" '
-        +'onblur="zdRowBlur(this)"></span>'
+        +'<input type="text" class="zd-new-input" list="zd-zutaten-suggestions" placeholder="Zutat eingeben…" spellcheck="false" '
+        +'style="font-size:13px;flex:1;outline:none;border:none;border-bottom:1px dashed #ddd;padding:2px 3px;background:transparent;">'
         +'<button class="zd-del" style="opacity:0.6;color:#DC2626;background:#FEE2E2;border:none;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>';
       katDiv.insertBefore(row, btn.parentElement);
       zdAttach(katDiv); // re-attach for new del button
-      row.querySelector('[contenteditable]').focus();
+      row.querySelector('.zd-new-input').focus();
     });
   });
   // Add category button
@@ -1556,7 +1579,8 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   const body=document.createElement('div');
   body.style.padding='14px 16px';
   body.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🧂 Zutaten</div>'
-    +renderZutatenEditable(currentText, safeKey);
+    +renderZutatenEditable(currentText, safeKey)
+    +'<datalist id="zd-zutaten-suggestions">'+getZutatenVocabulary().map(z=>'<option value="'+z.replace(/"/g,'&quot;')+'">').join('')+'</datalist>';
   sheet.appendChild(body);
 
   // Footer buttons
@@ -1800,6 +1824,17 @@ window.addEventListener('resize', ()=>{
   if(document.getElementById('v-home')?.classList.contains('show')) applyHomeGrid();
 });
 
+function dismissUebergabeNotiz(){
+  const key=window._uebergabeDismissKey;
+  if(!key) return;
+  const dismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
+  dismissed[key]=true;
+  localStorage.setItem('kf_uebergabe_dismissed', JSON.stringify(dismissed));
+  const banner=document.getElementById('uebergabe-banner');
+  if(banner) banner.remove();
+}
+window.dismissUebergabeNotiz=dismissUebergabeNotiz;
+
 async function renderHome(){
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
   const allItems=Object.values(templates).flat();
@@ -1849,7 +1884,9 @@ async function renderHome(){
     const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
     const ydStr=yesterday.toISOString().split('T')[0];
     const uebergabeGestern=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${ydStr}&select=notiz`).catch(()=>[]);
-    uebergabeNotiz=uebergabeGestern?.[0]?.notiz||null;
+    const uebergabeDismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
+    uebergabeNotiz=(uebergabeDismissed[`${currentStore.id}_${ydStr}`])?null:(uebergabeGestern?.[0]?.notiz||null);
+    window._uebergabeDismissKey=`${currentStore.id}_${ydStr}`;
     }catch(e){console.error(e);}
 
     if(isWeekday) gamificationHtml=await loadGamificationWidget(currentStore.id).catch(()=>'');
@@ -1941,7 +1978,10 @@ async function renderHome(){
         <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${_laufendeWocheHome}</span>
       </div>`;
     })()}
-    ${uebergabeNotiz?`<div style="background:#FFF7ED;border:1px solid #F97316;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11px;"><strong style="color:#E0521F;">📋 Übergabe gestern:</strong> ${uebergabeNotiz}</div>`:''}
+    ${uebergabeNotiz?`<div id="uebergabe-banner" style="background:#FFF7ED;border:1px solid #F97316;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11px;display:flex;align-items:flex-start;gap:8px;">
+      <div style="flex:1;"><strong style="color:#E0521F;">📋 Übergabe gestern:</strong> ${uebergabeNotiz}</div>
+      <button onclick="dismissUebergabeNotiz()" style="background:none;border:none;color:#B45309;font-size:14px;cursor:pointer;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
+    </div>`:''}
     ${(()=>{
       const todayMenu=getTodayMenu()||[];
       if(!todayMenu.length) return '';
