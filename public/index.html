@@ -888,7 +888,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.5';
+const APP_VERSION = '6.6.7';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2431,7 +2431,7 @@ const ORDER_TABS={
   transporter:{label:'🚚 Transporter',cats:TRANSPORTER_CATS,color:'#F97316',title:'Transporter',icon:'🚚'},
   kc:{label:'📦 Shop Produkte',cats:KC_CATS,color:'#A855F7',title:'Shop Produkte',icon:'📦'},
   sweets:{label:'🍰 Sweets',cats:SWEETS_CATS,color:'#EC4899',title:'Sweets — für morgen',icon:'🍰'},
-  kueche:{label:'🍳 Küche',cats:[],color:'#3B6D11',title:'Küche — Dressing, Raita & Co.',icon:'🍳'},
+  kueche:{label:'🍳<br><span style="font-size:8.5px;line-height:1.25;display:block;font-weight:400;">Saucen<br>Limetten<br>Dressings</span>',cats:[],color:'#3B6D11',title:'Saucen, Limetten & Dressings',icon:'🍳'},
   forecast:{label:'📅 Forecast',cats:[],color:'#0EA5E9',title:'Forecast — Portionsmengen',icon:'📅'}
 };
 function renderOrder(){
@@ -3565,10 +3565,21 @@ window.markForecastDirty=markForecastDirty;
 // nächsten Öffnen wieder wie der alte Wert/Vorschlag aussah — Ursache war, dass der Store das Feld
 // verlassen hat, ohne den separaten Sammel-Button zu drücken (anders als überall sonst in der App,
 // wo Zahlenfelder sofort speichern). Der Sammel-Button bleibt zusätzlich bestehen für Batch-Eingabe.
+// Verhindert, dass zwei Größen-Felder (z.B. Mittel + Klein) fast gleichzeitig gespeichert werden
+// (z.B. beim schnellen Tab-Wechsel zwischen Feldern) — ohne das können sich zwei parallele
+// Lösch+Schreib-Vorgänge für dasselbe Gericht überschneiden und einen Fehler auslösen.
+const _forecastSaveQueue={};
 async function autoSaveForecastCell(inputEl){
   const dateStr=inputEl.dataset.date;
   const dishName=inputEl.dataset.dish;
   if(!dateStr||!dishName) return;
+  const queueKey=`${dateStr}|${dishName}`;
+  const prev=_forecastSaveQueue[queueKey]||Promise.resolve();
+  const run=prev.then(()=>_autoSaveForecastCellInner(inputEl, dateStr, dishName)).catch(()=>{});
+  _forecastSaveQueue[queueKey]=run;
+  await run;
+}
+async function _autoSaveForecastCellInner(inputEl, dateStr, dishName){
   const isLasagneDish=dishName.includes('Lasagne');
   const rowsToInsert=[];
   try{
@@ -3600,10 +3611,13 @@ async function autoSaveForecastCell(inputEl){
       inp.style.borderColor='#22C55E';
       setTimeout(()=>{ markForecastDirty(inp); }, 600);
     });
+    // Fokus bewusst verlassen, damit die mobile Tastatur zuverlässig zugeht — sonst kann der fix
+    // positionierte Nav-Balken unten manchmal hängenbleiben und auf Taps nicht mehr reagieren.
+    if(document.activeElement && document.activeElement.tagName==='INPUT') document.activeElement.blur();
     showToast('✓ Gespeichert');
   }catch(e){
     console.error(e);
-    showToast('❌ Fehler beim Speichern — bitte nochmal versuchen');
+    showToast('❌ Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
   }
 }
 window.autoSaveForecastCell=autoSaveForecastCell;
@@ -6454,6 +6468,7 @@ async function renderSchichtende(){
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
+    {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:false, link:'order', orderTab:'kueche', group:'kueche', optional:true},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
@@ -6467,6 +6482,7 @@ async function renderSchichtende(){
     abschluss: {emoji:'💡', label:'Abschluss-Checkliste (optionale Hilfe)', sub:`${clDoneCount} von ${clTotal} Punkten — kein Pflichtschritt`, link:'check'},
     entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
     forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', link:'order', orderTab:'forecast'},
+    beilagen_anpassen: {emoji:'🍳', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen', link:'order', orderTab:'kueche'},
     dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
     reinigung_protokoll: {emoji:'🧽', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', link:null},
     uebergabe: {emoji:'✍️', label:'Übergabe-Notiz', sub:'Optional — nur falls es was für die nächste Schicht zu wissen gibt', link:null},
