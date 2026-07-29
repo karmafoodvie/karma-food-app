@@ -296,6 +296,10 @@ const SUPABASE_URL = 'https://fkliyqjxnttzyuzogrng.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Eu6-MQxkfyaxii2vpCR-IQ_uqS90NRf';
 
 const STORE_COLORS = {'lb':'#22C55E','boerse':'#A855F7','1020':'#3B82F6','1070':'#EAB308','3400':'#F97316','kitchen':'#EF4444','zentrale':'#6B7280'};
+// Kurzform der Filialnamen für enge Tabellenköpfe (z.B. Transporter-Bestellliste) — bei manchen
+// Filialen (z.B. "Ausstellungsstraße") gibt's kein Leerzeichen, an dem sich automatisch abkürzen
+// ließe, deshalb fix hinterlegt statt automatisch berechnet.
+const STORE_SHORT = {'lb':'Laurenz.','boerse':'Börse','1020':'Ausst.','3400':'Stadtpl.'};
 const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'klein',l:'Kl.·8'}];
 // Kräftige, markante Farben speziell für die Login-Auswahl (eigene Palette, unabhängig von STORE_COLORS)
 const STORE_LOGIN_COLORS = {'lb':'#00A878','boerse':'#00B4CC','1020':'#F0806B','3400':'#E0521F','kitchen':'#F0A500','zentrale':'#2B3A67'};
@@ -884,7 +888,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.4';
+const APP_VERSION = '6.6.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6754,34 +6758,35 @@ async function renderPack(){
   html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Zahl antippen = als eingepackt markieren</div>`;
 
   let hasAny=false;
+  const storeColWidth=(60/(storeList.length+1)).toFixed(1); // % je Filiale + Summe, Rest für Artikel
   TRANSPORTER_CATS.forEach(cat=>{
     const items=articles.filter(a=>a.category===cat&&storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0));
     if(!items.length) return;
     hasAny=true;
-    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th>Artikel</th>`;
-    storeList.forEach(s=>html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
-    html+=`<th style="color:${activeColor};">∑</th></tr></thead><tbody>`;
+    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div><div class="card" style="overflow:hidden;"><table class="pack-table" style="width:100%;table-layout:fixed;">
+      <thead><tr><th style="width:40%;text-align:left;padding:6px 4px;font-size:11px;">Artikel</th>`;
+    storeList.forEach(s=>html+=`<th style="width:${storeColWidth}%;color:${STORE_COLORS[s.id]||'#888'};padding:6px 2px;font-size:9.5px;font-weight:700;" data-no-translate>${STORE_SHORT[s.id]||s.name.split(' ')[0]}</th>`);
+    html+=`<th style="width:${storeColWidth}%;color:${activeColor};padding:6px 2px;font-size:10px;">∑</th></tr></thead><tbody>`;
     items.forEach(a=>{
       const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
-      html+=`<tr><td><div style="display:flex;align-items:center;gap:6px;">
-        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
-        ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
-        <span>${a.name}</span>
+      html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:4px;">
+        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
+        <span style="font-size:11.5px;line-height:1.2;word-break:break-word;">${a.name}</span>
       </div></td>`;
       storeList.forEach(s=>{
         const rec=(allOrd[a.id]||{})[s.id];
         const v=rec?.quantity||0;
         const packed=!!rec?.eingepackt;
-        if(!v){ html+=`<td style="color:var(--border);">·</td>`; return; }
-        const cellStyle=`display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
+        if(!v){ html+=`<td style="color:var(--border);text-align:center;padding:5px 1px;">·</td>`; return; }
+        const cellStyle=`display:inline-block;padding:1px 4px;border-radius:5px;font-size:11.5px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
         html+=isBestellToday
-          ? `<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
-          : `<td><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
+          ? `<td style="text-align:center;padding:5px 1px;"><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
+          : `<td style="text-align:center;padding:5px 1px;"><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
       });
-      html+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
+      html+=`<td style="text-align:center;padding:5px 1px;font-size:11.5px;font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
     });
-    html+='</tbody></table></div></div>';
+    html+='</tbody></table></div>';
   });
 
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
