@@ -884,7 +884,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.5.4';
+const APP_VERSION = '6.6.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -912,7 +912,7 @@ window.goToGuideEntry=goToGuideEntry;
 let clDone = {};
 let stockData = {};
 let activePackTab = 'transporter';
-let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen' | 'info'
+let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen' | 'info' | 'endkontrolle'
 let transporterInfoAutoShown = false; // einmal pro Sitzung automatisch auf Info springen, wenn was offen ist
 let transporterBestellDateOffset = 0; // 0=heute, -1=gestern, ... für Bestellliste-Verlauf
 function navBestellDate(delta){ transporterBestellDateOffset+=delta; renderPack(); }
@@ -1246,6 +1246,11 @@ function goTo(v, noPush=false){
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
+  const targetEl=document.getElementById('v-'+v);
+  // Sofortige visuelle Rückmeldung beim Antippen — die Render-Funktionen laden oft erst noch Daten
+  // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
+  // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
+  if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
   const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
   if(renders[v]) renders[v]();
 }
@@ -1341,15 +1346,53 @@ function highlightAllergen(name){
 }
 
 // Render read-only bullet list grouped by category
+// Ordnet einer Zutat ein passendes Emoji-Icon zu (Stichwort-Abgleich) — als Ersatz für
+// individuelle Illustrationen, damit die Kachel-Optik (Bring-Stil) ohne eigene Icon-Bibliothek geht.
+function zutatEmoji(name){
+  const n=(name||'').toUpperCase();
+  const MAP=[
+    [['APFEL','ÄPFEL'],'🍎'],[['ORANGE','ZITRUS'],'🍊'],[['ZITRONE'],'🍋'],[['LIMETTE'],'🟢'],
+    [['BANANE'],'🍌'],[['MANGO'],'🥭'],[['ANANAS'],'🍍'],[['BEERE','HIMBEER','ERDBEER'],'🍓'],
+    [['TOMATE'],'🍅'],[['KARTOFFEL','ERDÄPFEL'],'🥔'],[['ZWIEBEL','SCHALOTTE'],'🧅'],[['KNOBLAUCH'],'🧄'],
+    [['KAROTTE','MÖHRE'],'🥕'],[['PAPRIKA'],'🫑'],[['GURKE'],'🥒'],[['BROKKOLI'],'🥦'],
+    [['SALAT','SPINAT'],'🥬'],[['MAIS'],'🌽'],[['CHILI'],'🌶️'],[['PILZ'],'🍄'],
+    [['KICHERERBS','LINSE','BOHNE','ERBSE'],'🫘'],[['NUSS','MANDEL','CASHEW'],'🥜'],
+    [['REIS'],'🍚'],[['EBLY','WEIZEN','GETREIDE','BULGUR','QUINOA'],'🌾'],[['BROT','SEMMELBRÖSEL'],'🍞'],
+    [['BUTTER'],'🧈'],[['MILCH'],'🥛'],[['KÄSE'],'🧀'],[['JOGHURT'],'🥣'],[['EI','EIER'],'🥚'],
+    [['ÖL'],'🫒'],[['ESSIG'],'🍶'],[['SENF'],'🟡'],[['HONIG'],'🍯'],[['ZUCKER'],'🧂'],
+    [['MINZE','KRÄUTER','PETERSILIE','KORIANDER','BASILIKUM'],'🌿'],[['LORBEER'],'🍃'],
+    [['CURRY','KURKUMA','GEWÜRZ','PULVER','KUMIN','ZIMT'],'🧂'],[['SALZ','PFEFFER'],'🧂'],
+    [['SAUCE','SUGO'],'🥫'],[['KOKOS'],'🥥'],[['BRÜHE','SUPPE'],'🍲'],
+  ];
+  for(const [keys,emo] of MAP){ if(keys.some(k=>n.includes(k))) return emo; }
+  return '🧂';
+}
+
+// Kachel-Farbe je Kategorie — dezent variiert, damit man Kategorien auf einen Blick unterscheidet,
+// im Grundton an Karma-Orange angelehnt (Bring-artige Optik: farbige Kachel, Icon, Name).
+const ZUTAT_KAT_COLOR={
+  'GEMÜSE':'#5B8C5A','OBST':'#E94E1B','HÜLSENFRÜCHTE':'#B08D57','KRÄUTER':'#4C7A5E',
+  'GETREIDE/REIS':'#C97C3D','ÖLE/FETTE':'#D4A64B','GEWÜRZE':'#C1542C','SONSTIGES':'#8A7F76',
+};
+
 function renderZutatenReadOnly(text){
   if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
   const byKat=parseZutatenText(text);
   const sorted=ZUTAT_KAT_ORDER.filter(k=>byKat[k]).concat(Object.keys(byKat).filter(k=>!ZUTAT_KAT_ORDER.includes(k)));
   if(!sorted.length) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
-  return sorted.map(kat=>{
-    const rows=byKat[kat].map(item=>'<div style="padding:1px 0;font-size:12px;"><span style="color:var(--muted);margin-right:4px;">•</span>'+highlightAllergen(item)+'</div>').join('');
-    return '<div style="margin-bottom:7px;"><div style="font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">'+kat+'</div>'+rows+'</div>';
-  }).join('');
+  let html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
+  sorted.forEach(kat=>{
+    const color=ZUTAT_KAT_COLOR[kat]||'#8A7F76';
+    (byKat[kat]||[]).forEach(item=>{
+      const isA=ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
+      html+=`<div style="background:${color};border-radius:12px;padding:10px 8px 8px;text-align:center;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;${isA?'box-shadow:inset 0 0 0 2px rgba(255,255,255,0.6);':''}">
+        <span style="font-size:26px;line-height:1;">${zutatEmoji(item)}</span>
+        <span style="font-size:10.5px;font-weight:700;color:#fff;line-height:1.15;">${item}</span>
+      </div>`;
+    });
+  });
+  html+='</div>';
+  return html;
 }
 
 // Render editable ingredient list — uses contenteditable with data-dish
@@ -2787,6 +2830,115 @@ async function toggleKuecheEingepackt(storeId, articleName, dateStr, currentQty,
 }
 window.toggleKuecheEingepackt=toggleKuecheEingepackt;
 
+// Passendes Icon pro Gericht (Stichwort-Abgleich) — Gerichte haben (anders als Artikel) kein
+// echtes Foto hinterlegt, deshalb hier ein Symbol als visueller Anker in der Endkontrolle.
+function dishIcon(name){
+  const n=(name||'').toUpperCase();
+  if(n.includes('SALAT')||n.includes('SALAD')||n.includes('BOWL')) return '🥗';
+  if(n.includes('LASAGNE')) return '🍝';
+  if(n.includes('CURRY')) return '🍛';
+  if(n.includes('DAL')) return '🍲';
+  if(n.includes('REIS')) return '🍚';
+  if(n.includes('BIRYANI')) return '🍛';
+  if(n.includes('TIKKA')||n.includes('MASALA')) return '🍛';
+  return '🍽️';
+}
+
+// Endkontrolle vor Abfahrt speichert den "eingepackt"-Haken für Gerichte in forecast_qty.eingepackt —
+// analog zu kitchen_supply_today.eingepackt bei Beilagen, damit dasselbe Prinzip überall gilt.
+async function toggleForecastEingepackt(storeId, dishName, dateStr, isPacked){
+  try{
+    await api(`forecast_qty?store_id=eq.${storeId}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,
+      {method:'PATCH',body:JSON.stringify({eingepackt:!isPacked})});
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.toggleForecastEingepackt=toggleForecastEingepackt;
+
+// ── Endkontrolle: Gerichte + Beilagen gemeinsam als abhakbare Checkliste pro Filiale ──────────
+// Grund: Michi packt morgens die Bestellungen von gestern ein und braucht eine EINZIGE Liste zum
+// Gegenkontrollieren, statt zwischen mehreren breiten Tabellen hin- und herzuscrollen. Bewusst als
+// senkrechte Liste gebaut (keine Spalten-Matrix) — passt dadurch auf jede Bildschirmbreite, ohne
+// dass seitlich gescrollt werden muss.
+async function renderEndkontrolleHtml(){
+  const dateObj=new Date(); dateObj.setDate(dateObj.getDate()+transporterBestellDateOffset);
+  const dateStr=dateObj.toISOString().split('T')[0];
+  const isToday=transporterBestellDateOffset===0;
+  const dateLabel=dateObj.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+
+  let html=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <button onclick="navBestellDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
+    <div style="text-align:center;">
+      <div style="font-size:12.5px;font-weight:600;">${dateLabel}${isToday?' · heute':''}</div>
+      ${!isToday?`<div onclick="navBestellToday()" style="font-size:10px;color:#F97316;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
+    </div>
+    <button onclick="navBestellDate(1)" ${isToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
+  </div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">✅ Endkontrolle vor der Abfahrt — Gerichte & Beilagen zusammen, pro Filiale antippen zum Abhaken</div>`;
+
+  const [fcRaw, supRaw] = await Promise.all([
+    api(`forecast_qty?forecast_date=eq.${dateStr}&select=store_id,dish_name,qty,groesse,eingepackt`).catch(()=>[]),
+    api(`kitchen_supply_today?supply_date=eq.${dateStr}&select=store_id,article_name,qty,eingepackt`).catch(()=>[])
+  ]);
+
+  let anyContent=false;
+  storeList.forEach(st=>{
+    const dishRows=(fcRaw||[]).filter(f=>f.store_id===st.id && f.qty>0);
+    const supRows=(supRaw||[]).filter(s=>s.store_id===st.id && s.qty>0);
+    if(!dishRows.length && !supRows.length) return;
+    anyContent=true;
+    // Gerichte: Lasagne-Größen (mehrere Zeilen je Gericht) zu einer Summe zusammenfassen
+    const dishMap={};
+    dishRows.forEach(f=>{
+      if(!dishMap[f.dish_name]) dishMap[f.dish_name]={qty:0, eingepackt:true};
+      dishMap[f.dish_name].qty+=f.qty;
+      if(!f.eingepackt) dishMap[f.dish_name].eingepackt=false; // erst "erledigt" wenn ALLE Teile abgehakt sind
+    });
+
+    html+=`<div class="card" style="margin-bottom:12px;overflow:hidden;">
+      <div style="background:${STORE_COLORS[st.id]||'#888'}18;padding:10px 14px;border-bottom:1px solid var(--border);">
+        <span style="font-weight:700;font-size:13.5px;color:${STORE_COLORS[st.id]||'#888'};" data-no-translate>${st.name}</span>
+      </div>`;
+
+    if(Object.keys(dishMap).length){
+      html+=`<div style="padding:8px 12px 2px;font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">🍽️ Gerichte</div>`;
+      Object.entries(dishMap).forEach(([name,d])=>{
+        html+=`<div onclick="toggleForecastEingepackt('${st.id}','${escAttr(name)}','${dateStr}',${d.eingepackt})"
+          style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:0.5px solid var(--border);cursor:pointer;background:${d.eingepackt?'var(--green-light)':'transparent'};">
+          <span style="font-size:22px;flex-shrink:0;">${dishIcon(name)}</span>
+          <div style="flex:1;" data-no-translate>
+            <div style="font-size:13px;font-weight:500;text-decoration:${d.eingepackt?'line-through':'none'};color:${d.eingepackt?'var(--green)':'inherit'};">${name}</div>
+            <div style="font-size:11px;color:var(--muted);">${formatQty(d.qty)} Behälter</div>
+          </div>
+          <span style="font-size:18px;flex-shrink:0;color:${d.eingepackt?'var(--green)':'var(--border)'};">${d.eingepackt?'✅':'⬜'}</span>
+        </div>`;
+      });
+    }
+    if(supRows.length){
+      html+=`<div style="padding:8px 12px 2px;font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">🥗 Beilagen</div>`;
+      supRows.forEach(s=>{
+        const img=KITCHEN_SUPPLY_IMAGES[s.article_name];
+        html+=`<div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(s.article_name)}','${dateStr}',${s.qty},${!!s.eingepackt})"
+          style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:0.5px solid var(--border);cursor:pointer;background:${s.eingepackt?'var(--green-light)':'transparent'};">
+          ${img?`<img src="${img}" alt="" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;">`:'<span style="font-size:22px;flex-shrink:0;">🥗</span>'}
+          <div style="flex:1;" data-no-translate>
+            <div style="font-size:13px;font-weight:500;text-decoration:${s.eingepackt?'line-through':'none'};color:${s.eingepackt?'var(--green)':'inherit'};">${s.article_name}</div>
+            <div style="font-size:11px;color:var(--muted);">${formatQty(s.qty)}</div>
+          </div>
+          <span style="font-size:18px;flex-shrink:0;color:${s.eingepackt?'var(--green)':'var(--border)'};">${s.eingepackt?'✅':'⬜'}</span>
+        </div>`;
+      });
+    }
+    html+='</div>';
+  });
+
+  if(!anyContent){
+    html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Gerichte oder Beilagen für diesen Tag eingetragen</div>';
+  }
+  return html;
+}
+window.renderEndkontrolleHtml=renderEndkontrolleHtml;
+
 // ---- FORECAST (Hauptspeisen-Portionsmengen pro Filiale & Tag) ----
 
 // Ungefähre Koordinaten pro Filiale, für die Wettervorhersage
@@ -3441,7 +3593,7 @@ async function autoSaveForecastCell(inputEl){
     }
     await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
     if(rowsToInsert.length){
-      await api('forecast_qty',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
+      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
     }
     // Alle Inputs dieser Zelle als "gespeichert" (data-original nachziehen) markieren, Rand grün kurz aufblitzen
     const cellInputs=isLasagneDish
@@ -3497,7 +3649,7 @@ async function saveForecastChanges(){
       await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${dateStr}&dish_name=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'}).catch(()=>{});
       // ... dann alle aktuellen Werte (alle Größen) in EINEM Rutsch neu schreiben — atomar statt sequenziell
       if(rowsToInsert.length){
-        await api('forecast_qty',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
+        await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rowsToInsert)});
       }
     }
     showToast('✓ Änderungen gespeichert — Küche wird informiert');
@@ -4275,9 +4427,6 @@ async function renderOrgForecast(){
           const LBLS_ORG={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
           const storeLocked=isLasagneLocked(dateStr);
           let lasHtml='<td style="min-width:110px;padding:4px 3px;">';
-          if(storeLocked){
-            lasHtml+=`<div title="Für Filialen gesperrt (Vortag ab 12:00) — Operations kann trotzdem anpassen" style="font-size:8.5px;color:#2B3A67;font-weight:600;margin-bottom:3px;">🔓 trotz Sperre änderbar</div>`;
-          }
           lasHtml+='<div style="display:grid;grid-template-columns:52px 40px;gap:3px 4px;align-items:center;">';
           sizes.forEach(sz=>{
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
@@ -4357,7 +4506,7 @@ async function updateForecastQtyOrg(inputEl){
   try{
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
+      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
     }
     inputEl.dataset.copied='0';
     inputEl.style.borderColor='#2B3A67';
@@ -4445,7 +4594,7 @@ async function orgFcSaveAll(){
       // Delete both with and without groesse to handle legacy NULL records
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
+      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
       inp.style.borderColor='#22C55E';
       inp.style.background='#F0FDF4';
       saved++;
@@ -4478,7 +4627,7 @@ async function updateForecastQtyOrgGroesse(inputEl){
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null && qty>=0){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
+      await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
     inputEl.dataset.copied='0';
     inputEl.style.borderColor='#2B3A67';
@@ -6493,7 +6642,7 @@ async function submitSchichtende(){
 }
 
 // ---- PACK ----
-async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty){
+async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty, orderDateStr){
   const newPacked=!currentPacked;
   // Optimistisches UI-Update — sofort sichtbar, kein Warten auf vollen Reload
   if(el){
@@ -6502,11 +6651,13 @@ async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty)
     el.style.background=newPacked?'#EAF3DE':'transparent';
     el.style.textDecoration=newPacked?'line-through':'none';
     el.textContent=qty+(newPacked?' ✓':'');
-    el.setAttribute('onclick',`toggleOrderEingepackt(${articleId},'${storeId}',${newPacked},this,${qty})`);
+    el.setAttribute('onclick',`toggleOrderEingepackt(${articleId},'${storeId}',${newPacked},this,${qty},'${orderDateStr}')`);
   }
-  const today=new Date().toISOString().split('T')[0];
+  // WICHTIG: order_date ist der Eintragstag der Filiale (gestern aus Michis Sicht), nicht der
+  // heutige Kalendertag — deshalb hier NICHT selbst neu berechnen, sondern den vom Aufrufer
+  // übergebenen, bereits korrekten Wert verwenden.
   try{
-    await api(`orders?article_id=eq.${articleId}&store_id=eq.${storeId}&order_date=eq.${today}`,{method:'PATCH',body:JSON.stringify({eingepackt:newPacked})});
+    await api(`orders?article_id=eq.${articleId}&store_id=eq.${storeId}&order_date=eq.${orderDateStr}`,{method:'PATCH',body:JSON.stringify({eingepackt:newPacked})});
   }catch(e){
     console.error(e);
     showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
@@ -6541,10 +6692,18 @@ async function renderPack(){
   // Vier Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
+    {key:'endkontrolle', label:'✅ Endkontrolle'},
     {key:'samosas',      label:'🥟 Samosas'},
     {key:'beilagen',     label:'🥗 Beilagen'},
     {key:'info',         label:`📋 Info${openTasksCount?` (${openTasksCount})`:''}`}
   ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
+
+  if(transporterSubTab==='endkontrolle'){
+    html+=await renderEndkontrolleHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   if(transporterSubTab==='info'){
     html+=await renderTransporterInfoTabHtml();
@@ -6567,14 +6726,21 @@ async function renderPack(){
   }
 
   // --- Bestellliste (Standard-Tab) — Datum wählbar, damit vergangene Tage nicht verloren gehen ---
+  // WICHTIG (Datums-Logik): Filialen tragen ihre Bestellung am Vortag ein — order_date in der DB
+  // ist also der EINTRAGSTAG (z.B. Dienstag), nicht der Tag, an dem Michi tatsächlich packt/liefert
+  // (Mittwoch). "Heute" für Michi bedeutet daher: er packt HEUTE, aber die Datenbank-Zeilen, die er
+  // dafür braucht, stehen unter GESTERN. bestellViewDate/Label zeigen weiterhin Michis heutigen
+  // Packtag; bestellDateStr (die tatsächliche DB-Abfrage) ist bewusst einen Tag früher.
   const bestellViewDate=new Date(); bestellViewDate.setDate(bestellViewDate.getDate()+transporterBestellDateOffset);
-  const bestellDateStr=bestellViewDate.toISOString().split('T')[0];
+  const orderEntryDate=new Date(bestellViewDate); orderEntryDate.setDate(orderEntryDate.getDate()-1);
+  const bestellDateStr=orderEntryDate.toISOString().split('T')[0];
   const isBestellToday=transporterBestellDateOffset===0;
   const bestellDateLabel=bestellViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   html+=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
     <button onclick="navBestellDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
     <div style="text-align:center;">
       <div style="font-size:12.5px;font-weight:600;">${bestellDateLabel}${isBestellToday?' · heute':''}</div>
+      <div style="font-size:10px;color:var(--muted);">Bestellungen von ${orderEntryDate.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}</div>
       ${!isBestellToday?`<div onclick="navBestellToday()" style="font-size:10px;color:#F97316;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
     </div>
     <button onclick="navBestellDate(1)" ${isBestellToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
@@ -6609,30 +6775,32 @@ async function renderPack(){
     const items=articles.filter(a=>a.category===cat&&storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0));
     if(!items.length) return;
     hasAny=true;
-    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div><div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th>Artikel</th>`;
-    storeList.forEach(s=>html+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
-    html+=`<th style="color:${activeColor};">∑</th></tr></thead><tbody>`;
+    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div>`;
     items.forEach(a=>{
-      const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
+      const relevantStores=storeList.filter(s=>((allOrd[a.id]||{})[s.id]?.quantity||0)>0);
+      const total=relevantStores.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
-      html+=`<tr><td><div style="display:flex;align-items:center;gap:6px;">
-        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
-        ${a.image_url?`<img src="${a.image_url}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
-        <span>${a.name}</span>
-      </div></td>`;
-      storeList.forEach(s=>{
+      html+=`<div class="card" style="margin-bottom:8px;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--surface-1);border-bottom:1px solid var(--border);">
+          <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:13px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
+          ${a.image_url?`<img src="${a.image_url}" alt="" style="width:26px;height:26px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          <span style="flex:1;font-size:13px;font-weight:600;">${a.name}</span>
+          <span style="font-size:12.5px;font-weight:700;color:${activeColor};background:${activeColor}15;padding:2px 8px;border-radius:6px;">∑ ${total}</span>
+        </div>`;
+      relevantStores.forEach(s=>{
         const rec=(allOrd[a.id]||{})[s.id];
         const v=rec?.quantity||0;
         const packed=!!rec?.eingepackt;
-        if(!v){ html+=`<td style="color:var(--border);">·</td>`; return; }
-        const cellStyle=`display:inline-block;padding:2px 7px;border-radius:6px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
-        html+=isBestellToday
-          ? `<td><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v})" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
-          : `<td><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
+        const cellStyle=`display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:7px;font-weight:${packed?'400':'600'};font-size:12.5px;color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'var(--surface-1)'};text-decoration:${packed?'line-through':'none'};`;
+        html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-top:0.5px solid var(--border);">
+          <span data-no-translate style="font-size:12.5px;color:${STORE_COLORS[s.id]||'#888'};font-weight:500;">${s.name.split(' ')[0]}</span>
+          ${isBestellToday
+            ? `<span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span>`
+            : `<span style="${cellStyle}">${v}${packed?' ✓':''}</span>`}
+        </div>`;
       });
-      html+=`<td style="font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
+      html+='</div>';
     });
-    html+='</tbody></table></div></div>';
   });
 
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
@@ -8583,8 +8751,12 @@ async function renderSweets(){
   let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
+  // Gleiche Datums-Logik wie bei der Transporter-Bestellliste: Filialen tragen Sweets-Bestellungen
+  // am Vortag ein (order_date = Eintragstag), Team bereitet sie am nächsten Tag vor. "Heute" für
+  // das Team bedeutet daher: Datenbank-Abfrage auf GESTERN, Anzeige/Label bleibt der heutige Tag.
   const sweetsViewDate=new Date(); sweetsViewDate.setDate(sweetsViewDate.getDate()+sweetsDateOffset);
-  const sweetsDateStr=sweetsViewDate.toISOString().split('T')[0];
+  const sweetsEntryDate=new Date(sweetsViewDate); sweetsEntryDate.setDate(sweetsEntryDate.getDate()-1);
+  const sweetsDateStr=sweetsEntryDate.toISOString().split('T')[0];
   const isSweetsToday=sweetsDateOffset===0;
   const allOrdRaw=await api(`orders?order_date=eq.${sweetsDateStr}&select=store_id,article_id,quantity`);
   const allOrd={};
@@ -8616,6 +8788,7 @@ async function renderSweets(){
     <button onclick="navSweetsDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
     <div style="text-align:center;">
       <div style="font-size:12.5px;font-weight:600;">${sweetsDateLabel}${isSweetsToday?' · heute':''}</div>
+      <div style="font-size:10px;color:var(--muted);">Bestellungen von ${sweetsEntryDate.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}</div>
       ${!isSweetsToday?`<div onclick="navSweetsToday()" style="font-size:10px;color:#EC4899;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
     </div>
     <button onclick="navSweetsDate(1)" ${isSweetsToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
