@@ -888,7 +888,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.8';
+const APP_VERSION = '6.6.10';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4625,10 +4625,21 @@ async function orgFcSaveAll(){
 window.orgFcSaveAll=orgFcSaveAll;
 window.orgForecastWeekOffset=orgForecastWeekOffset;
 
+// Gleiche Absicherung wie bei der Filial-Ansicht: verhindert, dass zwei Speichervorgänge fürs
+// selbe Gericht (z.B. Groß + Mittel kurz nacheinander geändert) sich überschneiden und einen
+// "duplicate key"-Fehler auslösen.
+const _orgForecastSaveQueue={};
 async function updateForecastQtyOrgGroesse(inputEl){
   const storeId=inputEl.dataset.store;
   const dish=inputEl.dataset.dish;
   const dateStr=inputEl.dataset.date;
+  const queueKey=`${storeId}|${dateStr}|${dish}`;
+  const prev=_orgForecastSaveQueue[queueKey]||Promise.resolve();
+  const run=prev.then(()=>_updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr)).catch(()=>{});
+  _orgForecastSaveQueue[queueKey]=run;
+  await run;
+}
+async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr){
   const groesse=inputEl.dataset.groesse||'gross';
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
   try{
@@ -6635,21 +6646,12 @@ async function saveUebergabeNotiz(){
 }
 
 async function submitSchichtende(){
-  const today=new Date().toISOString().split('T')[0];
-  const now=new Date().toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   try{
-    const uebergabe=(await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}&select=notiz`).catch(()=>[]))[0];
-    const notiz=uebergabe?.notiz||'(keine Notiz)';
-    await emailjs.send('service_xla195w','template_9uiq1wf',{
-      name: `${currentStore.name} — Schichtende`,
-      time: now,
-      message: `✅ Abschluss-Checkliste: erledigt\n✅ Entsorgung: eingetragen\n✅ Wochensalat: gemeldet\n✅ Daily Check-up: vollständig\n\n📋 Übergabe-Notiz:\n${notiz}`,
-      title: `Schichtende ${currentStore.name}`,
-      to_email: 'tini@karmafood.at'
-    });
-    showToast('✔ Schicht abgeschlossen & E-Mail gesendet!');
+    // E-Mail-Versand bei Schichtende bewusst entfernt (auf Wunsch von Tini) — die App selbst zeigt
+    // den Abschluss-Status ja schon vollständig, eine zusätzliche Mail war nicht mehr nötig.
+    showToast('✔ Schicht abgeschlossen!');
     renderSchichtende();
-  }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen');}
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 // ---- PACK ----
