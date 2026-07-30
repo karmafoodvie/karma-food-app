@@ -888,7 +888,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.13';
+const APP_VERSION = '6.6.14';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6696,13 +6696,15 @@ window.toggleOrderEingepackt=toggleOrderEingepackt;
 
 // Sammel-Aktion: alles für diesen Tag als eingepackt markieren UND die Menge auf 0 zurücksetzen —
 // so gewünscht, damit Filialen danach nicht mehr die alte (bereits gelieferte) Menge sehen,
-// sondern wieder bei 0 starten. Ein einziger PATCH-Aufruf für alle betroffenen Zeilen auf einmal,
-// statt jede Zeile einzeln durchzuklicken.
+// sondern wieder bei 0 starten. Räumt zusätzlich offene Geldwechsel-Anfragen und Sonderbestellungen
+// mit auf, damit Michi nicht noch extra jede einzeln antippen muss.
 async function markAllPackedAndReset(orderDateStr){
-  if(!confirm('Wirklich ALLES für diesen Tag als eingepackt markieren und auf 0 zurücksetzen? Das kann nicht rückgängig gemacht werden.')) return;
+  if(!confirm('Wirklich ALLES für diesen Tag als eingepackt markieren, auf 0 zurücksetzen und Geldwechsel/Sonderbestellungen erledigen? Das kann nicht rückgängig gemacht werden.')) return;
   try{
     await api(`orders?order_date=eq.${orderDateStr}&quantity=gt.0`,{method:'PATCH',body:JSON.stringify({eingepackt:true,quantity:0})});
-    showToast('✓ Alles eingepackt & zurückgesetzt');
+    await api(`geldwechsel?status=eq.offen`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}).catch(()=>{});
+    await api(`special_orders?order_date=eq.${orderDateStr}`,{method:'DELETE'}).catch(()=>{});
+    showToast('✓ Alles eingepackt & aufgeräumt');
     renderPack();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
