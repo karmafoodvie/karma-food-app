@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.13.0';
+const APP_VERSION = '6.13.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4801,16 +4801,19 @@ async function loadOrgDashboard(){
   const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
   const tomorrowStr=tomorrow.toISOString().split('T')[0];
   try{
-    const [stores, ordersToday, kcToday, forecastTomorrow, disposalToday, submissionsAllToday] = await Promise.all([
+    const [stores, ordersToday, kcPending, forecastTomorrow, disposalToday, submissionsAllToday] = await Promise.all([
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
-      api(`kc_submissions?order_date=eq.${today}&select=store_id`).catch(()=>[]),
+      api(`kc_submissions?select=store_id`).catch(()=>[]),
       api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=eq.manual&select=store_id`).catch(()=>[]),
       api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[]),
       api(`order_submissions?order_date=eq.${today}&select=store_id,tab`).catch(()=>[])
     ]);
     const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
-    const kcSet=new Set((kcToday||[]).map(k=>k.store_id));
+    // "Shop" bleibt grün, solange die Meldung noch aussteht (nicht eingepackt/verschickt) — wird
+    // NICHT mehr täglich auf Rot zurückgesetzt, sondern erst wenn Ines "Alles eingepackt" klickt
+    // (das räumt kc_submissions dann auf, siehe kcAllesErledigt).
+    const kcSet=new Set((kcPending||[]).map(k=>k.store_id));
     const forecastSet=new Set((forecastTomorrow||[]).map(f=>f.store_id));
     const disposalSet=new Set((disposalToday||[]).filter(d=>d.leftover_qty!=null).map(d=>d.store_id));
 
@@ -7673,22 +7676,36 @@ async function kcAllesErledigt(){
   const btn=document.querySelector('button[onclick="kcAllesErledigt()"]');
   if(btn){ btn.disabled=true; btn.textContent='Wird gesendet…'; }
   try{
-    // 1. Eintrag in DB für Transporter sichtbar machen
     const today=new Date().toISOString().split('T')[0];
+
+    // Welche Filialen hatten offene Meldungen (noch nicht eingepackt)? — für die Nachricht an Michi
+    const [stores, pendingSubs] = await Promise.all([
+      api('stores?select=id,name').catch(()=>[]),
+      api('kc_submissions?select=store_id').catch(()=>[])
+    ]);
+    const storeNameMap={}; (stores||[]).forEach(s=>{ storeNameMap[s.id]=s.name; });
+    const storeNames=[...new Set((pendingSubs||[]).map(p=>storeNameMap[p.store_id]||p.store_id))];
+    const storeListText=storeNames.length?storeNames.join(', '):'(keine Filiale hat heute etwas gemeldet)';
+
+    // 1. Eintrag in DB für Transporter sichtbar machen — jetzt mit konkreten Filialnamen
     await api('kc_pickup_ready?date=eq.'+today,{method:'DELETE'}).catch(()=>{});
     await api('kc_pickup_ready',{method:'POST',body:JSON.stringify([{
       date:today,
       store_id:currentStore?.id||'kitchen',
       ready_at:new Date().toISOString(),
-      message:'Shop Produkte eingepackt und abholbereit 📦'
+      message:`Shop Produkte zum Abholen bereit in KC für ${storeListText} 📦`
     }])}).catch(()=>{});
 
-    // 2. EmailJS Benachrichtigung an Michi
+    // 2. EmailJS Benachrichtigung an Michi — ebenfalls mit Filialnamen
     await emailjs.send('service_xla195w','template_9uiq1wf',{
       subject:'📦 Shop Produkte abholbereit',
-      message:'Hallo Michi,\n\nInes hat die Shop Produkte eingepackt. Alles ist abholbereit!\n\n'+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})+' Uhr',
+      message:`Hallo Michi,\n\nInes hat die Shop Produkte eingepackt. Abholbereit für: ${storeListText}\n\n`+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})+' Uhr',
       to_email:'tini@karmafood.at'
     }).catch(()=>{});
+
+    // 3. Meldungen als erledigt aufräumen — damit der Bestellstatus-heute-Status für die nächste
+    // Runde wieder korrekt auf "offen" zurückgeht, statt fälschlich weiter grün zu bleiben.
+    await api('kc_submissions',{method:'DELETE'}).catch(()=>{});
 
     if(btn){ btn.style.background='var(--green)'; btn.textContent='✓ Michi wurde benachrichtigt!'; btn.disabled=false; }
     showToast('✓ Benachrichtigung gesendet — Michi weiß Bescheid!');
