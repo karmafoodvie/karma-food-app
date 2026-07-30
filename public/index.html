@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.12.1';
+const APP_VERSION = '6.13.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9490,15 +9490,49 @@ let teamTab='sweets';
 function switchTeamTab(t){ teamTab=t; renderSweets(); }
 window.switchTeamTab=switchTeamTab;
 
+async function showTeamRezeptForm(id){
+  const rez=(await api(`team_produktion_rezepte?id=eq.${id}&select=*`).catch(()=>[]))[0];
+  if(!rez) return;
+  const wrap=document.getElementById('team-rezept-form');
+  if(!wrap) return;
+  wrap.innerHTML=`<div class="card" style="padding:14px;margin-bottom:14px;border:1.5px solid #0EA5E9;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:10px;">${rez.emoji||''} ${rez.name} bearbeiten</div>
+    <label style="font-size:11px;font-weight:600;color:var(--muted);">Ergibt (Menge)</label>
+    <input id="tr-ergibt" type="text" value="${escAttr(rez.ergibt||'')}" placeholder="z.B. 100 Flaschen à 260 ml" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;font-size:13px;">
+    <label style="font-size:11px;font-weight:600;color:var(--muted);">Zutaten (eine pro Zeile)</label>
+    <textarea id="tr-zutaten" rows="4" placeholder="6 Liter Chai-Konzentrat&#10;20 Liter Milch/Wasser/etc." style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;font-size:13px;font-family:inherit;">${(rez.zutaten||'').replace(/</g,'&lt;')}</textarea>
+    <label style="font-size:11px;font-weight:600;color:var(--muted);">Zubereitung (optional)</label>
+    <textarea id="tr-anleitung" rows="4" placeholder="Schritt für Schritt…" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 12px;box-sizing:border-box;font-size:13px;font-family:inherit;">${(rez.anleitung||'').replace(/</g,'&lt;')}</textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('team-rezept-form').innerHTML='';" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="saveTeamRezept(${rez.id})" style="flex:1;padding:9px;border:none;border-radius:8px;background:#0EA5E9;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
+    </div>
+  </div>`;
+  wrap.scrollIntoView({behavior:'smooth', block:'center'});
+}
+window.showTeamRezeptForm=showTeamRezeptForm;
+
+async function saveTeamRezept(id){
+  const ergibt=document.getElementById('tr-ergibt').value.trim();
+  const zutaten=document.getElementById('tr-zutaten').value.trim();
+  const anleitung=document.getElementById('tr-anleitung').value.trim();
+  try{
+    await api(`team_produktion_rezepte?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({ergibt,zutaten,anleitung})});
+    showToast('✓ Gespeichert');
+    renderSweets();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.saveTeamRezept=saveTeamRezept;
+
 async function renderSweets(){
   const el=document.getElementById('v-sweets');
-  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E'};
+  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9'};
   const ttab=(key,label)=>{
     const active=teamTab===key;
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}</div>`;
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Produktion')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   // Gleiche Datums-Logik wie bei der Transporter-Bestellliste: Filialen tragen Sweets-Bestellungen
@@ -9516,6 +9550,30 @@ async function renderSweets(){
   const sweetsDateLabel=sweetsViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
 
   let html=tabsHtml;
+
+  // Eigenproduktion (Mango Lassi, Masala Chai, Chili Crisp) — eigener Reiter neben Sweets, mit
+  // hinterlegten Rezepten. Team-editierbar über die Bearbeiten-Buttons.
+  if(teamTab==='produktion'){
+    const rezepte=await api('team_produktion_rezepte?select=*&order=sort_order').catch(()=>[]);
+    html+=`<div style="font-size:11px;color:var(--muted);margin:10px 2px;">Rezepte für die Eigenproduktion — antippen zum Bearbeiten.</div>`;
+    (rezepte||[]).forEach(r=>{
+      html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+          <div style="font-size:15px;font-weight:700;">${r.emoji||''} <span data-no-translate>${r.name}</span></div>
+          <button onclick="showTeamRezeptForm(${r.id})" style="background:var(--surface-1);border:none;border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">✏️ Bearbeiten</button>
+        </div>
+        ${r.ergibt?`<div style="font-size:11px;color:#0EA5E9;font-weight:600;margin-bottom:8px;">Ergibt: ${r.ergibt}</div>`:''}
+        ${r.zutaten?`<div style="margin-bottom:${r.anleitung?'8px':'0'};"><div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Zutaten</div><div style="font-size:12.5px;line-height:1.6;white-space:pre-line;" data-no-translate>${r.zutaten}</div></div>`:''}
+        ${r.anleitung?`<div><div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Zubereitung</div><div style="font-size:12.5px;line-height:1.6;white-space:pre-line;" data-no-translate>${r.anleitung}</div></div>`:''}
+        ${(!r.zutaten && !r.anleitung && !r.ergibt)?`<div style="font-size:11.5px;color:var(--muted);">Noch kein Rezept hinterlegt — auf "Bearbeiten" tippen.</div>`:''}
+      </div>`;
+    });
+    html+=`<div id="team-rezept-form"></div>`;
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
 
   if(currentStore?.id==='zentrale'){
     html+=`<div class="section-lbl" style="margin-top:10px;">🚫 Verfügbarkeit</div>
