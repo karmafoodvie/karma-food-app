@@ -216,6 +216,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-mengen" class="view"></div>
     <div id="v-kitchenDaily" class="view"></div>
     <div id="v-hilfe" class="view"></div>
+    <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
   </div>
 
@@ -641,6 +642,40 @@ async function deleteOnboardingDay(id){
 }
 window.deleteOnboardingDay=deleteOnboardingDay;
 
+async function renderRabattcodes(){
+  const el=document.getElementById('v-rabattcodes');
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🎟️','Rabattcodes','Alle aktuellen Codes auf einen Blick','#C1542C');
+  html+=`<div class="card"><div style="overflow-x:auto;">`;
+  const isOrgHilfe=currentStore?.id==='zentrale';
+  const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz', '1070':'Neustiftgasse (geschlossen)'};
+  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
+  if(visibleCodes.length){
+    html+=`<table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Wofür</th><th style="text-align:left;">Code</th><th style="text-align:right;">Rabatt</th>
+    </tr></thead><tbody>`;
+    visibleCodes.forEach(r=>{
+      const storeBadges=(r.stores||[]).map(sid=>{
+        const col=STORE_COLORS[sid]||'#888';
+        return `<span data-no-translate style="font-size:9.5px;font-weight:600;color:${col};background:${col}20;border-radius:20px;padding:1px 6px;margin-left:4px;white-space:nowrap;">${storeLabelMap[sid]||sid}</span>`;
+      }).join('');
+      html+=`<tr>
+        <td style="text-align:left;font-size:12px;color:var(--sub);">${r.bedingung}${storeBadges}</td>
+        <td data-no-translate style="text-align:left;font-size:13px;font-weight:700;">${r.code}</td>
+        <td style="text-align:right;font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert||'–'}</td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+  } else {
+    html+=`<div style="padding:12px;font-size:12.5px;color:var(--muted);">Noch keine Codes hinterlegt.</div>`;
+  }
+  html+='</div></div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Aktuelle Codes fehlen? Einfach Tini Bescheid geben.</div>`;
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderRabattcodes=renderRabattcodes;
+
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
   let html=backToHomeHtml();
@@ -655,14 +690,16 @@ async function renderHilfe(){
     </div>
     <div id="qa-search-results" style="margin-top:10px;"></div>
   </div>`;
-  html+=`<div onclick="goTo('onboarding')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
+  // Onboarding-Button vorübergehend deaktiviert (auf Wunsch von Tini, 30.07.26) — evtl. Verknüpfung
+  // mit einer separaten Onboarding-App geplant. Code bleibt erhalten, nur auskommentiert.
+  /* html+=`<div onclick="goTo('onboarding')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
     <span style="font-size:18px;">🌱</span>
     <div style="flex:1;">
       <div style="font-size:12.5px;font-weight:600;color:#166534;">Onboarding — neu im Team?</div>
       <div style="font-size:10.5px;color:#3B6D11;">Erste Schritte, wichtige Infos & Checkliste</div>
     </div>
     <span style="color:#166534;">→</span>
-  </div>`;
+  </div>`; */
 
   html+=`<div class="section-lbl">👥 Ansprechpartner</div><div class="card">`;
   CONTACT_PERSONS.forEach(p=>{
@@ -918,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.11.2';
+const APP_VERSION = '6.12.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1276,7 +1313,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1285,7 +1322,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
   if(renders[v]) renders[v]();
 }
 // Der normale "Bestellen"-Nav-Button soll IMMER auf die übliche Tab-Ansicht (Transporter/Shop
@@ -2396,7 +2433,7 @@ async function renderHome(){
       <div style="font-size:13px;font-weight:500;">🗑️ Entsorgung / Food Waste</div>
       <div style="font-size:10px;color:${disposalDone?'var(--green)':'var(--muted)'};margin-top:2px;">${disposalDone?'✓ erledigt':'Restmengen eintragen'}</div>
     </div>
-    <div class="home-card" onclick="goTo('hilfe')" style="margin-bottom:6px;padding:8px 10px;">
+    <div class="home-card" onclick="goTo('rabattcodes')" style="margin-bottom:6px;padding:8px 10px;">
       <div style="font-size:13px;font-weight:500;">🎟️ Rabattcodes</div>
       <div style="font-size:10px;color:var(--muted);margin-top:2px;">Alle Codes auf einen Blick</div>
     </div>
@@ -4602,7 +4639,7 @@ async function renderSchrankerlTab(){
   // Übersichtszeile ganz am Anfang — auf einen Blick, welche 3 Produkte diese Woche dran sind,
   // PLUS gleich hier die Bestellmenge PRO GERICHT eintragbar (kommt meist Dienstag Nachmittag von
   // Schrankerl rein und muss der Küche kommuniziert werden — deshalb direkt hier oben).
-  const overviewOrder=[['salat','Salat'],['curry','Curry'],['dessert','Dessert']];
+  const overviewOrder=[['curry','Curry'],['salat','Salat'],['dessert','Dessert']];
   html+=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">`;
   overviewOrder.forEach(([slot,label],i)=>{
     const item=menu.find(m=>m.slot===slot);
