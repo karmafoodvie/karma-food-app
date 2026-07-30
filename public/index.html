@@ -357,14 +357,23 @@ const ZUTAT_KAT_ORDER_UP=ZUTAT_KAT_ORDER.map(k=>k.toUpperCase());
 // Ermittelt die Kategorie einer Zutat — bevorzugt die Zutaten-Datenbank (verlässlich, von Hand
 // gepflegt), fällt nur auf die alte Stichwort-Erkennung zurück, wenn die Zutat dort noch nicht
 // existiert. Gibt immer GROSSBUCHSTABEN zurück (Konvention der Zutaten-Datenbank).
-function getEffectiveKat(name){
+// Findet den passenden Eintrag in der Zutaten-Datenbank (falls vorhanden) — wird sowohl für die
+// Kategorie als auch für den einheitlichen Anzeigenamen genutzt (löst uneinheitliche
+// Groß-/Kleinschreibung, da immer der in der Datenbank gepflegte Name angezeigt wird).
+function findZutatMasterMatch(name){
   const n=(name||'').toUpperCase();
   const master=_zutatenMasterCache;
-  if(master){
-    const hit=master.find(m=>{ const mn=m.name.toUpperCase(); return mn===n || n.includes(mn) || mn.includes(n); });
-    if(hit) return hit.kategorie;
-  }
+  if(!master) return null;
+  return master.find(m=>{ const mn=m.name.toUpperCase(); return mn===n || n.includes(mn) || mn.includes(n); })||null;
+}
+function getEffectiveKat(name){
+  const hit=findZutatMasterMatch(name);
+  if(hit) return hit.kategorie;
   return guessZutatKat(name).toUpperCase();
+}
+function getEffectiveName(name){
+  const hit=findZutatMasterMatch(name);
+  return hit ? hit.name : name;
 }
 const ALLERGEN_BOLD=['sesam','käse','joghurt','butter','teigblätter','soja','tofu','sellerie','senf','weizen','mehl','gluten','milch','laktose','nuss','mandel','erdnuss','cashew','ebly'];
 const ZUTAT_KATEGORIEN=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Sonstiges'];
@@ -905,7 +914,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.7.5';
+const APP_VERSION = '6.8.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1632,9 +1641,10 @@ function renderZutatenReadOnly(text){
     let tiles='';
     byKat[kat].forEach(item=>{
       const isA=ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
+      const displayName=getEffectiveName(item);
       tiles+=`<div style="background:${color};border-radius:10px;padding:6px 8px;display:flex;align-items:center;gap:7px;${isA?'box-shadow:inset 0 0 0 2px rgba(255,255,255,0.7);':''}">
         <div style="width:22px;height:22px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
-        <span data-no-translate style="font-size:10.5px;font-weight:700;color:#fff;line-height:1.2;text-align:left;">${item}</span>
+        <span data-no-translate style="font-size:10.5px;font-weight:700;color:#fff;line-height:1.2;text-align:left;">${displayName}</span>
       </div>`;
     });
     html+=`<div style="display:flex;gap:8px;margin-bottom:14px;">
@@ -1741,7 +1751,11 @@ function zdAttach(editor){
         +'style="font-size:13px;flex:1;outline:none;border:none;border-bottom:1px dashed #ddd;padding:2px 3px;background:transparent;">'
         +'<button class="zd-del" style="opacity:0.6;color:#DC2626;background:#FEE2E2;border:none;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>';
       katDiv.insertBefore(row, btn.parentElement);
-      zdAttach(katDiv); // re-attach for new del button
+      // WICHTIG: nur den neuen Löschen-Button verkabeln, NICHT den ganzen Bereich erneut per
+      // zdAttach(katDiv) durchlaufen — sonst bekommt der "+ Zutat"-Button bei jedem Klick eine
+      // weitere, zusätzliche Klick-Funktion oben drauf (Ursache für "mal 2, mal 4 Zeilen").
+      const newDelBtn=row.querySelector('.zd-del');
+      newDelBtn.addEventListener('click', ()=>{ row.remove(); });
       row.querySelector('.zd-new-input').focus();
     });
   });
@@ -4432,7 +4446,8 @@ async function renderZutatenDBContent(){
   const wrap=document.getElementById('zdb-content');
   invalidateZutatenMasterCache();
   const items=await getZutatenMaster();
-  let html=`<button onclick="showZutatenMasterForm()" style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:14px;">+ Neue Zutat anlegen</button>
+  let html=`<button onclick="showZutatenMasterForm()" style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px;">+ Neue Zutat anlegen</button>
+    <button onclick="renderZutatenMergeTool()" style="width:100%;padding:12px;border:1.5px dashed #C1542C;border-radius:12px;background:#FFF7ED;color:#C1542C;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:14px;">🔀 Dubletten & Schreibfehler zusammenführen</button>
     <div id="zdb-form"></div>`;
 
   const byKat={};
@@ -4510,6 +4525,114 @@ async function deleteZutatenMaster(id){
   }catch(e){console.error(e);showToast('Fehler beim Löschen: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.deleteZutatenMaster=deleteZutatenMaster;
+
+// ══════════════════════════════════════════════════════════════════════════
+// ZUTATEN ZUSAMMENFÜHREN — findet Schreibvarianten/Dubletten, die in den Gerichten stehen, aber
+// nicht exakt mit der Zutaten-Datenbank übereinstimmen (z.B. andere Schreibweise, Tippfehler,
+// versehentlich verklebte Einträge). Für jede kann man wählen: mit einer bestehenden Zutat
+// zusammenführen (ersetzt sie überall), als neue Zutat übernehmen, oder löschen.
+async function renderZutatenMergeTool(){
+  const wrap=document.getElementById('zdb-content');
+  wrap.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted);">Suche nach Dubletten…</div>';
+  const master=await getZutatenMaster();
+  const masterNames=new Set(master.map(m=>m.name.toUpperCase()));
+  const recipes=await api('allergene_rezepturen?select=id,gericht,zutaten').catch(()=>[]);
+
+  // Alle rohen Zutaten-Texte einsammeln, die NICHT exakt (case-insensitiv) in der Datenbank stehen
+  const unmatched={}; // raw (Originalschreibweise zuerst gesehen) -> Set von gericht-Namen, wo es vorkommt
+  (recipes||[]).forEach(r=>{
+    (r.zutaten||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(raw=>{
+      const up=raw.toUpperCase();
+      if(masterNames.has(up)) return; // schon korrekt
+      if(!unmatched[raw]) unmatched[raw]=new Set();
+      unmatched[raw].add(r.gericht);
+    });
+  });
+  const rawList=Object.keys(unmatched).sort((a,b)=>a.localeCompare(b,'de'));
+
+  let html=`<div onclick="renderZutatenDBContent()" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:14px;cursor:pointer;">← Zurück zur Zutaten-Datenbank</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${rawList.length} Einträge in Gerichten gefunden, die nicht exakt mit der Zutaten-Datenbank übereinstimmen — vermutlich Schreibvarianten, Tippfehler oder Dubletten.</div>`;
+
+  if(!rawList.length){
+    html+='<div class="card" style="padding:20px;text-align:center;color:var(--muted);">🎉 Alles sauber — keine Abweichungen gefunden.</div>';
+    wrap.innerHTML=html;
+    return;
+  }
+
+  const masterOptions=master.map(m=>`<option value="${escAttr(m.name)}">`).join('');
+  html+=`<datalist id="zmerge-suggestions">${masterOptions}</datalist>`;
+
+  rawList.forEach((raw,i)=>{
+    const dishes=[...unmatched[raw]].join(', ');
+    const safeId='zm'+i;
+    html+=`<div class="card" style="padding:10px 12px;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:2px;" data-no-translate>${raw}</div>
+      <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">kommt vor bei: ${dishes}</div>
+      <div style="display:flex;gap:6px;">
+        <input id="${safeId}-target" type="text" list="zmerge-suggestions" placeholder="Bestehende Zutat wählen…" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:7px;font-size:12px;">
+        <button onclick="mergeZutatInto('${escAttr(raw)}', document.getElementById('${safeId}-target').value)" style="padding:6px 10px;border:none;border-radius:7px;background:var(--green);color:#fff;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;">Zusammenführen</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button onclick="addRawAsNewMaster('${escAttr(raw)}')" style="flex:1;padding:6px;border:1px dashed var(--border);border-radius:7px;background:none;font-size:11px;cursor:pointer;">Als neue Zutat übernehmen</button>
+        <button onclick="removeRawEverywhere('${escAttr(raw)}')" style="flex:1;padding:6px;border:1px dashed #DC2626;border-radius:7px;background:none;color:#DC2626;font-size:11px;cursor:pointer;">Überall löschen</button>
+      </div>
+    </div>`;
+  });
+  wrap.innerHTML=html;
+  translateEl(wrap);
+}
+window.renderZutatenMergeTool=renderZutatenMergeTool;
+
+// Ersetzt einen rohen Zutaten-Text überall dort, wo er in Gerichten vorkommt, durch den
+// einheitlichen Namen einer bestehenden Zutaten-Datenbank-Zutat.
+async function mergeZutatInto(raw, targetName){
+  if(!targetName || !targetName.trim()){ showToast('Bitte eine Ziel-Zutat auswählen'); return; }
+  await replaceRawEverywhere(raw, targetName.trim().toUpperCase());
+  showToast(`✓ "${raw}" → "${targetName.trim().toUpperCase()}" zusammengeführt`);
+  renderZutatenMergeTool();
+}
+window.mergeZutatInto=mergeZutatInto;
+
+// Legt den rohen Text 1:1 als neue Zutat in der Datenbank an (Kategorie wird bestmöglich per
+// Stichwort-Erkennung geraten, kann danach in der Zutaten-Datenbank angepasst werden).
+async function addRawAsNewMaster(raw){
+  const kategorie=guessZutatKat(raw).toUpperCase();
+  try{
+    await api('zutaten_master',{method:'POST',body:JSON.stringify([{name:raw.toUpperCase(),kategorie,allergene_codes:[],erstellt_von:currentStore?.name||'Organisation'}])});
+    invalidateZutatenMasterCache();
+    showToast(`✓ "${raw}" als neue Zutat angelegt (Kategorie: ${kategorie} — bei Bedarf anpassen)`);
+    renderZutatenMergeTool();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.addRawAsNewMaster=addRawAsNewMaster;
+
+// Entfernt einen rohen Zutaten-Text überall, wo er (fehlerhaft) vorkommt — z.B. für versehentlich
+// verklebte oder kaputte Einträge, die nirgends hingehören.
+async function removeRawEverywhere(raw){
+  if(!confirm(`"${raw}" wirklich aus ALLEN Gerichten entfernen? Das kann nicht rückgängig gemacht werden.`)) return;
+  await replaceRawEverywhere(raw, null);
+  showToast(`✓ "${raw}" überall entfernt`);
+  renderZutatenMergeTool();
+}
+window.removeRawEverywhere=removeRawEverywhere;
+
+// Gemeinsame Kernlogik: geht alle Rezepte durch, ersetzt (oder entfernt, falls replacement=null)
+// den exakten rohen Zutaten-Eintrag, und berechnet die Allergene neu.
+async function replaceRawEverywhere(raw, replacement){
+  const recipes=await api('allergene_rezepturen?select=id,gericht,zutaten,allergene_codes').catch(()=>[]);
+  for(const r of (recipes||[])){
+    const parts=(r.zutaten||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(!parts.some(p=>p===raw)) continue;
+    const newParts=replacement
+      ? parts.map(p=>p===raw?replacement:p)
+      : parts.filter(p=>p!==raw);
+    // Dubletten entfernen, falls das Ziel schon vorhanden war
+    const merged=[...new Set(newParts)].join(', ');
+    const autoCodes=await computeAllergensFromZutatenText(merged);
+    const mergedCodes=[...new Set([...(r.allergene_codes||[]), ...autoCodes])];
+    await api(`allergene_rezepturen?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({zutaten:merged,allergene_codes:mergedCodes,aktualisiert_am:new Date().toISOString()})});
+  }
+}
 function renderOrg(){ goTo('management'); } // alter Einstiegspunkt, leitet nur noch weiter
 window.renderOrg=renderOrg;
 
