@@ -918,7 +918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.9.0';
+const APP_VERSION = '6.10.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4553,6 +4553,69 @@ async function deleteZutatenMaster(id){
   }catch(e){console.error(e);showToast('Fehler beim Löschen: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.deleteZutatenMaster=deleteZutatenMaster;
+
+// ══════════════════════════════════════════════════════════════════════════
+// SCHRANKERL — eigener wöchentlicher Produktionsprozess (schrankerl.at Vending-Kühlschränke).
+// Wird jeden Freitag für die kommende Woche produziert (1 Curry + 1 Salat + 1 Dessert, rotiert
+// über dieselben 4 Wochen wie das Hauptmenü). Die Menge wird meist Dienstag Nachmittag
+// durchgegeben und hier manuell eingetragen.
+function getNextFriday(){
+  const d=new Date();
+  const day=d.getDay(); // 0=So...5=Fr...6=Sa
+  const diff=(5-day+7)%7;
+  d.setDate(d.getDate()+(diff===0?0:diff));
+  return d.toISOString().split('T')[0];
+}
+async function renderSchrankerlTab(){
+  await getZutatenMaster();
+  const woche=CURRENT_MENU_WOCHE;
+  const lieferdatum=getNextFriday();
+  const [menu, prod] = await Promise.all([
+    api(`schrankerl_menu?woche=eq.${woche}&select=*`).catch(()=>[]),
+    api(`schrankerl_production?lieferdatum=eq.${lieferdatum}&select=*`).catch(()=>[])
+  ]);
+  const menge=prod?.[0]?.menge;
+  const dateLabel=new Date(lieferdatum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+  const SLOT_LABEL={curry:'🍛 Curry',salat:'🥗 Salat',dessert:'🍮 Dessert'};
+
+  let html=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">
+    <div style="font-size:12px;font-weight:700;color:#C1542C;">🥡 Schrankerl-Produktion — Woche ${woche}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:1px;">Für: ${dateLabel} (nächster Produktionstag)</div>
+  </div>`;
+
+  ['curry','salat','dessert'].forEach(slot=>{
+    const item=menu.find(m=>m.slot===slot);
+    if(!item) return;
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">${SLOT_LABEL[slot]}</div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:2px;" data-no-translate>${item.name}</div>
+      <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">${item.grammatur||''}</div>
+      <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(item.zutaten)}</div>
+    </div>`;
+  });
+
+  html+=`<div class="card" style="padding:14px;margin-top:6px;">
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">Produktionsmenge (Gesamt, alle 3 Produkte zusammen)</div>
+    <div style="display:flex;gap:8px;">
+      <input id="schrankerl-menge" type="number" step="1" placeholder="z.B. 40" value="${menge??''}" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+      <button onclick="saveSchrankerlMenge('${lieferdatum}')" style="padding:9px 16px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
+    </div>
+    ${prod?.[0]?.eingetragen_von?`<div style="font-size:10px;color:var(--muted);margin-top:6px;">Zuletzt eingetragen von ${prod[0].eingetragen_von}</div>`:''}
+  </div>`;
+  return html;
+}
+window.renderSchrankerlTab=renderSchrankerlTab;
+
+async function saveSchrankerlMenge(lieferdatum){
+  const menge=parseFloat(document.getElementById('schrankerl-menge').value);
+  if(isNaN(menge)){ showToast('Bitte eine Zahl eingeben'); return; }
+  try{
+    await api(`schrankerl_production?lieferdatum=eq.${lieferdatum}`,{method:'DELETE'}).catch(()=>{});
+    await api('schrankerl_production',{method:'POST',body:JSON.stringify([{lieferdatum,menge,eingetragen_von:currentStore?.name||'Küche'}])});
+    showToast('✓ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.saveSchrankerlMenge=saveSchrankerlMenge;
 
 // ══════════════════════════════════════════════════════════════════════════
 // ZUTATEN ZUSAMMENFÜHREN — findet Schreibvarianten/Dubletten, die in den Gerichten stehen, aber
@@ -8501,7 +8564,7 @@ async function renderKitchen(){
   const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
   const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style="font-size:10px;font-weight:400;">'+forecastDateRange+'</span>';
   const menuTabLabel='🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche '+CURRENT_MENU_WOCHE+'</span>';
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}</div>`;
 
   if(kitchenTab==='daily'){
     // Daily Business — Store-Ansicht für Kassenbereich (Während der Schicht)
@@ -8602,6 +8665,13 @@ async function renderKitchen(){
 
   if(kitchenTab==='supply'){
     html+=await renderBeilagenTableHtml('kueche');
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
+  if(kitchenTab==='schrankerl'){
+    html+=await renderSchrankerlTab();
     el.innerHTML=html;
     translateEl(el);
     return;
