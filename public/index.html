@@ -918,7 +918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.10.2';
+const APP_VERSION = '6.10.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1678,7 +1678,7 @@ function renderZutatenReadOnly(text){
       <div style="writing-mode:vertical-rl;transform:rotate(180deg);flex-shrink:0;width:16px;display:flex;align-items:center;justify-content:center;">
         <span style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);">${katLabel[kat]||kat}</span>
       </div>
-      <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;align-items:start;">${tiles}</div>
+      <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;align-items:start;">${tiles}</div>
     </div>`;
   });
   return html;
@@ -4589,13 +4589,22 @@ async function renderSchrankerlTab(){
   </div>`;
 
   // Übersichtszeile ganz am Anfang — auf einen Blick, welche 3 Produkte diese Woche dran sind,
-  // bevor man sich durch die einzelnen Zutaten-Karten scrollt.
+  // PLUS gleich hier die Bestellmenge eintragbar (kommt meist Dienstag Nachmittag von Schrankerl
+  // rein und muss der Küche kommuniziert werden — deshalb direkt hier oben, nicht erst ganz unten).
   const overviewOrder=[['salat','Salat'],['curry','Curry'],['dessert','Dessert']];
   html+=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">`;
   overviewOrder.forEach(([slot,label],i)=>{
     const item=menu.find(m=>m.slot===slot);
     html+=`<div style="font-size:12.5px;${i>0?'margin-top:4px;':''}"><strong>${label}:</strong> <span data-no-translate>${item?item.name:'–'}</span></div>`;
   });
+  html+=`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">📦 Bestellmenge (von Schrankerl reingekommen)</div>
+    <div style="display:flex;gap:8px;">
+      <input id="schrankerl-menge" type="number" step="1" placeholder="z.B. 40" value="${menge??''}" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+      <button onclick="saveSchrankerlMenge('${lieferdatum}')" style="padding:9px 16px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
+    </div>
+    ${prod?.[0]?.eingetragen_von?`<div style="font-size:10px;color:var(--muted);margin-top:6px;">Zuletzt eingetragen von ${prod[0].eingetragen_von}</div>`:''}
+  </div>`;
   html+=`</div>`;
 
   ['curry','salat','dessert'].forEach(slot=>{
@@ -4608,15 +4617,6 @@ async function renderSchrankerlTab(){
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(item.zutaten)}</div>
     </div>`;
   });
-
-  html+=`<div class="card" style="padding:14px;margin-top:6px;">
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">Produktionsmenge (Gesamt, alle 3 Produkte zusammen)</div>
-    <div style="display:flex;gap:8px;">
-      <input id="schrankerl-menge" type="number" step="1" placeholder="z.B. 40" value="${menge??''}" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
-      <button onclick="saveSchrankerlMenge('${lieferdatum}')" style="padding:9px 16px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
-    </div>
-    ${prod?.[0]?.eingetragen_von?`<div style="font-size:10px;color:var(--muted);margin-top:6px;">Zuletzt eingetragen von ${prod[0].eingetragen_von}</div>`:''}
-  </div>`;
   return html;
 }
 window.renderSchrankerlTab=renderSchrankerlTab;
