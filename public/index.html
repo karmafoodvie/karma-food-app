@@ -377,7 +377,7 @@ function getEffectiveKat(name){
 }
 function getEffectiveName(name){
   const hit=findZutatMasterMatch(name);
-  return hit ? hit.name : name;
+  return (hit ? hit.name : name).toUpperCase();
 }
 const ALLERGEN_BOLD=['sesam','käse','joghurt','butter','teigblätter','soja','tofu','sellerie','senf','weizen','mehl','gluten','milch','laktose','nuss','mandel','erdnuss','cashew','ebly'];
 const ZUTAT_KATEGORIEN=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Sonstiges'];
@@ -918,7 +918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.10.0';
+const APP_VERSION = '6.10.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1663,17 +1663,22 @@ function renderZutatenReadOnly(text){
       const masterHit=findZutatMasterMatch(item);
       const isA=(masterHit?.allergene_codes?.length>0) || ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
       const displayName=getEffectiveName(item);
-      tiles+=`<div style="position:relative;background:${color};border-radius:10px;padding:6px 8px;min-height:44px;display:flex;align-items:center;gap:7px;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
-        ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:10px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.3);">!</span>':''}
-        <div style="width:22px;height:22px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
-        <span data-no-translate style="font-size:10.5px;font-weight:700;color:#fff;line-height:1.25;text-align:left;">${displayName}</span>
+      // Quadrat-Trick über padding-bottom:100% statt aspect-ratio — funktioniert garantiert in
+      // JEDEM Browser/Webview, auch älteren, die die neuere aspect-ratio-Eigenschaft nicht
+      // unterstützen (das war der Grund, warum es vorher trotz Fix noch nicht quadratisch war).
+      tiles+=`<div style="position:relative;width:100%;padding-bottom:100%;">
+        <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
+          ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:9px;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.3);">!</span>':''}
+          <div style="width:18px;height:18px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
+          <span data-no-translate style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;">${displayName}</span>
+        </div>
       </div>`;
     });
     html+=`<div style="display:flex;gap:8px;margin-bottom:16px;">
       <div style="writing-mode:vertical-rl;transform:rotate(180deg);flex-shrink:0;width:16px;display:flex;align-items:center;justify-content:center;">
         <span style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);">${katLabel[kat]||kat}</span>
       </div>
-      <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;align-items:stretch;">${tiles}</div>
+      <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;align-items:start;">${tiles}</div>
     </div>`;
   });
   return html;
@@ -4582,6 +4587,16 @@ async function renderSchrankerlTab(){
     <div style="font-size:12px;font-weight:700;color:#C1542C;">🥡 Schrankerl-Produktion — Woche ${woche}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:1px;">Für: ${dateLabel} (nächster Produktionstag)</div>
   </div>`;
+
+  // Übersichtszeile ganz am Anfang — auf einen Blick, welche 3 Produkte diese Woche dran sind,
+  // bevor man sich durch die einzelnen Zutaten-Karten scrollt.
+  const overviewOrder=[['salat','Salat'],['curry','Curry'],['dessert','Dessert']];
+  html+=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">`;
+  overviewOrder.forEach(([slot,label],i)=>{
+    const item=menu.find(m=>m.slot===slot);
+    html+=`<div style="font-size:12.5px;${i>0?'margin-top:4px;':''}"><strong>${label}:</strong> <span data-no-translate>${item?item.name:'–'}</span></div>`;
+  });
+  html+=`</div>`;
 
   ['curry','salat','dessert'].forEach(slot=>{
     const item=menu.find(m=>m.slot===slot);
