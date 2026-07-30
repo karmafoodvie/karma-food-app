@@ -918,7 +918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.10.3';
+const APP_VERSION = '6.11.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1670,7 +1670,7 @@ function renderZutatenReadOnly(text){
         <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
           ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:9px;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.3);">!</span>':''}
           <div style="width:18px;height:18px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
-          <span data-no-translate style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;">${displayName}</span>
+          <span data-no-translate style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;word-break:break-word;overflow-wrap:break-word;hyphens:auto;max-width:100%;">${displayName}</span>
         </div>
       </div>`;
     });
@@ -4579,7 +4579,7 @@ async function renderSchrankerlTab(){
     api(`schrankerl_menu?woche=eq.${woche}&select=*`).catch(()=>[]),
     api(`schrankerl_production?lieferdatum=eq.${lieferdatum}&select=*`).catch(()=>[])
   ]);
-  const menge=prod?.[0]?.menge;
+  const mengeBySlot={}; (prod||[]).forEach(p=>{ mengeBySlot[p.slot]=p.menge; });
   const dateLabel=new Date(lieferdatum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   const SLOT_LABEL={curry:'🍛 Curry',salat:'🥗 Salat',dessert:'🍮 Dessert'};
 
@@ -4589,8 +4589,8 @@ async function renderSchrankerlTab(){
   </div>`;
 
   // Übersichtszeile ganz am Anfang — auf einen Blick, welche 3 Produkte diese Woche dran sind,
-  // PLUS gleich hier die Bestellmenge eintragbar (kommt meist Dienstag Nachmittag von Schrankerl
-  // rein und muss der Küche kommuniziert werden — deshalb direkt hier oben, nicht erst ganz unten).
+  // PLUS gleich hier die Bestellmenge PRO GERICHT eintragbar (kommt meist Dienstag Nachmittag von
+  // Schrankerl rein und muss der Küche kommuniziert werden — deshalb direkt hier oben).
   const overviewOrder=[['salat','Salat'],['curry','Curry'],['dessert','Dessert']];
   html+=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">`;
   overviewOrder.forEach(([slot,label],i)=>{
@@ -4598,14 +4598,16 @@ async function renderSchrankerlTab(){
     html+=`<div style="font-size:12.5px;${i>0?'margin-top:4px;':''}"><strong>${label}:</strong> <span data-no-translate>${item?item.name:'–'}</span></div>`;
   });
   html+=`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">📦 Bestellmenge (von Schrankerl reingekommen)</div>
-    <div style="display:flex;gap:8px;">
-      <input id="schrankerl-menge" type="number" step="1" placeholder="z.B. 40" value="${menge??''}" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
-      <button onclick="saveSchrankerlMenge('${lieferdatum}')" style="padding:9px 16px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
-    </div>
-    ${prod?.[0]?.eingetragen_von?`<div style="font-size:10px;color:var(--muted);margin-top:6px;">Zuletzt eingetragen von ${prod[0].eingetragen_von}</div>`:''}
-  </div>`;
-  html+=`</div>`;
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">📦 Bestellmenge pro Gericht (von Schrankerl reingekommen)</div>`;
+  overviewOrder.forEach(([slot,label])=>{
+    const lastBy=(prod||[]).find(p=>p.slot===slot)?.eingetragen_von;
+    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <span style="font-size:12px;width:52px;flex-shrink:0;">${label}</span>
+      <input id="schrankerl-menge-${slot}" type="number" step="1" placeholder="z.B. 15" value="${mengeBySlot[slot]??''}" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;">
+      <button onclick="saveSchrankerlMenge('${lieferdatum}','${slot}')" style="padding:8px 12px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">Speichern</button>
+    </div>`;
+  });
+  html+=`</div></div>`;
 
   ['curry','salat','dessert'].forEach(slot=>{
     const item=menu.find(m=>m.slot===slot);
@@ -4621,12 +4623,12 @@ async function renderSchrankerlTab(){
 }
 window.renderSchrankerlTab=renderSchrankerlTab;
 
-async function saveSchrankerlMenge(lieferdatum){
-  const menge=parseFloat(document.getElementById('schrankerl-menge').value);
+async function saveSchrankerlMenge(lieferdatum, slot){
+  const menge=parseFloat(document.getElementById(`schrankerl-menge-${slot}`).value);
   if(isNaN(menge)){ showToast('Bitte eine Zahl eingeben'); return; }
   try{
-    await api(`schrankerl_production?lieferdatum=eq.${lieferdatum}`,{method:'DELETE'}).catch(()=>{});
-    await api('schrankerl_production',{method:'POST',body:JSON.stringify([{lieferdatum,menge,eingetragen_von:currentStore?.name||'Küche'}])});
+    await api(`schrankerl_production?lieferdatum=eq.${lieferdatum}&slot=eq.${slot}`,{method:'DELETE'}).catch(()=>{});
+    await api('schrankerl_production',{method:'POST',body:JSON.stringify([{lieferdatum,slot,menge,eingetragen_von:currentStore?.name||'Küche'}])});
     showToast('✓ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
