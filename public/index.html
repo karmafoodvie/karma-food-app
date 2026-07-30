@@ -918,7 +918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.11.0';
+const APP_VERSION = '6.11.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1661,17 +1661,17 @@ function renderZutatenReadOnly(text){
     let tiles='';
     byKat[kat].forEach(item=>{
       const masterHit=findZutatMasterMatch(item);
-      const isA=(masterHit?.allergene_codes?.length>0) || ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
+      const isA=masterHit ? (masterHit.allergene_codes?.length>0) : ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
       const displayName=getEffectiveName(item);
       // Quadrat-Trick über padding-bottom:100% statt aspect-ratio — funktioniert garantiert in
       // JEDEM Browser/Webview, auch älteren, die die neuere aspect-ratio-Eigenschaft nicht
       // unterstützen (das war der Grund, warum es vorher trotz Fix noch nicht quadratisch war).
       tiles+=`<div style="position:relative;width:100%;padding-bottom:100%;">
         <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
-          ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:9px;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.3);">!</span>':''}
           <div style="width:18px;height:18px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
           <span data-no-translate style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;word-break:break-word;overflow-wrap:break-word;hyphens:auto;max-width:100%;">${displayName}</span>
         </div>
+        ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:10px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.4);z-index:2;">!</span>':''}
       </div>`;
     });
     html+=`<div style="display:flex;gap:8px;margin-bottom:16px;">
