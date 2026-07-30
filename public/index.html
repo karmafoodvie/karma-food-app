@@ -202,6 +202,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-guide" class="view"></div>
     <div id="v-forecastReview" class="view"></div>
     <div id="v-healthcheck" class="view"></div>
+    <div id="v-zutatenDB" class="view"></div>
     <div id="v-oeffnungHilfe" class="view"></div>
     <div id="v-reinigungHilfe" class="view"></div>
     <div id="v-hygieneSchulung" class="view"></div>
@@ -888,7 +889,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.14';
+const APP_VERSION = '6.7.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1246,7 +1247,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1255,7 +1256,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
   if(renders[v]) renders[v]();
 }
 // Der normale "Bestellen"-Nav-Button soll IMMER auf die übliche Tab-Ansicht (Transporter/Shop
@@ -1325,7 +1326,7 @@ function zutatenKey(woche, tag, slot){
 function guessZutatKat(name){
   const n=name.toLowerCase();
   if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
-  if(/spinat|tomate|zwiebel|knoblauch|paprika[^p]|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|mais|sellerie|blumenkohl|süßkartoffel/.test(n)) return 'Gemüse';
+  if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|mais|sellerie|blumenkohl|süßkartoffel/.test(n)) return 'Gemüse';
   if(/limett|zitronen|orange|mango|kokos|ananas|apfel|banane|granatapfel|tamarinde|maracuja/.test(n)) return 'Obst';
   if(/linsen|kichererbsen|bohnen|tofu|tempeh|edamame|\bdal\b/.test(n)) return 'Hülsenfrüchte';
   if(/petersilie|koriander.fri|minze|basilikum|thymian|rosmarin|dill|schnittlauch|kräuter/.test(n)) return 'Kräuter';
@@ -1389,6 +1390,60 @@ const ZUTAT_KAT_COLOR={
   'GEMÜSE':'#5B8C5A','OBST':'#E94E1B','HÜLSENFRÜCHTE':'#B08D57','KRÄUTER':'#4C7A5E',
   'GETREIDE/REIS':'#C97C3D','ÖLE/FETTE':'#D4A64B','GEWÜRZE':'#C1542C','SONSTIGES':'#8A7F76',
 };
+
+// Handgezeichnete Kategorie-Illustrationen im Bring-Stil (weiße Linien-Zeichnung auf farbigem
+// Kreis) — eine Illustration pro Kategorie statt eines Fotos pro einzelner Zutat. Das ergibt die
+// gewünschte "coole Illustration"-Optik, ohne für jede der vielen Zutaten ein eigenes Bild zu
+// brauchen; neue Zutaten bekommen automatisch die passende Kategorie-Illustration.
+const ZUTAT_KAT_ICON={
+  'GEMÜSE':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 20c-9 0-15 8-15 18 0 8 6 12 15 12s15-4 15-12c0-10-6-18-15-18z"/>
+    <path d="M32 20c0-5 2-9 6-11"/><path d="M26 11c2 3 3 6 3 9" stroke-width="1.8"/>
+  </svg>`,
+  'OBST':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 24c-9 0-16 7-16 17s7 14 16 14 16-6 16-14-7-17-16-17z"/>
+    <path d="M32 24v-6"/><path d="M32 18c2-3 6-4 9-3" stroke-width="1.8"/>
+  </svg>`,
+  'HÜLSENFRÜCHTE':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 44c-4-10-2-22 8-28 10-6 22-2 26 8"/>
+    <circle cx="27" cy="35" r="3.2"/><circle cx="36" cy="30" r="3.2"/><circle cx="34" cy="41" r="3.2"/>
+  </svg>`,
+  'KRÄUTER':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 50V22"/><path d="M32 30c-6-2-10-8-9-15 7 0 12 4 14 10"/>
+    <path d="M32 22c6-2 10-8 9-15-7 0-12 4-14 10"/>
+  </svg>`,
+  'GETREIDE/REIS':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 50V14"/>
+    <path d="M32 18c-4-2-8-1-10 2M32 18c4-2 8-1 10 2"/>
+    <path d="M32 27c-4-2-8-1-10 2M32 27c4-2 8-1 10 2"/>
+    <path d="M32 36c-4-2-8-1-10 2M32 36c4-2 8-1 10 2"/>
+  </svg>`,
+  'ÖLE/FETTE':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M26 16h12l2 8-3 4v20a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4V28l-3-4z"/>
+    <path d="M26 16v-3h12v3"/>
+  </svg>`,
+  'GEWÜRZE':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="22" y="22" width="20" height="26" rx="4"/><path d="M26 22v-6a6 6 0 0 1 12 0v6"/>
+    <circle cx="28" cy="32" r="1.3" fill="#fff" stroke="none"/><circle cx="34" cy="36" r="1.3" fill="#fff" stroke="none"/>
+    <circle cx="29" cy="41" r="1.3" fill="#fff" stroke="none"/>
+  </svg>`,
+  'SONSTIGES':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 26h24l-2 22a4 4 0 0 1-4 4H26a4 4 0 0 1-4-4z"/><path d="M24 26v-4a8 8 0 0 1 16 0v4"/>
+  </svg>`,
+};
+function zutatKatIcon(kategorie){
+  return ZUTAT_KAT_ICON[kategorie]||ZUTAT_KAT_ICON['SONSTIGES'];
+}
+
+// Zutaten-Stammdatenbank (zutaten_master) im Speicher zwischenhalten, damit nicht bei jeder
+// Anzeige neu geladen werden muss. Enthält Name → Kategorie + Allergene + evtl. eigenes Foto.
+let _zutatenMasterCache=null;
+async function getZutatenMaster(){
+  if(_zutatenMasterCache) return _zutatenMasterCache;
+  _zutatenMasterCache=await api('zutaten_master?select=*&order=name').catch(()=>[]);
+  return _zutatenMasterCache;
+}
+function invalidateZutatenMasterCache(){ _zutatenMasterCache=null; }
 
 function renderZutatenReadOnly(text){
   if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
@@ -1554,25 +1609,42 @@ function showSaveDialog(dishName, newText, onSaved, woche, tag, slot){
 }
 window.showSaveDialog=showSaveDialog;
 
+// Berechnet automatisch, welche Allergene in einem Zutatentext stecken, indem jede Zutat gegen
+// die Zutaten-Datenbank abgeglichen wird. Genau das, was bisher gefehlt hat: Lasagneblätter im
+// Text → Gluten kommt automatisch mit, ohne dass es jemand separat anhaken muss.
+async function computeAllergensFromZutatenText(text){
+  if(!text) return [];
+  const master=await getZutatenMaster();
+  const items=text.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+  const codes=new Set();
+  items.forEach(item=>{
+    const hit=master.find(m=>m.name.toUpperCase()===item || item.includes(m.name.toUpperCase()) || m.name.toUpperCase().includes(item));
+    if(hit) (hit.allergene_codes||[]).forEach(c=>codes.add(c));
+  });
+  return [...codes];
+}
+
 async function zdSaveLocal(dishName, text, woche, tag, slot){
   const key=zutatenKey(woche, tag, slot);
   try{
     let ex;
     if(key){
-      ex=(await api('allergene_rezepturen?zkey=eq.'+encodeURIComponent(key)+'&select=id').catch(()=>[]))[0];
+      ex=(await api('allergene_rezepturen?zkey=eq.'+encodeURIComponent(key)+'&select=id,allergene_codes').catch(()=>[]))[0];
     }
     if(!ex){
       // Fallback für Altbestand ohne zkey (bisher nach Gerichtname gespeichert)
-      ex=(await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=id').catch(()=>[]))[0];
+      ex=(await api('allergene_rezepturen?gericht=eq.'+encodeURIComponent(dishName)+'&select=id,allergene_codes').catch(()=>[]))[0];
     }
-    const payload={gericht:dishName, zutaten:text, aktualisiert_am:new Date().toISOString()};
+    const autoCodes=await computeAllergensFromZutatenText(text);
+    const mergedCodes=[...new Set([...(ex?.allergene_codes||[]), ...autoCodes])];
+    const payload={gericht:dishName, zutaten:text, allergene_codes:mergedCodes, aktualisiert_am:new Date().toISOString()};
     if(key) payload.zkey=key;
     if(ex){
       await api('allergene_rezepturen?id=eq.'+ex.id,{method:'PATCH',body:JSON.stringify(payload)});
     } else {
-      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{...payload, allergene_codes:[]}])});
+      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([payload])});
     }
-    showToast('✔ Gespeichert');
+    showToast('✔ Gespeichert'+(autoCodes.length?' · Allergene automatisch erkannt: '+autoCodes.map(c=>ALLERGEN_NAMES[c]||c).join(', '):''));
   }catch(e){ showToast('Fehler: '+(e.message||'unbekannt')); }
 }
 
@@ -1582,7 +1654,7 @@ async function zdSaveGlobal(dishName, newText, woche, tag, slot){
     await zdSaveLocal(dishName, newText, woche, tag, slot);
     // 2. Find overlapping items and update other recipes
     const newItems=newText.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
-    const all=await api('allergene_rezepturen?select=id,gericht,zutaten').catch(()=>[]);
+    const all=await api('allergene_rezepturen?select=id,gericht,zutaten,allergene_codes').catch(()=>[]);
     let updated=0;
     for(const rec of (all||[])){
       if(rec.gericht===dishName || !rec.zutaten) continue;
@@ -1594,7 +1666,9 @@ async function zdSaveGlobal(dishName, newText, woche, tag, slot){
       const toAdd=newItems.filter(ni=>!existingSet.has(ni));
       if(toAdd.length===0) continue;
       const merged=[...rec.zutaten.split(',').map(s=>s.trim()).filter(Boolean),...toAdd].join(', ');
-      await api('allergene_rezepturen?id=eq.'+rec.id,{method:'PATCH',body:JSON.stringify({zutaten:merged,aktualisiert_am:new Date().toISOString()})});
+      const autoCodes=await computeAllergensFromZutatenText(merged);
+      const mergedCodes=[...new Set([...(rec.allergene_codes||[]), ...autoCodes])];
+      await api('allergene_rezepturen?id=eq.'+rec.id,{method:'PATCH',body:JSON.stringify({zutaten:merged,allergene_codes:mergedCodes,aktualisiert_am:new Date().toISOString()})});
       updated++;
     }
     showToast('✔ Global gespeichert'+(updated?' · '+updated+' weitere Rezepte aktualisiert':''));
@@ -1631,6 +1705,20 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
     +renderZutatenEditable(currentText, safeKey)
     +'<datalist id="zd-zutaten-suggestions">'+getZutatenVocabulary().map(z=>'<option value="'+z.replace(/"/g,'&quot;')+'">').join('')+'</datalist>';
   sheet.appendChild(body);
+  // Zutaten-Datenbank ergänzt die Vorschlagsliste um zentral gepflegte Zutaten (mit Kategorie +
+  // Allergenen) — läuft asynchron nach, damit das Öffnen des Editors nicht wartet.
+  getZutatenMaster().then(master=>{
+    const dl=document.getElementById('zd-zutaten-suggestions');
+    if(!dl) return;
+    const existing=new Set([...dl.options].map(o=>o.value.toUpperCase()));
+    master.forEach(m=>{
+      if(!existing.has(m.name.toUpperCase())){
+        const opt=document.createElement('option');
+        opt.value=m.name;
+        dl.appendChild(opt);
+      }
+    });
+  });
 
   // Footer buttons
   const footer=document.createElement('div');
@@ -1693,10 +1781,12 @@ async function saveGemuese(dishName, newGemuese){
     const currentZutaten=existing?.zutaten||'';
     const {rest}=splitZutaten(currentZutaten);
     const merged=[...newGemuese.split(',').map(s=>s.trim()).filter(Boolean),...rest].join(', ');
+    const autoCodes=await computeAllergensFromZutatenText(merged);
+    const mergedCodes=[...new Set([...(existing?.allergene_codes||[]), ...autoCodes])];
     if(existing){
-      await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}`,{method:'PATCH',body:JSON.stringify({zutaten:merged})});
+      await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}`,{method:'PATCH',body:JSON.stringify({zutaten:merged,allergene_codes:mergedCodes})});
     } else {
-      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten:merged,allergene_codes:[]}])});
+      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten:merged,allergene_codes:mergedCodes}])});
     }
     showToast(`✔ Gemüse für ${dishName} gespeichert`);
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
@@ -3999,6 +4089,13 @@ async function renderManagement(){
         <span class="org-btn-title" style="color:#15803D;">System-Check</span>
         <span class="org-btn-sub">Alle Tabellen & Zugriffsrechte prüfen, Gleichzeitigkeits-Test</span>
       </div>
+    </button>
+    <button class="org-btn" onclick="goTo('zutatenDB')" style="border-color:#5B8C5A;margin-top:8px;">
+      <span class="org-btn-icon">🥕</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#5B8C5A;">Zutaten-Datenbank</span>
+        <span class="org-btn-sub">Zutaten mit Kategorie & Allergenen zentral pflegen</span>
+      </div>
     </button>`;
   translateEl(el);
 }
@@ -4122,6 +4219,103 @@ async function runHealthCheckConcurrency(){
   wrap.innerHTML=html;
 }
 window.runHealthCheckConcurrency=runHealthCheckConcurrency;
+
+// ══════════════════════════════════════════════════════════════════════════
+// ZUTATEN-DATENBANK — zentrale Stammdaten-Verwaltung (Name, Kategorie, Allergene).
+// Der Zutaten-Editor bei Gerichten schlägt daraus vor und übernimmt automatisch Kategorie +
+// Allergene, sobald eine bestehende Zutat gewählt wird — so muss niemand mehr separat daran
+// denken, z.B. Gluten bei Lasagneblättern anzuhaken.
+// ══════════════════════════════════════════════════════════════════════════
+async function renderZutatenDB(){
+  const el=document.getElementById('v-zutatenDB');
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🥕','Zutaten-Datenbank','Einmal richtig anlegen, überall korrekt','#5B8C5A')+'<div id="zdb-content">Lädt…</div>';
+  translateEl(el);
+  await renderZutatenDBContent();
+}
+window.renderZutatenDB=renderZutatenDB;
+
+async function renderZutatenDBContent(){
+  const wrap=document.getElementById('zdb-content');
+  invalidateZutatenMasterCache();
+  const items=await getZutatenMaster();
+  let html=`<button onclick="showZutatenMasterForm()" style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:14px;">+ Neue Zutat anlegen</button>
+    <div id="zdb-form"></div>`;
+
+  const byKat={};
+  items.forEach(it=>{ (byKat[it.kategorie]=byKat[it.kategorie]||[]).push(it); });
+  ZUTAT_KAT_ORDER.concat(Object.keys(byKat).filter(k=>!ZUTAT_KAT_ORDER.includes(k))).forEach(kat=>{
+    if(!byKat[kat]?.length) return;
+    const color=ZUTAT_KAT_COLOR[kat]||'#8A7F76';
+    html+=`<div class="section-lbl" style="margin-top:14px;">${kat}</div><div class="card">`;
+    byKat[kat].forEach(it=>{
+      const allergBadges=(it.allergene_codes||[]).map(c=>`<span class="badge" style="background:#FEF3C7;color:#92400E;margin-right:3px;font-size:9.5px;">${ALLERGEN_NAMES[c]||c}</span>`).join('');
+      html+=`<div onclick='showZutatenMasterForm(${JSON.stringify(it)})' style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:0.5px solid var(--border);cursor:pointer;">
+        <div style="width:34px;height:34px;border-radius:50%;background:${color};flex-shrink:0;padding:6px;box-sizing:border-box;">${zutatKatIcon(kat)}</div>
+        <div style="flex:1;min-width:0;">
+          <div data-no-translate style="font-size:13px;font-weight:500;">${it.name}</div>
+          <div style="margin-top:2px;">${allergBadges||'<span style="font-size:10px;color:var(--muted);">keine Allergene</span>'}</div>
+        </div>
+        <span style="color:var(--muted);">→</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  wrap.innerHTML=html;
+  translateEl(wrap);
+}
+
+function showZutatenMasterForm(existing){
+  const wrap=document.getElementById('zdb-form');
+  const e=existing||{};
+  const allergenBoxes=Object.entries(ALLERGEN_NAMES).map(([code,label])=>{
+    const checked=(e.allergene_codes||[]).includes(code);
+    return `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:12.5px;">
+      <input type="checkbox" value="${code}" ${checked?'checked':''} class="zdb-allerg-box"> ${label}
+    </label>`;
+  }).join('');
+  const katOptions=ZUTAT_KAT_ORDER.map(k=>`<option value="${k}" ${e.kategorie===k?'selected':''}>${k}</option>`).join('');
+  wrap.innerHTML=`<div class="card" style="padding:14px;margin-bottom:14px;">
+    <div style="font-weight:600;font-size:13.5px;margin-bottom:10px;">${e.id?'Zutat bearbeiten':'Neue Zutat'}</div>
+    <input id="zdb-name" type="text" placeholder="Name (GROSSBUCHSTABEN, z.B. LASAGNEBLÄTTER)" value="${e.name?escAttr(e.name):''}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;font-size:13px;">
+    <select id="zdb-kat" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-size:13px;">${katOptions}</select>
+    <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;">Allergene:</div>
+    <div style="margin-bottom:12px;">${allergenBoxes}</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('zdb-form').innerHTML='';" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      ${e.id?`<button onclick="deleteZutatenMaster(${e.id})" style="padding:9px 14px;border:none;border-radius:8px;background:#FEE2E2;color:#DC2626;font-size:13px;cursor:pointer;">🗑</button>`:''}
+      <button onclick="saveZutatenMaster(${e.id||'null'})" style="flex:1;padding:9px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
+    </div>
+  </div>`;
+  wrap.scrollIntoView({behavior:'smooth', block:'center'});
+}
+window.showZutatenMasterForm=showZutatenMasterForm;
+
+async function saveZutatenMaster(id){
+  const name=document.getElementById('zdb-name').value.trim().toUpperCase();
+  const kategorie=document.getElementById('zdb-kat').value;
+  const codes=[...document.querySelectorAll('.zdb-allerg-box:checked')].map(c=>c.value);
+  if(!name){ showToast('Bitte Namen eingeben'); return; }
+  try{
+    if(id){
+      await api(`zutaten_master?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({name,kategorie,allergene_codes:codes})});
+    }else{
+      await api('zutaten_master',{method:'POST',body:JSON.stringify([{name,kategorie,allergene_codes:codes,erstellt_von:currentStore?.name||'Organisation'}])});
+    }
+    showToast('✓ Gespeichert');
+    renderZutatenDBContent();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.saveZutatenMaster=saveZutatenMaster;
+
+async function deleteZutatenMaster(id){
+  if(!confirm('Diese Zutat wirklich aus der Datenbank löschen?')) return;
+  try{
+    await api(`zutaten_master?id=eq.${id}`,{method:'DELETE'});
+    showToast('✓ Gelöscht');
+    renderZutatenDBContent();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.deleteZutatenMaster=deleteZutatenMaster;
 function renderOrg(){ goTo('management'); } // alter Einstiegspunkt, leitet nur noch weiter
 window.renderOrg=renderOrg;
 
