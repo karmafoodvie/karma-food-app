@@ -918,7 +918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.11.1';
+const APP_VERSION = '6.11.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2360,7 +2360,9 @@ async function renderHome(){
     ${(()=>{
       const todayMenu=getTodayMenu()||[];
       if(!todayMenu.length) return '';
-      return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${todayMenu.map((d,i)=>{
+      let cardsHtml='';
+      let panelsHtml='';
+      todayMenu.forEach((d,i)=>{
         const cat=mapDishNameToCategory(d.name, d.slot);
         const mainCodes=d.allergene?.main||[];
         const dressingCodes=d.allergene?.dressing||[];
@@ -2370,7 +2372,7 @@ async function renderHome(){
         const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
         const zutatenMerged=(zKeyHome && homeZutatenOverrideMap[zKeyHome])||homeZutatenOverrideMap[d.name]||d.zutaten;
         const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
-                return `<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
+        cardsHtml+=`<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
           <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
             ${dishVisual}
             <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
@@ -2379,12 +2381,16 @@ async function renderHome(){
           <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
             <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
           </div>
-          <div id="dish-allergen-${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px;">
-            <div style="font-size:9.5px;font-weight:600;color:var(--muted);margin-bottom:5px;">🧂 ZUTATEN</div>
-            <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
-          </div>
         </div>`;
-      }).join('')}</div>`;
+        // Zutaten-Panel bewusst NICHT in der schmalen Gericht-Spalte, sondern als eigener,
+        // volle-Breite-Bereich darunter — sonst kann sich die Zutatenliste nie richtig ausdehnen.
+        panelsHtml+=`<div id="dish-allergen-${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+          <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
+          <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
+        </div>`;
+      });
+      return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${cardsHtml}</div>
+        <div id="dish-allergen-panels" style="margin-bottom:10px;">${panelsHtml}</div>`;
     })()}
     <div class="home-card kf-disposal" onclick="goTo('disposal')" style="margin-bottom:6px;padding:8px 10px;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
       <div style="font-size:13px;font-weight:500;">🗑️ Entsorgung / Food Waste</div>
@@ -2481,8 +2487,13 @@ async function renderReinigungHelp(){
 }
 
 function toggleDishAllergeneCard(i){
-  const el=document.getElementById('dish-allergen-'+i);
-  if(el) el.style.display = el.style.display==='none' ? 'block' : 'none';
+  const target=document.getElementById('dish-allergen-'+i);
+  if(!target) return;
+  const wasOpen=target.style.display!=='none' && target.style.display!=='';
+  // Immer erst alle anderen offenen Zutaten-Ansichten schließen — nie mehrere gleichzeitig offen
+  const panelsWrap=document.getElementById('dish-allergen-panels');
+  if(panelsWrap) panelsWrap.querySelectorAll('[id^="dish-allergen-"]').forEach(p=>{ p.style.display='none'; });
+  target.style.display = wasOpen ? 'none' : 'block';
 }
 window.toggleDishAllergeneCard=toggleDishAllergeneCard;
 
