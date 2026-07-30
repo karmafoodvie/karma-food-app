@@ -888,7 +888,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.6.12';
+const APP_VERSION = '6.6.13';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6694,6 +6694,20 @@ async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty,
 }
 window.toggleOrderEingepackt=toggleOrderEingepackt;
 
+// Sammel-Aktion: alles für diesen Tag als eingepackt markieren UND die Menge auf 0 zurücksetzen —
+// so gewünscht, damit Filialen danach nicht mehr die alte (bereits gelieferte) Menge sehen,
+// sondern wieder bei 0 starten. Ein einziger PATCH-Aufruf für alle betroffenen Zeilen auf einmal,
+// statt jede Zeile einzeln durchzuklicken.
+async function markAllPackedAndReset(orderDateStr){
+  if(!confirm('Wirklich ALLES für diesen Tag als eingepackt markieren und auf 0 zurücksetzen? Das kann nicht rückgängig gemacht werden.')) return;
+  try{
+    await api(`orders?order_date=eq.${orderDateStr}&quantity=gt.0`,{method:'PATCH',body:JSON.stringify({eingepackt:true,quantity:0})});
+    showToast('✓ Alles eingepackt & zurückgesetzt');
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.markAllPackedAndReset=markAllPackedAndReset;
+
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -6788,7 +6802,10 @@ async function renderPack(){
     </div>`;
   }
 
-  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Zahl antippen = als eingepackt markieren</div>`;
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
+    <div style="font-size:11px;color:var(--muted);">Zahl antippen = als eingepackt markieren</div>
+    <button onclick="markAllPackedAndReset('${bestellDateStr}')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">✅ Alles eingepackt</button>
+  </div>`;
 
   let hasAny=false;
   const storeColWidth=(60/(storeList.length+1)).toFixed(1); // % je Filiale + Summe, Rest für Artikel
