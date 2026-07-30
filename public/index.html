@@ -348,7 +348,11 @@ function getDishBeilagen(dishName){
 // Gleiche Farbzuordnung für Küchen-Zulieferartikel überall (Store-Ansicht & Transporter/Küche-Matrix)
 const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Sauce Bowl/Salat':'#1D4ED8','Limetten':'#15803D','Dressing':'#B91C1C','Lasagne Dressing':'#B91C1C','Petersilie':'#DB6B57','Salat (zur Lasagne)':'#A21CAF','Raita':'#15803D'};
 // Ausgeschriebene Allergen-Namen statt Buchstaben-Codes — Mitarbeitende kennen die Buchstaben nicht auswendig
-const ALLERGEN_NAMES={A:'Gluten',C:'Sellerie',F:'Soja',G:'Milch',L:'Sesam',M:'Senf',N:'Nüsse'};
+// Offizielle 14-Allergene-Kennzeichnung (Österreich/EU) — Buchstaben A-R.
+// WICHTIG: Die bisherige Zuordnung hatte C/L/N vertauscht (C war fälschlich "Sellerie" statt
+// "Eier", L war "Sesam" statt "Sellerie", N war "Nüsse" statt "Sesam") — am 30.07.26 korrigiert
+// und die 3 betroffenen Datenbank-Einträge entsprechend migriert.
+const ALLERGEN_NAMES={A:'Gluten',B:'Krebstiere',C:'Eier',D:'Fisch',E:'Erdnüsse',F:'Soja',G:'Milch',H:'Nüsse',L:'Sellerie',M:'Senf',N:'Sesam',O:'Sulfite',P:'Lupinen',R:'Weichtiere'};
 const ZUTAT_KAT_ORDER=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Sonstiges'];
 // Manche neuere Teile (Zutaten-Datenbank, Illustrationen) verwenden GROSSBUCHSTABEN-Kategorien —
 // hier einmal normalisiert, damit beide Konventionen zusammenpassen, statt an zwei Stellen mit
@@ -914,7 +918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.8.0';
+const APP_VERSION = '6.9.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1622,6 +1626,22 @@ async function getZutatenMaster(){
 }
 function invalidateZutatenMasterCache(){ _zutatenMasterCache=null; }
 
+// Allergene für Sweets/Samosas/Chutney & Co. — separate Tabelle, da das keine "Gerichte" sind
+// (kein Zutaten-Editor dafür), sondern fertige Artikel mit vom Hersteller/Rezept bekannten
+// Allergenen, die einmalig hinterlegt werden.
+let _produktAllergeneCache=null;
+async function getProduktAllergene(){
+  if(_produktAllergeneCache) return _produktAllergeneCache;
+  _produktAllergeneCache=await api('produkt_allergene?select=*').catch(()=>[]);
+  return _produktAllergeneCache;
+}
+function findProduktAllergene(name){
+  const n=(name||'').toUpperCase();
+  const list=_produktAllergeneCache;
+  if(!list) return null;
+  return list.find(p=>p.name.toUpperCase()===n)||null;
+}
+
 function renderZutatenReadOnly(text){
   if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
   const items=text.split(/[,\n]/).map(s=>s.trim()).filter(s=>s && !/^(GEM|GEW|GRUNDZ|GETREIDE|BEILAGE:|ZUTATEN|ÖL\/|DRESSING:)/i.test(s));
@@ -1640,18 +1660,20 @@ function renderZutatenReadOnly(text){
     const color=ZUTAT_KAT_COLOR[kat]||'#7D7268';
     let tiles='';
     byKat[kat].forEach(item=>{
-      const isA=ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
+      const masterHit=findZutatMasterMatch(item);
+      const isA=(masterHit?.allergene_codes?.length>0) || ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
       const displayName=getEffectiveName(item);
-      tiles+=`<div style="background:${color};border-radius:10px;padding:6px 8px;display:flex;align-items:center;gap:7px;${isA?'box-shadow:inset 0 0 0 2px rgba(255,255,255,0.7);':''}">
+      tiles+=`<div style="position:relative;background:${color};border-radius:10px;padding:6px 8px;min-height:44px;display:flex;align-items:center;gap:7px;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
+        ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:10px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.3);">!</span>':''}
         <div style="width:22px;height:22px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
-        <span data-no-translate style="font-size:10.5px;font-weight:700;color:#fff;line-height:1.2;text-align:left;">${displayName}</span>
+        <span data-no-translate style="font-size:10.5px;font-weight:700;color:#fff;line-height:1.25;text-align:left;">${displayName}</span>
       </div>`;
     });
-    html+=`<div style="display:flex;gap:8px;margin-bottom:14px;">
+    html+=`<div style="display:flex;gap:8px;margin-bottom:16px;">
       <div style="writing-mode:vertical-rl;transform:rotate(180deg);flex-shrink:0;width:16px;display:flex;align-items:center;justify-content:center;">
         <span style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);">${katLabel[kat]||kat}</span>
       </div>
-      <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">${tiles}</div>
+      <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;align-items:stretch;">${tiles}</div>
     </div>`;
   });
   return html;
@@ -2187,6 +2209,7 @@ async function renderHome(){
   // Zutaten-Datenbank früh laden (nicht abwarten), damit die Kategorie-Erkennung bei den
   // Gericht-Karten unten gleich die verlässlichen, gepflegten Kategorien nutzt statt nur zu raten.
   getZutatenMaster();
+  getProduktAllergene();
   // Zutaten-Overrides einmal laden, damit die Gericht-Karten unten die vom Koch bearbeiteten
   // Zutaten zeigen — sonst sieht die Filiale immer nur den ursprünglichen Menü-Text.
   const homeZutatenOverrideRaw=await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
@@ -2618,12 +2641,15 @@ function renderOrderSection(cats, label, color, icon){
       }
       const v=orderQtys[a.id]||0;
       const verfuegbar=a.verfuegbar!==false;
+      const allergInfo=findProduktAllergene(a.name);
+      const allergLine=(allergInfo?.allergene_codes?.length)?`<div style="font-size:10px;color:#B45309;margin-top:2px;">⚠️ ${allergInfo.allergene_codes.map(c=>ALLERGEN_NAMES[c]||c).join(', ')}</div>`:'';
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
           ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
+            ${allergLine}
             ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
@@ -2987,7 +3013,9 @@ async function renderStoreSamosaHtml(weekDates){
   const todayVals=await api(`samosa_today?store_id=eq.${currentStore.id}&supply_date=gte.${weekDates[1]}&supply_date=lte.${weekDates[4]}&select=supply_date,qty,is_adjusted`).catch(()=>[]);
   const valMap={}; (todayVals||[]).forEach(d=>{valMap[d.supply_date]=d;});
 
+  const samosaAllerg=await getProduktAllergene().then(list=>list.find(p=>p.name.toUpperCase()==='SAMOSA'));
   let html=`<div class="section-lbl" style="color:#F97316;">🥟 Samosas — diese Woche</div>
+  ${(samosaAllerg?.allergene_codes?.length)?`<div style="font-size:11px;color:#B45309;margin:-4px 0 8px;">⚠️ Enthält: ${samosaAllerg.allergene_codes.map(c=>ALLERGEN_NAMES[c]||c).join(', ')}</div>`:''}
   <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Artikel</th>
     ${[1,2,3,4].map(wd=>{
