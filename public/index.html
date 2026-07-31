@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.17.0';
+const APP_VERSION = '6.17.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3036,6 +3036,15 @@ function formatQty(n){
   // kein bekannter Bruch -> normale Zahl, Punkt durch Komma falls Nachkommastellen
   return num % 1 === 0 ? `${num}` : num.toString().replace('.',',');
 }
+// Nächster Geschäftstag ab einem Basisdatum (überspringt Sa+So). Ohne Argument: ab heute.
+// Wird für alle "morgen"-Bezüge in der Produktion genutzt, damit z.B. Freitags korrekt Montag
+// geprüft wird (am Wochenende ist kein Betrieb, es gibt keine Forecast-Einträge für Sa/So).
+function nextBusinessDayStr(baseDate){
+  const d = baseDate ? new Date(baseDate) : new Date();
+  d.setDate(d.getDate()+1);
+  while([0,6].includes(d.getDay())){ d.setDate(d.getDate()+1); }
+  return d.toISOString().split('T')[0];
+}
 function getWeekdayDates(weekOffsetParam=0){
   // Liefert {1:'YYYY-MM-DD', ..., 5:'YYYY-MM-DD'} für Mo-Fr — Standard ist die aktuelle Kalenderwoche,
   // weekOffsetParam verschiebt in Wochenschritten (z.B. +1 = nächste Woche, -1 = letzte Woche).
@@ -4814,14 +4823,13 @@ async function loadOrgDashboard(){
   const wrap=document.getElementById('org-dashboard-widget');
   if(!wrap) return;
   const today=new Date().toISOString().split('T')[0];
-  const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-  const tomorrowStr=tomorrow.toISOString().split('T')[0];
+  const tomorrowStr=nextBusinessDayStr(); // nächster Geschäftstag (Fr→Mo)
   try{
     const [stores, ordersToday, kcPending, forecastTomorrow, disposalToday, submissionsAllToday] = await Promise.all([
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
       api(`kc_submissions?select=store_id`).catch(()=>[]),
-      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=eq.manual&select=store_id`).catch(()=>[]),
+      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=in.(store,manual)&select=store_id`).catch(()=>[]),
       api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[]),
       api(`order_submissions?order_date=eq.${today}&select=store_id,tab`).catch(()=>[])
     ]);
@@ -7421,7 +7429,7 @@ window.setMangelStatus=setMangelStatus;
 async function renderSchichtende(){
   const el=document.getElementById('v-schichtende');
   const today=new Date().toISOString().split('T')[0];
-  const tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
+  const tomorrow=nextBusinessDayStr(); // nächster Geschäftstag (Fr→Mo), passend zur Forecast-Eingabe
 
   // Alle Daten parallel laden
   const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, submissionsToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow] = await Promise.all([
