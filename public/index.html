@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.13.1';
+const APP_VERSION = '6.13.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9140,7 +9140,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const sizeLabel=isLasagne&&recs.length?recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join('+'):null;
       return `<td style="font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
     }).join('');
-    html+=`<tr onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
+    html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
       <td style="text-align:left;border-bottom:1px solid var(--border);border-right:1px solid var(--border);"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
       ${cells}
       <td style="font-weight:700;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${total>0?formatQty(total):'–'}</td>
