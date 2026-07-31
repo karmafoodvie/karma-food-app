@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.18.0';
+const APP_VERSION = '6.18.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3187,15 +3187,30 @@ async function renderStoreBeilagenWeekTable(weekDates, headingColor){
   return html;
 }
 
+let kuecheWeekOffset=0; // eigene Wochen-Navigation für den Beilagen-Tab: 0=aktuelle Woche, +1=nächste, -1=letzte
+function changeKuecheWeek(d){ kuecheWeekOffset+=d; renderOrder(); }
+window.changeKuecheWeek=changeKuecheWeek;
+
 async function renderKuecheOrderTab(el, tabHtml){
   const tab=ORDER_TABS.kueche;
   let html=tabHtml;
-  const weekDates=getWeekdayDates();
+  const weekDates=getWeekdayDates(kuecheWeekOffset);
+  const kwNum=getIsoWeekNumber(weekDates[1]);
+  const kwLabel=`${new Date(weekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(weekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}`;
 
   html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
     <span style="font-size:18px;">${tab.icon}</span>
     <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
     <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen</div></div>
+  </div>`;
+
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <button onclick="changeKuecheWeek(-1)" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;">← Vorherige</button>
+    <div style="text-align:center;">
+      <div style="font-size:13px;font-weight:600;">KW ${kwNum}${kuecheWeekOffset===0?' (diese Woche)':''}</div>
+      <div style="font-size:10.5px;color:var(--muted);">${kwLabel}</div>
+    </div>
+    <button onclick="changeKuecheWeek(1)" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;">Nächste →</button>
   </div>`;
 
   html+=await renderStoreBeilagenWeekTable(weekDates, tab.color);
