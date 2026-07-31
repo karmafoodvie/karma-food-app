@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.17.1';
+const APP_VERSION = '6.18.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3114,18 +3114,13 @@ async function renderStoreSamosaHtml(weekDates){
   return html;
 }
 
-async function renderKuecheOrderTab(el, tabHtml){
-  const tab=ORDER_TABS.kueche;
-  let html=tabHtml;
-  const todayWeekday=new Date().getDay(); // 0=So,1=Mo...6=Sa
-  const weekDates=getWeekdayDates();
-
-  html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
-    <span style="font-size:18px;">${tab.icon}</span>
-    <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
-    <div style="font-size:10px;color:var(--muted);">Fixe Wochenmenge laut Plan — jeder Tag bei Bedarf anpassbar</div></div>
-  </div>`;
-
+// Wiederverwendbare Beilagen-Tabelle (Saucen/Limetten/Dressings) — nimmt weekDates als Parameter,
+// damit sie sowohl im eigenen Küche-Tab als auch direkt unter der Forecast-Tabelle eingebunden
+// werden kann (dieselbe Woche, dieselbe Navigation — beide hängen oft zusammen und werden an
+// denselben Tagen ausgefüllt).
+async function renderStoreBeilagenWeekTable(weekDates, headingColor){
+  const color=headingColor||'#3B6D11';
+  const todayWeekday=new Date().getDay();
   const baseline=await api(`kitchen_supply_baseline?store_id=eq.${currentStore.id}&select=weekday,article_name,unit,base_qty&order=weekday`).catch(()=>[]);
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekVals=await api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=supply_date,article_name,qty,is_adjusted`).catch(()=>[]);
@@ -3134,60 +3129,76 @@ async function renderKuecheOrderTab(el, tabHtml){
 
   const daysWithItems=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
   const today=new Date().toISOString().split('T')[0];
-  const todayRest=await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]);
-  const restRec=(todayRest||[])[0]||{};
+  const isCurrentWeek=(weekDates[1]<=today && today<=weekDates[5]);
+  const todayRest=isCurrentWeek?await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]):[];
   // Wochensalat-Meldung ist eine tägliche Aufgabe unabhängig von den sonstigen Beilagen — die
   // heutige Spalte muss also immer existieren, auch wenn an einem Tag sonst nichts geliefert wird.
-  const displayDays=[...new Set([...daysWithItems, ...((todayWeekday>=1&&todayWeekday<=5)?[todayWeekday]:[])])].sort((a,b)=>a-b);
+  const displayDays=[...new Set([...daysWithItems, ...((isCurrentWeek&&todayWeekday>=1&&todayWeekday<=5)?[todayWeekday]:[])])].sort((a,b)=>a-b);
 
+  let html=`<div class="section-lbl" style="color:${color};margin-top:16px;">🍳 Saucen, Limetten &amp; Dressings</div>`;
   if(!displayDays.length){
     html+=`<div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);font-size:13px;">Für diese Filiale ist keine Küchen-Lieferung hinterlegt.</div>`;
-  } else {
-    // Kompakte Wochentabelle: 1 Zeile pro Artikel, 1 Spalte pro Liefertag — jede Zelle einzeln
-    // anpassbar (z.B. 0 eintragen, wenn vom Vortag noch genug übrig ist). Alle Tage auf einen
-    // Blick statt einzeln durchklicken zu müssen.
-    const articleNames=[...new Set(baseline.map(b=>b.article_name))];
-    let matrixHtml=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
-      <th style="text-align:left;">Artikel</th>
-      ${displayDays.map(wd=>{
-        const dateStr=weekDates[wd];
-        const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-        const isToday=wd===todayWeekday;
-        return `<th style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
-      }).join('')}
-    </tr></thead><tbody>`;
-
-    articleNames.forEach(name=>{
-      const unit=baseline.find(b=>b.article_name===name)?.unit||'';
-      const color=ARTICLE_COLORS[name]||'#1a1a18';
-      const cells=displayDays.map(wd=>{
-        const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
-        const dateStr=weekDates[wd];
-        const rec=(valMap[dateStr]||{})[name];
-        const val=rec ? rec.qty : (b ? b.base_qty : 0);
-        const adjusted=rec?.is_adjusted;
-        const isPlanned=!!b; // dezenter dargestellt, wenn's laut Plan eigentlich kein Liefertag ist
-        return `<td style="padding:6px 3px;">
-          <input type="number" step="0.25" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
-            onchange="updateKuecheQty(this)" inputmode="decimal"
-            style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':(isPlanned?'#fff':'#FAFAFA')};color:${isPlanned||val>0?'inherit':'var(--muted)'};">
-        </td>`;
-      }).join('');
-      matrixHtml+=`<tr>
-        <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
-            <div>${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></div>
-          </div>
-        </td>
-        ${cells}
-      </tr>`;
-    });
-
-    matrixHtml+='</tbody></table></div></div>';
-    html+=matrixHtml;
-    html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
+    return html;
   }
+  // Kompakte Wochentabelle: 1 Zeile pro Artikel, 1 Spalte pro Liefertag — jede Zelle einzeln
+  // anpassbar (z.B. 0 eintragen, wenn vom Vortag noch genug übrig ist). Alle Tage auf einen
+  // Blick statt einzeln durchklicken zu müssen.
+  const articleNames=[...new Set(baseline.map(b=>b.article_name))];
+  let matrixHtml=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Artikel</th>
+    ${displayDays.map(wd=>{
+      const dateStr=weekDates[wd];
+      const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      const isToday=isCurrentWeek&&wd===todayWeekday;
+      return `<th style="${isToday?`color:${color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
+    }).join('')}
+  </tr></thead><tbody>`;
+
+  articleNames.forEach(name=>{
+    const unit=baseline.find(b=>b.article_name===name)?.unit||'';
+    const acolor=ARTICLE_COLORS[name]||'#1a1a18';
+    const cells=displayDays.map(wd=>{
+      const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
+      const dateStr=weekDates[wd];
+      const rec=(valMap[dateStr]||{})[name];
+      const val=rec ? rec.qty : (b ? b.base_qty : 0);
+      const adjusted=rec?.is_adjusted;
+      const isPlanned=!!b; // dezenter dargestellt, wenn's laut Plan eigentlich kein Liefertag ist
+      return `<td style="padding:6px 3px;">
+        <input type="number" step="0.25" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
+          onchange="updateKuecheQty(this)" inputmode="decimal"
+          style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':(isPlanned?'#fff':'#FAFAFA')};color:${isPlanned||val>0?'inherit':'var(--muted)'};">
+      </td>`;
+    }).join('');
+    matrixHtml+=`<tr>
+      <td data-no-translate style="font-size:13px;font-weight:600;color:${acolor};white-space:nowrap;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+          <div>${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></div>
+        </div>
+      </td>
+      ${cells}
+    </tr>`;
+  });
+
+  matrixHtml+='</tbody></table></div></div>';
+  html+=matrixHtml;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
+  return html;
+}
+
+async function renderKuecheOrderTab(el, tabHtml){
+  const tab=ORDER_TABS.kueche;
+  let html=tabHtml;
+  const weekDates=getWeekdayDates();
+
+  html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
+    <span style="font-size:18px;">${tab.icon}</span>
+    <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
+    <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen</div></div>
+  </div>`;
+
+  html+=await renderStoreBeilagenWeekTable(weekDates, tab.color);
 
   // Samosas — eigene, kleine Wochentabelle nur für diese Filiale (Mo–Do), damit die Mengen
   // direkt hier gepflegt werden können, statt separat per WhatsApp durchgegeben zu werden.
@@ -3954,6 +3965,10 @@ async function renderForecastOrderTab(el, tabHtml){
   if(!isHistoric){
     html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
   }
+
+  // Saucen, Limetten & Dressings direkt hier mit anzeigen — hängt oft mit dem Forecast zusammen
+  // und wird an denselben Tagen ausgefüllt; teilt sich dieselbe Wochen-Navigation wie oben.
+  html+=await renderStoreBeilagenWeekTable(weekDates, '#3B6D11');
 
   el.innerHTML=html;
   translateEl(el);
