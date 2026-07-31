@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.13.2';
+const APP_VERSION = '6.14.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2007,11 +2007,15 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   document.getElementById('zd-modal-cancel').addEventListener('click', closeModal);
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 
-  document.getElementById('zd-modal-save').addEventListener('click', ()=>{
+  document.getElementById('zd-modal-save').addEventListener('click', async ()=>{
     const items=zdCollectItems(editor);
     const newText=items.join(', ');
     closeModal();
-    showSaveDialog(dishName, newText, ()=>renderKitchen(), woche, tag, slot);
+    // "Global speichern" wurde am 31.07.26 entfernt (hat Zutaten fälschlich in andere Gerichte
+    // gemischt, sobald sie nur eine gemeinsame Basis-Zutat wie Salz/Öl/Zwiebel hatten — siehe
+    // Dal/BBQ-Wedges/Biryani-Korrektur). Jetzt nur noch lokal, pro Gericht, speichern.
+    await zdSaveLocal(dishName, newText, woche, tag, slot);
+    renderKitchen();
   });
 }
 window.openZutatenEditor=openZutatenEditor;
