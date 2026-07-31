@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.15.2';
+const APP_VERSION = '6.16.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4946,11 +4946,18 @@ async function editOrgRoleName(ev, key, currentName){
 window.editOrgRoleName=editOrgRoleName;
 
 let orgForecastWeekOffset = 0; // 0 = diese Woche, 1 = nächste Woche
+let orgFcActiveTab = 'mengen'; // 'mengen' | 'entsorgung'
 
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
-  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:12px;">
+    <button onclick="orgFcActiveTab='mengen';renderOrgForecast()" style="flex:1;padding:10px 6px;border-radius:10px;border:none;background:${orgFcActiveTab==='mengen'?'#2B3A67':'#EEF1F8'};color:${orgFcActiveTab==='mengen'?'#fff':'#2B3A67'};font-family:'Boldonse',sans-serif;font-size:11px;cursor:pointer;">📊 Mengen anpassen</button>
+    <button onclick="orgFcActiveTab='entsorgung';renderOrgForecast()" style="flex:1;padding:10px 6px;border-radius:10px;border:none;background:${orgFcActiveTab==='entsorgung'?'#2B3A67':'#EEF1F8'};color:${orgFcActiveTab==='entsorgung'?'#fff':'#2B3A67'};font-family:'Boldonse',sans-serif;font-size:11px;cursor:pointer;">🗑 Entsorgung Vorwochen</button>
+  </div>`;
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+tabBar+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
+
+  if(orgFcActiveTab==='entsorgung'){ renderOrgDisposal(); return; }
 
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
@@ -5123,6 +5130,9 @@ async function renderOrgForecast(){
       if(!store||!dish||!dateStr) return;
       const sugg=computeOrgSuggestion(store, dish, dateStr, groesse);
       if(!sugg || sugg.qty==null){
+        // Lasagne Mittel/Klein sind eine ZUSATZ-Option (nicht jede Filiale braucht sie neben Groß) —
+        // fehlende Historie dafür ist normal und wird nicht als offenes Pflichtfeld gemeldet.
+        if(groesse==='mittel'||groesse==='klein') return;
         const storeName=inp.closest('tr')?.querySelector('td:first-child')?.textContent?.trim()||store;
         stillEmpty.push({storeName, dish, dateStr});
         return;
@@ -5201,7 +5211,7 @@ async function renderOrgForecast(){
               lasHtml+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
-                  data-has-record="${rec?'1':'0'}"
+                  data-has-record="${rec?'1':'0'}" data-source="${rec?.source||''}" data-orig-qty="${rec?.qty??''}"
                   onchange="updateForecastQtyOrgGroesse(this)"
                   title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
                   style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">`;
@@ -5223,7 +5233,7 @@ async function renderOrgForecast(){
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
-              data-has-record="${rec?'1':'0'}"
+              data-has-record="${rec?'1':'0'}" data-source="${rec?.source||''}" data-orig-qty="${rec?.qty??''}"
               onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
               style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
@@ -5263,12 +5273,24 @@ async function updateForecastQtyOrg(inputEl){
   const dish=inputEl.dataset.dish;
   const dateStr=inputEl.dataset.date;
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
+  // Wenn das Feld einen unveränderten Filial-Wert enthält (Operations hat nur reingeklickt, nichts
+  // geändert), NICHT auf 'org' umschreiben — Filial-Eingabe behält Vorrang.
+  const srcOrig=inputEl.dataset.source||'';
+  const origQty=inputEl.dataset.origQty===''?null:parseFloat(inputEl.dataset.origQty);
+  if((srcOrig==='store'||srcOrig==='manual') && origQty!=null && qty===origQty){
+    inputEl.dataset.hasRecord='1';
+    return; // Filial-Wert unangetastet lassen
+  }
   try{
-    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
+    // Nur groesse=gross löschen — andere Größen (Lasagne Mittel/Klein) bleiben erhalten
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.gross`,{method:'DELETE'}).catch(()=>{});
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
     }
     inputEl.dataset.copied='0';
+    inputEl.dataset.source='org';
+    inputEl.dataset.origQty=qty!=null?String(qty):'';
     inputEl.dataset.hasRecord=qty!=null?'1':'0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
@@ -5277,6 +5299,106 @@ async function updateForecastQtyOrg(inputEl){
 }
 window.updateForecastQtyOrg=updateForecastQtyOrg;
 window.renderOrgForecast=renderOrgForecast;
+
+// ===== Entsorgungs-Tab (read-only Nachschau der Vorwochen) =====
+let orgDisposalWeekOffset = -1; // -1 = letzte Woche (Standard), -2 = vorletzte, ...
+
+async function renderOrgDisposal(){
+  const content=document.getElementById('orgfc-content');
+  if(!content) return;
+  content.innerHTML='<div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div>';
+
+  const weekDates=getWeekdayDates(orgDisposalWeekOffset);
+  const fromDate=weekDates[1], toDate=weekDates[5];
+  const kw=getIsoWeekNumber(fromDate);
+
+  const [stores, disposals]=await Promise.all([
+    api('stores?select=id,name&order=id').catch(()=>[]),
+    api(`disposal?disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=store_id,disposal_date,slot,dish_name,leftover_qty,sold_out_time,note&order=disposal_date`).catch(()=>[])
+  ]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
+
+  // Woche-Switcher: bis zu 6 Wochen zurück
+  let html='<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px;">';
+  for(let off=-1; off>=-6; off--){
+    const wd=getWeekdayDates(off);
+    const kwn=getIsoWeekNumber(wd[1]);
+    const active=orgDisposalWeekOffset===off;
+    const lbl=wd[1].split('-').reverse().slice(0,2).join('.')+'.–'+wd[5].split('-').reverse().slice(0,2).join('.')+'.';
+    html+='<button onclick="orgDisposalWeekOffset='+off+';renderOrgDisposal()" style="flex:0 0 auto;padding:8px 10px;border-radius:9px;border:'+(active?'2px solid #2B3A67':'1.5px solid var(--border)')+';background:'+(active?'#2B3A67':'var(--card)')+';color:'+(active?'#fff':'var(--sub)')+';font-size:11px;line-height:1.3;cursor:pointer;white-space:nowrap;">KW '+kwn+'<br><span style="font-size:9px;opacity:0.8;">'+lbl+'</span></button>';
+  }
+  html+='</div>';
+
+  if(!disposals || !disposals.length){
+    html+='<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Keine Entsorgungsdaten für KW '+kw+' vorhanden.</div>';
+    content.innerHTML=html;
+    translateEl(content);
+    return;
+  }
+
+  // dMap[date][store_id] = [ {slot, dish_name, leftover, soldOut, note} ]
+  const dMap={};
+  disposals.forEach(function(d){
+    if(!dMap[d.disposal_date]) dMap[d.disposal_date]={};
+    if(!dMap[d.disposal_date][d.store_id]) dMap[d.disposal_date][d.store_id]=[];
+    dMap[d.disposal_date][d.store_id].push({
+      slot:d.slot, dish:d.dish_name,
+      leftover:(d.leftover_qty!=null?Number(d.leftover_qty):null),
+      soldOut:d.sold_out_time, note:d.note
+    });
+  });
+
+  // Ampel-Logik: viel übrig = zu viel produziert / ausverkauft = evtl. zu wenig
+  function ampel(leftover, soldOut){
+    if(soldOut) return {icon:'🔥', txt:'ausverkauft', col:'#DC2626'};
+    if(leftover==null) return {icon:'', txt:'', col:'var(--muted)'};
+    if(leftover>10) return {icon:'📦', txt:'viel übrig', col:'#B45309'};
+    if(leftover>4) return {icon:'📦', txt:'einiges übrig', col:'#CA8A04'};
+    return {icon:'✓', txt:'gut getroffen', col:'#16A34A'};
+  }
+  const slotOrder={salat:0, gericht1:1, gericht2:2, gericht3:3, reis:4};
+  function slotSort(a,b){ return (slotOrder[a.slot]??9)-(slotOrder[b.slot]??9); }
+
+  const WD_LABEL={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
+  for(let wd=1; wd<=5; wd++){
+    const dateStr=weekDates[wd];
+    const dayData=dMap[dateStr];
+    const dateLbl=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+    html+='<div class="section-lbl" style="margin-top:14px;">'+WD_LABEL[wd]+' '+dateLbl+'</div>';
+    if(!dayData){
+      html+='<div class="card" style="padding:10px 12px;color:var(--muted);font-size:12px;">Keine Einträge.</div>';
+      continue;
+    }
+    storeList.forEach(function(s){
+      const rows=dayData[s.id];
+      if(!rows || !rows.length) return;
+      rows.sort(slotSort);
+      html+='<div class="card" style="margin-bottom:8px;overflow:hidden;">';
+      html+='<div style="background:#F5F5F3;padding:8px 12px;font-weight:700;font-size:12px;" data-no-translate>'+s.name.split(' ')[0]+'</div>';
+      rows.forEach(function(r){
+        const a=ampel(r.leftover, r.soldOut);
+        const leftoverTxt=(r.leftover!=null?formatQty(r.leftover)+' Port. übrig':'– keine Menge');
+        const soldTxt=(r.soldOut?' · ausverkauft um '+String(r.soldOut).slice(0,5):'');
+        html+='<div style="padding:8px 12px;border-top:0.5px solid var(--border);">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+        html+='<div style="font-size:12.5px;font-weight:500;flex:1;" data-no-translate>'+r.dish+'</div>';
+        html+='<div style="font-size:11px;color:'+a.col+';white-space:nowrap;font-weight:600;">'+a.icon+' '+a.txt+'</div>';
+        html+='</div>';
+        html+='<div style="font-size:11.5px;color:var(--sub);margin-top:2px;">'+leftoverTxt+soldTxt+'</div>';
+        if(r.note){ html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;font-style:italic;" data-no-translate>📝 '+r.note+'</div>'; }
+        html+='</div>';
+      });
+      html+='</div>';
+    });
+  }
+
+  html+='<div style="font-size:10px;color:var(--muted);padding:6px 2px 16px;">🔥 ausverkauft = evtl. zu wenig produziert &nbsp;·&nbsp; 📦 viel übrig = zu viel produziert &nbsp;·&nbsp; ✓ gut getroffen</div>';
+
+  content.innerHTML=html;
+  translateEl(content);
+}
+window.renderOrgDisposal=renderOrgDisposal;
+window.orgDisposalWeekOffset=orgDisposalWeekOffset;
 
 // Auto-Fill: holt die zuletzt bekannten Mengen aus forecast_qty und befüllt alle leeren Inputs
 async function orgFcAutoFill(){
@@ -5352,8 +5474,22 @@ async function orgFcSaveAll(){
     const qty=inp.value===''?null:parseFloat(inp.value);
     if(!store||!dish||!dateStr) continue;
     if(qty==null){
+      // Lasagne Mittel/Klein sind eine ZUSATZ-Option, kein Pflichtfeld — leer bleiben ist normal
+      if(groesse==='mittel'||groesse==='klein') continue;
       const storeName=inp.closest('tr')?.querySelector('td:first-child')?.textContent?.trim()||store;
       emptyFields.push({storeName, dish, dateStr});
+      continue;
+    }
+    // SCHUTZ: Werte, die von der Filiale kommen (source 'store' oder 'manual'), NIE automatisch
+    // überschreiben — außer Operations hat die Zahl in genau diesem Feld bewusst geändert.
+    // "Bewusst geändert" = aktueller Wert weicht vom ursprünglich geladenen Store-Wert ab.
+    const srcOrig=inp.dataset.source||'';
+    const origQty=inp.dataset.origQty===''?null:parseFloat(inp.dataset.origQty);
+    const isStoreValue=(srcOrig==='store'||srcOrig==='manual');
+    const orgTouchedIt=(origQty==null)||(qty!==origQty);
+    if(isStoreValue && !orgTouchedIt){
+      // Filial-Wert unverändert → in Ruhe lassen, gilt trotzdem als "gespeichert"
+      inp.dataset.hasRecord='1';
       continue;
     }
     const src=inp.dataset.copied==='1'?'copied':'org';
@@ -5412,6 +5548,13 @@ async function updateForecastQtyOrgGroesse(inputEl){
 async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr){
   const groesse=inputEl.dataset.groesse||'gross';
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
+  // Unveränderten Filial-Wert nicht auf 'org' umschreiben
+  const srcOrig=inputEl.dataset.source||'';
+  const origQty=inputEl.dataset.origQty===''?null:parseFloat(inputEl.dataset.origQty);
+  if((srcOrig==='store'||srcOrig==='manual') && origQty!=null && qty===origQty){
+    inputEl.dataset.hasRecord='1';
+    return;
+  }
   try{
     // Nur diese Größe löschen — andere Größen bleiben erhalten
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
@@ -5420,6 +5563,8 @@ async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
     inputEl.dataset.copied='0';
+    inputEl.dataset.source='org';
+    inputEl.dataset.origQty=(qty!=null&&qty>=0)?String(qty):'';
     inputEl.dataset.hasRecord=(qty!=null&&qty>=0)?'1':'0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
