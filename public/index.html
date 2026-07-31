@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.16.1';
+const APP_VERSION = '6.16.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4951,8 +4951,8 @@ let orgFcActiveTab = 'mengen'; // 'mengen' | 'entsorgung'
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
   const tabBar=`<div style="display:flex;gap:6px;margin-bottom:12px;">
+    <button onclick="orgFcActiveTab='entsorgung';renderOrgForecast()" style="flex:1;padding:10px 6px;border-radius:10px;border:none;background:${orgFcActiveTab==='entsorgung'?'#2B3A67':'#EEF1F8'};color:${orgFcActiveTab==='entsorgung'?'#fff':'#2B3A67'};font-family:'Boldonse',sans-serif;font-size:11px;cursor:pointer;">🗑 Entsorgung</button>
     <button onclick="orgFcActiveTab='mengen';renderOrgForecast()" style="flex:1;padding:10px 6px;border-radius:10px;border:none;background:${orgFcActiveTab==='mengen'?'#2B3A67':'#EEF1F8'};color:${orgFcActiveTab==='mengen'?'#fff':'#2B3A67'};font-family:'Boldonse',sans-serif;font-size:11px;cursor:pointer;">📊 Mengen anpassen</button>
-    <button onclick="orgFcActiveTab='entsorgung';renderOrgForecast()" style="flex:1;padding:10px 6px;border-radius:10px;border:none;background:${orgFcActiveTab==='entsorgung'?'#2B3A67':'#EEF1F8'};color:${orgFcActiveTab==='entsorgung'?'#fff':'#2B3A67'};font-family:'Boldonse',sans-serif;font-size:11px;cursor:pointer;">🗑 Entsorgung Vorwochen</button>
   </div>`;
   el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+tabBar+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
@@ -5029,7 +5029,7 @@ async function renderOrgForecast(){
     prevFcMap[f.forecast_date][f.store_id][cat][f.groesse||'gross']=f.qty;
   });
 
-  // prevDispMap[store][category] = {leftover, soldOutEarly}
+  // prevDispMap[store][category] = {leftover, soldOutEarly}  — Wochensumme (nur noch als Notfall-Fallback)
   const prevDispMap={};
   (prevDisposals||[]).forEach(d=>{
     if(!prevDispMap[d.store_id])prevDispMap[d.store_id]={};
@@ -5038,6 +5038,20 @@ async function renderOrgForecast(){
     prev.leftover+=(d.leftover_qty||0);
     if(d.sold_out_time) prev.soldOutEarly=true;
     prevDispMap[d.store_id][cat]=prev;
+  });
+
+  // prevDispByStoreDate[store][date][category] = {leftover, soldOutEarly}
+  // Store- UND tagesgenau — das ist die korrekte Basis für die Vorschlags-Anpassung, damit nicht
+  // die Restmenge/ausverkauft-Info eines ganz anderen Tages/Gerichts derselben Kategorie einfließt.
+  const prevDispByStoreDate={};
+  (prevDisposals||[]).forEach(d=>{
+    const cat=mapDishNameToCategory(d.dish_name, d.slot);
+    if(!prevDispByStoreDate[d.store_id])prevDispByStoreDate[d.store_id]={};
+    if(!prevDispByStoreDate[d.store_id][d.disposal_date])prevDispByStoreDate[d.store_id][d.disposal_date]={};
+    const ex=prevDispByStoreDate[d.store_id][d.disposal_date][cat]||{leftover:0,soldOutEarly:false};
+    ex.leftover+=(d.leftover_qty||0);
+    if(d.sold_out_time) ex.soldOutEarly=true;
+    prevDispByStoreDate[d.store_id][d.disposal_date][cat]=ex;
   });
 
   // prevDisposalByDate[date][category] = {leftoverPortionen, soldOutEarly}
@@ -5081,7 +5095,8 @@ async function renderOrgForecast(){
     // Entsorgung Vorwoche — nur anwenden wenn wir wirklich die direkte Vorwoche als Basis haben
     // (bei Fallback auf ältere Wochen passt die Entsorgungsmeldung der letzten Woche nicht zur Basis)
     if(!usedFallback){
-      const disp=prevDispMap[storeId]?.[cat];
+      // Store- UND tagesgenau: exakt der passende Vortag-Wochentag + dieselbe Kategorie.
+      const disp=prevDispByStoreDate[storeId]?.[prevDateStr]?.[cat];
       if(disp && (disp.soldOutEarly || disp.leftover>0)){
         if(disp.soldOutEarly){
           qty=Math.round((qty+0.25)*4)/4;
@@ -5301,7 +5316,7 @@ window.updateForecastQtyOrg=updateForecastQtyOrg;
 window.renderOrgForecast=renderOrgForecast;
 
 // ===== Entsorgungs-Tab (read-only Nachschau der Vorwochen) =====
-let orgDisposalWeekOffset = -1; // -1 = letzte Woche (Standard), -2 = vorletzte, ...
+let orgDisposalWeekOffset = 0; // 0 = aktuelle Woche (Standard), -1 = letzte, ...
 let orgDisposalShowDetail = false; // Detailanzeige (Menge & Uhrzeit) optional einblendbar
 
 async function renderOrgDisposal(){
@@ -5319,14 +5334,15 @@ async function renderOrgDisposal(){
   ]);
   const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
 
-  // Woche-Switcher: bis zu 6 Wochen zurück
+  // Woche-Switcher: aktuelle Woche bis 6 Wochen zurück
   let html='<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px;">';
-  for(let off=-1; off>=-6; off--){
+  for(let off=0; off>=-6; off--){
     const wd=getWeekdayDates(off);
     const kwn=getIsoWeekNumber(wd[1]);
     const active=orgDisposalWeekOffset===off;
     const lbl=wd[1].split('-').reverse().slice(0,2).join('.')+'.–'+wd[5].split('-').reverse().slice(0,2).join('.')+'.';
-    html+='<button onclick="orgDisposalWeekOffset='+off+';renderOrgDisposal()" style="flex:0 0 auto;padding:8px 10px;border-radius:9px;border:'+(active?'2px solid #2B3A67':'1.5px solid var(--border)')+';background:'+(active?'#2B3A67':'var(--card)')+';color:'+(active?'#fff':'var(--sub)')+';font-size:11px;line-height:1.3;cursor:pointer;white-space:nowrap;">KW '+kwn+'<br><span style="font-size:9px;opacity:0.8;">'+lbl+'</span></button>';
+    const tag=(off===0?'diese Woche':(off===-1?'letzte Woche':''));
+    html+='<button onclick="orgDisposalWeekOffset='+off+';renderOrgDisposal()" style="flex:0 0 auto;padding:8px 10px;border-radius:9px;border:'+(active?'2px solid #2B3A67':'1.5px solid var(--border)')+';background:'+(active?'#2B3A67':'var(--card)')+';color:'+(active?'#fff':'var(--sub)')+';font-size:11px;line-height:1.3;cursor:pointer;white-space:nowrap;">KW '+kwn+(tag?' <span style="opacity:0.7;">('+tag+')</span>':'')+'<br><span style="font-size:9px;opacity:0.8;">'+lbl+'</span></button>';
   }
   html+='</div>';
 
