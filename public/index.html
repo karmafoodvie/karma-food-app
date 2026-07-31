@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.16.2';
+const APP_VERSION = '6.17.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4968,10 +4968,18 @@ async function renderOrgForecast(){
   const weekLabel=new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})
     +' – '+new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
-  // Woche-Switcher oben
-  const weekSwitcher=`<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
-    <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===0?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===0?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===0?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Diese Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(0)[1].split('-').reverse().slice(0,2).join('.')}.–${getWeekdayDates(0)[5].split('-').reverse().slice(0,2).join('.')}.</span></button>
-    <button onclick="orgForecastWeekOffset=1;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===1?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===1?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===1?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Nächste Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(1)[1].split('-').reverse().slice(0,2).join('.')}.–${getWeekdayDates(1)[5].split('-').reverse().slice(0,2).join('.')}.</span></button>
+  // Woche-Switcher oben — diese / nächste / übernächste Woche (Planung im Voraus)
+  const wkBtn=(off,label)=>{
+    const wd=getWeekdayDates(off);
+    const kwn=getIsoWeekNumber(wd[1]);
+    const range=wd[1].split('-').reverse().slice(0,2).join('.')+'.–'+wd[5].split('-').reverse().slice(0,2).join('.')+'.';
+    const active=orgForecastWeekOffset===off;
+    return `<button onclick="orgForecastWeekOffset=${off};renderOrgForecast()" style="flex:1;padding:9px 3px;border-radius:10px;border:${active?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${active?'#2B3A67':'var(--card)'};color:${active?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:11px;line-height:1.3;cursor:pointer;">${label}<br><span style="font-size:9px;opacity:0.8;">KW ${kwn} · ${range}</span></button>`;
+  };
+  const weekSwitcher=`<div style="display:flex;gap:6px;margin-bottom:8px;align-items:stretch;">
+    ${wkBtn(0,'📅 Diese')}
+    ${wkBtn(1,'📅 Nächste')}
+    ${wkBtn(2,'📅 Übernächste')}
   </div>
   <div style="font-size:11px;color:var(--muted);margin:0 0 12px;text-align:center;">${weekLabel}</div>`;
 
@@ -5131,7 +5139,7 @@ async function renderOrgForecast(){
   // nutzt dieselbe Zuordnung wie die blauen Vorschläge (computeOrgSuggestion, über Kategorie statt
   // Gerichtsname, da sich Gerichte wöchentlich ändern). Füllt nur leere Felder, überschreibt nichts.
   async function orgFcCopyFromCurrentWeek(){
-    if(orgForecastWeekOffset!==1){ showToast('Nur bei "Nächste Woche" verfügbar'); return; }
+    if(orgForecastWeekOffset<1){ showToast('Nur bei zukünftigen Wochen verfügbar'); return; }
     const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
     let filled=0;
     const stillEmpty=[]; // Felder ohne jede History — für konkrete Rückmeldung statt pauschalem "nichts gefunden"
@@ -5568,14 +5576,13 @@ async function orgFcSaveAll(){
     const more=emptyFields.length>3?` … (${emptyFields.length} Felder insgesamt)`:'';
     showToast(`✓ ${saved} gespeichert. ⚠ Noch offen — bitte manuell eintragen: ${list}${more}`, true);
     setTimeout(()=>{
-      orgForecastWeekOffset=1;
-      renderOrgForecast();
+      renderOrgForecast(); // auf der aktuell gewählten Woche bleiben
     }, 2000);
   } else {
     showToast(`✓ ${saved} Mengen gespeichert!`);
-    // Automatisch auf Nächste Woche switchen damit Vorschläge sofort sichtbar sind
     setTimeout(()=>{
-      orgForecastWeekOffset=1;
+      // Von "Diese Woche" aus geht's zur Planung → auf Nächste springen; sonst gewählte Woche halten
+      if(orgForecastWeekOffset===0) orgForecastWeekOffset=1;
       renderOrgForecast();
     }, 1200);
   }
