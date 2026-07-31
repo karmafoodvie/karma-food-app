@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.15.0';
+const APP_VERSION = '6.15.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3479,6 +3479,18 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
 
 // Ordnet einen (ggf. beschreibenden) Gerichtnamen der generischen Verkaufs-Kategorie zu,
 // mit der auch sales_history befüllt ist (aus dem Odoo-Export abgeleitet).
+// Zeitzonen-sichere Datumsberechnung "X Tage vorher" — NICHT über .getTime()-N*86400000 gefolgt
+// von .toISOString() rechnen, das verschiebt das Ergebnis in Zeitzonen östlich von UTC (wie
+// Österreich) um einen Tag zurück (z.B. Vorwoche von 07.08. ergab fälschlich 30.07. statt 31.07.,
+// wodurch Forecast-Vorschläge am falschen Tag nachschauten und "keine Menge gefunden" meldeten).
+// Rechnet stattdessen komplett mit lokalen Datumsteilen, ohne UTC-Umweg.
+function dateMinusDays(dateStr, days){
+  const [y,m,d]=dateStr.split('-').map(Number);
+  const dt=new Date(y, m-1, d);
+  dt.setDate(dt.getDate()-days);
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+
 function mapDishNameToCategory(dishName, slot){
   const n=(dishName||'').toLowerCase();
   if(slot==='salat') return 'Salat'; // Slot hat immer Vorrang
@@ -3704,8 +3716,8 @@ async function renderForecastOrderTab(el, tabHtml){
   Object.keys(fRecordsMap).forEach(d=>{ fMap[d]={}; Object.keys(fRecordsMap[d]).forEach(dish=>{ fMap[d][dish]=fRecordsMap[d][dish][0]; }); });
 
   // Vorwoche forecast_qty + Entsorgung + Wetter — kein Sales History mehr
-  const lastWeekFrom=new Date(new Date(fromDate+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
-  const lastWeekTo=new Date(new Date(toDate+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+  const lastWeekFrom=dateMinusDays(fromDate,7);
+  const lastWeekTo=dateMinusDays(toDate,7);
   const [weatherMap, calendarEvents, fcSettings, lastWeekFcRaw, lastWeekDisposalRaw] = await Promise.all([
     fetchWeatherForStore(currentStore.id, fromDate, toDate),
     getCalendarEvents(),
@@ -3759,7 +3771,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
     const salatName=getSalatNameForDate(dateStr);
     const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
-    const lastWeekDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+    const lastWeekDateStr=dateMinusDays(dateStr,7);
     allDishes.forEach(dish=>{
       const category=mapDishNameToCategory(dish);
       const prevQty=(lastWeekFcByDate[lastWeekDateStr]?.[category]?.['gross'])||null;
@@ -3774,7 +3786,7 @@ async function renderForecastOrderTab(el, tabHtml){
   }
   suggestionJobs.forEach(j=>{
     const cat=mapDishNameToCategory(j.dish);
-    const prevDateStr=new Date(new Date(j.dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+    const prevDateStr=dateMinusDays(j.dateStr,7);
     const prevQty=(lastWeekFcByDate[prevDateStr]?.[cat]?.['gross'])||null;
     if(prevQty==null){ if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={}; suggestionMap[j.dateStr][j.dish]=null; return; }
     let qty=prevQty;
@@ -5024,7 +5036,7 @@ async function renderOrgForecast(){
     // Falls keine Vorwoche-Daten → kein Vorschlag (noch keine History)
 
     const cat=mapDishNameToCategory(dish);
-    const prevDateStr=new Date(new Date(dateStr+'T00:00:00').getTime()-7*86400000).toISOString().split('T')[0];
+    const prevDateStr=dateMinusDays(dateStr,7);
 
     // Vorwoche Forecast — lookup via Kategorie (nicht dish_name, da Gerichte wöchentlich wechseln)
     const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[cat]?.[groesse||'gross'])||null;
