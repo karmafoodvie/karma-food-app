@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.15.1';
+const APP_VERSION = '6.15.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4974,14 +4974,30 @@ async function renderOrgForecast(){
 
   // Lade alles parallel: aktueller Forecast, Vorwoche Forecast, Entsorgung Vorwoche,
   // Wetter Vorwoche (für Vergleich), Sales History für alle Stores
-  const [allForecasts, calendarEvents, refWeather, prevForecasts, prevDisposals, fcSettings]=await Promise.all([
+  // Fallback-Fenster: falls direkte Vorwoche für Store+Kategorie keine Daten hat, weiter zurückschauen
+  // (bis zu 3 weitere Wochen) statt sofort aufzugeben — verhindert "keine Daten"-Fehlmeldung wenn
+  // irgendwo in der Historie schon mal etwas Vergleichbares eingetragen wurde.
+  const olderFromDate=dateMinusDays(prevFromDate,21);
+  const [allForecasts, calendarEvents, refWeather, prevForecasts, prevDisposals, fcSettings, olderForecasts]=await Promise.all([
     api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
     getCalendarEvents().catch(()=>[]),
     fetchWeatherForStore('lb', fromDate, toDate).catch(()=>({})),
     api(`forecast_qty?forecast_date=gte.${prevFromDate}&forecast_date=lte.${prevToDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
     api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${prevToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time,slot`).catch(()=>[]),
-    api('forecast_settings?select=*').catch(()=>[])
+    api('forecast_settings?select=*').catch(()=>[]),
+    api(`forecast_qty?forecast_date=gte.${olderFromDate}&forecast_date=lt.${prevFromDate}&select=store_id,forecast_date,dish_name,qty,groesse`).catch(()=>[])
   ]);
+
+  // olderFcMap[store][kategorie][groesse] = {qty, date} — jeweils der NEUESTE Treffer aus den älteren
+  // Wochen (Fallback-Basis, wenn die direkte Vorwoche für diese Zelle leer ist)
+  const olderFcMap={};
+  (olderForecasts||[]).slice().sort((a,b)=>a.forecast_date<b.forecast_date?1:-1).forEach(f=>{
+    const cat=mapDishNameToCategory(f.dish_name);
+    const g=f.groesse||'gross';
+    if(!olderFcMap[f.store_id])olderFcMap[f.store_id]={};
+    if(!olderFcMap[f.store_id][cat])olderFcMap[f.store_id][cat]={};
+    if(!olderFcMap[f.store_id][cat][g])olderFcMap[f.store_id][cat][g]={qty:f.qty,date:f.forecast_date}; // erster Treffer = neuester (absteigend sortiert)
+  });
 
   // Settings für Wetter/Ferien-Zuschläge
   const settingsRec=(fcSettings||[])[0]||{weather_sunny_pct:-10,weather_rain_pct:10,feiertag_pct:-20,ferien_pct:-5};
@@ -5039,29 +5055,42 @@ async function renderOrgForecast(){
     const prevDateStr=dateMinusDays(dateStr,7);
 
     // Vorwoche Forecast — lookup via Kategorie (nicht dish_name, da Gerichte wöchentlich wechseln)
-    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[cat]?.[groesse||'gross'])||null;
-    if(prevQty==null) return null; // Noch keine History → kein Vorschlag, leer lassen
+    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[cat]?.[groesse||'gross'])??null;
 
-    let qty=prevQty;
-    const reasons=[`Vorwoche: ${formatQty(prevQty)} Bhlt`];
-
-    // Entsorgung Vorwoche
-    const disp=prevDispMap[storeId]?.[cat];
-    if(disp && (disp.soldOutEarly || disp.leftover>0)){
-      if(disp.soldOutEarly){
-        qty=Math.round((qty+0.25)*4)/4;
-        reasons.push('🔥 +0.25 ausverkauft');
-      } else if(disp.leftover>10){
-        qty=Math.max(0.25,Math.round((qty-0.5)*4)/4);
-        reasons.push(`📦 −0.5 (${disp.leftover} Port. übrig)`);
-      } else if(disp.leftover>4){
-        qty=Math.max(0.25,Math.round((qty-0.25)*4)/4);
-        reasons.push(`📦 −0.25 (${disp.leftover} Port. übrig)`);
-      } else {
-        reasons.push(`✓ wenig übrig (${disp.leftover} Port.) → 1:1`);
-      }
+    let qty, reasons, usedFallback=false;
+    if(prevQty!=null){
+      qty=prevQty;
+      reasons=[`Vorwoche: ${formatQty(prevQty)} Bhlt`];
     } else {
-      reasons.push('⚪ keine Entsorgung → 1:1');
+      // Direkte Vorwoche leer → weiter zurückschauen (bis zu 3 weitere Wochen), bevor aufgegeben wird
+      const older=olderFcMap[storeId]?.[cat]?.[groesse||'gross'];
+      if(!older) return null; // wirklich keine History vorhanden → kein Vorschlag, leer lassen
+      qty=older.qty;
+      usedFallback=true;
+      const dLabel=new Date(older.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      reasons=[`⚠️ keine Vorwoche-Daten — letzter bekannter Wert vom ${dLabel}: ${formatQty(older.qty)} Bhlt`];
+    }
+
+    // Entsorgung Vorwoche — nur anwenden wenn wir wirklich die direkte Vorwoche als Basis haben
+    // (bei Fallback auf ältere Wochen passt die Entsorgungsmeldung der letzten Woche nicht zur Basis)
+    if(!usedFallback){
+      const disp=prevDispMap[storeId]?.[cat];
+      if(disp && (disp.soldOutEarly || disp.leftover>0)){
+        if(disp.soldOutEarly){
+          qty=Math.round((qty+0.25)*4)/4;
+          reasons.push('🔥 +0.25 ausverkauft');
+        } else if(disp.leftover>10){
+          qty=Math.max(0.25,Math.round((qty-0.5)*4)/4);
+          reasons.push(`📦 −0.5 (${disp.leftover} Port. übrig)`);
+        } else if(disp.leftover>4){
+          qty=Math.max(0.25,Math.round((qty-0.25)*4)/4);
+          reasons.push(`📦 −0.25 (${disp.leftover} Port. übrig)`);
+        } else {
+          reasons.push(`✓ wenig übrig (${disp.leftover} Port.) → 1:1`);
+        }
+      } else {
+        reasons.push('⚪ keine Entsorgung → 1:1');
+      }
     }
 
     // Wetter (optional, nur kleine Anpassung)
@@ -5072,7 +5101,7 @@ async function renderOrgForecast(){
       if(wReason) reasons.push(wReason);
     }
 
-    return {qty, reason:reasons.join(' · ')};
+    return {qty, reason:reasons.join(' · '), fallback:usedFallback};
   }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
@@ -5083,24 +5112,43 @@ async function renderOrgForecast(){
     if(orgForecastWeekOffset!==1){ showToast('Nur bei "Nächste Woche" verfügbar'); return; }
     const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
     let filled=0;
+    const stillEmpty=[]; // Felder ohne jede History — für konkrete Rückmeldung statt pauschalem "nichts gefunden"
     inputs.forEach(inp=>{
-      if(inp.value!=='') return; // nicht überschreiben
+      // Priorität 1: Feld hat bereits einen echten, gespeicherten Wert (Filiale/Operations) → NIE anfassen.
+      // Wichtig: hier NICHT inp.value prüfen — das Feld zeigt evtl. schon einen unbestätigten
+      // Anzeige-Vorschlag (blau) als value, ist aber noch nicht in der DB. Das war der eigentliche Bug:
+      // dadurch dachte die Funktion, fast alles sei "schon ausgefüllt" und hat nichts mehr übertragen.
+      if(inp.dataset.hasRecord==='1') return;
       const store=inp.dataset.store, dish=inp.dataset.dish, dateStr=inp.dataset.date, groesse=inp.dataset.groesse||'gross';
       if(!store||!dish||!dateStr) return;
       const sugg=computeOrgSuggestion(store, dish, dateStr, groesse);
-      if(!sugg || sugg.qty==null) return;
+      if(!sugg || sugg.qty==null){
+        const storeName=inp.closest('tr')?.querySelector('td:first-child')?.textContent?.trim()||store;
+        stillEmpty.push({storeName, dish, dateStr});
+        return;
+      }
       inp.value=sugg.qty;
       inp.dataset.copied='1';
       inp.style.borderColor='#0D9488';
       inp.style.background='#F0FDFA';
+      inp.title=sugg.reason;
       const lbl=inp.nextElementSibling;
       if(lbl && lbl.textContent && lbl.textContent.includes('Vorschlag')) lbl.remove();
       filled++;
     });
+
     if(filled>0){
       showToast(`✓ ${filled} Felder von letzter Woche übertragen — bitte prüfen und speichern`);
-    } else {
-      showToast('Keine passenden Mengen aus letzter Woche gefunden.');
+    }
+    if(stillEmpty.length>0){
+      const list=stillEmpty.slice(0,3).map(x=>{
+        const dLabel=new Date(x.dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+        return `${x.storeName} – ${x.dish} (${dLabel})`;
+      }).join('; ');
+      const more=stillEmpty.length>3?` … (${stillEmpty.length} Felder insgesamt)`:'';
+      showToast(`⚠ Keine Historie für: ${list}${more} — bitte manuell eintragen.`, true);
+    } else if(filled===0){
+      showToast('Alle Felder sind bereits befüllt.');
     }
   }
   window.orgFcCopyFromCurrentWeek=orgFcCopyFromCurrentWeek;
@@ -5153,6 +5201,7 @@ async function renderOrgForecast(){
               lasHtml+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
+                  data-has-record="${rec?'1':'0'}"
                   onchange="updateForecastQtyOrgGroesse(this)"
                   title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
                   style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">`;
@@ -5174,6 +5223,7 @@ async function renderOrgForecast(){
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
+              data-has-record="${rec?'1':'0'}"
               onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
               style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
@@ -5219,6 +5269,7 @@ async function updateForecastQtyOrg(inputEl){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
     }
     inputEl.dataset.copied='0';
+    inputEl.dataset.hasRecord=qty!=null?'1':'0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
@@ -5289,6 +5340,7 @@ window.orgFcAutoFill=orgFcAutoFill;
 async function orgFcSaveAll(){
   const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
   let saved=0; let errors=0;
+  const emptyFields=[]; // Felder, die leer geblieben sind — für eine konkrete Rückmeldung statt stillem Überspringen
   const btn=document.getElementById('orgfc-save-btn');
   if(btn){ btn.disabled=true; btn.textContent='Speichert…'; }
 
@@ -5298,13 +5350,19 @@ async function orgFcSaveAll(){
     const dateStr=inp.dataset.date;
     const groesse=inp.dataset.groesse||'gross';
     const qty=inp.value===''?null:parseFloat(inp.value);
-    if(!store||!dish||!dateStr||qty==null) continue;
+    if(!store||!dish||!dateStr) continue;
+    if(qty==null){
+      const storeName=inp.closest('tr')?.querySelector('td:first-child')?.textContent?.trim()||store;
+      emptyFields.push({storeName, dish, dateStr});
+      continue;
+    }
     const src=inp.dataset.copied==='1'?'copied':'org';
     try{
       // Delete both with and without groesse to handle legacy NULL records
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
+      inp.dataset.hasRecord='1';
       inp.style.borderColor='#22C55E';
       inp.style.background='#F0FDF4';
       saved++;
@@ -5314,6 +5372,17 @@ async function orgFcSaveAll(){
   if(btn){ btn.disabled=false; btn.textContent='💾 Alle speichern'; }
   if(errors){
     showToast(`${saved} gespeichert, ${errors} Fehler`);
+  } else if(emptyFields.length>0){
+    const list=emptyFields.slice(0,3).map(x=>{
+      const dLabel=new Date(x.dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+      return `${x.storeName} – ${x.dish} (${dLabel})`;
+    }).join('; ');
+    const more=emptyFields.length>3?` … (${emptyFields.length} Felder insgesamt)`:'';
+    showToast(`✓ ${saved} gespeichert. ⚠ Noch offen — bitte manuell eintragen: ${list}${more}`, true);
+    setTimeout(()=>{
+      orgForecastWeekOffset=1;
+      renderOrgForecast();
+    }, 2000);
   } else {
     showToast(`✓ ${saved} Mengen gespeichert!`);
     // Automatisch auf Nächste Woche switchen damit Vorschläge sofort sichtbar sind
@@ -5351,6 +5420,7 @@ async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
     inputEl.dataset.copied='0';
+    inputEl.dataset.hasRecord=(qty!=null&&qty>=0)?'1':'0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
