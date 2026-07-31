@@ -955,7 +955,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.14.1';
+const APP_VERSION = '6.15.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9545,15 +9545,66 @@ async function saveTeamRezept(id){
 }
 window.saveTeamRezept=saveTeamRezept;
 
+// E-Mail-Empfänger für Nachschub-Anfragen — HIER die Adresse der Bestellperson eintragen:
+const NACHSCHUB_EMAIL=''; // z.B. 'bestellung@karmafood.at'
+
+// Kitchen bestellt Shop Produkte bei Ines — identisch zum Store-Ablauf (submitKCNote), nur fix
+// mit store_id='kitchen'.
+async function submitKitchenKC(){
+  const today=new Date().toISOString().split('T')[0];
+  const note=document.getElementById('special-note-kc-kitchen')?.value?.trim()||'';
+  const kcArticleIds=new Set((articles||[]).filter(a=>KC_CATS.includes(a.category)).map(a=>a.id));
+  try{
+    // Bestellmengen für die Küche in orders schreiben (store_id='kitchen') — erst alte Zeilen des
+    // Tages für diese Artikel löschen, dann neue setzen (gleiches sichere Muster wie submitOrder).
+    for(const aid of kcArticleIds){
+      await api(`orders?store_id=eq.kitchen&article_id=eq.${aid}&order_date=eq.${today}`,{method:'DELETE'}).catch(()=>{});
+    }
+    const rows=Object.entries(orderQtys)
+      .filter(([id,v])=>v>0 && kcArticleIds.has(parseInt(id)))
+      .map(([id,qty])=>({store_id:'kitchen',article_id:parseInt(id),quantity:qty,order_date:today}));
+    if(rows.length){
+      await api('orders',{method:'POST',body:JSON.stringify(rows)});
+    }
+    await api(`kc_submissions?store_id=eq.kitchen&order_date=eq.${today}`,{method:'DELETE'});
+    await api('kc_submissions',{method:'POST',body:JSON.stringify([{store_id:'kitchen',order_date:today}])});
+    if(note){
+      await api(`special_orders?store_id=eq.kitchen&order_date=eq.${today}`,{method:'DELETE'});
+      await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:'kitchen',note,order_date:today}])});
+    }
+    showToast('✓ Shop Produkte abgeschickt!');
+    goTo('home');
+  }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen',true);}
+}
+window.submitKitchenKC=submitKitchenKC;
+
+async function submitNachschub(){
+  const produkt=document.getElementById('nachschub-produkt')?.value?.trim()||'';
+  const filialen=document.getElementById('nachschub-filialen')?.value?.trim()||'';
+  const notiz=document.getElementById('nachschub-notiz')?.value?.trim()||'';
+  if(!produkt){ showToast('Bitte ein Produkt angeben'); return; }
+  const empfaenger=NACHSCHUB_EMAIL||'tini@karmafood.at'; // Fallback bis echte Bestelladresse eingetragen ist
+  try{
+    await emailjs.send('service_xla195w','template_9uiq1wf',{
+      subject:'⚠️ Nachschub benötigt: '+produkt,
+      message:`Nachschub-Anfrage aus der Küche:\n\nProdukt: ${produkt}\nFür Filialen: ${filialen||'—'}\nAnmerkung: ${notiz||'—'}\n\n`+new Date().toLocaleString('de-AT'),
+      to_email:empfaenger
+    });
+    showToast('✓ Nachschub-Anfrage gesendet!');
+    ['nachschub-produkt','nachschub-filialen','nachschub-notiz'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen',true);}
+}
+window.submitNachschub=submitNachschub;
+
 async function renderSweets(){
   const el=document.getElementById('v-sweets');
-  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9'};
+  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C'};
   const ttab=(key,label)=>{
     const active=teamTab===key;
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Produktion')}</div>`;
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Produktion')}${ttab('bestellen','📦 Bestellen')}${ttab('nachschub','⚠️ Nachschub')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   // Gleiche Datums-Logik wie bei der Transporter-Bestellliste: Filialen tragen Sweets-Bestellungen
@@ -9590,6 +9641,70 @@ async function renderSweets(){
       </div>`;
     });
     html+=`<div id="team-rezept-form"></div>`;
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
+  // ── BESTELLEN — Kitchen bestellt Shop Produkte bei Ines (KC), genau wie die Läden. Nutzt das
+  // bestehende kc_submissions-System, nur mit store_id='kitchen'. Kein neuer Mechanismus.
+  if(teamTab==='bestellen'){
+    const kcArticles=(articles||[]).filter(a=>KC_CATS.includes(a.category));
+    html+=`<div class="section-banner" style="background:#A855F712;border-left-color:#A855F7;margin-top:10px;">
+      <span style="font-size:18px;">📦</span>
+      <div><div style="font-size:12px;font-weight:600;color:#A855F7;">Shop Produkte bei Ines bestellen</div>
+      <div style="font-size:10px;color:var(--muted);">Für die Küche selbst — wie bei den Filialen</div></div>
+    </div>`;
+    if(!kcArticles.length){
+      html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Keine Shop-Produkte hinterlegt.</div>`;
+    } else {
+      html+=`<div class="card">`;
+      kcArticles.forEach(a=>{
+        const v=orderQtys[a.id]||0;
+        const verfuegbar=a.verfuegbar!==false;
+        html+=`<div class="item-row">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;">
+            ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+            <div><div class="item-name">${a.name}</div><div class="item-unit">${a.unit}</div>
+            ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ derzeit nicht lieferbar</div>`:''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
+            <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
+            <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0" onclick="this.select()" onchange="setQty(${a.id},this.value)" style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
+            <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
+          </div>
+        </div>`;
+      });
+      html+=`</div>
+        <div style="margin-top:16px;">
+          <p style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Anmerkung (optional)</p>
+          <textarea id="special-note-kc-kitchen" placeholder="z.B. dringend, oder spezielle Bestellung…" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:70px;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+        <button class="submit-btn" style="background:#A855F7;" onclick="submitKitchenKC()">Shop Produkte abschicken ✓</button>`;
+    }
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
+  // ── NACHSCHUB — Engpassmeldung: ein Produkt ist für die Shops ausgegangen (z.B. Kuchen) und muss
+  // gesamt nachbestellt werden. Löst eine Mail an die Bestellperson aus (Empfänger noch offen).
+  if(teamTab==='nachschub'){
+    html+=`<div class="section-banner" style="background:#EA580C12;border-left-color:#EA580C;margin-top:10px;">
+      <span style="font-size:18px;">⚠️</span>
+      <div><div style="font-size:12px;font-weight:600;color:#EA580C;">Nachschub anfordern</div>
+      <div style="font-size:10px;color:var(--muted);">Wenn ein Produkt für die Shops ausgegangen ist</div></div>
+    </div>
+    <div class="card" style="padding:14px;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);">Produkt</label>
+      <input id="nachschub-produkt" type="text" placeholder="z.B. Choco Coco Cake" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;font-size:13.5px;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);">Für welche Filialen?</label>
+      <input id="nachschub-filialen" type="text" placeholder="z.B. alle, oder Börse + Laurenzerberg" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;font-size:13.5px;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);">Anmerkung (optional)</label>
+      <textarea id="nachschub-notiz" placeholder="z.B. bis Freitag benötigt" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 12px;box-sizing:border-box;font-size:13.5px;min-height:60px;resize:vertical;font-family:inherit;"></textarea>
+      <button onclick="submitNachschub()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#EA580C;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">⚠️ Nachschub-Anfrage senden</button>
+      <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:8px;">Geht per Mail an die zuständige Bestellperson.</div>
+    </div>`;
     el.innerHTML=html;
     translateEl(el);
     return;
