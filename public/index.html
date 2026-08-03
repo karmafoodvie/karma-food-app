@@ -964,7 +964,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.17.1';
+const APP_VERSION = '6.17.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2276,10 +2276,11 @@ window.rateMesse=rateMesse;
 // Vor-Einschätzung durch die Filiale, BEVOR die Messe stattfindet: einfaches Ja/Nein, ob aus
 // Mitarbeiter-Sicht relevant (z.B. weiß man schon vorab, dass eine kleine Fachmesse kaum Publikumsverkehr
 // bringt, während eine Publikumsmesse sicher mehr Zulauf bedeutet).
-async function setMesseRelevanz(terminId, relevant){
+async function setMesseRelevanz(terminId, einschaetzung){
   try{
-    await api('messe_relevanz?on_conflict=messe_termin_id,store_id',{method:'POST',body:JSON.stringify([{messe_termin_id:terminId,store_id:'1020',relevant,notiert_von:currentStore?.name||'Ausstellungsstraße'}]),headers:{'Prefer':'resolution=merge-duplicates,return=representation'}});
-    showToast(relevant?'✓ Als relevant vermerkt':'✓ Als nicht relevant vermerkt');
+    await api('messe_relevanz?on_conflict=messe_termin_id,store_id',{method:'POST',body:JSON.stringify([{messe_termin_id:terminId,store_id:'1020',einschaetzung,notiert_von:currentStore?.name||'Ausstellungsstraße'}]),headers:{'Prefer':'resolution=merge-duplicates,return=representation'}});
+    const _msgs={relevant:'✓ Als relevant vermerkt',nicht_relevant:'✓ Als nicht relevant vermerkt',unsicher:'✓ Als unsicher vermerkt'};
+    showToast(_msgs[einschaetzung]||'✓ Gespeichert');
     renderMessen();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
@@ -2293,10 +2294,10 @@ async function renderMessenStore(el){
   const todayStr=new Date().toISOString().split('T')[0];
   const [termine, relevanzen, bewertungen] = await Promise.all([
     api('messe_termine?store_id=eq.1020&select=*&order=start_date.asc').catch(()=>[]),
-    api('messe_relevanz?store_id=eq.1020&select=messe_termin_id,relevant').catch(()=>[]),
+    api('messe_relevanz?store_id=eq.1020&select=messe_termin_id,einschaetzung').catch(()=>[]),
     api('messe_bewertungen?store_id=eq.1020&select=messe_termin_id,rating').catch(()=>[])
   ]);
-  const relevanzMap={}; (relevanzen||[]).forEach(r=>{ relevanzMap[r.messe_termin_id]=r.relevant; });
+  const relevanzMap={}; (relevanzen||[]).forEach(r=>{ relevanzMap[r.messe_termin_id]=r.einschaetzung; });
   const ratingMap={}; (bewertungen||[]).forEach(b=>{ ratingMap[b.messe_termin_id]=b.rating; });
   const upcoming=(termine||[]).filter(t=>t.end_date>=todayStr);
   const past=(termine||[]).filter(t=>t.end_date<todayStr).sort((a,b)=>b.end_date.localeCompare(a.end_date));
@@ -2350,8 +2351,9 @@ async function renderMessenStore(el){
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;">
-          <div onclick="setMesseRelevanz(${t.id},true)" style="flex:1;text-align:center;cursor:pointer;padding:8px 4px;border-radius:9px;font-size:12px;font-weight:700;background:${rel===true?'#DCFCE7':'var(--surface-1)'};border:1.5px solid ${rel===true?'#16A34A':'var(--border)'};color:${rel===true?'#166534':'var(--sub)'};">✅ Relevant</div>
-          <div onclick="setMesseRelevanz(${t.id},false)" style="flex:1;text-align:center;cursor:pointer;padding:8px 4px;border-radius:9px;font-size:12px;font-weight:700;background:${rel===false?'#FEE2E2':'var(--surface-1)'};border:1.5px solid ${rel===false?'#DC2626':'var(--border)'};color:${rel===false?'#991B1B':'var(--sub)'};">❌ Nicht relevant</div>
+          <div onclick="setMesseRelevanz(${t.id},'relevant')" style="flex:1;text-align:center;cursor:pointer;padding:8px 2px;border-radius:9px;font-size:11px;font-weight:700;background:${rel==='relevant'?'#DCFCE7':'var(--surface-1)'};border:1.5px solid ${rel==='relevant'?'#16A34A':'var(--border)'};color:${rel==='relevant'?'#166534':'var(--sub)'};">✅ Relevant</div>
+          <div onclick="setMesseRelevanz(${t.id},'unsicher')" style="flex:1;text-align:center;cursor:pointer;padding:8px 2px;border-radius:9px;font-size:11px;font-weight:700;background:${rel==='unsicher'?'#F3F4F6':'var(--surface-1)'};border:1.5px solid ${rel==='unsicher'?'#9CA3AF':'var(--border)'};color:${rel==='unsicher'?'#4B5563':'var(--sub)'};">🤷 Weiß nicht</div>
+          <div onclick="setMesseRelevanz(${t.id},'nicht_relevant')" style="flex:1;text-align:center;cursor:pointer;padding:8px 2px;border-radius:9px;font-size:11px;font-weight:700;background:${rel==='nicht_relevant'?'#FEE2E2':'var(--surface-1)'};border:1.5px solid ${rel==='nicht_relevant'?'#DC2626':'var(--border)'};color:${rel==='nicht_relevant'?'#991B1B':'var(--sub)'};">❌ Nicht relevant</div>
         </div>
       </div>`;
     }).join('');
@@ -2518,6 +2520,20 @@ async function renderHome(){
       const _m=_msTreffer[0];
       const _msDateLabel=_msNext.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
       messeInfoHtml=`<div style="font-size:11.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;margin:0 0 8px;">ⓘ Achtung: am ${_msDateLabel} findet <span data-no-translate>${_m.name}</span> statt${_m.personen?` (${_m.personen} Personen erwartet)`:''} — evtl. mehr Laufkundschaft</div>`;
+    }
+
+    // Zusätzlicher, ruhigerer Hinweis rechtzeitig fürs Gemüse-/Waren-Bestellen (das passiert eine
+    // Woche vorher) — bewusst über mehrere Tage sichtbar (Start in 2-7 Tagen), nicht nur einmalig,
+    // und optisch anders (blau statt orange) als der schärfere "morgen"-Produktionshinweis oben.
+    const _msIn2=new Date(); _msIn2.setDate(_msIn2.getDate()+2);
+    const _msIn7=new Date(); _msIn7.setDate(_msIn7.getDate()+7);
+    const _msIn2Str=_msIn2.toISOString().split('T')[0];
+    const _msIn7Str=_msIn7.toISOString().split('T')[0];
+    const _msBestellTreffer=await api(`messe_termine?store_id=eq.1020&start_date=gte.${_msIn2Str}&start_date=lte.${_msIn7Str}&select=name,start_date,personen&order=start_date.asc&limit=1`).catch(()=>[]);
+    if(_msBestellTreffer?.length){
+      const _mb=_msBestellTreffer[0];
+      const _mbDateLabel=new Date(_mb.start_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      messeInfoHtml+=`<div style="font-size:11.5px;color:#075985;background:#F0F9FF;border:1px solid #7DD3FC;border-radius:8px;padding:6px 10px;margin:0 0 8px;">🛒 Fürs Bestellen mitdenken: am ${_mbDateLabel} findet <span data-no-translate>${_mb.name}</span> statt${_mb.personen?` (${_mb.personen} Personen erwartet)`:''} — evtl. mehr Gemüse/Ware einplanen</div>`;
     }
 
     // Gamifizierte Nachfrage, sobald eine Messe vorbei ist: "Wie war der Zulauf?" — Emoji-Skala,
@@ -5816,12 +5832,12 @@ async function loadMesseTermineList(){
   const [termine, bewertungen, relevanzen]=await Promise.all([
     api('messe_termine?store_id=eq.1020&select=*&order=start_date.asc').catch(()=>[]),
     api('messe_bewertungen?store_id=eq.1020&select=messe_termin_id,rating').catch(()=>[]),
-    api('messe_relevanz?store_id=eq.1020&select=messe_termin_id,relevant').catch(()=>[])
+    api('messe_relevanz?store_id=eq.1020&select=messe_termin_id,einschaetzung').catch(()=>[])
   ]);
   const bewertungMap={};
   (bewertungen||[]).forEach(b=>{ bewertungMap[b.messe_termin_id]=b.rating; });
   const relevanzMap={};
-  (relevanzen||[]).forEach(r=>{ relevanzMap[r.messe_termin_id]=r.relevant; });
+  (relevanzen||[]).forEach(r=>{ relevanzMap[r.messe_termin_id]=r.einschaetzung; });
   const RATING_LABEL={1:'😴 Kaum spürbar',2:'😃 Spürbar mehr',3:'🔥 Extrem viel mehr'};
   if(!termine?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Messe-Termine eingetragen.</div>'; return; }
   const todayStr=new Date().toISOString().split('T')[0];
@@ -5831,8 +5847,9 @@ async function loadMesseTermineList(){
     const endLabel=new Date(t.end_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
     const dateRange=t.start_date===t.end_date?startLabel:`${startLabel} – ${endLabel}`;
     const rating=bewertungMap[t.id];
-    const relevant=relevanzMap[t.id]; // true/false/undefined
-    const bewertungLine=isPast?(rating?`<div style="font-size:11px;color:#0F6E56;font-weight:600;margin-top:4px;">Bewertung: ${RATING_LABEL[rating]}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Noch nicht bewertet</div>`):(relevant===undefined?'':`<div style="font-size:11px;font-weight:600;margin-top:4px;color:${relevant?'#166534':'#991B1B'};">Vor-Einschätzung Store: ${relevant?'✅ Relevant':'❌ Nicht relevant'}</div>`);
+    const einschaetzung=relevanzMap[t.id]; // 'relevant'/'nicht_relevant'/'unsicher'/undefined
+    const EINSCH_LABEL={relevant:{txt:'✅ Relevant',col:'#166534'},nicht_relevant:{txt:'❌ Nicht relevant',col:'#991B1B'},unsicher:{txt:'🤷 Weiß nicht',col:'#4B5563'}};
+    const bewertungLine=isPast?(rating?`<div style="font-size:11px;color:#0F6E56;font-weight:600;margin-top:4px;">Bewertung: ${RATING_LABEL[rating]}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Noch nicht bewertet</div>`):(!einschaetzung?'':`<div style="font-size:11px;font-weight:600;margin-top:4px;color:${EINSCH_LABEL[einschaetzung].col};">Vor-Einschätzung Store: ${EINSCH_LABEL[einschaetzung].txt}</div>`);
     return `<div class="card" style="padding:12px;margin-bottom:8px;${isPast?'opacity:0.7;':''}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div style="flex:1;min-width:0;">
