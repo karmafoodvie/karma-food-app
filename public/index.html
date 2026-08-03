@@ -960,7 +960,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.15.4';
+const APP_VERSION = '6.15.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9078,8 +9078,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
 
   // Get tomorrow's menu dishes from MENU_DATA
   const _cookWoche=getMenuWocheForDate(tomorrowStr);
-  const menuDishes = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${_cookWoche}_${tomorrowWd}`])||[];
-  const dishNames = menuDishes.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
+  const menuDishesRaw = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${_cookWoche}_${tomorrowWd}`])||[];
+  const dishNames = menuDishesRaw.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
+  // Reis wird nicht im Menüplan geführt, aber jeden Tag mitproduziert — daher hier synthetisch
+  // ergänzt, DAMIT die Reis-Menge in der "Gerichte & Mengen"-Tabelle auftaucht (wie in Forecast/Daily).
+  const menuDishes = [...menuDishesRaw, {name: REIS_DISH_NAME}];
   const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
   const overrideMap = {};
   (overrides||[]).forEach(e=>{
