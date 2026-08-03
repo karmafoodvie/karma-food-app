@@ -964,7 +964,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.17.0';
+const APP_VERSION = '6.17.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2306,38 +2306,80 @@ async function renderMessenStore(el){
     const e=new Date(t.end_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
     return t.start_date===t.end_date?s:`${s}–${e}`;
   };
+  // Kalender-Kachel fürs Startdatum — auf einen Blick lesbar statt reinem Text (Wochentag, Tag groß, Monat)
+  const dateBadgeHtml=(t,accent)=>{
+    const d=new Date(t.start_date+'T00:00:00');
+    const wd=d.toLocaleDateString('de-AT',{weekday:'short'}).replace('.','');
+    const day=d.toLocaleDateString('de-AT',{day:'2-digit'});
+    const mon=d.toLocaleDateString('de-AT',{month:'short'}).replace('.','');
+    return `<div style="flex-shrink:0;width:50px;text-align:center;background:${accent.bg};border:1.5px solid ${accent.border};border-radius:11px;padding:5px 2px 6px;">
+      <div style="font-size:9px;font-weight:700;color:${accent.fg};text-transform:uppercase;letter-spacing:.03em;">${wd}</div>
+      <div style="font-size:19px;font-weight:800;color:${accent.fgStrong};line-height:1.05;">${day}</div>
+      <div style="font-size:9px;font-weight:600;color:${accent.fg};text-transform:uppercase;">${mon}</div>
+    </div>`;
+  };
+  const daysUntil=t=>Math.round((new Date(t.start_date+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);
+  const countdownChip=t=>{
+    const n=daysUntil(t);
+    const label=n<=0?'läuft schon':(n===1?'morgen':`in ${n} Tagen`);
+    return `<span style="font-size:9.5px;font-weight:700;color:#C2410C;background:#FFEDD5;border-radius:20px;padding:2px 7px;white-space:nowrap;">${label}</span>`;
+  };
+  const ORANGE={bg:'#FFF7ED',border:'#FDBA74',fg:'#C2410C',fgStrong:'#9A3412'};
+  const GRAY={bg:'#F5F5F4',border:'#D6D3D1',fg:'#78716C',fgStrong:'#57534E'};
 
-  html+=`<div class="section-lbl" style="margin-top:14px;">📅 Kommende Termine — relevant?</div>`;
+  html+=`<div class="section-lbl" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;">
+    <span>📅 Kommende Termine</span>
+    ${upcoming.length?`<span style="font-size:10px;font-weight:700;color:#C2410C;background:#FFEDD5;border-radius:20px;padding:2px 8px;">${upcoming.length}</span>`:''}
+  </div>`;
   if(!upcoming.length){
     html+='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Aktuell keine kommenden Termine eingetragen.</div>';
   }else{
     html+=upcoming.map(t=>{
       const rel=relevanzMap[t.id]; // true/false/undefined
-      return `<div class="card" style="padding:12px;margin-bottom:8px;">
-        <div data-no-translate style="font-size:13.5px;font-weight:600;">${t.name}</div>
-        <div style="font-size:11.5px;color:var(--muted);margin:2px 0 8px;">${dateRangeOf(t)}${t.personen?` · ${t.personen} Personen erwartet`:''}</div>
-        <div style="display:flex;gap:8px;">
-          <div onclick="setMesseRelevanz(${t.id},true)" style="flex:1;text-align:center;cursor:pointer;padding:7px 4px;border-radius:9px;font-size:12px;font-weight:600;background:${rel===true?'#DCFCE7':'var(--surface-1)'};border:1.5px solid ${rel===true?'#16A34A':'var(--border)'};color:${rel===true?'#166534':'var(--sub)'};">✅ Relevant</div>
-          <div onclick="setMesseRelevanz(${t.id},false)" style="flex:1;text-align:center;cursor:pointer;padding:7px 4px;border-radius:9px;font-size:12px;font-weight:600;background:${rel===false?'#FEE2E2':'var(--surface-1)'};border:1.5px solid ${rel===false?'#DC2626':'var(--border)'};color:${rel===false?'#991B1B':'var(--sub)'};">❌ Nicht relevant</div>
+      return `<div class="card" style="padding:12px;margin-bottom:9px;">
+        <div style="display:flex;gap:11px;align-items:center;">
+          ${dateBadgeHtml(t,ORANGE)}
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <div data-no-translate style="font-size:13.5px;font-weight:700;color:#1a1a18;">${t.name}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
+              ${countdownChip(t)}
+              <span style="font-size:11px;color:var(--muted);">${dateRangeOf(t)}${t.personen?` · 👥 ${t.personen}`:''}</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <div onclick="setMesseRelevanz(${t.id},true)" style="flex:1;text-align:center;cursor:pointer;padding:8px 4px;border-radius:9px;font-size:12px;font-weight:700;background:${rel===true?'#DCFCE7':'var(--surface-1)'};border:1.5px solid ${rel===true?'#16A34A':'var(--border)'};color:${rel===true?'#166534':'var(--sub)'};">✅ Relevant</div>
+          <div onclick="setMesseRelevanz(${t.id},false)" style="flex:1;text-align:center;cursor:pointer;padding:8px 4px;border-radius:9px;font-size:12px;font-weight:700;background:${rel===false?'#FEE2E2':'var(--surface-1)'};border:1.5px solid ${rel===false?'#DC2626':'var(--border)'};color:${rel===false?'#991B1B':'var(--sub)'};">❌ Nicht relevant</div>
         </div>
       </div>`;
     }).join('');
   }
 
-  html+=`<div class="section-lbl" style="margin-top:18px;">✅ Vergangene Termine — wie war der Zulauf?</div>`;
+  html+=`<div class="section-lbl" style="margin-top:20px;display:flex;align-items:center;justify-content:space-between;">
+    <span>✅ Vergangene Termine</span>
+    ${past.length?`<span style="font-size:10px;font-weight:700;color:var(--muted);background:var(--surface-1);border-radius:20px;padding:2px 8px;">${past.length}</span>`:''}
+  </div>`;
   if(!past.length){
     html+='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine vergangenen Termine.</div>';
   }else{
     const RATING_OPTS=[[1,'😴','Kaum'],[2,'😃','Spürbar'],[3,'🔥','Extrem']];
     html+=past.slice(0,10).map(t=>{
       const rating=ratingMap[t.id];
-      return `<div class="card" style="padding:12px;margin-bottom:8px;">
-        <div data-no-translate style="font-size:13.5px;font-weight:600;">${t.name}</div>
-        <div style="font-size:11.5px;color:var(--muted);margin:2px 0 8px;">${dateRangeOf(t)}${t.personen?` · ${t.personen} Personen erwartet`:''}</div>
-        <div style="display:flex;gap:8px;">
+      return `<div class="card" style="padding:12px;margin-bottom:9px;">
+        <div style="display:flex;gap:11px;align-items:center;">
+          ${dateBadgeHtml(t,GRAY)}
+          <div style="flex:1;min-width:0;">
+            <div data-no-translate style="font-size:13.5px;font-weight:700;color:#1a1a18;">${t.name}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">${dateRangeOf(t)}${t.personen?` · 👥 ${t.personen}`:''}</div>
+          </div>
+          ${rating?`<span style="font-size:20px;flex-shrink:0;">${RATING_OPTS.find(o=>o[0]===rating)?.[1]||''}</span>`:''}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
           ${RATING_OPTS.map(([val,emoji,label])=>`
           <div onclick="rateMesse(${t.id},${val})" style="flex:1;text-align:center;cursor:pointer;padding:7px 4px;border-radius:9px;background:${rating===val?'#FEF3C7':'var(--surface-1)'};border:1.5px solid ${rating===val?'#FCD34D':'var(--border)'};">
-            <div style="font-size:18px;">${emoji}</div>
+            <div style="font-size:17px;">${emoji}</div>
             <div style="font-size:9.5px;font-weight:600;color:${rating===val?'#78350F':'var(--sub)'};margin-top:2px;">${label}</div>
           </div>`).join('')}
         </div>
