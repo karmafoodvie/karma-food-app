@@ -960,7 +960,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.15.3';
+const APP_VERSION = '6.15.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6760,7 +6760,7 @@ async function renderMaengel(){
         </div>
         <span class="badge ${statusClass[status]||'badge-warn'}" style="flex-shrink:0;">${statusLabel[status]||status}</span>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px;">${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.foto_url?' · 📷':''}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;">${new Date(m.gemeldet_am).toLocaleDateString('de-AT')}${m.gemeldet_von?' · '+m.gemeldet_von:''}${m.foto_url?' · 📷':''}${m.faelligkeit_am?' · Fällig: '+new Date(m.faelligkeit_am).toLocaleDateString('de-AT'):''}</div>
     </div>`;
   };
 
@@ -6814,6 +6814,11 @@ function mangelFormHtml(storeOptions){
       </select>`:''}
       <input type="text" id="mangel-betreff" placeholder="Kurzer Betreff (z.B. Handwaschbecken defekt)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
       <textarea id="mangel-text" placeholder="Details (was genau, seit wann, etc.)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+      <select id="mangel-dringlichkeit" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-top:10px;background:#fff;">
+        <option value="0">Fällig: Heute</option>
+        <option value="3" selected>Fällig: In 3 Tagen</option>
+        <option value="7">Fällig: In 1 Woche</option>
+      </select>
       <div style="margin-top:10px;">
         <input type="file" id="mangel-foto-input" accept="image/*" capture="environment" onchange="previewMangelFoto(this)" style="display:none;">
         <button type="button" onclick="document.getElementById('mangel-foto-input').click()" style="background:none;border:1.5px dashed var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--sub);cursor:pointer;width:100%;">📷 Foto hinzufügen (optional)</button>
@@ -6987,12 +6992,12 @@ function hideSubmitOverlay(){
   if(ov) ov.style.display='none';
 }
 
-async function sendToAsana(betreff, beschreibung, storeName, gemeldetVon, fotoUrl){
+async function sendToAsana(betreff, beschreibung, storeName, gemeldetVon, fotoUrl, dueOn){
   try{
     await fetch(`${SUPABASE_URL}/functions/v1/asana-schadensmeldung`, {
       method:'POST',
       headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},
-      body: JSON.stringify({betreff, beschreibung, store_name:storeName, gemeldet_von:gemeldetVon, foto_url:fotoUrl})
+      body: JSON.stringify({betreff, beschreibung, store_name:storeName, gemeldet_von:gemeldetVon, foto_url:fotoUrl, due_on:dueOn})
     });
   }catch(e){ console.error('Asana-Weiterleitung fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', e); }
 }
@@ -7030,9 +7035,12 @@ async function sendMangelMeldung(){
   try{
     let fotoUrl=null;
     if(mangelFotoBlob){ fotoUrl=await uploadMangelFoto(mangelFotoBlob); }
+    const dringlichkeitTage=parseInt(document.getElementById('mangel-dringlichkeit')?.value||'3',10);
+    const faelligDate=new Date(Date.now()+dringlichkeitTage*24*60*60*1000);
+    const faelligkeitAm=faelligDate.toISOString().split('T')[0]; // YYYY-MM-DD
     const verlauf=[{t:'erstellt', text:'Meldung erstellt', autor:gemeldetVon, zeit:new Date().toISOString()}];
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf}])});
-    sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl); // nicht blockierend — Meldung ist bereits gespeichert
+    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf,faelligkeit_am:faelligkeitAm}])});
+    sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm); // nicht blockierend — Meldung ist bereits gespeichert
     await emailjs.send('service_xla195w','template_9uiq1wf',{
       name: targetStoreName+' — Schadensmeldung: '+betreff,
       time: now,
