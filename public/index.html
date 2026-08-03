@@ -956,7 +956,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.19.1';
+const APP_VERSION = '6.20.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5017,30 +5017,17 @@ async function renderOrgForecast(){
   const weekLabel=new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})
     +' – '+new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
-  // Woche-Switcher — exakt dasselbe Muster wie in der Küchen-Ansicht: ← Vorherige / Mitte (tippen
-  // zum Zurücksetzen auf die aktuelle Woche) / Nächste →. Zusätzlich darunter die drei
-  // Schnellzugriffs-Buttons für Diese/Nächste/Übernächste Woche.
-  const wkBtn=(off,label)=>{
-    const wd=getWeekdayDates(off);
-    const kwn=getIsoWeekNumber(wd[1]);
-    const range=wd[1].split('-').reverse().slice(0,2).join('.')+'.–'+wd[5].split('-').reverse().slice(0,2).join('.')+'.';
-    const active=orgForecastWeekOffset===off;
-    return `<button onclick="orgForecastWeekOffset=${off};renderOrgForecast()" style="flex:1;padding:9px 3px;border-radius:10px;border:${active?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${active?'#2B3A67':'var(--card)'};color:${active?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:11px;line-height:1.3;cursor:pointer;">${label}<br><span style="font-size:9px;opacity:0.8;">KW ${kwn} · ${range}</span></button>`;
-  };
+  // Woche-Switcher — kompakt: ← Vorherige / KW (tippen zum Zurücksetzen) / Nächste →
   const curKw=getIsoWeekNumber(fromDate);
-  const weekSwitcher=`<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;">
+  const weekSwitcher=`<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;">
     <button onclick="orgForecastWeekOffset--;renderOrgForecast()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">← Vorherige</button>
     <div style="text-align:center;cursor:pointer;" onclick="orgForecastWeekOffset=0;renderOrgForecast()" title="Klick: zurück zur aktuellen Woche">
       <div style="font-size:13px;font-weight:600;">KW ${curKw} · ${weekLabel}</div>
-      <div style="font-size:9px;color:var(--muted);">tippen zum Zurücksetzen</div>
+      ${orgForecastWeekOffset!==0?`<div style="font-size:9px;color:var(--muted);">tippen zum Zurücksetzen</div>`:`<div style="font-size:9px;color:var(--muted);">aktuelle Woche</div>`}
     </div>
     <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">Nächste →</button>
   </div>
-  <div style="display:flex;gap:6px;margin-bottom:12px;align-items:stretch;">
-    ${wkBtn(0,'📅 Diese')}
-    ${wkBtn(1,'📅 Nächste')}
-    ${wkBtn(2,'📅 Übernächste')}
-  </div>`;
+  <div style="font-size:9.5px;color:var(--muted);text-align:center;margin-bottom:12px;">Symbol neben Menge = letzte Woche: 🔥 zu wenig · 📦 zu viel · ✓ passte</div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
   const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
@@ -5192,6 +5179,19 @@ async function renderOrgForecast(){
 
     return {qty, reason:reasons.join(' · '), fallback:usedFallback};
   }
+  // Ampel-Badge für den Gegencheck: was ist letzte Woche am gleichen Wochentag mit diesem
+  // Gericht/Kategorie passiert? 🔥 ausverkauft (evtl. zu wenig) · 📦 viel übrig (zu viel) · ✓ passte.
+  // Rein informativ neben der Menge, damit man den Vorschlag nicht blind übernehmen muss.
+  function orgAmpelBadge(storeId, dish, dateStr){
+    const cat=mapDishNameToCategory(dish);
+    const prevDateStr=dateMinusDays(dateStr,7);
+    const disp=prevDispByStoreDate[storeId]?.[prevDateStr]?.[cat];
+    if(!disp) return ''; // keine Vorwochen-Entsorgung erfasst → nichts anzeigen
+    if(disp.soldOutEarly) return '<span title="Letzte Woche ausverkauft — evtl. zu wenig" style="font-size:10px;">🔥</span>';
+    if(disp.leftover>10)  return `<span title="Letzte Woche viel übrig (${formatQty(disp.leftover)} Port.) — war zu viel" style="font-size:10px;">📦</span>`;
+    if(disp.leftover>4)   return `<span title="Letzte Woche etwas übrig (${formatQty(disp.leftover)} Port.)" style="font-size:10px;">📦</span>`;
+    return '<span title="Letzte Woche gut getroffen" style="font-size:10px;opacity:0.7;">✓</span>';
+  }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
   // Überträgt Mengen aus der vorherigen (aktuell laufenden) Woche in die angezeigte nächste Woche —
@@ -5276,7 +5276,9 @@ async function renderOrgForecast(){
           const dateRecs=Object.values(((fMap[dateStr]||{})[s.id]||{})[dish]||{});
           const LBLS_ORG={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
           const storeLocked=isLasagneLocked(dateStr);
+          const lasAmpel=orgAmpelBadge(s.id, dish, dateStr);
           let lasHtml='<td style="min-width:110px;padding:4px 3px;">';
+          if(lasAmpel) lasHtml+=`<div style="text-align:right;margin-bottom:2px;">${lasAmpel}</div>`;
           lasHtml+='<div style="display:grid;grid-template-columns:52px 40px;gap:3px 4px;align-items:center;">';
           sizes.forEach(sz=>{
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
@@ -5312,13 +5314,17 @@ async function renderOrgForecast(){
           const displayVal=rec?.qty??sugg?.qty??'';
           const isSugg=!rec && sugg!=null;
           const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
+          const ampel=orgAmpelBadge(s.id, dish, dateStr);
           html+=`<td style="vertical-align:top;padding:3px;">
-            <input type="number" step="0.25" value="${displayVal}" placeholder="–"
-              data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
-              data-has-record="${rec?'1':'0'}" data-source="${rec?.source||''}" data-orig-qty="${rec?.qty??''}"
-              onchange="updateForecastQtyOrg(this)"
-              title="${escAttr(title)}"
-              style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
+            <div style="display:flex;align-items:center;justify-content:center;gap:3px;">
+              <input type="number" step="0.25" value="${displayVal}" placeholder="–"
+                data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
+                data-has-record="${rec?'1':'0'}" data-source="${rec?.source||''}" data-orig-qty="${rec?.qty??''}"
+                onchange="updateForecastQtyOrg(this)"
+                title="${escAttr(title)}"
+                style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
+              ${ampel}
+            </div>
             ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
           </td>`;
         }
