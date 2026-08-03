@@ -956,7 +956,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.18.4';
+const APP_VERSION = '6.18.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7679,16 +7679,20 @@ async function submitSchichtende(){
 }
 
 // ---- PACK ----
-async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty, orderDateStr){
+async function toggleOrderEingepackt(articleId, storeId, currentPacked, tdEl, qty, orderDateStr){
   const newPacked=!currentPacked;
-  // Optimistisches UI-Update — sofort sichtbar, kein Warten auf vollen Reload
-  if(el){
-    el.style.fontWeight=newPacked?'400':'600';
-    el.style.color=newPacked?'#3B6D11':'#1a1a18';
-    el.style.background=newPacked?'#EAF3DE':'transparent';
-    el.style.textDecoration=newPacked?'line-through':'none';
-    el.textContent=qty+(newPacked?' ✓':'');
-    el.setAttribute('onclick',`toggleOrderEingepackt(${articleId},'${storeId}',${newPacked},this,${qty},'${orderDateStr}')`);
+  // onclick sitzt jetzt auf der ganzen <td> (größere Tap-Fläche am Handy) — die Zahl selbst
+  // steckt im inneren <span>, den wir hier gezielt fürs optimistische Update anfassen.
+  const spanEl=tdEl?.querySelector?.('span')||tdEl;
+  if(spanEl){
+    spanEl.style.fontWeight=newPacked?'400':'600';
+    spanEl.style.color=newPacked?'#3B6D11':'#1a1a18';
+    spanEl.style.background=newPacked?'#EAF3DE':'transparent';
+    spanEl.style.textDecoration=newPacked?'line-through':'none';
+    spanEl.textContent=qty+(newPacked?' ✓':'');
+  }
+  if(tdEl){
+    tdEl.setAttribute('onclick',`toggleOrderEingepackt(${articleId},'${storeId}',${newPacked},this,${qty},'${orderDateStr}')`);
   }
   // WICHTIG: order_date ist der Eintragstag der Filiale (gestern aus Michis Sicht), nicht der
   // heutige Kalendertag — deshalb hier NICHT selbst neu berechnen, sondern den vom Aufrufer
@@ -7833,8 +7837,12 @@ async function renderPack(){
     items.forEach(a=>{
       const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
-      html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:4px;">
-        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
+      // Verfügbar-Toggle bewusst NICHT grün/Haken — das kollidiert visuell mit dem grünen
+      // "eingepackt ✓"-Zeichen der Mengen-Zellen und sorgt für Verwechslung (siehe Feedback: Chef
+      // hielt das Verfügbar-Symbol für "ganze Zeile eingepackt"). Im Normalfall (verfügbar) daher
+      // gar kein auffälliges Icon — nur "nicht lieferbar" zeigt eine klar rote, textliche Markierung.
+      html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:5px;">
+        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar — antippen für: nicht lieferbar':'Nicht lieferbar — antippen für: lieferbar'}" style="font-size:10px;padding:${verfuegbar?'0':'2px 5px'};border:none;border-radius:5px;background:${verfuegbar?'transparent':'#FEE2E2'};color:${verfuegbar?'var(--muted)':'#991B1B'};cursor:pointer;line-height:1.3;flex-shrink:0;white-space:nowrap;">${verfuegbar?'○':'🚫 n.v.'}</button>
         <span style="font-size:11.5px;line-height:1.2;word-break:break-word;">${a.name}</span>
       </div></td>`;
       storeList.forEach(s=>{
@@ -7842,10 +7850,13 @@ async function renderPack(){
         const v=rec?.quantity||0;
         const packed=!!rec?.eingepackt;
         if(!v){ html+=`<td style="color:var(--border);text-align:center;padding:5px 1px;">·</td>`; return; }
-        const cellStyle=`display:inline-block;padding:1px 4px;border-radius:5px;font-size:11.5px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
+        const cellStyle=`display:block;padding:8px 2px;border-radius:5px;font-size:12px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
+        // Ganze Zelle klickbar (nicht nur die Zahl) — auf dem Handy war der reine Zahlen-Bereich
+        // als Trefferfläche zu klein, ein Tippen knapp daneben landete auf der leeren Zelle ohne
+        // Funktion. min-height/touch-action sorgen zusätzlich für eine verlässliche Tap-Fläche.
         html+=isBestellToday
-          ? `<td style="text-align:center;padding:5px 1px;"><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
-          : `<td style="text-align:center;padding:5px 1px;"><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
+          ? `<td onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="text-align:center;padding:0;cursor:pointer;touch-action:manipulation;min-height:36px;"><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`
+          : `<td style="text-align:center;padding:5px 1px;"><span style="${cellStyle.replace('display:block','display:inline-block')}">${v}${packed?' ✓':''}</span></td>`;
       });
       html+=`<td style="text-align:center;padding:5px 1px;font-size:11.5px;font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
     });
