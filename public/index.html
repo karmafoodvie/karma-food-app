@@ -329,6 +329,7 @@ const KITCHEN_SUPPLY_IMAGES = {
   'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
   'Raita': '/images/kitchen-supply/raita.jpg',
   'Salat': '/images/dishes/salat.jpg',
+  'Reis': '/images/kitchen-supply/reis.jpg',
   'Samosas': '/images/dishes/samosa.jpg',
   'Samosa': '/images/dishes/samosa.jpg',
 };
@@ -955,7 +956,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.18.1';
+const APP_VERSION = '6.18.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2141,9 +2142,9 @@ async function computeAndSaveScore(storeId){
     const haccp_done=(wek||[]).length>0 && (rein||[])[0]?.reinigung_erledigt && (rein||[])[0]?.desinfektion_erledigt && (kuehl||[]).length>0;
     const waste_total=(disposal||[]).reduce((s,d)=>s+(d.leftover_qty||0),0);
 
-    // Streak: Vortag prüfen
-    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
-    const yd=yesterday.toISOString().split('T')[0];
+    // Streak: voriger GESCHÄFTSTag prüfen (am Montag ist das Freitag, nicht der leere Sonntag —
+    // sonst würde die Serie jeden Montag fälschlich auf 0 zurückfallen)
+    const yd=prevBusinessDayStr();
     const prevScore=(await api(`store_scores?store_id=eq.${storeId}&datum=eq.${yd}&select=streak_haccp`).catch(()=>[]))[0];
     const prevStreak=prevScore?.streak_haccp||0;
     const streak_haccp=haccp_done?(prevStreak+1):0;
@@ -2296,9 +2297,8 @@ async function renderHome(){
     // Entsorgung heute Status
     const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=id`).catch(()=>[]);
     disposalDone=(disposalToday||[]).length>0;
-    // Übergabe-Notiz von gestern laden
-    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
-    const ydStr=yesterday.toISOString().split('T')[0];
+    // Übergabe-Notiz vom vorigen GESCHÄFTSTag laden (am Montag = Freitag, nicht der leere Sonntag)
+    const ydStr=prevBusinessDayStr();
     const uebergabeGestern=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${ydStr}&select=notiz`).catch(()=>[]);
     const uebergabeDismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
     uebergabeNotiz=(uebergabeDismissed[`${currentStore.id}_${ydStr}`])?null:(uebergabeGestern?.[0]?.notiz||null);
@@ -2911,8 +2911,10 @@ function renderOrder(){
 async function loadYesterdayOrderBox(){
   const wrap=document.getElementById('yesterday-order-box');
   if(!wrap) return;
-  const y=new Date(); y.setDate(y.getDate()-1);
-  const yStr=y.toISOString().split('T')[0];
+  // Voriger GESCHÄFTSTag (am Montag = Freitag, nicht der leere Sonntag) — dort wurde die Bestellung
+  // eingetragen, die Michi heute tatsächlich mitbringt.
+  const yStr=prevBusinessDayStr();
+  const y=new Date(yStr+'T00:00:00');
   const yLabel=y.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   const tab=ORDER_TABS[activeOrderTab];
   const rows=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${yStr}&select=article_id,quantity,eingepackt`).catch(()=>[]);
@@ -3043,6 +3045,15 @@ function nextBusinessDayStr(baseDate){
   const d = baseDate ? new Date(baseDate) : new Date();
   d.setDate(d.getDate()+1);
   while([0,6].includes(d.getDay())){ d.setDate(d.getDate()+1); }
+  return d.toISOString().split('T')[0];
+}
+// Voriger Geschäftstag vor einem Basisdatum (überspringt Sa+So rückwärts). Ohne Argument: vor heute.
+// Wichtig für den Transporter: er packt montags, aber die Bestellungen dafür wurden am FREITAG
+// eingetragen (nicht Sonntag) — der naive "-1 Tag" würde aufs leere Wochenende zeigen.
+function prevBusinessDayStr(baseDate){
+  const d = baseDate ? new Date(baseDate) : new Date();
+  d.setDate(d.getDate()-1);
+  while([0,6].includes(d.getDay())){ d.setDate(d.getDate()-1); }
   return d.toISOString().split('T')[0];
 }
 function getWeekdayDates(weekOffsetParam=0){
@@ -7766,8 +7777,10 @@ async function renderPack(){
   // dafür braucht, stehen unter GESTERN. bestellViewDate/Label zeigen weiterhin Michis heutigen
   // Packtag; bestellDateStr (die tatsächliche DB-Abfrage) ist bewusst einen Tag früher.
   const bestellViewDate=new Date(); bestellViewDate.setDate(bestellViewDate.getDate()+transporterBestellDateOffset);
-  const orderEntryDate=new Date(bestellViewDate); orderEntryDate.setDate(orderEntryDate.getDate()-1);
-  const bestellDateStr=orderEntryDate.toISOString().split('T')[0];
+  // Bestellungen wurden am vorigen GESCHÄFTSTAG eingetragen (Fr für Mo), nicht kalendarisch -1 Tag —
+  // sonst zeigt Michi montags auf den leeren Sonntag und sieht keine Bestellungen.
+  const bestellDateStr=prevBusinessDayStr(bestellViewDate);
+  const orderEntryDate=new Date(bestellDateStr+'T00:00:00');
   const isBestellToday=transporterBestellDateOffset===0;
   const bestellDateLabel=bestellViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   html+=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
