@@ -243,6 +243,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="nav-btn" onclick="goTo('kontrolle')" id="nav-kontrolle">
       <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Kontrolle
     </button>
+    <button class="nav-btn" onclick="goTo('messen')" id="nav-messen" style="display:none;">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Messen
+    </button>
     <button class="nav-btn" onclick="goTo('sweets')" id="nav-org-sweets" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M20 21v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8"/><path d="M4 10V8a2 2 0 012-2h12a2 2 0 012 2v2"/><line x1="12" y1="6" x2="12" y2="3"/></svg><span id="navlabel-sweets">Sweets</span>
     </button>
@@ -961,7 +964,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.16.1';
+const APP_VERSION = '6.17.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1242,13 +1245,16 @@ async function loginAs(store){
     document.getElementById('nav-org-kc').style.display='flex';
     loadOrgRolesRow();
   }
+  if(store.id==='1020'){
+    document.getElementById('nav-messen').style.display='flex';
+  }
   await loadAll();
   checkForBroadcasts();
   const savedView=localStorage.getItem('kf_view')||'home';
   // Only restore views that make sense for this role
   const orgViews=['management','maengel'];
   const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
-  const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende'];
+  const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
   const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
   goTo(allowedViews.includes(savedView)?savedView:'home');
 }
@@ -1319,7 +1325,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine (Ausstellungsstraße)'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -2255,15 +2261,94 @@ window.dismissUebergabeNotiz=dismissUebergabeNotiz;
 
 // Speichert die Zulauf-Bewertung einer Messe (Ausstellungsstraße) — ein Tap, sofort gespeichert,
 // kein Formular/Submit-Button, damit es sich spielerisch statt nach Arbeit anfühlt.
+// Skala bewusst nur 3-stufig (Kaum / Spürbar / Extrem) — reicht völlig, ohne dass es nach
+// Umfrage-Arbeit aussieht.
 async function rateMesse(terminId, rating){
   try{
-    await api('messe_bewertungen',{method:'POST',body:JSON.stringify([{messe_termin_id:terminId,store_id:'1020',rating,bewertet_von:currentStore?.name||'Ausstellungsstraße'}])});
-    const _msgs={1:'Danke fürs Bewerten! ✓',2:'Danke fürs Bewerten! ✓',3:'Danke, gut zu wissen! 🎉',4:'Super, danke dir! 🎉',5:'Mega, danke für die Info! 🔥'};
+    await api('messe_bewertungen?on_conflict=messe_termin_id,store_id',{method:'POST',body:JSON.stringify([{messe_termin_id:terminId,store_id:'1020',rating,bewertet_von:currentStore?.name||'Ausstellungsstraße'}]),headers:{'Prefer':'resolution=merge-duplicates,return=representation'}});
+    const _msgs={1:'Danke fürs Bewerten! ✓',2:'Danke, gut zu wissen! 🎉',3:'Mega, danke für die Info! 🔥'};
     showToast(_msgs[rating]||'Danke fürs Bewerten!');
-    renderHome();
+    if(currentView==='messen') renderMessen(); else renderHome();
   }catch(e){console.error(e);showToast('Fehler beim Speichern');}
 }
 window.rateMesse=rateMesse;
+
+// Vor-Einschätzung durch die Filiale, BEVOR die Messe stattfindet: einfaches Ja/Nein, ob aus
+// Mitarbeiter-Sicht relevant (z.B. weiß man schon vorab, dass eine kleine Fachmesse kaum Publikumsverkehr
+// bringt, während eine Publikumsmesse sicher mehr Zulauf bedeutet).
+async function setMesseRelevanz(terminId, relevant){
+  try{
+    await api('messe_relevanz?on_conflict=messe_termin_id,store_id',{method:'POST',body:JSON.stringify([{messe_termin_id:terminId,store_id:'1020',relevant,notiert_von:currentStore?.name||'Ausstellungsstraße'}]),headers:{'Prefer':'resolution=merge-duplicates,return=representation'}});
+    showToast(relevant?'✓ Als relevant vermerkt':'✓ Als nicht relevant vermerkt');
+    renderMessen();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.setMesseRelevanz=setMesseRelevanz;
+
+// Store-Ansicht (nur Ausstellungsstraße): Messe-Termine durchsehen, vorab als relevant/nicht relevant
+// markieren, und nach Ende den Zulauf einschätzen — alles an einem Ort, ohne Organisation zu fragen.
+async function renderMessenStore(el){
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🎪','Messe-Termine','Termine bei uns nebenan. Vor der Messe: kurz einschätzen, ob relevant. Nach der Messe: kurz sagen, wie der Zulauf war.','#F97316');
+  const todayStr=new Date().toISOString().split('T')[0];
+  const [termine, relevanzen, bewertungen] = await Promise.all([
+    api('messe_termine?store_id=eq.1020&select=*&order=start_date.asc').catch(()=>[]),
+    api('messe_relevanz?store_id=eq.1020&select=messe_termin_id,relevant').catch(()=>[]),
+    api('messe_bewertungen?store_id=eq.1020&select=messe_termin_id,rating').catch(()=>[])
+  ]);
+  const relevanzMap={}; (relevanzen||[]).forEach(r=>{ relevanzMap[r.messe_termin_id]=r.relevant; });
+  const ratingMap={}; (bewertungen||[]).forEach(b=>{ ratingMap[b.messe_termin_id]=b.rating; });
+  const upcoming=(termine||[]).filter(t=>t.end_date>=todayStr);
+  const past=(termine||[]).filter(t=>t.end_date<todayStr).sort((a,b)=>b.end_date.localeCompare(a.end_date));
+
+  const dateRangeOf=t=>{
+    const s=new Date(t.start_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+    const e=new Date(t.end_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+    return t.start_date===t.end_date?s:`${s}–${e}`;
+  };
+
+  html+=`<div class="section-lbl" style="margin-top:14px;">📅 Kommende Termine — relevant?</div>`;
+  if(!upcoming.length){
+    html+='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Aktuell keine kommenden Termine eingetragen.</div>';
+  }else{
+    html+=upcoming.map(t=>{
+      const rel=relevanzMap[t.id]; // true/false/undefined
+      return `<div class="card" style="padding:12px;margin-bottom:8px;">
+        <div data-no-translate style="font-size:13.5px;font-weight:600;">${t.name}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin:2px 0 8px;">${dateRangeOf(t)}${t.personen?` · ${t.personen} Personen erwartet`:''}</div>
+        <div style="display:flex;gap:8px;">
+          <div onclick="setMesseRelevanz(${t.id},true)" style="flex:1;text-align:center;cursor:pointer;padding:7px 4px;border-radius:9px;font-size:12px;font-weight:600;background:${rel===true?'#DCFCE7':'var(--surface-1)'};border:1.5px solid ${rel===true?'#16A34A':'var(--border)'};color:${rel===true?'#166534':'var(--sub)'};">✅ Relevant</div>
+          <div onclick="setMesseRelevanz(${t.id},false)" style="flex:1;text-align:center;cursor:pointer;padding:7px 4px;border-radius:9px;font-size:12px;font-weight:600;background:${rel===false?'#FEE2E2':'var(--surface-1)'};border:1.5px solid ${rel===false?'#DC2626':'var(--border)'};color:${rel===false?'#991B1B':'var(--sub)'};">❌ Nicht relevant</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  html+=`<div class="section-lbl" style="margin-top:18px;">✅ Vergangene Termine — wie war der Zulauf?</div>`;
+  if(!past.length){
+    html+='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine vergangenen Termine.</div>';
+  }else{
+    const RATING_OPTS=[[1,'😴','Kaum'],[2,'😃','Spürbar'],[3,'🔥','Extrem']];
+    html+=past.slice(0,10).map(t=>{
+      const rating=ratingMap[t.id];
+      return `<div class="card" style="padding:12px;margin-bottom:8px;">
+        <div data-no-translate style="font-size:13.5px;font-weight:600;">${t.name}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin:2px 0 8px;">${dateRangeOf(t)}${t.personen?` · ${t.personen} Personen erwartet`:''}</div>
+        <div style="display:flex;gap:8px;">
+          ${RATING_OPTS.map(([val,emoji,label])=>`
+          <div onclick="rateMesse(${t.id},${val})" style="flex:1;text-align:center;cursor:pointer;padding:7px 4px;border-radius:9px;background:${rating===val?'#FEF3C7':'var(--surface-1)'};border:1.5px solid ${rating===val?'#FCD34D':'var(--border)'};">
+            <div style="font-size:18px;">${emoji}</div>
+            <div style="font-size:9.5px;font-weight:600;color:${rating===val?'#78350F':'var(--sub)'};margin-top:2px;">${label}</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderMessenStore=renderMessenStore;
 
 async function renderHome(){
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
@@ -2409,8 +2494,8 @@ async function renderHome(){
         messeBewertungHtml=`<div class="card" style="padding:14px;margin:0 0 10px;background:linear-gradient(135deg,#FEF3C7,#FDE68A);border:1px solid #FCD34D;">
           <div style="font-size:13px;font-weight:700;color:#78350F;margin-bottom:2px;">🎪 Wie war der Zulauf?</div>
           <div data-no-translate style="font-size:11.5px;color:#92400E;margin-bottom:10px;">${_t.name} (${_range}) ist vorbei — gab's spürbar mehr Kundschaft?</div>
-          <div style="display:flex;justify-content:space-between;gap:4px;">
-            ${[[1,'😴','Kaum'],[2,'🙂','Wenig'],[3,'😃','Spürbar'],[4,'🤩','Viel'],[5,'🔥','Extrem']].map(([val,emoji,label])=>`
+          <div style="display:flex;justify-content:space-between;gap:6px;">
+            ${[[1,'😴','Kaum'],[2,'😃','Spürbar'],[3,'🔥','Extrem']].map(([val,emoji,label])=>`
             <div onclick="rateMesse(${_t.id},${val})" style="flex:1;text-align:center;cursor:pointer;background:#fff;border-radius:10px;padding:8px 2px;border:1px solid #FCD34D;">
               <div style="font-size:22px;">${emoji}</div>
               <div style="font-size:9px;color:#78350F;margin-top:2px;">${label}</div>
@@ -5615,6 +5700,10 @@ window.deleteTransporterTask=deleteTransporterTask;
 // ---- MESSE-TERMINE (Ausstellungsstraße) — Organisation kann selbst pflegen ----
 async function renderMessen(){
   const el=document.getElementById('v-messen');
+  if(currentStore?.id!=='zentrale'){
+    await renderMessenStore(el);
+    return;
+  }
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🎪','Messe-Termine','Termine bei der Ausstellungsstraße mit erhöhtem Laufkundschafts-Aufkommen. Ein kleiner Hinweis erscheint automatisch bei Ausstellungsstraße & Küche — bereits am Vortag (bzw. am Freitag, falls der Termin einen Montag betrifft).','#F97316');
   const today=new Date().toISOString().split('T')[0];
@@ -5682,13 +5771,16 @@ window.editMesseTermin=editMesseTermin;
 async function loadMesseTermineList(){
   const wrap=document.getElementById('ms-list');
   if(!wrap) return;
-  const [termine, bewertungen]=await Promise.all([
+  const [termine, bewertungen, relevanzen]=await Promise.all([
     api('messe_termine?store_id=eq.1020&select=*&order=start_date.asc').catch(()=>[]),
-    api('messe_bewertungen?store_id=eq.1020&select=messe_termin_id,rating').catch(()=>[])
+    api('messe_bewertungen?store_id=eq.1020&select=messe_termin_id,rating').catch(()=>[]),
+    api('messe_relevanz?store_id=eq.1020&select=messe_termin_id,relevant').catch(()=>[])
   ]);
   const bewertungMap={};
   (bewertungen||[]).forEach(b=>{ bewertungMap[b.messe_termin_id]=b.rating; });
-  const RATING_LABEL={1:'😴 Kaum spürbar',2:'🙂 Wenig mehr',3:'😃 Spürbar mehr',4:'🤩 Deutlich mehr',5:'🔥 Extrem viel mehr'};
+  const relevanzMap={};
+  (relevanzen||[]).forEach(r=>{ relevanzMap[r.messe_termin_id]=r.relevant; });
+  const RATING_LABEL={1:'😴 Kaum spürbar',2:'😃 Spürbar mehr',3:'🔥 Extrem viel mehr'};
   if(!termine?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Messe-Termine eingetragen.</div>'; return; }
   const todayStr=new Date().toISOString().split('T')[0];
   wrap.innerHTML=termine.map(t=>{
@@ -5697,7 +5789,8 @@ async function loadMesseTermineList(){
     const endLabel=new Date(t.end_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
     const dateRange=t.start_date===t.end_date?startLabel:`${startLabel} – ${endLabel}`;
     const rating=bewertungMap[t.id];
-    const bewertungLine=isPast?(rating?`<div style="font-size:11px;color:#0F6E56;font-weight:600;margin-top:4px;">Bewertung: ${RATING_LABEL[rating]}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Noch nicht bewertet</div>`):'';
+    const relevant=relevanzMap[t.id]; // true/false/undefined
+    const bewertungLine=isPast?(rating?`<div style="font-size:11px;color:#0F6E56;font-weight:600;margin-top:4px;">Bewertung: ${RATING_LABEL[rating]}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Noch nicht bewertet</div>`):(relevant===undefined?'':`<div style="font-size:11px;font-weight:600;margin-top:4px;color:${relevant?'#166534':'#991B1B'};">Vor-Einschätzung Store: ${relevant?'✅ Relevant':'❌ Nicht relevant'}</div>`);
     return `<div class="card" style="padding:12px;margin-bottom:8px;${isPast?'opacity:0.7;':''}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div style="flex:1;min-width:0;">
