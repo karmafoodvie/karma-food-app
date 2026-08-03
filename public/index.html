@@ -278,6 +278,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="submit-overlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,0.85);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:12px;">
+  <div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:submitSpin 0.8s linear infinite;"></div>
+  <div id="submit-overlay-text" style="font-size:14px;font-weight:600;color:var(--sub);">Wird gesendet …</div>
+</div>
+<style>@keyframes submitSpin{to{transform:rotate(360deg);}}</style>
 
 <div id="bc-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;align-items:center;justify-content:center;padding:20px;">
   <div style="background:#fff;border-radius:16px;padding:20px;max-width:360px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,0.3);">
@@ -329,7 +334,6 @@ const KITCHEN_SUPPLY_IMAGES = {
   'Salat (zur Lasagne)': '/images/kitchen-supply/salat-lasagne.jpg',
   'Raita': '/images/kitchen-supply/raita.jpg',
   'Salat': '/images/dishes/salat.jpg',
-  'Reis': '/images/kitchen-supply/reis.jpg',
   'Samosas': '/images/dishes/samosa.jpg',
   'Samosa': '/images/dishes/samosa.jpg',
 };
@@ -956,7 +960,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.20.0';
+const APP_VERSION = '6.15.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2142,9 +2146,9 @@ async function computeAndSaveScore(storeId){
     const haccp_done=(wek||[]).length>0 && (rein||[])[0]?.reinigung_erledigt && (rein||[])[0]?.desinfektion_erledigt && (kuehl||[]).length>0;
     const waste_total=(disposal||[]).reduce((s,d)=>s+(d.leftover_qty||0),0);
 
-    // Streak: voriger GESCHÄFTSTag prüfen (am Montag ist das Freitag, nicht der leere Sonntag —
-    // sonst würde die Serie jeden Montag fälschlich auf 0 zurückfallen)
-    const yd=prevBusinessDayStr();
+    // Streak: Vortag prüfen
+    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+    const yd=yesterday.toISOString().split('T')[0];
     const prevScore=(await api(`store_scores?store_id=eq.${storeId}&datum=eq.${yd}&select=streak_haccp`).catch(()=>[]))[0];
     const prevStreak=prevScore?.streak_haccp||0;
     const streak_haccp=haccp_done?(prevStreak+1):0;
@@ -2297,8 +2301,9 @@ async function renderHome(){
     // Entsorgung heute Status
     const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=id`).catch(()=>[]);
     disposalDone=(disposalToday||[]).length>0;
-    // Übergabe-Notiz vom vorigen GESCHÄFTSTag laden (am Montag = Freitag, nicht der leere Sonntag)
-    const ydStr=prevBusinessDayStr();
+    // Übergabe-Notiz von gestern laden
+    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+    const ydStr=yesterday.toISOString().split('T')[0];
     const uebergabeGestern=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${ydStr}&select=notiz`).catch(()=>[]);
     const uebergabeDismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
     uebergabeNotiz=(uebergabeDismissed[`${currentStore.id}_${ydStr}`])?null:(uebergabeGestern?.[0]?.notiz||null);
@@ -2911,10 +2916,8 @@ function renderOrder(){
 async function loadYesterdayOrderBox(){
   const wrap=document.getElementById('yesterday-order-box');
   if(!wrap) return;
-  // Voriger GESCHÄFTSTag (am Montag = Freitag, nicht der leere Sonntag) — dort wurde die Bestellung
-  // eingetragen, die Michi heute tatsächlich mitbringt.
-  const yStr=prevBusinessDayStr();
-  const y=new Date(yStr+'T00:00:00');
+  const y=new Date(); y.setDate(y.getDate()-1);
+  const yStr=y.toISOString().split('T')[0];
   const yLabel=y.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   const tab=ORDER_TABS[activeOrderTab];
   const rows=await api(`orders?store_id=eq.${currentStore.id}&order_date=eq.${yStr}&select=article_id,quantity,eingepackt`).catch(()=>[]);
@@ -3038,24 +3041,6 @@ function formatQty(n){
   // kein bekannter Bruch -> normale Zahl, Punkt durch Komma falls Nachkommastellen
   return num % 1 === 0 ? `${num}` : num.toString().replace('.',',');
 }
-// Nächster Geschäftstag ab einem Basisdatum (überspringt Sa+So). Ohne Argument: ab heute.
-// Wird für alle "morgen"-Bezüge in der Produktion genutzt, damit z.B. Freitags korrekt Montag
-// geprüft wird (am Wochenende ist kein Betrieb, es gibt keine Forecast-Einträge für Sa/So).
-function nextBusinessDayStr(baseDate){
-  const d = baseDate ? new Date(baseDate) : new Date();
-  d.setDate(d.getDate()+1);
-  while([0,6].includes(d.getDay())){ d.setDate(d.getDate()+1); }
-  return d.toISOString().split('T')[0];
-}
-// Voriger Geschäftstag vor einem Basisdatum (überspringt Sa+So rückwärts). Ohne Argument: vor heute.
-// Wichtig für den Transporter: er packt montags, aber die Bestellungen dafür wurden am FREITAG
-// eingetragen (nicht Sonntag) — der naive "-1 Tag" würde aufs leere Wochenende zeigen.
-function prevBusinessDayStr(baseDate){
-  const d = baseDate ? new Date(baseDate) : new Date();
-  d.setDate(d.getDate()-1);
-  while([0,6].includes(d.getDay())){ d.setDate(d.getDate()-1); }
-  return d.toISOString().split('T')[0];
-}
 function getWeekdayDates(weekOffsetParam=0){
   // Liefert {1:'YYYY-MM-DD', ..., 5:'YYYY-MM-DD'} für Mo-Fr — Standard ist die aktuelle Kalenderwoche,
   // weekOffsetParam verschiebt in Wochenschritten (z.B. +1 = nächste Woche, -1 = letzte Woche).
@@ -3125,13 +3110,18 @@ async function renderStoreSamosaHtml(weekDates){
   return html;
 }
 
-// Wiederverwendbare Beilagen-Tabelle (Saucen/Limetten/Dressings) — nimmt weekDates als Parameter,
-// damit sie sowohl im eigenen Küche-Tab als auch direkt unter der Forecast-Tabelle eingebunden
-// werden kann (dieselbe Woche, dieselbe Navigation — beide hängen oft zusammen und werden an
-// denselben Tagen ausgefüllt).
-async function renderStoreBeilagenWeekTable(weekDates, headingColor){
-  const color=headingColor||'#3B6D11';
-  const todayWeekday=new Date().getDay();
+async function renderKuecheOrderTab(el, tabHtml){
+  const tab=ORDER_TABS.kueche;
+  let html=tabHtml;
+  const todayWeekday=new Date().getDay(); // 0=So,1=Mo...6=Sa
+  const weekDates=getWeekdayDates();
+
+  html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
+    <span style="font-size:18px;">${tab.icon}</span>
+    <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
+    <div style="font-size:10px;color:var(--muted);">Fixe Wochenmenge laut Plan — jeder Tag bei Bedarf anpassbar</div></div>
+  </div>`;
+
   const baseline=await api(`kitchen_supply_baseline?store_id=eq.${currentStore.id}&select=weekday,article_name,unit,base_qty&order=weekday`).catch(()=>[]);
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekVals=await api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=supply_date,article_name,qty,is_adjusted`).catch(()=>[]);
@@ -3140,91 +3130,60 @@ async function renderStoreBeilagenWeekTable(weekDates, headingColor){
 
   const daysWithItems=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
   const today=new Date().toISOString().split('T')[0];
-  const isCurrentWeek=(weekDates[1]<=today && today<=weekDates[5]);
-  const todayRest=isCurrentWeek?await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]):[];
+  const todayRest=await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]);
+  const restRec=(todayRest||[])[0]||{};
   // Wochensalat-Meldung ist eine tägliche Aufgabe unabhängig von den sonstigen Beilagen — die
   // heutige Spalte muss also immer existieren, auch wenn an einem Tag sonst nichts geliefert wird.
-  const displayDays=[...new Set([...daysWithItems, ...((isCurrentWeek&&todayWeekday>=1&&todayWeekday<=5)?[todayWeekday]:[])])].sort((a,b)=>a-b);
+  const displayDays=[...new Set([...daysWithItems, ...((todayWeekday>=1&&todayWeekday<=5)?[todayWeekday]:[])])].sort((a,b)=>a-b);
 
-  let html=`<div class="section-lbl" style="color:${color};margin-top:16px;">🍳 Saucen, Limetten &amp; Dressings</div>`;
   if(!displayDays.length){
     html+=`<div class="card" style="text-align:center;padding:24px 12px;color:var(--muted);font-size:13px;">Für diese Filiale ist keine Küchen-Lieferung hinterlegt.</div>`;
-    return html;
+  } else {
+    // Kompakte Wochentabelle: 1 Zeile pro Artikel, 1 Spalte pro Liefertag — jede Zelle einzeln
+    // anpassbar (z.B. 0 eintragen, wenn vom Vortag noch genug übrig ist). Alle Tage auf einen
+    // Blick statt einzeln durchklicken zu müssen.
+    const articleNames=[...new Set(baseline.map(b=>b.article_name))];
+    let matrixHtml=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Artikel</th>
+      ${displayDays.map(wd=>{
+        const dateStr=weekDates[wd];
+        const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        const isToday=wd===todayWeekday;
+        return `<th style="${isToday?`color:${tab.color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
+      }).join('')}
+    </tr></thead><tbody>`;
+
+    articleNames.forEach(name=>{
+      const unit=baseline.find(b=>b.article_name===name)?.unit||'';
+      const color=ARTICLE_COLORS[name]||'#1a1a18';
+      const cells=displayDays.map(wd=>{
+        const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
+        const dateStr=weekDates[wd];
+        const rec=(valMap[dateStr]||{})[name];
+        const val=rec ? rec.qty : (b ? b.base_qty : 0);
+        const adjusted=rec?.is_adjusted;
+        const isPlanned=!!b; // dezenter dargestellt, wenn's laut Plan eigentlich kein Liefertag ist
+        return `<td style="padding:6px 3px;">
+          <input type="number" step="0.25" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
+            onchange="updateKuecheQty(this)" inputmode="decimal"
+            style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':(isPlanned?'#fff':'#FAFAFA')};color:${isPlanned||val>0?'inherit':'var(--muted)'};">
+        </td>`;
+      }).join('');
+      matrixHtml+=`<tr>
+        <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+            <div>${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></div>
+          </div>
+        </td>
+        ${cells}
+      </tr>`;
+    });
+
+    matrixHtml+='</tbody></table></div></div>';
+    html+=matrixHtml;
+    html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
   }
-  // Kompakte Wochentabelle: 1 Zeile pro Artikel, 1 Spalte pro Liefertag — jede Zelle einzeln
-  // anpassbar (z.B. 0 eintragen, wenn vom Vortag noch genug übrig ist). Alle Tage auf einen
-  // Blick statt einzeln durchklicken zu müssen.
-  const articleNames=[...new Set(baseline.map(b=>b.article_name))];
-  let matrixHtml=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
-    <th style="text-align:left;">Artikel</th>
-    ${displayDays.map(wd=>{
-      const dateStr=weekDates[wd];
-      const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-      const isToday=isCurrentWeek&&wd===todayWeekday;
-      return `<th style="${isToday?`color:${color};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
-    }).join('')}
-  </tr></thead><tbody>`;
-
-  articleNames.forEach(name=>{
-    const unit=baseline.find(b=>b.article_name===name)?.unit||'';
-    const acolor=ARTICLE_COLORS[name]||'#1a1a18';
-    const cells=displayDays.map(wd=>{
-      const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
-      const dateStr=weekDates[wd];
-      const rec=(valMap[dateStr]||{})[name];
-      const val=rec ? rec.qty : (b ? b.base_qty : 0);
-      const adjusted=rec?.is_adjusted;
-      const isPlanned=!!b; // dezenter dargestellt, wenn's laut Plan eigentlich kein Liefertag ist
-      return `<td style="padding:6px 3px;">
-        <input type="number" step="0.25" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
-          onchange="updateKuecheQty(this)" inputmode="decimal"
-          style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':(isPlanned?'#fff':'#FAFAFA')};color:${isPlanned||val>0?'inherit':'var(--muted)'};">
-      </td>`;
-    }).join('');
-    matrixHtml+=`<tr>
-      <td data-no-translate style="font-size:13px;font-weight:600;color:${acolor};white-space:nowrap;">
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
-          <div>${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></div>
-        </div>
-      </td>
-      ${cells}
-    </tr>`;
-  });
-
-  matrixHtml+='</tbody></table></div></div>';
-  html+=matrixHtml;
-  html+=`<div style="font-size:11px;color:var(--muted);padding:6px 2px 4px;">Werte sind die Grundmengen laut Plan. Jede Zelle einzeln anpassbar (z.B. 0, wenn vom Vortag noch genug da ist) — orange = angepasst, Küche sieht es sofort.</div>`;
-  return html;
-}
-
-let kuecheWeekOffset=0; // eigene Wochen-Navigation für den Beilagen-Tab: 0=aktuelle Woche, +1=nächste, -1=letzte
-function changeKuecheWeek(d){ kuecheWeekOffset+=d; renderOrder(); }
-window.changeKuecheWeek=changeKuecheWeek;
-
-async function renderKuecheOrderTab(el, tabHtml){
-  const tab=ORDER_TABS.kueche;
-  let html=tabHtml;
-  const weekDates=getWeekdayDates(kuecheWeekOffset);
-  const kwNum=getIsoWeekNumber(weekDates[1]);
-  const kwLabel=`${new Date(weekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(weekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}`;
-
-  html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
-    <span style="font-size:18px;">${tab.icon}</span>
-    <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
-    <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen</div></div>
-  </div>`;
-
-  html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-    <button onclick="changeKuecheWeek(-1)" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;">← Vorherige</button>
-    <div style="text-align:center;">
-      <div style="font-size:13px;font-weight:600;">KW ${kwNum}${kuecheWeekOffset===0?' (diese Woche)':''}</div>
-      <div style="font-size:10.5px;color:var(--muted);">${kwLabel}</div>
-    </div>
-    <button onclick="changeKuecheWeek(1)" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;">Nächste →</button>
-  </div>`;
-
-  html+=await renderStoreBeilagenWeekTable(weekDates, tab.color);
 
   // Samosas — eigene, kleine Wochentabelle nur für diese Filiale (Mo–Do), damit die Mengen
   // direkt hier gepflegt werden können, statt separat per WhatsApp durchgegeben zu werden.
@@ -3991,10 +3950,6 @@ async function renderForecastOrderTab(el, tabHtml){
   if(!isHistoric){
     html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
   }
-
-  // Saucen, Limetten & Dressings direkt hier mit anzeigen — hängt oft mit dem Forecast zusammen
-  // und wird an denselben Tagen ausgefüllt; teilt sich dieselbe Wochen-Navigation wie oben.
-  html+=await renderStoreBeilagenWeekTable(weekDates, '#3B6D11');
 
   el.innerHTML=html;
   translateEl(el);
@@ -4864,13 +4819,14 @@ async function loadOrgDashboard(){
   const wrap=document.getElementById('org-dashboard-widget');
   if(!wrap) return;
   const today=new Date().toISOString().split('T')[0];
-  const tomorrowStr=nextBusinessDayStr(); // nächster Geschäftstag (Fr→Mo)
+  const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+  const tomorrowStr=tomorrow.toISOString().split('T')[0];
   try{
     const [stores, ordersToday, kcPending, forecastTomorrow, disposalToday, submissionsAllToday] = await Promise.all([
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
       api(`kc_submissions?select=store_id`).catch(()=>[]),
-      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=in.(store,manual)&select=store_id`).catch(()=>[]),
+      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=eq.manual&select=store_id`).catch(()=>[]),
       api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[]),
       api(`order_submissions?order_date=eq.${today}&select=store_id,tab`).catch(()=>[])
     ]);
@@ -4995,18 +4951,11 @@ async function editOrgRoleName(ev, key, currentName){
 window.editOrgRoleName=editOrgRoleName;
 
 let orgForecastWeekOffset = 0; // 0 = diese Woche, 1 = nächste Woche
-let orgFcActiveTab = 'mengen'; // 'mengen' | 'entsorgung'
 
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
-  const tabBar=`<div style="display:flex;gap:6px;margin-bottom:12px;">
-    <button onclick="orgFcActiveTab='entsorgung';renderOrgForecast()" style="flex:1;padding:10px 6px;border-radius:10px;border:none;background:${orgFcActiveTab==='entsorgung'?'#2B3A67':'#EEF1F8'};color:${orgFcActiveTab==='entsorgung'?'#fff':'#2B3A67'};font-family:'Boldonse',sans-serif;font-size:11px;cursor:pointer;">🗑 Entsorgung</button>
-    <button onclick="orgFcActiveTab='mengen';renderOrgForecast()" style="flex:1;padding:10px 6px;border-radius:10px;border:none;background:${orgFcActiveTab==='mengen'?'#2B3A67':'#EEF1F8'};color:${orgFcActiveTab==='mengen'?'#fff':'#2B3A67'};font-family:'Boldonse',sans-serif;font-size:11px;cursor:pointer;">📊 Mengen anpassen</button>
-  </div>`;
-  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+tabBar+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
-
-  if(orgFcActiveTab==='entsorgung'){ renderOrgDisposal(); return; }
 
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
@@ -5017,17 +4966,12 @@ async function renderOrgForecast(){
   const weekLabel=new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})
     +' – '+new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
-  // Woche-Switcher — kompakt: ← Vorherige / KW (tippen zum Zurücksetzen) / Nächste →
-  const curKw=getIsoWeekNumber(fromDate);
-  const weekSwitcher=`<div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;">
-    <button onclick="orgForecastWeekOffset--;renderOrgForecast()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">← Vorherige</button>
-    <div style="text-align:center;cursor:pointer;" onclick="orgForecastWeekOffset=0;renderOrgForecast()" title="Klick: zurück zur aktuellen Woche">
-      <div style="font-size:13px;font-weight:600;">KW ${curKw} · ${weekLabel}</div>
-      ${orgForecastWeekOffset!==0?`<div style="font-size:9px;color:var(--muted);">tippen zum Zurücksetzen</div>`:`<div style="font-size:9px;color:var(--muted);">aktuelle Woche</div>`}
-    </div>
-    <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--sub);cursor:pointer;">Nächste →</button>
+  // Woche-Switcher oben
+  const weekSwitcher=`<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+    <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===0?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===0?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===0?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Diese Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(0)[1].split('-').reverse().slice(0,2).join('.')}.–${getWeekdayDates(0)[5].split('-').reverse().slice(0,2).join('.')}.</span></button>
+    <button onclick="orgForecastWeekOffset=1;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===1?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===1?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===1?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Nächste Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(1)[1].split('-').reverse().slice(0,2).join('.')}.–${getWeekdayDates(1)[5].split('-').reverse().slice(0,2).join('.')}.</span></button>
   </div>
-  <div style="font-size:9.5px;color:var(--muted);text-align:center;margin-bottom:12px;">Symbol neben Menge = letzte Woche: 🔥 zu wenig · 📦 zu viel · ✓ passte</div>`;
+  <div style="font-size:11px;color:var(--muted);margin:0 0 12px;text-align:center;">${weekLabel}</div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
   const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
@@ -5035,30 +4979,14 @@ async function renderOrgForecast(){
 
   // Lade alles parallel: aktueller Forecast, Vorwoche Forecast, Entsorgung Vorwoche,
   // Wetter Vorwoche (für Vergleich), Sales History für alle Stores
-  // Fallback-Fenster: falls direkte Vorwoche für Store+Kategorie keine Daten hat, weiter zurückschauen
-  // (bis zu 3 weitere Wochen) statt sofort aufzugeben — verhindert "keine Daten"-Fehlmeldung wenn
-  // irgendwo in der Historie schon mal etwas Vergleichbares eingetragen wurde.
-  const olderFromDate=dateMinusDays(prevFromDate,21);
-  const [allForecasts, calendarEvents, refWeather, prevForecasts, prevDisposals, fcSettings, olderForecasts]=await Promise.all([
+  const [allForecasts, calendarEvents, refWeather, prevForecasts, prevDisposals, fcSettings]=await Promise.all([
     api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
     getCalendarEvents().catch(()=>[]),
     fetchWeatherForStore('lb', fromDate, toDate).catch(()=>({})),
     api(`forecast_qty?forecast_date=gte.${prevFromDate}&forecast_date=lte.${prevToDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
     api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${prevToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time,slot`).catch(()=>[]),
-    api('forecast_settings?select=*').catch(()=>[]),
-    api(`forecast_qty?forecast_date=gte.${olderFromDate}&forecast_date=lt.${prevFromDate}&select=store_id,forecast_date,dish_name,qty,groesse`).catch(()=>[])
+    api('forecast_settings?select=*').catch(()=>[])
   ]);
-
-  // olderFcMap[store][kategorie][groesse] = {qty, date} — jeweils der NEUESTE Treffer aus den älteren
-  // Wochen (Fallback-Basis, wenn die direkte Vorwoche für diese Zelle leer ist)
-  const olderFcMap={};
-  (olderForecasts||[]).slice().sort((a,b)=>a.forecast_date<b.forecast_date?1:-1).forEach(f=>{
-    const cat=mapDishNameToCategory(f.dish_name);
-    const g=f.groesse||'gross';
-    if(!olderFcMap[f.store_id])olderFcMap[f.store_id]={};
-    if(!olderFcMap[f.store_id][cat])olderFcMap[f.store_id][cat]={};
-    if(!olderFcMap[f.store_id][cat][g])olderFcMap[f.store_id][cat][g]={qty:f.qty,date:f.forecast_date}; // erster Treffer = neuester (absteigend sortiert)
-  });
 
   // Settings für Wetter/Ferien-Zuschläge
   const settingsRec=(fcSettings||[])[0]||{weather_sunny_pct:-10,weather_rain_pct:10,feiertag_pct:-20,ferien_pct:-5};
@@ -5083,7 +5011,7 @@ async function renderOrgForecast(){
     prevFcMap[f.forecast_date][f.store_id][cat][f.groesse||'gross']=f.qty;
   });
 
-  // prevDispMap[store][category] = {leftover, soldOutEarly}  — Wochensumme (nur noch als Notfall-Fallback)
+  // prevDispMap[store][category] = {leftover, soldOutEarly}
   const prevDispMap={};
   (prevDisposals||[]).forEach(d=>{
     if(!prevDispMap[d.store_id])prevDispMap[d.store_id]={};
@@ -5092,20 +5020,6 @@ async function renderOrgForecast(){
     prev.leftover+=(d.leftover_qty||0);
     if(d.sold_out_time) prev.soldOutEarly=true;
     prevDispMap[d.store_id][cat]=prev;
-  });
-
-  // prevDispByStoreDate[store][date][category] = {leftover, soldOutEarly}
-  // Store- UND tagesgenau — das ist die korrekte Basis für die Vorschlags-Anpassung, damit nicht
-  // die Restmenge/ausverkauft-Info eines ganz anderen Tages/Gerichts derselben Kategorie einfließt.
-  const prevDispByStoreDate={};
-  (prevDisposals||[]).forEach(d=>{
-    const cat=mapDishNameToCategory(d.dish_name, d.slot);
-    if(!prevDispByStoreDate[d.store_id])prevDispByStoreDate[d.store_id]={};
-    if(!prevDispByStoreDate[d.store_id][d.disposal_date])prevDispByStoreDate[d.store_id][d.disposal_date]={};
-    const ex=prevDispByStoreDate[d.store_id][d.disposal_date][cat]||{leftover:0,soldOutEarly:false};
-    ex.leftover+=(d.leftover_qty||0);
-    if(d.sold_out_time) ex.soldOutEarly=true;
-    prevDispByStoreDate[d.store_id][d.disposal_date][cat]=ex;
   });
 
   // prevDisposalByDate[date][category] = {leftoverPortionen, soldOutEarly}
@@ -5130,43 +5044,29 @@ async function renderOrgForecast(){
     const prevDateStr=dateMinusDays(dateStr,7);
 
     // Vorwoche Forecast — lookup via Kategorie (nicht dish_name, da Gerichte wöchentlich wechseln)
-    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[cat]?.[groesse||'gross'])??null;
+    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[cat]?.[groesse||'gross'])||null;
+    if(prevQty==null) return null; // Noch keine History → kein Vorschlag, leer lassen
 
-    let qty, reasons, usedFallback=false;
-    if(prevQty!=null){
-      qty=prevQty;
-      reasons=[`Vorwoche: ${formatQty(prevQty)} Bhlt`];
-    } else {
-      // Direkte Vorwoche leer → weiter zurückschauen (bis zu 3 weitere Wochen), bevor aufgegeben wird
-      const older=olderFcMap[storeId]?.[cat]?.[groesse||'gross'];
-      if(!older) return null; // wirklich keine History vorhanden → kein Vorschlag, leer lassen
-      qty=older.qty;
-      usedFallback=true;
-      const dLabel=new Date(older.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-      reasons=[`⚠️ keine Vorwoche-Daten — letzter bekannter Wert vom ${dLabel}: ${formatQty(older.qty)} Bhlt`];
-    }
+    let qty=prevQty;
+    const reasons=[`Vorwoche: ${formatQty(prevQty)} Bhlt`];
 
-    // Entsorgung Vorwoche — nur anwenden wenn wir wirklich die direkte Vorwoche als Basis haben
-    // (bei Fallback auf ältere Wochen passt die Entsorgungsmeldung der letzten Woche nicht zur Basis)
-    if(!usedFallback){
-      // Store- UND tagesgenau: exakt der passende Vortag-Wochentag + dieselbe Kategorie.
-      const disp=prevDispByStoreDate[storeId]?.[prevDateStr]?.[cat];
-      if(disp && (disp.soldOutEarly || disp.leftover>0)){
-        if(disp.soldOutEarly){
-          qty=Math.round((qty+0.25)*4)/4;
-          reasons.push('🔥 +0.25 ausverkauft');
-        } else if(disp.leftover>10){
-          qty=Math.max(0.25,Math.round((qty-0.5)*4)/4);
-          reasons.push(`📦 −0.5 (${disp.leftover} Port. übrig)`);
-        } else if(disp.leftover>4){
-          qty=Math.max(0.25,Math.round((qty-0.25)*4)/4);
-          reasons.push(`📦 −0.25 (${disp.leftover} Port. übrig)`);
-        } else {
-          reasons.push(`✓ wenig übrig (${disp.leftover} Port.) → 1:1`);
-        }
+    // Entsorgung Vorwoche
+    const disp=prevDispMap[storeId]?.[cat];
+    if(disp && (disp.soldOutEarly || disp.leftover>0)){
+      if(disp.soldOutEarly){
+        qty=Math.round((qty+0.25)*4)/4;
+        reasons.push('🔥 +0.25 ausverkauft');
+      } else if(disp.leftover>10){
+        qty=Math.max(0.25,Math.round((qty-0.5)*4)/4);
+        reasons.push(`📦 −0.5 (${disp.leftover} Port. übrig)`);
+      } else if(disp.leftover>4){
+        qty=Math.max(0.25,Math.round((qty-0.25)*4)/4);
+        reasons.push(`📦 −0.25 (${disp.leftover} Port. übrig)`);
       } else {
-        reasons.push('⚪ keine Entsorgung → 1:1');
+        reasons.push(`✓ wenig übrig (${disp.leftover} Port.) → 1:1`);
       }
+    } else {
+      reasons.push('⚪ keine Entsorgung → 1:1');
     }
 
     // Wetter (optional, nur kleine Anpassung)
@@ -5177,20 +5077,7 @@ async function renderOrgForecast(){
       if(wReason) reasons.push(wReason);
     }
 
-    return {qty, reason:reasons.join(' · '), fallback:usedFallback};
-  }
-  // Ampel-Badge für den Gegencheck: was ist letzte Woche am gleichen Wochentag mit diesem
-  // Gericht/Kategorie passiert? 🔥 ausverkauft (evtl. zu wenig) · 📦 viel übrig (zu viel) · ✓ passte.
-  // Rein informativ neben der Menge, damit man den Vorschlag nicht blind übernehmen muss.
-  function orgAmpelBadge(storeId, dish, dateStr){
-    const cat=mapDishNameToCategory(dish);
-    const prevDateStr=dateMinusDays(dateStr,7);
-    const disp=prevDispByStoreDate[storeId]?.[prevDateStr]?.[cat];
-    if(!disp) return ''; // keine Vorwochen-Entsorgung erfasst → nichts anzeigen
-    if(disp.soldOutEarly) return '<span title="Letzte Woche ausverkauft — evtl. zu wenig" style="font-size:10px;">🔥</span>';
-    if(disp.leftover>10)  return `<span title="Letzte Woche viel übrig (${formatQty(disp.leftover)} Port.) — war zu viel" style="font-size:10px;">📦</span>`;
-    if(disp.leftover>4)   return `<span title="Letzte Woche etwas übrig (${formatQty(disp.leftover)} Port.)" style="font-size:10px;">📦</span>`;
-    return '<span title="Letzte Woche gut getroffen" style="font-size:10px;opacity:0.7;">✓</span>';
+    return {qty, reason:reasons.join(' · ')};
   }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
 
@@ -5198,49 +5085,27 @@ async function renderOrgForecast(){
   // nutzt dieselbe Zuordnung wie die blauen Vorschläge (computeOrgSuggestion, über Kategorie statt
   // Gerichtsname, da sich Gerichte wöchentlich ändern). Füllt nur leere Felder, überschreibt nichts.
   async function orgFcCopyFromCurrentWeek(){
-    if(orgForecastWeekOffset<1){ showToast('Nur bei zukünftigen Wochen verfügbar'); return; }
+    if(orgForecastWeekOffset!==1){ showToast('Nur bei "Nächste Woche" verfügbar'); return; }
     const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
     let filled=0;
-    const stillEmpty=[]; // Felder ohne jede History — für konkrete Rückmeldung statt pauschalem "nichts gefunden"
     inputs.forEach(inp=>{
-      // Priorität 1: Feld hat bereits einen echten, gespeicherten Wert (Filiale/Operations) → NIE anfassen.
-      // Wichtig: hier NICHT inp.value prüfen — das Feld zeigt evtl. schon einen unbestätigten
-      // Anzeige-Vorschlag (blau) als value, ist aber noch nicht in der DB. Das war der eigentliche Bug:
-      // dadurch dachte die Funktion, fast alles sei "schon ausgefüllt" und hat nichts mehr übertragen.
-      if(inp.dataset.hasRecord==='1') return;
+      if(inp.value!=='') return; // nicht überschreiben
       const store=inp.dataset.store, dish=inp.dataset.dish, dateStr=inp.dataset.date, groesse=inp.dataset.groesse||'gross';
       if(!store||!dish||!dateStr) return;
       const sugg=computeOrgSuggestion(store, dish, dateStr, groesse);
-      if(!sugg || sugg.qty==null){
-        // Lasagne Mittel/Klein sind eine ZUSATZ-Option (nicht jede Filiale braucht sie neben Groß) —
-        // fehlende Historie dafür ist normal und wird nicht als offenes Pflichtfeld gemeldet.
-        if(groesse==='mittel'||groesse==='klein') return;
-        const storeName=inp.closest('tr')?.querySelector('td:first-child')?.textContent?.trim()||store;
-        stillEmpty.push({storeName, dish, dateStr});
-        return;
-      }
+      if(!sugg || sugg.qty==null) return;
       inp.value=sugg.qty;
       inp.dataset.copied='1';
       inp.style.borderColor='#0D9488';
       inp.style.background='#F0FDFA';
-      inp.title=sugg.reason;
       const lbl=inp.nextElementSibling;
       if(lbl && lbl.textContent && lbl.textContent.includes('Vorschlag')) lbl.remove();
       filled++;
     });
-
     if(filled>0){
       showToast(`✓ ${filled} Felder von letzter Woche übertragen — bitte prüfen und speichern`);
-    }
-    if(stillEmpty.length>0){
-      const list=stillEmpty.slice(0,3).map(x=>{
-        const dLabel=new Date(x.dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
-        return `${x.storeName} – ${x.dish} (${dLabel})`;
-      }).join('; ');
-      const more=stillEmpty.length>3?` … (${stillEmpty.length} Felder insgesamt)`:'';
-      showToast(`⚠ Keine Historie für: ${list}${more} — bitte manuell eintragen.`, true);
-    } else if(filled===0){
-      showToast('Alle Felder sind bereits befüllt.');
+    } else {
+      showToast('Keine passenden Mengen aus letzter Woche gefunden.');
     }
   }
   window.orgFcCopyFromCurrentWeek=orgFcCopyFromCurrentWeek;
@@ -5276,9 +5141,7 @@ async function renderOrgForecast(){
           const dateRecs=Object.values(((fMap[dateStr]||{})[s.id]||{})[dish]||{});
           const LBLS_ORG={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
           const storeLocked=isLasagneLocked(dateStr);
-          const lasAmpel=orgAmpelBadge(s.id, dish, dateStr);
           let lasHtml='<td style="min-width:110px;padding:4px 3px;">';
-          if(lasAmpel) lasHtml+=`<div style="text-align:right;margin-bottom:2px;">${lasAmpel}</div>`;
           lasHtml+='<div style="display:grid;grid-template-columns:52px 40px;gap:3px 4px;align-items:center;">';
           sizes.forEach(sz=>{
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
@@ -5295,7 +5158,6 @@ async function renderOrgForecast(){
               lasHtml+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
-                  data-has-record="${rec?'1':'0'}" data-source="${rec?.source||''}" data-orig-qty="${rec?.qty??''}"
                   onchange="updateForecastQtyOrgGroesse(this)"
                   title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
                   style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">`;
@@ -5314,17 +5176,12 @@ async function renderOrgForecast(){
           const displayVal=rec?.qty??sugg?.qty??'';
           const isSugg=!rec && sugg!=null;
           const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
-          const ampel=orgAmpelBadge(s.id, dish, dateStr);
           html+=`<td style="vertical-align:top;padding:3px;">
-            <div style="display:flex;align-items:center;justify-content:center;gap:3px;">
-              <input type="number" step="0.25" value="${displayVal}" placeholder="–"
-                data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
-                data-has-record="${rec?'1':'0'}" data-source="${rec?.source||''}" data-orig-qty="${rec?.qty??''}"
-                onchange="updateForecastQtyOrg(this)"
-                title="${escAttr(title)}"
-                style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
-              ${ampel}
-            </div>
+            <input type="number" step="0.25" value="${displayVal}" placeholder="–"
+              data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
+              onchange="updateForecastQtyOrg(this)"
+              title="${escAttr(title)}"
+              style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
             ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
           </td>`;
         }
@@ -5361,25 +5218,12 @@ async function updateForecastQtyOrg(inputEl){
   const dish=inputEl.dataset.dish;
   const dateStr=inputEl.dataset.date;
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
-  // Wenn das Feld einen unveränderten Filial-Wert enthält (Operations hat nur reingeklickt, nichts
-  // geändert), NICHT auf 'org' umschreiben — Filial-Eingabe behält Vorrang.
-  const srcOrig=inputEl.dataset.source||'';
-  const origQty=inputEl.dataset.origQty===''?null:parseFloat(inputEl.dataset.origQty);
-  if((srcOrig==='store'||srcOrig==='manual') && origQty!=null && qty===origQty){
-    inputEl.dataset.hasRecord='1';
-    return; // Filial-Wert unangetastet lassen
-  }
   try{
-    // Nur groesse=gross löschen — andere Größen (Lasagne Mittel/Klein) bleiben erhalten
-    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.gross`,{method:'DELETE'}).catch(()=>{});
-    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
+    await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse:'gross',source:'org'}])});
     }
     inputEl.dataset.copied='0';
-    inputEl.dataset.source='org';
-    inputEl.dataset.origQty=qty!=null?String(qty):'';
-    inputEl.dataset.hasRecord=qty!=null?'1':'0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
@@ -5387,143 +5231,6 @@ async function updateForecastQtyOrg(inputEl){
 }
 window.updateForecastQtyOrg=updateForecastQtyOrg;
 window.renderOrgForecast=renderOrgForecast;
-
-// ===== Entsorgungs-Tab (read-only Nachschau der Vorwochen) =====
-let orgDisposalWeekOffset = 0; // 0 = aktuelle Woche (Standard), -1 = letzte, ...
-let orgDisposalShowDetail = false; // Detailanzeige (Menge & Uhrzeit) optional einblendbar
-
-async function renderOrgDisposal(){
-  const content=document.getElementById('orgfc-content');
-  if(!content) return;
-  content.innerHTML='<div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div>';
-
-  const weekDates=getWeekdayDates(orgDisposalWeekOffset);
-  const fromDate=weekDates[1], toDate=weekDates[5];
-  const kw=getIsoWeekNumber(fromDate);
-
-  const [stores, disposals]=await Promise.all([
-    api('stores?select=id,name&order=id').catch(()=>[]),
-    api(`disposal?disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=store_id,disposal_date,slot,dish_name,leftover_qty,sold_out_time,note&order=disposal_date`).catch(()=>[])
-  ]);
-  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
-
-  // Woche-Switcher: aktuelle Woche bis 6 Wochen zurück
-  let html='<div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px;">';
-  for(let off=0; off>=-6; off--){
-    const wd=getWeekdayDates(off);
-    const kwn=getIsoWeekNumber(wd[1]);
-    const active=orgDisposalWeekOffset===off;
-    const lbl=wd[1].split('-').reverse().slice(0,2).join('.')+'.–'+wd[5].split('-').reverse().slice(0,2).join('.')+'.';
-    const tag=(off===0?'diese Woche':(off===-1?'letzte Woche':''));
-    html+='<button onclick="orgDisposalWeekOffset='+off+';renderOrgDisposal()" style="flex:0 0 auto;padding:8px 10px;border-radius:9px;border:'+(active?'2px solid #2B3A67':'1.5px solid var(--border)')+';background:'+(active?'#2B3A67':'var(--card)')+';color:'+(active?'#fff':'var(--sub)')+';font-size:11px;line-height:1.3;cursor:pointer;white-space:nowrap;">KW '+kwn+(tag?' <span style="opacity:0.7;">('+tag+')</span>':'')+'<br><span style="font-size:9px;opacity:0.8;">'+lbl+'</span></button>';
-  }
-  html+='</div>';
-
-  if(!disposals || !disposals.length){
-    html+='<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Keine Entsorgungsdaten für KW '+kw+' vorhanden.</div>';
-    content.innerHTML=html;
-    translateEl(content);
-    return;
-  }
-
-  // dMap[date][store_id][slot] = {dish, leftover, soldOut, note}
-  // slotDish[date][slot] = Gerichtsname (Spaltenüberschrift, aus tatsächlichen Entsorgungsdaten)
-  const dMap={};
-  const slotDish={};
-  disposals.forEach(function(d){
-    if(!dMap[d.disposal_date]) dMap[d.disposal_date]={};
-    if(!dMap[d.disposal_date][d.store_id]) dMap[d.disposal_date][d.store_id]={};
-    dMap[d.disposal_date][d.store_id][d.slot]={
-      dish:d.dish_name,
-      leftover:(d.leftover_qty!=null?Number(d.leftover_qty):null),
-      soldOut:d.sold_out_time, note:d.note
-    };
-    if(!slotDish[d.disposal_date]) slotDish[d.disposal_date]={};
-    // längsten/vollständigsten Namen behalten (Filialen tragen manchmal verkürzt ein)
-    if(!slotDish[d.disposal_date][d.slot] || (d.dish_name||'').length>slotDish[d.disposal_date][d.slot].length){
-      slotDish[d.disposal_date][d.slot]=d.dish_name||d.slot;
-    }
-  });
-
-  // Ampel: ausverkauft = zu wenig / viel übrig = zu viel / wenig übrig = passt
-  function ampel(leftover, soldOut){
-    if(soldOut) return {bg:'#FEE2E2', border:'#DC2626', col:'#991B1B', icon:'🔥'}; // zu wenig
-    if(leftover==null) return {bg:'#F3F4F6', border:'#D1D5DB', col:'#9CA3AF', icon:''};
-    if(leftover>10) return {bg:'#FEF3C7', border:'#D97706', col:'#92400E', icon:'📦'}; // zu viel
-    if(leftover>4) return {bg:'#FEF9C3', border:'#CA8A04', col:'#854D0E', icon:'📦'};  // etwas zu viel
-    return {bg:'#DCFCE7', border:'#16A34A', col:'#166534', icon:'✓'};                   // passt
-  }
-  const slotOrder={salat:0, gericht1:1, gericht2:2, gericht3:3, reis:4};
-
-  // Legende
-  html+='<div class="card" style="padding:10px 12px;margin-bottom:12px;">'
-    +'<div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--sub);">Legende</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:6px;">'
-    +'<span style="font-size:10.5px;padding:3px 8px;border-radius:6px;background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;">🔥 ausverkauft = zu wenig</span>'
-    +'<span style="font-size:10.5px;padding:3px 8px;border-radius:6px;background:#DCFCE7;color:#166534;border:1px solid #16A34A;">✓ wenig übrig = genau richtig</span>'
-    +'<span style="font-size:10.5px;padding:3px 8px;border-radius:6px;background:#FEF9C3;color:#854D0E;border:1px solid #CA8A04;">📦 5–10 übrig = etwas zu viel</span>'
-    +'<span style="font-size:10.5px;padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #D97706;">📦 >10 übrig = zu viel</span>'
-    +'</div>'
-    +'<div style="margin-top:8px;display:flex;align-items:center;gap:8px;">'
-    +'<label style="font-size:11px;color:var(--sub);display:flex;align-items:center;gap:5px;cursor:pointer;">'
-    +'<input type="checkbox" id="disp-detail-toggle" '+(orgDisposalShowDetail?'checked':'')+' onchange="orgDisposalShowDetail=this.checked;renderOrgDisposal()" style="cursor:pointer;">'
-    +'Genaue Daten anzeigen (Menge & Uhrzeit)</label></div>'
-    +'</div>';
-
-  const showDetail=orgDisposalShowDetail;
-  const WD_LABEL={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
-  for(let wd=1; wd<=5; wd++){
-    const dateStr=weekDates[wd];
-    const dayData=dMap[dateStr];
-    const dateLbl=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-    html+='<div class="section-lbl" style="margin-top:14px;">'+WD_LABEL[wd]+' '+dateLbl+'</div>';
-    if(!dayData || !slotDish[dateStr]){
-      html+='<div class="card" style="padding:10px 12px;color:var(--muted);font-size:12px;">Keine Einträge.</div>';
-      continue;
-    }
-    // Spalten = vorkommende Slots des Tages, sortiert
-    const slots=Object.keys(slotDish[dateStr]).sort(function(a,b){ return (slotOrder[a]??9)-(slotOrder[b]??9); });
-
-    html+='<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;"><thead><tr>';
-    html+='<th style="text-align:left;font-size:11px;padding:6px 8px;">Filiale</th>';
-    slots.forEach(function(sl){
-      html+='<th data-no-translate style="font-size:10px;padding:6px 4px;line-height:1.2;">'+slotDish[dateStr][sl]+'</th>';
-    });
-    html+='</tr></thead><tbody>';
-
-    storeList.forEach(function(s){
-      const storeRow=dayData[s.id];
-      html+='<tr><td style="text-align:left;font-size:11.5px;padding:6px 8px;" data-no-translate>'+s.name.split(' ')[0]+'</td>';
-      slots.forEach(function(sl){
-        const r=storeRow?storeRow[sl]:null;
-        if(!r){
-          html+='<td style="text-align:center;padding:5px 3px;color:var(--muted);font-size:11px;">–</td>';
-          return;
-        }
-        const a=ampel(r.leftover, r.soldOut);
-        let cell='<div style="background:'+a.bg+';border:1.5px solid '+a.border+';border-radius:7px;padding:4px 3px;min-width:52px;">';
-        cell+='<div style="font-size:13px;font-weight:700;color:'+a.col+';">'+a.icon+' '+(r.leftover!=null?formatQty(r.leftover):'–')+'</div>';
-        if(showDetail){
-          const timeTxt=(r.soldOut?String(r.soldOut).slice(0,5)+' aus':(r.leftover!=null?'übrig':''));
-          cell+='<div style="font-size:8.5px;color:'+a.col+';margin-top:1px;">'+timeTxt+'</div>';
-          if(r.note){ cell+='<div style="font-size:8px;color:var(--muted);margin-top:1px;font-style:italic;" data-no-translate title="'+escAttr(r.note)+'">📝</div>'; }
-        }
-        cell+='</div>';
-        const titleAttr=escAttr((r.dish||'')+' — '+(r.leftover!=null?formatQty(r.leftover)+' Port. übrig':'keine Menge')+(r.soldOut?' · ausverkauft '+String(r.soldOut).slice(0,5):'')+(r.note?' · '+r.note:''));
-        html+='<td style="text-align:center;padding:4px 3px;" title="'+titleAttr+'">'+cell+'</td>';
-      });
-      html+='</tr>';
-    });
-    html+='</tbody></table></div></div>';
-  }
-
-  html+='<div style="font-size:10px;color:var(--muted);padding:10px 2px 16px;text-align:center;">Zahl = Restportionen der Vorwoche. Zelle antippen/hovern für Gerichtsname & Details.</div>';
-
-  content.innerHTML=html;
-  translateEl(content);
-}
-window.renderOrgDisposal=renderOrgDisposal;
-window.orgDisposalWeekOffset=orgDisposalWeekOffset;
 
 // Auto-Fill: holt die zuletzt bekannten Mengen aus forecast_qty und befüllt alle leeren Inputs
 async function orgFcAutoFill(){
@@ -5587,7 +5294,6 @@ window.orgFcAutoFill=orgFcAutoFill;
 async function orgFcSaveAll(){
   const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
   let saved=0; let errors=0;
-  const emptyFields=[]; // Felder, die leer geblieben sind — für eine konkrete Rückmeldung statt stillem Überspringen
   const btn=document.getElementById('orgfc-save-btn');
   if(btn){ btn.disabled=true; btn.textContent='Speichert…'; }
 
@@ -5597,33 +5303,13 @@ async function orgFcSaveAll(){
     const dateStr=inp.dataset.date;
     const groesse=inp.dataset.groesse||'gross';
     const qty=inp.value===''?null:parseFloat(inp.value);
-    if(!store||!dish||!dateStr) continue;
-    if(qty==null){
-      // Lasagne Mittel/Klein sind eine ZUSATZ-Option, kein Pflichtfeld — leer bleiben ist normal
-      if(groesse==='mittel'||groesse==='klein') continue;
-      const storeName=inp.closest('tr')?.querySelector('td:first-child')?.textContent?.trim()||store;
-      emptyFields.push({storeName, dish, dateStr});
-      continue;
-    }
-    // SCHUTZ: Werte, die von der Filiale kommen (source 'store' oder 'manual'), NIE automatisch
-    // überschreiben — außer Operations hat die Zahl in genau diesem Feld bewusst geändert.
-    // "Bewusst geändert" = aktueller Wert weicht vom ursprünglich geladenen Store-Wert ab.
-    const srcOrig=inp.dataset.source||'';
-    const origQty=inp.dataset.origQty===''?null:parseFloat(inp.dataset.origQty);
-    const isStoreValue=(srcOrig==='store'||srcOrig==='manual');
-    const orgTouchedIt=(origQty==null)||(qty!==origQty);
-    if(isStoreValue && !orgTouchedIt){
-      // Filial-Wert unverändert → in Ruhe lassen, gilt trotzdem als "gespeichert"
-      inp.dataset.hasRecord='1';
-      continue;
-    }
+    if(!store||!dish||!dateStr||qty==null) continue;
     const src=inp.dataset.copied==='1'?'copied':'org';
     try{
       // Delete both with and without groesse to handle legacy NULL records
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
       await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
-      inp.dataset.hasRecord='1';
       inp.style.borderColor='#22C55E';
       inp.style.background='#F0FDF4';
       saved++;
@@ -5633,21 +5319,11 @@ async function orgFcSaveAll(){
   if(btn){ btn.disabled=false; btn.textContent='💾 Alle speichern'; }
   if(errors){
     showToast(`${saved} gespeichert, ${errors} Fehler`);
-  } else if(emptyFields.length>0){
-    const list=emptyFields.slice(0,3).map(x=>{
-      const dLabel=new Date(x.dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
-      return `${x.storeName} – ${x.dish} (${dLabel})`;
-    }).join('; ');
-    const more=emptyFields.length>3?` … (${emptyFields.length} Felder insgesamt)`:'';
-    showToast(`✓ ${saved} gespeichert. ⚠ Noch offen — bitte manuell eintragen: ${list}${more}`, true);
-    setTimeout(()=>{
-      renderOrgForecast(); // auf der aktuell gewählten Woche bleiben
-    }, 2000);
   } else {
     showToast(`✓ ${saved} Mengen gespeichert!`);
+    // Automatisch auf Nächste Woche switchen damit Vorschläge sofort sichtbar sind
     setTimeout(()=>{
-      // Von "Diese Woche" aus geht's zur Planung → auf Nächste springen; sonst gewählte Woche halten
-      if(orgForecastWeekOffset===0) orgForecastWeekOffset=1;
+      orgForecastWeekOffset=1;
       renderOrgForecast();
     }, 1200);
   }
@@ -5672,13 +5348,6 @@ async function updateForecastQtyOrgGroesse(inputEl){
 async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr){
   const groesse=inputEl.dataset.groesse||'gross';
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
-  // Unveränderten Filial-Wert nicht auf 'org' umschreiben
-  const srcOrig=inputEl.dataset.source||'';
-  const origQty=inputEl.dataset.origQty===''?null:parseFloat(inputEl.dataset.origQty);
-  if((srcOrig==='store'||srcOrig==='manual') && origQty!=null && qty===origQty){
-    inputEl.dataset.hasRecord='1';
-    return;
-  }
   try{
     // Nur diese Größe löschen — andere Größen bleiben erhalten
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
@@ -5687,9 +5356,6 @@ async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
     }
     inputEl.dataset.copied='0';
-    inputEl.dataset.source='org';
-    inputEl.dataset.origQty=(qty!=null&&qty>=0)?String(qty):'';
-    inputEl.dataset.hasRecord=(qty!=null&&qty>=0)?'1':'0';
     inputEl.style.borderColor='#2B3A67';
     inputEl.style.background='#EEF1F8';
     showToast('✔ Gespeichert');
@@ -7310,6 +6976,17 @@ async function loadTransporterNoteList(){
 }
 window.loadTransporterNoteList=loadTransporterNoteList;
 
+function showSubmitOverlay(text){
+  const ov=document.getElementById('submit-overlay');
+  const t=document.getElementById('submit-overlay-text');
+  if(t) t.textContent=text||'Wird gesendet …';
+  if(ov) ov.style.display='flex';
+}
+function hideSubmitOverlay(){
+  const ov=document.getElementById('submit-overlay');
+  if(ov) ov.style.display='none';
+}
+
 async function sendMangelMeldung(){
   const betreff=document.getElementById('mangel-betreff')?.value?.trim();
   const text=document.getElementById('mangel-text')?.value?.trim();
@@ -7326,7 +7003,20 @@ async function sendMangelMeldung(){
   }
   const now=new Date().toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   const btn=document.getElementById('mangel-submit-btn');
-  if(btn){ btn.disabled=true; btn.textContent=mangelFotoBlob?'Foto wird hochgeladen …':'Wird gemeldet …'; }
+  // Duplikat-Check: gleicher Betreff, gleiche Filiale, letzte 2 Minuten -> nachfragen statt blind senden
+  if(btn){ btn.disabled=true; }
+  showSubmitOverlay('Wird geprüft …');
+  try{
+    const twoMinAgo=new Date(Date.now()-2*60*1000).toISOString();
+    const dupes=await api(`maengel?store_id=eq.${targetStoreId}&betreff=eq.${encodeURIComponent(betreff)}&gemeldet_am=gte.${twoMinAgo}&select=id`).catch(()=>[]);
+    if(dupes?.length){
+      hideSubmitOverlay();
+      const weiter=confirm('Diese Meldung ("'+betreff+'") wurde für diese Filiale gerade erst gemeldet (innerhalb der letzten 2 Minuten). Trotzdem nochmal senden?');
+      if(!weiter){ if(btn){ btn.disabled=false; } return; }
+    }
+  }catch(e){ console.error(e); }
+  showSubmitOverlay(mangelFotoBlob?'Foto wird hochgeladen …':'Wird gemeldet …');
+  if(btn){ btn.textContent=mangelFotoBlob?'Foto wird hochgeladen …':'Wird gemeldet …'; }
   try{
     let fotoUrl=null;
     if(mangelFotoBlob){ fotoUrl=await uploadMangelFoto(mangelFotoBlob); }
@@ -7346,7 +7036,7 @@ async function sendMangelMeldung(){
     clearMangelFoto();
     renderMaengel();
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
-  finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } hideSubmitOverlay(); }
 }
 
 // ---- Detailansicht mit chronologischem Verlauf (Status-Änderungen + Rückmeldungen) ----
@@ -7486,7 +7176,7 @@ window.setMangelStatus=setMangelStatus;
 async function renderSchichtende(){
   const el=document.getElementById('v-schichtende');
   const today=new Date().toISOString().split('T')[0];
-  const tomorrow=nextBusinessDayStr(); // nächster Geschäftstag (Fr→Mo), passend zur Forecast-Eingabe
+  const tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
 
   // Alle Daten parallel laden
   const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, submissionsToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow] = await Promise.all([
@@ -7695,20 +7385,16 @@ async function submitSchichtende(){
 }
 
 // ---- PACK ----
-async function toggleOrderEingepackt(articleId, storeId, currentPacked, tdEl, qty, orderDateStr){
+async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty, orderDateStr){
   const newPacked=!currentPacked;
-  // onclick sitzt jetzt auf der ganzen <td> (größere Tap-Fläche am Handy) — die Zahl selbst
-  // steckt im inneren <span>, den wir hier gezielt fürs optimistische Update anfassen.
-  const spanEl=tdEl?.querySelector?.('span')||tdEl;
-  if(spanEl){
-    spanEl.style.fontWeight=newPacked?'400':'600';
-    spanEl.style.color=newPacked?'#3B6D11':'#1a1a18';
-    spanEl.style.background=newPacked?'#EAF3DE':'transparent';
-    spanEl.style.textDecoration=newPacked?'line-through':'none';
-    spanEl.textContent=qty+(newPacked?' ✓':'');
-  }
-  if(tdEl){
-    tdEl.setAttribute('onclick',`toggleOrderEingepackt(${articleId},'${storeId}',${newPacked},this,${qty},'${orderDateStr}')`);
+  // Optimistisches UI-Update — sofort sichtbar, kein Warten auf vollen Reload
+  if(el){
+    el.style.fontWeight=newPacked?'400':'600';
+    el.style.color=newPacked?'#3B6D11':'#1a1a18';
+    el.style.background=newPacked?'#EAF3DE':'transparent';
+    el.style.textDecoration=newPacked?'line-through':'none';
+    el.textContent=qty+(newPacked?' ✓':'');
+    el.setAttribute('onclick',`toggleOrderEingepackt(${articleId},'${storeId}',${newPacked},this,${qty},'${orderDateStr}')`);
   }
   // WICHTIG: order_date ist der Eintragstag der Filiale (gestern aus Michis Sicht), nicht der
   // heutige Kalendertag — deshalb hier NICHT selbst neu berechnen, sondern den vom Aufrufer
@@ -7797,10 +7483,8 @@ async function renderPack(){
   // dafür braucht, stehen unter GESTERN. bestellViewDate/Label zeigen weiterhin Michis heutigen
   // Packtag; bestellDateStr (die tatsächliche DB-Abfrage) ist bewusst einen Tag früher.
   const bestellViewDate=new Date(); bestellViewDate.setDate(bestellViewDate.getDate()+transporterBestellDateOffset);
-  // Bestellungen wurden am vorigen GESCHÄFTSTAG eingetragen (Fr für Mo), nicht kalendarisch -1 Tag —
-  // sonst zeigt Michi montags auf den leeren Sonntag und sieht keine Bestellungen.
-  const bestellDateStr=prevBusinessDayStr(bestellViewDate);
-  const orderEntryDate=new Date(bestellDateStr+'T00:00:00');
+  const orderEntryDate=new Date(bestellViewDate); orderEntryDate.setDate(orderEntryDate.getDate()-1);
+  const bestellDateStr=orderEntryDate.toISOString().split('T')[0];
   const isBestellToday=transporterBestellDateOffset===0;
   const bestellDateLabel=bestellViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   html+=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -7853,12 +7537,8 @@ async function renderPack(){
     items.forEach(a=>{
       const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
-      // Verfügbar-Toggle bewusst NICHT grün/Haken — das kollidiert visuell mit dem grünen
-      // "eingepackt ✓"-Zeichen der Mengen-Zellen und sorgt für Verwechslung (siehe Feedback: Chef
-      // hielt das Verfügbar-Symbol für "ganze Zeile eingepackt"). Im Normalfall (verfügbar) daher
-      // gar kein auffälliges Icon — nur "nicht lieferbar" zeigt eine klar rote, textliche Markierung.
-      html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:5px;">
-        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar — antippen für: nicht lieferbar':'Nicht lieferbar — antippen für: lieferbar'}" style="font-size:10px;padding:${verfuegbar?'0':'2px 5px'};border:none;border-radius:5px;background:${verfuegbar?'transparent':'#FEE2E2'};color:${verfuegbar?'var(--muted)':'#991B1B'};cursor:pointer;line-height:1.3;flex-shrink:0;white-space:nowrap;">${verfuegbar?'○':'🚫 n.v.'}</button>
+      html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:4px;">
+        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
         <span style="font-size:11.5px;line-height:1.2;word-break:break-word;">${a.name}</span>
       </div></td>`;
       storeList.forEach(s=>{
@@ -7866,13 +7546,10 @@ async function renderPack(){
         const v=rec?.quantity||0;
         const packed=!!rec?.eingepackt;
         if(!v){ html+=`<td style="color:var(--border);text-align:center;padding:5px 1px;">·</td>`; return; }
-        const cellStyle=`display:block;padding:8px 2px;border-radius:5px;font-size:12px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
-        // Ganze Zelle klickbar (nicht nur die Zahl) — auf dem Handy war der reine Zahlen-Bereich
-        // als Trefferfläche zu klein, ein Tippen knapp daneben landete auf der leeren Zelle ohne
-        // Funktion. min-height/touch-action sorgen zusätzlich für eine verlässliche Tap-Fläche.
+        const cellStyle=`display:inline-block;padding:1px 4px;border-radius:5px;font-size:11.5px;font-weight:${packed?'400':'600'};color:${packed?'#3B6D11':'#1a1a18'};background:${packed?'#EAF3DE':'transparent'};text-decoration:${packed?'line-through':'none'};`;
         html+=isBestellToday
-          ? `<td onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="text-align:center;padding:0;cursor:pointer;touch-action:manipulation;min-height:36px;"><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`
-          : `<td style="text-align:center;padding:5px 1px;"><span style="${cellStyle.replace('display:block','display:inline-block')}">${v}${packed?' ✓':''}</span></td>`;
+          ? `<td style="text-align:center;padding:5px 1px;"><span onclick="toggleOrderEingepackt(${a.id},'${s.id}',${packed},this,${v},'${bestellDateStr}')" style="cursor:pointer;${cellStyle}">${v}${packed?' ✓':''}</span></td>`
+          : `<td style="text-align:center;padding:5px 1px;"><span style="${cellStyle}">${v}${packed?' ✓':''}</span></td>`;
       });
       html+=`<td style="text-align:center;padding:5px 1px;font-size:11.5px;font-weight:600;color:${activeColor};background:${activeColor}10;">${total}</td></tr>`;
     });
@@ -9382,10 +9059,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
 
   // Get tomorrow's menu dishes from MENU_DATA
   const _cookWoche=getMenuWocheForDate(tomorrowStr);
-  const menuDishesRaw = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${_cookWoche}_${tomorrowWd}`])||[];
-  // Reis wird hier bewusst mit angehängt (letzte Zeile) — genau wie in der Store-Forecast-Tabelle,
-  // wo es ebenfalls kein fixer MENU_DATA-Eintrag ist, sondern per REIS_DISH_NAME dazugemischt wird.
-  const menuDishes = [...menuDishesRaw, {name: REIS_DISH_NAME}];
+  const menuDishes = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${_cookWoche}_${tomorrowWd}`])||[];
   const dishNames = menuDishes.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
   const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
   const overrideMap = {};
@@ -9457,7 +9131,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     </div>
   </div>`;
 
-  if(!menuDishesRaw.length || !['mo','di','mi','do','fr'].includes(tomorrowWd)){
+  if(!dishNames.length || !['mo','di','mi','do','fr'].includes(tomorrowWd)){
     html+=`<div style="text-align:center;padding:2rem;color:var(--muted);">Kein Menü für morgen eingetragen.</div>`;
     el.innerHTML=html; return;
   }
