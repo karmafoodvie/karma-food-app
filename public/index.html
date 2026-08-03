@@ -195,6 +195,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
     <div id="v-maengel" class="view"></div>
+    <div id="v-messen" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
     <div id="v-waehrend" class="view"></div>
@@ -960,7 +961,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.15.5';
+const APP_VERSION = '6.16.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1314,11 +1315,11 @@ function goTo(v, noPush=false){
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
     else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
-    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle') navId='nav-org-management';
+    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen') navId='nav-org-management';
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',mengen:'Mengen',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine (Ausstellungsstraße)'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1327,7 +1328,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,mengen:renderMengen,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen};
   if(renders[v]) renders[v]();
 }
 // Der normale "Bestellen"-Nav-Button soll IMMER auf die übliche Tab-Ansicht (Transporter/Shop
@@ -2252,6 +2253,18 @@ function dismissUebergabeNotiz(){
 }
 window.dismissUebergabeNotiz=dismissUebergabeNotiz;
 
+// Speichert die Zulauf-Bewertung einer Messe (Ausstellungsstraße) — ein Tap, sofort gespeichert,
+// kein Formular/Submit-Button, damit es sich spielerisch statt nach Arbeit anfühlt.
+async function rateMesse(terminId, rating){
+  try{
+    await api('messe_bewertungen',{method:'POST',body:JSON.stringify([{messe_termin_id:terminId,store_id:'1020',rating,bewertet_von:currentStore?.name||'Ausstellungsstraße'}])});
+    const _msgs={1:'Danke fürs Bewerten! ✓',2:'Danke fürs Bewerten! ✓',3:'Danke, gut zu wissen! 🎉',4:'Super, danke dir! 🎉',5:'Mega, danke für die Info! 🔥'};
+    showToast(_msgs[rating]||'Danke fürs Bewerten!');
+    renderHome();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern');}
+}
+window.rateMesse=rateMesse;
+
 async function renderHome(){
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
   const allItems=Object.values(templates).flat();
@@ -2364,8 +2377,54 @@ async function renderHome(){
     }
   }
 
+  let messeInfoHtml='';
+  let messeBewertungHtml='';
+  if(currentStore?.id==='1020'){
+    // Nächster relevanter Tag = morgen, aber Wochenende übersprungen (Freitag -> zeigt schon Montag,
+    // damit die Info rechtzeitig vor dem Wochenende sichtbar ist, nicht erst Sonntagabend).
+    const _msNext=new Date();
+    _msNext.setDate(_msNext.getDate()+1);
+    while([0,6].includes(_msNext.getDay())){ _msNext.setDate(_msNext.getDate()+1); }
+    const _msNextStr=_msNext.toISOString().split('T')[0];
+    const _msTreffer=await api(`messe_termine?store_id=eq.1020&start_date=lte.${_msNextStr}&end_date=gte.${_msNextStr}&select=name,personen&limit=1`).catch(()=>[]);
+    if(_msTreffer?.length){
+      const _m=_msTreffer[0];
+      const _msDateLabel=_msNext.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      messeInfoHtml=`<div style="font-size:11.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;margin:0 0 8px;">ⓘ Achtung: am ${_msDateLabel} findet <span data-no-translate>${_m.name}</span> statt${_m.personen?` (${_m.personen} Personen erwartet)`:''} — evtl. mehr Laufkundschaft</div>`;
+    }
+
+    // Gamifizierte Nachfrage, sobald eine Messe vorbei ist: "Wie war der Zulauf?" — Emoji-Skala,
+    // ein Tap genügt (kein Formular), damit's wirklich niemand als lästig empfindet.
+    const _todayStrMs=new Date().toISOString().split('T')[0];
+    const _pastTermine=await api(`messe_termine?store_id=eq.1020&end_date=lt.${_todayStrMs}&select=id,name,start_date,end_date&order=end_date.desc`).catch(()=>[]);
+    if(_pastTermine?.length){
+      const _bewertet=await api(`messe_bewertungen?store_id=eq.1020&select=messe_termin_id`).catch(()=>[]);
+      const _bewertetIds=new Set((_bewertet||[]).map(b=>b.messe_termin_id));
+      const _unbewertet=_pastTermine.filter(t=>!_bewertetIds.has(t.id));
+      if(_unbewertet.length){
+        const _t=_unbewertet[0];
+        const _startL=new Date(_t.start_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        const _endL=new Date(_t.end_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        const _range=_t.start_date===_t.end_date?_startL:`${_startL}–${_endL}`;
+        messeBewertungHtml=`<div class="card" style="padding:14px;margin:0 0 10px;background:linear-gradient(135deg,#FEF3C7,#FDE68A);border:1px solid #FCD34D;">
+          <div style="font-size:13px;font-weight:700;color:#78350F;margin-bottom:2px;">🎪 Wie war der Zulauf?</div>
+          <div data-no-translate style="font-size:11.5px;color:#92400E;margin-bottom:10px;">${_t.name} (${_range}) ist vorbei — gab's spürbar mehr Kundschaft?</div>
+          <div style="display:flex;justify-content:space-between;gap:4px;">
+            ${[[1,'😴','Kaum'],[2,'🙂','Wenig'],[3,'😃','Spürbar'],[4,'🤩','Viel'],[5,'🔥','Extrem']].map(([val,emoji,label])=>`
+            <div onclick="rateMesse(${_t.id},${val})" style="flex:1;text-align:center;cursor:pointer;background:#fff;border-radius:10px;padding:8px 2px;border:1px solid #FCD34D;">
+              <div style="font-size:22px;">${emoji}</div>
+              <div style="font-size:9px;color:#78350F;margin-top:2px;">${label}</div>
+            </div>`).join('')}
+          </div>
+        </div>`;
+      }
+    }
+  }
+
   el.innerHTML=`
     <div class="kf-greeting" style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
+    ${messeInfoHtml}
+    ${messeBewertungHtml}
     <div id="broadcast-banner-widget"></div>
     ${monthlyCleaningHtml}
     ${currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen' && homeMode!=='kontrolle'?`
@@ -4327,6 +4386,13 @@ async function renderManagement(){
         <span class="org-btn-sub">Aufgaben mit Datum verknüpfen — erscheint direkt bei Michi im Info-Tab</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('messen')" style="border-color:#F97316;">
+      <span class="org-btn-icon">🎪</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#F97316;">Messe-Termine (Ausstellungsstraße)</span>
+        <span class="org-btn-sub">Termine mit erhöhtem Laufkundschafts-Aufkommen verwalten</span>
+      </div>
+    </button>
 
     <div class="section-lbl" style="margin-top:16px;">🔧 Meldungen & Kontrolle</div>
     <button class="org-btn" onclick="goTo('maengel')" style="border-color:#0F6E56;">
@@ -5545,6 +5611,117 @@ async function deleteTransporterTask(id){
   }catch(e){console.error(e);showToast('Fehler beim Löschen');}
 }
 window.deleteTransporterTask=deleteTransporterTask;
+
+// ---- MESSE-TERMINE (Ausstellungsstraße) — Organisation kann selbst pflegen ----
+async function renderMessen(){
+  const el=document.getElementById('v-messen');
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🎪','Messe-Termine','Termine bei der Ausstellungsstraße mit erhöhtem Laufkundschafts-Aufkommen. Ein kleiner Hinweis erscheint automatisch bei Ausstellungsstraße & Küche — bereits am Vortag (bzw. am Freitag, falls der Termin einen Montag betrifft).','#F97316');
+  const today=new Date().toISOString().split('T')[0];
+  html+=`<div class="card" style="padding:14px;">
+    <div style="font-weight:500;margin-bottom:8px;">Name der Veranstaltung</div>
+    <input type="text" id="ms-name" placeholder="z.B. G20 - YEA 2026 Vienna Summit" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;gap:10px;margin-bottom:12px;">
+      <div style="flex:1;">
+        <div style="font-weight:500;margin-bottom:6px;font-size:13px;">Startdatum</div>
+        <input type="date" id="ms-start" value="${today}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
+      </div>
+      <div style="flex:1;">
+        <div style="font-weight:500;margin-bottom:6px;font-size:13px;">Enddatum</div>
+        <input type="date" id="ms-end" value="${today}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
+      </div>
+    </div>
+    <div style="font-weight:500;margin-bottom:8px;">Erwartete Personenzahl (optional)</div>
+    <input type="number" id="ms-personen" placeholder="z.B. 500" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
+    <button class="submit-btn" onclick="saveMesseTermin()">➕ Termin hinzufügen</button>
+  </div>
+  <div class="section-lbl" style="margin-top:18px;">Alle Termine</div>
+  <div id="ms-list"></div>`;
+  el.innerHTML=html;
+  translateEl(el);
+  loadMesseTermineList();
+}
+window.renderMessen=renderMessen;
+
+async function saveMesseTermin(editId){
+  const name=document.getElementById('ms-name').value.trim();
+  const start=document.getElementById('ms-start').value;
+  const end=document.getElementById('ms-end').value;
+  const personenRaw=document.getElementById('ms-personen').value.trim();
+  const personen=personenRaw?parseInt(personenRaw,10):null;
+  if(!name||!start||!end){ showToast('Bitte Name, Start- und Enddatum ausfüllen'); return; }
+  if(end<start){ showToast('Enddatum liegt vor dem Startdatum'); return; }
+  try{
+    if(editId){
+      await api(`messe_termine?id=eq.${editId}`,{method:'PATCH',body:JSON.stringify({name,start_date:start,end_date:end,personen})});
+      showToast('✔ Termin aktualisiert');
+      window._messeEditId=null;
+      document.getElementById('ms-name').value='';
+    }else{
+      await api('messe_termine',{method:'POST',body:JSON.stringify([{store_id:'1020',name,start_date:start,end_date:end,personen}])});
+      showToast('✔ Termin hinzugefügt');
+      document.getElementById('ms-name').value='';
+    }
+    loadMesseTermineList();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.saveMesseTermin=saveMesseTermin;
+
+function editMesseTermin(id,name,start,end,personen){
+  document.getElementById('ms-name').value=name;
+  document.getElementById('ms-start').value=start;
+  document.getElementById('ms-end').value=end;
+  document.getElementById('ms-personen').value=personen||'';
+  window._messeEditId=id;
+  document.querySelector('#v-messen .submit-btn').setAttribute('onclick',`saveMesseTermin(${id})`);
+  document.querySelector('#v-messen .submit-btn').textContent='✔ Änderung speichern';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+window.editMesseTermin=editMesseTermin;
+
+async function loadMesseTermineList(){
+  const wrap=document.getElementById('ms-list');
+  if(!wrap) return;
+  const [termine, bewertungen]=await Promise.all([
+    api('messe_termine?store_id=eq.1020&select=*&order=start_date.asc').catch(()=>[]),
+    api('messe_bewertungen?store_id=eq.1020&select=messe_termin_id,rating').catch(()=>[])
+  ]);
+  const bewertungMap={};
+  (bewertungen||[]).forEach(b=>{ bewertungMap[b.messe_termin_id]=b.rating; });
+  const RATING_LABEL={1:'😴 Kaum spürbar',2:'🙂 Wenig mehr',3:'😃 Spürbar mehr',4:'🤩 Deutlich mehr',5:'🔥 Extrem viel mehr'};
+  if(!termine?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Messe-Termine eingetragen.</div>'; return; }
+  const todayStr=new Date().toISOString().split('T')[0];
+  wrap.innerHTML=termine.map(t=>{
+    const isPast=t.end_date<todayStr;
+    const startLabel=new Date(t.start_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const endLabel=new Date(t.end_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const dateRange=t.start_date===t.end_date?startLabel:`${startLabel} – ${endLabel}`;
+    const rating=bewertungMap[t.id];
+    const bewertungLine=isPast?(rating?`<div style="font-size:11px;color:#0F6E56;font-weight:600;margin-top:4px;">Bewertung: ${RATING_LABEL[rating]}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Noch nicht bewertet</div>`):'';
+    return `<div class="card" style="padding:12px;margin-bottom:8px;${isPast?'opacity:0.7;':''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div data-no-translate style="font-size:13.5px;font-weight:600;">${t.name}</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">${dateRange}${t.personen?` · ${t.personen} Personen erwartet`:''}</div>
+          ${bewertungLine}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button onclick="editMesseTermin(${t.id},'${escAttr(t.name)}','${t.start_date}','${t.end_date}',${t.personen||'null'})" style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">✏️</button>
+          <button onclick="deleteMesseTermin(${t.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteMesseTermin(id){
+  if(!confirm('Diesen Messe-Termin wirklich löschen?')) return;
+  try{
+    await api(`messe_termine?id=eq.${id}`,{method:'DELETE'});
+    loadMesseTermineList();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen');}
+}
+window.deleteMesseTermin=deleteMesseTermin;
 
 let broadcastQueue=[];
 async function checkForBroadcasts(){
@@ -9152,6 +9329,13 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       <button onclick="navNextDay()" style="background:none;border:1px solid rgba(29,94,58,0.25);border-radius:8px;padding:5px 12px;font-size:12px;color:var(--green);cursor:pointer;font-weight:500;">Nächster →</button>
     </div>
   </div>`;
+
+  // Messe-Hinweis Ausstellungsstraße — tomorrowStr ist bereits wochenend-sicher (Freitag zeigt Montag)
+  const _msTreffer=await api(`messe_termine?store_id=eq.1020&start_date=lte.${tomorrowStr}&end_date=gte.${tomorrowStr}&select=name,personen&limit=1`).catch(()=>[]);
+  if(_msTreffer?.length){
+    const _m=_msTreffer[0];
+    html+=`<div style="font-size:11.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;margin:-6px 0 14px;">ⓘ Achtung: am ${shortDate} findet <span data-no-translate>${_m.name}</span> statt${_m.personen?` (${_m.personen} Personen erwartet)`:''} bei der Ausstellungsstraße — Produktionsmenge ggf. anpassen</div>`;
+  }
 
   if(!dishNames.length || !['mo','di','mi','do','fr'].includes(tomorrowWd)){
     html+=`<div style="text-align:center;padding:2rem;color:var(--muted);">Kein Menü für morgen eingetragen.</div>`;
