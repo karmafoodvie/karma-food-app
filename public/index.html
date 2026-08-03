@@ -956,7 +956,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.18.5';
+const APP_VERSION = '6.18.6';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9366,7 +9366,10 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
 
   // Get tomorrow's menu dishes from MENU_DATA
   const _cookWoche=getMenuWocheForDate(tomorrowStr);
-  const menuDishes = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${_cookWoche}_${tomorrowWd}`])||[];
+  const menuDishesRaw = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${_cookWoche}_${tomorrowWd}`])||[];
+  // Reis wird hier bewusst mit angehängt (letzte Zeile) — genau wie in der Store-Forecast-Tabelle,
+  // wo es ebenfalls kein fixer MENU_DATA-Eintrag ist, sondern per REIS_DISH_NAME dazugemischt wird.
+  const menuDishes = [...menuDishesRaw, {name: REIS_DISH_NAME}];
   const dishNames = menuDishes.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
   const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
   const overrideMap = {};
@@ -9438,7 +9441,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     </div>
   </div>`;
 
-  if(!dishNames.length || !['mo','di','mi','do','fr'].includes(tomorrowWd)){
+  if(!menuDishesRaw.length || !['mo','di','mi','do','fr'].includes(tomorrowWd)){
     html+=`<div style="text-align:center;padding:2rem;color:var(--muted);">Kein Menü für morgen eingetragen.</div>`;
     el.innerHTML=html; return;
   }
