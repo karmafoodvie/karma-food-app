@@ -310,6 +310,9 @@ const STORE_COLORS = {'lb':'#22C55E','boerse':'#A855F7','1020':'#3B82F6','1070':
 // Filialen (z.B. "Ausstellungsstraße") gibt's kein Leerzeichen, an dem sich automatisch abkürzen
 // ließe, deshalb fix hinterlegt statt automatisch berechnet.
 const STORE_SHORT = {'lb':'Laurenz.','boerse':'Börse','1020':'Ausst.','3400':'Stadtpl.'};
+// Portionen pro Lasagne-Blech-Größe — global, da sowohl Store- als auch Organisation-Vorschlagslogik
+// in echten Portionen statt "Behälter" rechnen müssen, um niemals krumme Bleche vorzuschlagen.
+const LASAGNE_SIZE_YIELD={gross:18, mittel:12, klein:8};
 const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'klein',l:'Kl.·8'}];
 // Kräftige, markante Farben speziell für die Login-Auswahl (eigene Palette, unabhängig von STORE_COLORS)
 const STORE_LOGIN_COLORS = {'lb':'#00A878','boerse':'#00B4CC','1020':'#F0806B','3400':'#E0521F','kitchen':'#F0A500','zentrale':'#2B3A67'};
@@ -963,7 +966,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.19.1';
+const APP_VERSION = '6.19.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4094,13 +4097,34 @@ async function renderForecastOrderTab(el, tabHtml){
     let qty=prevQty;
     const reasons=[`Vorwoche: ${formatQty(prevQty)} Bhlt`];
     const disp=(lastWeekDisposalByDate[prevDateStr]||{})[cat];
+    // Bei Lasagne (Groß = 18 Portionen/Blech) in Portionen rechnen und auf ganze Bleche runden —
+    // sonst entstehen zwangsläufig Kommazahlen wie 1.75 Bleche, die niemand bestellen kann.
+    const isLasagneGross=j.dish.includes('Lasagne');
     if(disp){
-      if(disp.soldOutEarly){ qty=Math.round((qty+0.25)*4)/4; reasons.push('🔥 +0.25 ausverkauft'); }
-      else if(disp.leftoverPortionen>10){ qty=Math.max(0.25,Math.round((qty-0.5)*4)/4); reasons.push('📦 −0.5 viel übrig'); }
-      else if(disp.leftoverPortionen>4){ qty=Math.max(0.25,Math.round((qty-0.25)*4)/4); reasons.push('📦 −0.25 etwas übrig'); }
+      if(isLasagneGross){
+        let portions=qty*LASAGNE_SIZE_YIELD.gross;
+        if(disp.soldOutEarly){ portions+=LASAGNE_SIZE_YIELD.gross*0.3; reasons.push('🔥 mehr einplanen, ausverkauft'); }
+        else if(disp.leftoverPortionen>10){ portions-=disp.leftoverPortionen*0.5; reasons.push('📦 weniger, viel übrig'); }
+        else if(disp.leftoverPortionen>4){ portions-=disp.leftoverPortionen*0.3; reasons.push('📦 etwas weniger übrig'); }
+        qty=Math.max(0, Math.round(portions/LASAGNE_SIZE_YIELD.gross));
+      } else {
+        if(disp.soldOutEarly){ qty=Math.round((qty+0.25)*4)/4; reasons.push('🔥 +0.25 ausverkauft'); }
+        else if(disp.leftoverPortionen>10){ qty=Math.max(0.25,Math.round((qty-0.5)*4)/4); reasons.push('📦 −0.5 viel übrig'); }
+        else if(disp.leftoverPortionen>4){ qty=Math.max(0.25,Math.round((qty-0.25)*4)/4); reasons.push('📦 −0.25 etwas übrig'); }
+      }
+    } else if(isLasagneGross){
+      qty=Math.round(qty);
     }
     const {pct:wPct,reason:wReason}=getDayModifiers(j.dateStr, currentStore.id, weatherMap, calendarEvents, fcSettings);
-    if(wPct!==0){ qty=Math.max(0.25,Math.round((qty*(1+wPct/100))*4)/4); if(wReason)reasons.push(wReason); }
+    if(wPct!==0){
+      if(isLasagneGross){
+        const portionsW=qty*LASAGNE_SIZE_YIELD.gross*(1+wPct/100);
+        qty=Math.max(0, Math.round(portionsW/LASAGNE_SIZE_YIELD.gross));
+      } else {
+        qty=Math.max(0.25,Math.round((qty*(1+wPct/100))*4)/4);
+      }
+      if(wReason)reasons.push(wReason);
+    }
     if(!suggestionMap[j.dateStr])suggestionMap[j.dateStr]={};
     suggestionMap[j.dateStr][j.dish]={qty,reason:reasons.join(' · ')};
   });
@@ -5416,6 +5440,15 @@ async function renderOrgForecast(){
     // 2. Falls Entsorgung eingetragen → anpassen
     // 3. Optional: Wetter
     // Falls keine Vorwoche-Daten → kein Vorschlag (noch keine History)
+    //
+    // WICHTIG: bei Lasagne (groesse gesetzt) wird die Anpassung in echten PORTIONEN gerechnet,
+    // nicht in "Behälter" — sonst entsteht bei jeder Anpassung zwangsläufig eine Kommazahl
+    // (0.25 Behälter Groß = 4.5 Portionen, aber 0.25 Behälter Klein = nur 2 Portionen — beides mit
+    // demselben pauschalen ±0.25/±0.5-Schritt zu behandeln ignoriert, dass ein Blech Groß (18)
+    // etwas ganz anderes ist als ein Blech Klein (8)). Am Ende wird IMMER auf ganze Bleche
+    // gerundet — halbe/viertel Bleche kann man schließlich nicht bestellen.
+    const isLasagneSize = !!groesse && LASAGNE_SIZE_YIELD[groesse]!=null;
+    const yieldPerContainer = isLasagneSize ? LASAGNE_SIZE_YIELD[groesse] : null;
 
     const cat=mapDishNameToCategory(dish);
     const prevDateStr=dateMinusDays(dateStr,7);
@@ -5430,27 +5463,51 @@ async function renderOrgForecast(){
     // Entsorgung Vorwoche
     const disp=prevDispMap[storeId]?.[cat];
     if(disp && (disp.soldOutEarly || disp.leftover>0)){
-      if(disp.soldOutEarly){
-        qty=Math.round((qty+0.25)*4)/4;
-        reasons.push('🔥 +0.25 ausverkauft');
-      } else if(disp.leftover>10){
-        qty=Math.max(0.25,Math.round((qty-0.5)*4)/4);
-        reasons.push(`📦 −0.5 (${disp.leftover} Port. übrig)`);
-      } else if(disp.leftover>4){
-        qty=Math.max(0.25,Math.round((qty-0.25)*4)/4);
-        reasons.push(`📦 −0.25 (${disp.leftover} Port. übrig)`);
+      if(isLasagneSize){
+        // In Portionen rechnen, dann auf ganze Bleche dieser Größe runden.
+        let portions=qty*yieldPerContainer;
+        if(disp.soldOutEarly){
+          portions+=yieldPerContainer*0.3; // knapp ein Drittel Blech mehr einplanen
+          reasons.push('🔥 mehr einplanen, ausverkauft');
+        } else if(disp.leftover>10){
+          portions-=disp.leftover*0.5;
+          reasons.push(`📦 weniger (${disp.leftover} Port. übrig)`);
+        } else if(disp.leftover>4){
+          portions-=disp.leftover*0.3;
+          reasons.push(`📦 etwas weniger (${disp.leftover} Port. übrig)`);
+        } else {
+          reasons.push(`✓ wenig übrig (${disp.leftover} Port.) → 1:1`);
+        }
+        qty=Math.max(0, Math.round(portions/yieldPerContainer));
       } else {
-        reasons.push(`✓ wenig übrig (${disp.leftover} Port.) → 1:1`);
+        if(disp.soldOutEarly){
+          qty=Math.round((qty+0.25)*4)/4;
+          reasons.push('🔥 +0.25 ausverkauft');
+        } else if(disp.leftover>10){
+          qty=Math.max(0.25,Math.round((qty-0.5)*4)/4);
+          reasons.push(`📦 −0.5 (${disp.leftover} Port. übrig)`);
+        } else if(disp.leftover>4){
+          qty=Math.max(0.25,Math.round((qty-0.25)*4)/4);
+          reasons.push(`📦 −0.25 (${disp.leftover} Port. übrig)`);
+        } else {
+          reasons.push(`✓ wenig übrig (${disp.leftover} Port.) → 1:1`);
+        }
       }
     } else {
       reasons.push('⚪ keine Entsorgung → 1:1');
+      if(isLasagneSize) qty=Math.round(qty); // auch ohne Anpassung nie krumme Bleche vorschlagen
     }
 
     // Wetter (optional, nur kleine Anpassung)
     const {pct:wPct, reason:wReason}=getDayModifiers(dateStr, storeId, refWeather, calendarEvents, settingsRec);
     if(wPct!==0 && qty>0){
-      const wAdj=Math.round(qty*(wPct/100)*4)/4;
-      qty=Math.max(0.25,Math.round((qty+wAdj)*4)/4);
+      if(isLasagneSize){
+        const portionsW=qty*yieldPerContainer*(1+wPct/100);
+        qty=Math.max(0, Math.round(portionsW/yieldPerContainer));
+      } else {
+        const wAdj=Math.round(qty*(wPct/100)*4)/4;
+        qty=Math.max(0.25,Math.round((qty+wAdj)*4)/4);
+      }
       if(wReason) reasons.push(wReason);
     }
 
