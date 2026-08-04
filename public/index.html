@@ -964,7 +964,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.17.9';
+const APP_VERSION = '6.18.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1737,6 +1737,167 @@ function renderZutatenReadOnly(text){
 // Sammelt alle jemals im Menü verwendeten Zutatennamen (über alle 4 Wochen) für Autovorschläge
 // beim Eintragen neuer Zutaten — wie bei der Bring-App: ein paar Buchstaben eintippen, Vorschläge
 // aus bereits bekannten Zutaten erscheinen. Wird einmal berechnet und zwischengespeichert.
+// ── Zutaten-Normalisierung & Fuzzy-Matching ─────────────────────────────────
+// Vereinheitlicht Groß-/Kleinschreibung, Leerzeichen und ß/ss-Schreibvarianten,
+// damit "Paprika" / "paprika" / "PAPRIKA" als IDENTISCH erkannt werden.
+function normalizeZutatName(s){
+  return (s||'').trim().toLowerCase().replace(/\s+/g,' ').replace(/ß/g,'ss');
+}
+
+// Klassische Levenshtein-Distanz (Editierdistanz) — für Tippfehler-Toleranz.
+// Bei kurzen Wörtern (<=91 Zutaten insgesamt, performant genug für clientseitige Berechnung
+// bei jedem Tastendruck) reicht ein einfacher O(n*m)-Algorithmus völlig aus.
+function levenshteinDistance(a,b){
+  if(a===b) return 0;
+  const m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  let prev=Array(n+1).fill(0).map((_,i)=>i);
+  for(let i=1;i<=m;i++){
+    const cur=[i];
+    for(let j=1;j<=n;j++){
+      cur[j]=a[i-1]===b[j-1] ? prev[j-1] : 1+Math.min(prev[j-1],prev[j],cur[j-1]);
+    }
+    prev=cur;
+  }
+  return prev[n];
+}
+
+let _zutatenIndexCache=null;
+// Baut EINEN vereinheitlichten, deduplizierten Zutaten-Index:
+// 1) zutaten_master ist führend (saubere, kuratierte Basis inkl. Varianten-Verknüpfung)
+// 2) Freitext aus allen Rezepten wird ergänzt, aber nur, wenn noch KEIN normalisiert-gleicher
+//    Eintrag existiert — verhindert genau die "Paprika/paprika/PAPRIKA"-Vervielfachung.
+async function buildZutatenIndex(){
+  if(_zutatenIndexCache) return _zutatenIndexCache;
+  const master=await getZutatenMaster();
+  const byId={}; master.forEach(m=>byId[m.id]=m);
+  const seen=new Set();
+  const entries=[];
+  // Basis-Zutaten zuerst (keine base_zutat_id), damit Varianten ihnen direkt zugeordnet werden können
+  master.filter(m=>!m.base_zutat_id).forEach(m=>{
+    seen.add(m.normalized_name || normalizeZutatName(m.name));
+    entries.push({name:m.name, norm:normalizeZutatName(m.name), isMaster:true, kategorie:m.kategorie, variants:[]});
+  });
+  master.filter(m=>m.base_zutat_id).forEach(m=>{
+    const base=entries.find(e=>e.name===byId[m.base_zutat_id]?.name);
+    const norm=normalizeZutatName(m.name);
+    seen.add(norm);
+    if(base) base.variants.push({name:m.name, norm, label:m.variant_label||''});
+    else entries.push({name:m.name, norm, isMaster:true, kategorie:m.kategorie, variants:[]}); // Fallback falls Basis fehlt
+  });
+  // Freitext aus Rezepten ergänzen — dedupliziert per Normalisierung, NICHT mehr case-sensitive
+  if(typeof MENU_DATA!=='undefined'){
+    Object.keys(MENU_DATA).forEach(key=>{
+      (MENU_DATA[key]||[]).forEach(dish=>{
+        (dish.zutaten||'').split(',').forEach(z=>{
+          const t=z.trim();
+          if(!t) return;
+          const norm=normalizeZutatName(t);
+          if(seen.has(norm)) return; // schon durch zutaten_master abgedeckt
+          seen.add(norm);
+          entries.push({name:t, norm, isMaster:false, kategorie:null, variants:[]});
+        });
+      });
+    });
+  }
+  entries.sort((a,b)=>a.name.localeCompare(b.name,'de'));
+  _zutatenIndexCache=entries;
+  return entries;
+}
+function invalidateZutatenIndexCache(){ _zutatenIndexCache=null; }
+
+// Sucht/bewertet Treffer für eine Eingabe: exakte Übereinstimmung > Präfix > Teilstring >
+// Tippfehler-Toleranz (Levenshtein). Zutaten_master-Einträge werden immer priorisiert.
+function searchZutatenIndex(query, index){
+  const q=normalizeZutatName(query);
+  if(!q) return index.filter(e=>e.isMaster).slice(0,12);
+  const scored=[];
+  index.forEach(e=>{
+    let score=null;
+    if(e.norm===q) score=0;
+    else if(e.norm.startsWith(q)) score=1;
+    else if(e.norm.includes(q)) score=2;
+    else{
+      // Fuzzy nur bei kurzen Eingaben sinnvoll (Tippfehler), Schwelle relativ zur Wortlänge
+      const dist=levenshteinDistance(q, e.norm.slice(0, q.length+3));
+      const threshold=q.length<=4?1:(q.length<=8?2:3);
+      if(dist<=threshold) score=3+dist;
+    }
+    // Auch Varianten durchsuchen
+    let variantHit=null;
+    (e.variants||[]).forEach(v=>{
+      if(v.norm===q) variantHit=0;
+      else if(v.norm.startsWith(q) && (variantHit===null||variantHit>1)) variantHit=1;
+      else if(v.norm.includes(q) && (variantHit===null||variantHit>2)) variantHit=2;
+    });
+    if(variantHit!==null && (score===null || variantHit<score)) score=variantHit;
+    if(score!==null) scored.push({entry:e, score:score-(e.isMaster?0.5:0)}); // Master leicht bevorzugen
+  });
+  scored.sort((a,b)=>a.score-b.score || a.entry.name.localeCompare(b.entry.name,'de'));
+  return scored.slice(0,12).map(s=>s.entry);
+}
+
+
+// ── Moderne Zutaten-Vorschlagsliste (ersetzt natives <datalist>, das kein Gruppieren/
+// Hervorheben kann) ─────────────────────────────────────────────────────────────────
+function highlightMatch(name, query){
+  if(!query) return name;
+  const idx=name.toLowerCase().indexOf(query.toLowerCase());
+  if(idx<0) return name;
+  return name.slice(0,idx)+'<mark style="background:#D4FF3F;color:inherit;border-radius:2px;">'+name.slice(idx,idx+query.length)+'</mark>'+name.slice(idx+query.length);
+}
+function closeZutatenDropdown(){
+  const dd=document.getElementById('zd-autocomplete-dropdown');
+  if(dd) dd.remove();
+}
+async function attachZutatenAutocomplete(inputEl){
+  if(!inputEl) return;
+  inputEl.removeAttribute('list'); // ersetzt das alte native datalist-Verhalten
+  const index=await buildZutatenIndex();
+  const renderDropdown=()=>{
+    closeZutatenDropdown();
+    const q=inputEl.value.trim();
+    const results=searchZutatenIndex(q, index);
+    if(!results.length) return;
+    const rect=inputEl.getBoundingClientRect();
+    const dd=document.createElement('div');
+    dd.id='zd-autocomplete-dropdown';
+    dd.style.cssText=`position:fixed;top:${rect.bottom+4}px;left:${rect.left}px;width:${Math.max(rect.width,220)}px;max-height:280px;overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,0.15);z-index:10001;padding:4px 0;`;
+    let rowsHtml='';
+    const masterResults=results.filter(e=>e.isMaster);
+    const freeResults=results.filter(e=>!e.isMaster);
+    const rowHtml=(name, norm, isVariant, kategorie)=>`<div class="zd-ac-row" data-name="${name.replace(/"/g,'&quot;')}" style="padding:7px ${isVariant?'28px':'12px'};font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span>${highlightMatch(name,q)}</span>
+        ${!isVariant&&kategorie?`<span style="font-size:9px;color:var(--muted);text-transform:uppercase;">${kategorie}</span>`:''}
+      </div>`;
+    masterResults.forEach(e=>{
+      rowsHtml+=rowHtml(e.name, e.norm, false, e.kategorie);
+      (e.variants||[]).forEach(v=>{
+        rowsHtml+=`<div class="zd-ac-row" data-name="${v.name.replace(/"/g,'&quot;')}" style="padding:5px 12px 5px 28px;font-size:12px;color:var(--sub);cursor:pointer;">↳ ${highlightMatch(v.name,q)}${v.label?` <span style="color:var(--muted);">(${v.label})</span>`:''}</div>`;
+      });
+    });
+    if(freeResults.length){
+      rowsHtml+=`<div style="padding:6px 12px 3px;font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);border-top:0.5px solid var(--border);margin-top:2px;">Aus Rezepten (nicht in Datenbank)</div>`;
+      freeResults.forEach(e=>{ rowsHtml+=rowHtml(e.name, e.norm, false, null); });
+    }
+    dd.innerHTML=rowsHtml;
+    document.body.appendChild(dd);
+    dd.querySelectorAll('.zd-ac-row').forEach(row=>{
+      row.addEventListener('mousedown', ev=>{ // mousedown statt click: feuert VOR blur
+        ev.preventDefault();
+        inputEl.value=row.dataset.name;
+        closeZutatenDropdown();
+      });
+      row.addEventListener('mouseenter', ()=>{ row.style.background='var(--green-light)'; });
+      row.addEventListener('mouseleave', ()=>{ row.style.background=''; });
+    });
+  };
+  inputEl.addEventListener('input', renderDropdown);
+  inputEl.addEventListener('focus', renderDropdown);
+  inputEl.addEventListener('blur', ()=>{ setTimeout(closeZutatenDropdown, 150); });
+}
+window.attachZutatenAutocomplete=attachZutatenAutocomplete;
+
 let _zutatenVocabCache=null;
 function getZutatenVocabulary(){
   if(_zutatenVocabCache) return _zutatenVocabCache;
@@ -1820,10 +1981,10 @@ function zdAttach(editor){
       const row=document.createElement('div');
       row.className='zd-row';
       row.style.cssText='display:flex;align-items:center;gap:6px;padding:2px 0;';
-      // Echtes <input> mit Datalist statt contenteditable — ermöglicht Autovorschläge aus bereits
-      // bekannten Zutaten (wie bei der Bring-App: tippen, Vorschlagsliste erscheint).
+      // Echtes <input> mit selbstgebauter Vorschlagsliste (siehe attachZutatenAutocomplete) statt
+      // nativem <datalist> — ermöglicht Gruppierung, Hervorhebung und Tippfehler-Toleranz.
       row.innerHTML='<span style="color:var(--muted);font-size:11px;">•</span>'
-        +'<input type="text" class="zd-new-input" list="zd-zutaten-suggestions" placeholder="Zutat eingeben…" spellcheck="false" '
+        +'<input type="text" class="zd-new-input" placeholder="Zutat eingeben…" spellcheck="false" '
         +'style="font-size:13px;flex:1;outline:none;border:none;border-bottom:1px dashed #ddd;padding:2px 3px;background:transparent;">'
         +'<button class="zd-del" style="opacity:0.6;color:#DC2626;background:#FEE2E2;border:none;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>';
       katDiv.insertBefore(row, btn.parentElement);
@@ -1831,8 +1992,10 @@ function zdAttach(editor){
       // zdAttach(katDiv) durchlaufen — sonst bekommt der "+ Zutat"-Button bei jedem Klick eine
       // weitere, zusätzliche Klick-Funktion oben drauf (Ursache für "mal 2, mal 4 Zeilen").
       const newDelBtn=row.querySelector('.zd-del');
-      newDelBtn.addEventListener('click', ()=>{ row.remove(); });
-      row.querySelector('.zd-new-input').focus();
+      newDelBtn.addEventListener('click', ()=>{ row.remove(); closeZutatenDropdown(); });
+      const newInput=row.querySelector('.zd-new-input');
+      attachZutatenAutocomplete(newInput);
+      newInput.focus();
     });
   });
   // Add category button
@@ -1983,23 +2146,8 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   const body=document.createElement('div');
   body.style.padding='14px 16px';
   body.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🧂 Zutaten</div>'
-    +renderZutatenEditable(currentText, safeKey)
-    +'<datalist id="zd-zutaten-suggestions">'+getZutatenVocabulary().map(z=>'<option value="'+z.replace(/"/g,'&quot;')+'">').join('')+'</datalist>';
+    +renderZutatenEditable(currentText, safeKey);
   sheet.appendChild(body);
-  // Zutaten-Datenbank ergänzt die Vorschlagsliste um zentral gepflegte Zutaten (mit Kategorie +
-  // Allergenen) — läuft asynchron nach, damit das Öffnen des Editors nicht wartet.
-  getZutatenMaster().then(master=>{
-    const dl=document.getElementById('zd-zutaten-suggestions');
-    if(!dl) return;
-    const existing=new Set([...dl.options].map(o=>o.value.toUpperCase()));
-    master.forEach(m=>{
-      if(!existing.has(m.name.toUpperCase())){
-        const opt=document.createElement('option');
-        opt.value=m.name;
-        dl.appendChild(opt);
-      }
-    });
-  });
 
   // Footer buttons
   const footer=document.createElement('div');
@@ -6018,7 +6166,7 @@ function renderZutatenForGericht(zutatenText, rezeptZutatenArr){
     return sortedKats.map(kat=>{
       const items = byKat[kat].sort((a,b)=>a.name.localeCompare(b.name));
       const itemsHtml = items.map(rz=>{
-        const isAllergen = rz.ist_allergen || ALLERGEN_BOLD_WORDS.some(w=>rz.name.toLowerCase().includes(w));
+        const isAllergen = (rz.allergene_codes && rz.allergene_codes.length>0) || ALLERGEN_BOLD_WORDS.some(w=>rz.name.toLowerCase().includes(w));
         const nameHtml = isAllergen ? `<strong style="color:#92400E;">${rz.name}</strong>` : rz.name;
         const menge = rz.menge ? `<span style="color:var(--muted);font-size:10px;"> (${rz.menge})</span>` : '';
         return `<div style="padding:1px 0;">${nameHtml}${menge}</div>`;
@@ -8287,6 +8435,66 @@ async function sendTransportNote(){
 // ---- ENTSORGUNG (Filiale) ----
 let mengenTab = 'forecast'; // 'forecast' | 'disposal'
 
+// Übersichts-Tabelle "Entsorgung" — alle Filialen nebeneinander für einen Tag, read-only.
+// Gemeinsam genutzt von Organisation (Mengen-Tab) UND Küche (eigener Tab) — vorher gab's hier
+// nur die Einzelfilialen-Eingabemaske, die bei der Organisation leer blieb (store_id='zentrale'
+// hat naturgemäß nie eigene Entsorgungsdaten).
+let disposalOverviewDateOffset=0;
+async function renderDisposalOverviewHtml(){
+  const d=new Date(); d.setDate(d.getDate()+disposalOverviewDateOffset);
+  const dateStr=d.toISOString().split('T')[0];
+  const dateLabel=d.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+  const isToday=disposalOverviewDateOffset===0;
+
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
+  const disp=await api(`disposal?disposal_date=eq.${dateStr}&select=store_id,slot,dish_name,sold_out_time,leftover_qty,note`).catch(()=>[]);
+
+  let html=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <button onclick="disposalOverviewDateOffset--;${mengenTab==='disposal'?'renderMengen()':'renderKitchen()'}" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
+    <div style="text-align:center;">
+      <div style="font-size:12.5px;font-weight:600;">${dateLabel}${isToday?' · heute':''}</div>
+    </div>
+    <button onclick="disposalOverviewDateOffset++;${mengenTab==='disposal'?'renderMengen()':'renderKitchen()'}" ${isToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
+  </div>`;
+
+  if(!disp?.length){
+    return html+'<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Keine Entsorgungsdaten für diesen Tag.</div>';
+  }
+
+  const SLOT_LABEL={salat:'Salat',gericht2:'Gericht 2',gericht3:'Gericht 3',reis:'Reis'};
+  const SLOT_ORDER=['salat','gericht2','gericht3','reis'];
+  const bySlot={};
+  disp.forEach(r=>{ (bySlot[r.slot]=bySlot[r.slot]||[]).push(r); });
+  const slots=SLOT_ORDER.filter(s=>bySlot[s]);
+
+  const storeColWidth=(70/(storeList.length+1)).toFixed(1);
+  html+=`<div class="card" style="overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;min-width:280px;">
+    <thead><tr><th style="text-align:left;padding:6px 4px;font-size:11px;">Gericht</th>`;
+  storeList.forEach(s=>html+=`<th style="width:${storeColWidth}%;color:${STORE_COLORS[s.id]||'#888'};padding:6px 2px;font-size:9.5px;font-weight:700;" data-no-translate>${STORE_SHORT[s.id]||s.name.split(' ')[0]}</th>`);
+  html+='</tr></thead><tbody>';
+  slots.forEach(slot=>{
+    const rows=bySlot[slot];
+    const dishName=rows[0]?.dish_name||SLOT_LABEL[slot];
+    html+=`<tr><td style="padding:7px 4px;"><div style="font-weight:600;font-size:12px;" data-no-translate>${dishName}</div><div style="font-size:9.5px;color:var(--muted);">${SLOT_LABEL[slot]}</div></td>`;
+    storeList.forEach(s=>{
+      const rec=rows.find(r=>r.store_id===s.id);
+      if(!rec || rec.leftover_qty==null){ html+=`<td style="text-align:center;color:var(--border);padding:6px 1px;">·</td>`; return; }
+      const soldOut=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
+      html+=`<td style="text-align:center;padding:6px 1px;">
+        <div style="font-size:12.5px;font-weight:700;color:${rec.leftover_qty>0?'#1a1a18':'var(--green)'};">${rec.leftover_qty}</div>
+        ${soldOut?`<div style="font-size:8.5px;color:#DC2626;">${soldOut}</div>`:''}
+        ${rec.note?`<div style="font-size:8px;color:var(--muted);max-width:60px;margin:0 auto;">${escAttr(rec.note)}</div>`:''}
+      </td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table></div></div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Restmenge in Portionen · rote Uhrzeit = ausverkauft gemeldet · "·" = noch nicht eingetragen</div>`;
+  return html;
+}
+window.renderDisposalOverviewHtml=renderDisposalOverviewHtml;
+
 function goToMengen(tab){
   mengenTab = tab || 'forecast';
   goTo('mengen');
@@ -8322,17 +8530,8 @@ async function renderMengen(){
     // Remove back-button if present inside content
     target.querySelectorAll('[onclick*="goTo(\'home\'"]').forEach(b=>b.style.display='none');
   } else {
-    const tmp = document.createElement('div');
-    tmp.id = 'v-disposal';
-    tmp.style.display = 'none';
-    const real = document.getElementById('v-disposal');
-    real.id = '__v_disposal_saved';
-    document.body.appendChild(tmp);
-    await renderDisposal();
-    target.innerHTML = tmp.innerHTML;
-    tmp.remove();
-    real.id = 'v-disposal';
-    target.querySelectorAll('[onclick*="goTo(\'home\'"]').forEach(b=>b.style.display='none');
+    target.innerHTML = await renderDisposalOverviewHtml();
+    translateEl(target);
   }
 }
 window.renderMengen = renderMengen;
@@ -9140,7 +9339,7 @@ async function renderKitchen(){
   const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
   const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style="font-size:10px;font-weight:400;">'+forecastDateRange+'</span>';
   const menuTabLabel='🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche '+CURRENT_MENU_WOCHE+'</span>';
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('entsorgung','🗑️ Entsorgung')}</div>`;
 
   if(kitchenTab==='daily'){
     // Daily Business — Store-Ansicht für Kassenbereich (Während der Schicht)
@@ -9248,6 +9447,13 @@ async function renderKitchen(){
 
   if(kitchenTab==='schrankerl'){
     html+=await renderSchrankerlTab();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
+  if(kitchenTab==='entsorgung'){
+    html+=await renderDisposalOverviewHtml();
     el.innerHTML=html;
     translateEl(el);
     return;
@@ -9520,11 +9726,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     if(e.zkey) overrideMap[e.zkey]=e; // stabiler Schlüssel hat Vorrang
   });
   // Load structured rezept_zutaten if available
-  const rezeptZutatenRaw = await api('rezept_zutaten?select=gericht,menge,notiz,zutaten(id,name,kategorie,ist_allergen,allergen_code)').catch(()=>[]);
+  const rezeptZutatenRaw = await api('rezept_zutaten?select=gericht,menge,notiz,zutaten_master(id,name,kategorie,allergene_codes)').catch(()=>[]);
   const rezeptZutaten = {};
   (rezeptZutatenRaw||[]).forEach(rz=>{
     if(!rezeptZutaten[rz.gericht]) rezeptZutaten[rz.gericht]=[];
-    if(rz.zutaten) rezeptZutaten[rz.gericht].push({...rz.zutaten, menge:rz.menge, notiz:rz.notiz});
+    if(rz.zutaten_master) rezeptZutaten[rz.gericht].push({...rz.zutaten_master, menge:rz.menge, notiz:rz.notiz});
   });
 
   // Last update time
@@ -9793,11 +9999,11 @@ async function renderMenuWoche(el, tabHtml){
   const overrideMap = {};
   (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
   // Load structured rezept_zutaten if available
-  const rezeptZutatenRaw = await api('rezept_zutaten?select=gericht,menge,notiz,zutaten(id,name,kategorie,ist_allergen,allergen_code)').catch(()=>[]);
+  const rezeptZutatenRaw = await api('rezept_zutaten?select=gericht,menge,notiz,zutaten_master(id,name,kategorie,allergene_codes)').catch(()=>[]);
   const rezeptZutaten = {};
   (rezeptZutatenRaw||[]).forEach(rz=>{
     if(!rezeptZutaten[rz.gericht]) rezeptZutaten[rz.gericht]=[];
-    if(rz.zutaten) rezeptZutaten[rz.gericht].push({...rz.zutaten, menge:rz.menge, notiz:rz.notiz});
+    if(rz.zutaten_master) rezeptZutaten[rz.gericht].push({...rz.zutaten_master, menge:rz.menge, notiz:rz.notiz});
   });
 
   let html = tabHtml;
@@ -9860,8 +10066,8 @@ window.switchKitchenTab=switchKitchenTab;
 
 async function openZutatenManager(dishName){
   const [allZutaten, rezeptLinks] = await Promise.all([
-    api('zutaten?select=*&order=kategorie,name').catch(()=>[]),
-    api('rezept_zutaten?gericht=eq.'+encodeURIComponent(dishName)+'&select=*,zutaten(id,name,kategorie,ist_allergen,allergen_code)').catch(()=>[])
+    api('zutaten_master?select=*&order=kategorie,name').catch(()=>[]),
+    api('rezept_zutaten?gericht=eq.'+encodeURIComponent(dishName)+'&select=*,zutaten_master(id,name,kategorie,allergene_codes)').catch(()=>[])
   ]);
   window._zmDish = dishName;
   window._zmAllZutaten = allZutaten||[];
@@ -9891,7 +10097,13 @@ function renderZutatenManagerBody(){
   const byKat = {};
   allZ.forEach(z=>{ const k=z.kategorie||'Sonstiges'; if(!byKat[k]) byKat[k]=[]; byKat[k].push(z); });
   const katOrder = typeof ZUTAT_KATEGORIEN!=='undefined' ? ZUTAT_KATEGORIEN : ['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Nüsse/Samen','Öle/Fette','Gewürze','Sonstiges'];
-  const sortedKats = katOrder.filter(k=>byKat[k]).concat(Object.keys(byKat).filter(k=>!katOrder.includes(k)));
+  // Kategorien in der DB sind GROSSGESCHRIEBEN, katOrder normal — case-insensitiv abgleichen,
+  // damit die vorgegebene Reihenfolge trotzdem greift und nichts doppelt einsortiert wird.
+  const katOrderLower = katOrder.map(k=>k.toLowerCase());
+  const sortedKats = [...Object.keys(byKat)].sort((a,b)=>{
+    const ia=katOrderLower.indexOf(a.toLowerCase()); const ib=katOrderLower.indexOf(b.toLowerCase());
+    return (ia<0?999:ia)-(ib<0?999:ib) || a.localeCompare(b,'de');
+  });
 
   let html = '';
 
@@ -9900,11 +10112,12 @@ function renderZutatenManagerBody(){
   if(links.length){
     html += '<div style="background:var(--surface-1);border-radius:10px;margin-bottom:14px;overflow:hidden;">';
     links.forEach((l,i)=>{
-      const z=l.zutaten||{};
-      const isAllergen=z.ist_allergen;
+      const z=l.zutaten_master||{};
+      const codes=z.allergene_codes||[];
+      const isAllergen=codes.length>0;
       html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;'+(i>0?'border-top:0.5px solid var(--border);':'')+'">'
         +'<div style="flex:1;"><span style="font-size:13px;'+(isAllergen?'font-weight:700;color:#92400E;':'')+'">'+z.name+'</span>'
-        +(z.allergen_code?'<span style="font-size:9px;color:var(--muted);margin-left:4px;">('+z.allergen_code+')</span>':'')+'</div>'
+        +(codes.length?'<span style="font-size:9px;color:var(--muted);margin-left:4px;">('+codes.join(', ')+')</span>':'')+'</div>'
         +'<input type="text" value="'+(l.menge||'')+'" placeholder="Menge" data-link-id="'+l.id+'" oninput="debounceFieldSave(this,()=>updateLinkMenge(this))" onchange="updateLinkMenge(this)" style="width:65px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;text-align:center;">'
         +'<button onclick="removeZutatFromRezept('+l.id+')" style="background:#FEE2E2;color:#DC2626;border:none;border-radius:6px;width:28px;height:28px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>'
         +'</div>';
@@ -9923,8 +10136,9 @@ function renderZutatenManagerBody(){
     html += '<div style="padding:5px 12px;font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);background:var(--surface-1);sticky:top">'+(kat)+'</div>';
     items.forEach(z=>{
       const already=linkedIds.has(z.id);
+      const zIsAllergen=(z.allergene_codes||[]).length>0;
       html += '<div class="zm-lib-item" data-id="'+z.id+'" data-name="'+z.name.replace(/"/g,'&quot;')+'" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-top:0.5px solid var(--border);'+(already?'opacity:0.4;background:var(--surface-1);':'')+'">'
-        +'<span style="font-size:13px;'+(z.ist_allergen?'font-weight:700;color:#92400E;':'')+'">'+z.name+'</span>'
+        +'<span style="font-size:13px;'+(zIsAllergen?'font-weight:700;color:#92400E;':'')+'">'+z.name+'</span>'
         +(already
           ? '<span style="font-size:10px;color:var(--muted);">✓ vorhanden</span>'
           : '<button onclick="addZutatToRezept('+z.id+')" style="background:var(--green-light);color:var(--green);border:1px solid var(--green);border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;">+ Add</button>')
@@ -9963,11 +10177,11 @@ window.filterZutatenLibrary=filterZutatenLibrary;
 async function addZutatToRezept(zutatId){
   const dish = window._zmDish; if(!dish) return;
   try{
-    await api('rezept_zutaten',{method:'POST',body:JSON.stringify([{gericht:dish,zutat_id:zutatId,menge:''}])});
-    window._zmRezeptLinks = await api('rezept_zutaten?gericht=eq.'+encodeURIComponent(dish)+'&select=*,zutaten(id,name,kategorie,ist_allergen,allergen_code)').catch(()=>[]);
-    window._zmAllZutaten = await api('zutaten?select=*&order=kategorie,name').catch(()=>[]);
+    await api('rezept_zutaten?on_conflict=gericht,zutat_id',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates'},body:JSON.stringify([{gericht:dish,zutat_id:zutatId,menge:''}])});
+    window._zmRezeptLinks = await api('rezept_zutaten?gericht=eq.'+encodeURIComponent(dish)+'&select=*,zutaten_master(id,name,kategorie,allergene_codes)').catch(()=>[]);
+    window._zmAllZutaten = await api('zutaten_master?select=*&order=kategorie,name').catch(()=>[]);
     renderZutatenManagerBody(); showToast('✓ Zutat hinzugefügt');
-  }catch(e){ showToast('Fehler'); }
+  }catch(e){ console.error(e); showToast('Fehler beim Hinzufügen'); }
 }
 window.addZutatToRezept=addZutatToRezept;
 
@@ -9990,14 +10204,17 @@ async function createNewZutat(){
   const name=(document.getElementById('zm-new-name')?.value||'').trim();
   const kat=document.getElementById('zm-new-kat')?.value||'Sonstiges';
   const isAllergen=document.getElementById('zm-new-allergen')?.checked||false;
-  const code=(document.getElementById('zm-new-code')?.value||'').trim()||null;
+  const code=(document.getElementById('zm-new-code')?.value||'').trim();
   if(!name){ showToast('Bitte Namen eingeben'); return; }
+  const codes=isAllergen&&code ? code.split(/[,\s]+/).filter(Boolean) : [];
   try{
-    const rows=await api('zutaten',{method:'POST',body:JSON.stringify([{name,kategorie:kat,ist_allergen:isAllergen,allergen_code:code}])});
+    const rows=await api('zutaten_master',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify([{name:name.toUpperCase(),kategorie:kat,allergene_codes:codes,erstellt_von:currentStore?.name||'Küchenchef'}])});
+    invalidateZutatenMasterCache();
+    invalidateZutatenIndexCache();
     if(rows?.[0]?.id) await addZutatToRezept(rows[0].id);
-    else{ window._zmAllZutaten=await api('zutaten?select=*&order=kategorie,name').catch(()=>[]); renderZutatenManagerBody(); }
+    else{ window._zmAllZutaten=await api('zutaten_master?select=*&order=kategorie,name').catch(()=>[]); renderZutatenManagerBody(); }
     showToast('✓ Neue Zutat angelegt');
-  }catch(e){ showToast('Fehler: '+(e.message||'')); }
+  }catch(e){ console.error(e); showToast('Fehler: '+(e.message||'').slice(0,100)); }
 }
 window.createNewZutat=createNewZutat;
 
