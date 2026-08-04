@@ -964,7 +964,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.17.3';
+const APP_VERSION = '6.17.9';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1718,7 +1718,7 @@ function renderZutatenReadOnly(text){
       tiles+=`<div style="position:relative;width:100%;padding-bottom:100%;">
         <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
           <div style="width:18px;height:18px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
-          <span data-no-translate style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;word-break:break-word;overflow-wrap:break-word;hyphens:auto;max-width:100%;">${displayName}</span>
+          <span style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;word-break:break-word;overflow-wrap:break-word;hyphens:auto;max-width:100%;">${displayName}</span>
         </div>
         ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:10px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.4);z-index:2;">!</span>':''}
       </div>`;
@@ -2923,7 +2923,7 @@ function renderOrderSection(cats, label, color, icon){
         <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
           <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
           <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0"
-            onclick="this.select()" onchange="setQty(${a.id},this.value)"
+            onclick="this.select()" oninput="setQty(${a.id},this.value)" onchange="setQty(${a.id},this.value)"
             style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
           <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
         </div>
@@ -2965,7 +2965,7 @@ function renderVariantGroupRow(groupKey, groupItems){
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;${(!r.articleId||!selVerf)?'opacity:0.3;pointer-events:none;':''}">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},-1)">−</button>
         <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}" value="${v}" min="0"
-          onclick="this.select()" onchange="setVariantQty('${groupKey}',${i},this.value)"
+          onclick="this.select()" oninput="setVariantQty('${groupKey}',${i},this.value)" onchange="setVariantQty('${groupKey}',${i},this.value)"
           style="width:40px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:5px 2px;font-size:14px;">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},1)">+</button>
       </div>
@@ -3168,7 +3168,7 @@ async function renderKCOrderTab(el, tabHtml){
     html+=`<tr${(!isOrg && !verfuegbar)?' style="opacity:0.4;"':''}>
       <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
       <td>
-        <input type="number" value="${ist}" onchange="updateIstBestandStore(${a.id}, this.value)" style="width:50px;text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:5px;font-size:12px;padding:5px;background:${updatedToday?'#F0FDF4':'#fff'};">
+        <input type="number" value="${ist}" oninput="debounceFieldSave(this,()=>updateIstBestandStore(${a.id}, this.value))" onchange="updateIstBestandStore(${a.id}, this.value)" style="width:50px;text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:5px;font-size:12px;padding:5px;background:${updatedToday?'#F0FDF4':'#fff'};">
         ${updatedLabel?`<div style="font-size:9px;color:${updatedToday?'#22C55E':'var(--muted)'};margin-top:2px;">${updatedLabel}</div>`:''}
       </td>
       <td style="color:var(--muted);">${soll}</td>
@@ -3303,7 +3303,7 @@ async function renderStoreSamosaHtml(weekDates){
       const adjusted=!!rec?.is_adjusted;
       return `<td style="padding:6px 3px;">
         <input type="number" step="1" value="${val}" data-store="${currentStore.id}" data-weekday="${wd}" data-date="${dateStr}"
-          onchange="updateSamosaQty(this)" inputmode="numeric"
+          oninput="scheduleSamosaSave(this)" onchange="updateSamosaQty(this)" inputmode="numeric"
           style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':'#fff'};">
       </td>`;
     }).join('')}
@@ -3367,7 +3367,7 @@ async function renderKuecheOrderTab(el, tabHtml){
         const isPlanned=!!b; // dezenter dargestellt, wenn's laut Plan eigentlich kein Liefertag ist
         return `<td style="padding:6px 3px;">
           <input type="number" step="0.25" value="${val}" data-article="${escAttr(name)}" data-base="${b?b.base_qty:0}" data-date="${dateStr}"
-            onchange="updateKuecheQty(this)" inputmode="decimal"
+            oninput="debounceFieldSave(this,()=>updateKuecheQty(this))" onchange="updateKuecheQty(this)" inputmode="decimal"
             style="width:48px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:13px;padding:6px 2px;background:${adjusted?'#FFF7ED':(isPlanned?'#fff':'#FAFAFA')};color:${isPlanned||val>0?'inherit':'var(--muted)'};">
         </td>`;
       }).join('');
@@ -4343,10 +4343,65 @@ function setQty(id,val){
   if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'');}
 }
 window.setQty=setQty;
+// Genaue Mengen-Quittung — aktuell nur für Stadtplatz (auf Wunsch, wegen wiederholter Probleme
+// mit "verschwundenen" Mengen). Zeigt exakt, was soeben in der DB gespeichert wurde, und muss
+// aktiv weggeklickt werden, damit es wirklich gesehen wird (kein automatisches Verschwinden).
+function showOrderReceipt(rows, tabTitle, onClose){
+  const overlay=document.createElement('div');
+  overlay.id='order-receipt-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  const itemsHtml=rows.length
+    ? rows.map(r=>{
+        const a=articles.find(x=>x.id===r.article_id);
+        return `<div style="display:flex;justify-content:space-between;padding:9px 14px;border-bottom:0.5px solid var(--border);font-size:14px;">
+          <span>${a?.name||'Artikel #'+r.article_id}</span>
+          <span style="font-weight:700;">${r.quantity}</span>
+        </div>`;
+      }).join('')
+    : `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Keine Mengen über 0 — alles wurde auf 0 gesetzt.</div>`;
+  overlay.innerHTML=`<div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:80vh;overflow-y:auto;padding:0 0 20px;box-shadow:0 -4px 30px rgba(0,0,0,0.15);">
+    <div style="position:sticky;top:0;background:#fff;padding:18px 16px 12px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:16px;font-weight:700;color:#15803D;">✓ Tatsächlich abgeschickt</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">${tabTitle} — bitte kurz gegenchecken, ob das stimmt</div>
+    </div>
+    <div>${itemsHtml}</div>
+    <div style="padding:14px 16px 0;">
+      <button id="order-receipt-ok-btn" style="width:100%;padding:13px;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Passt, weiter</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('order-receipt-ok-btn').onclick=()=>{
+    overlay.remove();
+    onClose();
+  };
+}
+window.showOrderReceipt=showOrderReceipt;
+
 async function submitOrder(){
   const today=new Date().toISOString().split('T')[0];
   const tab=ORDER_TABS[activeOrderTab];
   const tabArticleIds=new Set(articles.filter(a=>tab.cats.includes(a.category)).map(a=>a.id));
+  // Sicherheitsnetz gegen die "20 bestellt, 0 angekommen"-Fälle (z.B. Stadtplatz/Mango Lassi,
+  // 03.08.26): onchange feuert erst beim Blur — tippt jemand am Handy eine Zahl ein und tippt
+  // SOFORT auf "Bestellung abschicken" ohne vorher wegzutippen, kann das Event zu spät oder gar
+  // nicht auslösen, und orderQtys bleibt auf dem alten Stand. Deshalb hier zusätzlich JEDES
+  // sichtbare Mengenfeld direkt aus dem DOM auslesen — was am Bildschirm steht, wird abgeschickt,
+  // unabhängig davon ob das Change-Event zuverlässig gefeuert hat.
+  document.querySelectorAll('input.qty-val[id^="q"]').forEach(inp=>{
+    const aid=parseInt(inp.id.slice(1));
+    if(tabArticleIds.has(aid)){
+      const n=Math.max(0, parseInt(inp.value)||0);
+      orderQtys[aid]=n;
+    }
+  });
+  document.querySelectorAll('input.qty-val[id^="vq-"]').forEach(inp=>{
+    const m=inp.id.match(/^vq-(.+)-(\d+)$/);
+    if(!m) return;
+    const row=variantRows[m[1]] && variantRows[m[1]][parseInt(m[2])];
+    if(row?.articleId && tabArticleIds.has(row.articleId)){
+      orderQtys[row.articleId]=Math.max(0, parseInt(inp.value)||0);
+    }
+  });
   const rows=Object.entries(orderQtys)
     .filter(([id,v])=>v>0 && tabArticleIds.has(parseInt(id)))
     .map(([id,qty])=>({store_id:currentStore.id,article_id:parseInt(id),quantity:qty,order_date:today}));
@@ -4390,7 +4445,14 @@ async function submitOrder(){
     showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!', submissionMarkerFailed);
     const goBackToSchichtende=schichtendeReturnFlag;
     schichtendeReturnFlag=false;
-    setTimeout(()=>goTo(goBackToSchichtende?'schichtende':'home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
+    // Stadtplatz bekommt zusätzlich eine genaue Mengen-Quittung, die aktiv weggeklickt werden muss
+    // (kein Auto-Verschwinden) — auf Wunsch, da dort wiederholt Mengen "verschwunden" sind und
+    // sofort sichtbar sein soll, was WIRKLICH abgeschickt wurde.
+    if(currentStore?.id==='3400'){
+      showOrderReceipt(rows, tab.title, ()=>goTo(goBackToSchichtende?'schichtende':'home'));
+    }else{
+      setTimeout(()=>goTo(goBackToSchichtende?'schichtende':'home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
+    }
   }catch(e){
     console.error(e);
     const detail=(e?.message||String(e)).slice(0,140);
@@ -5367,7 +5429,7 @@ async function renderOrgForecast(){
               lasHtml+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
                 <input type="number" step="0.25" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
-                  onchange="updateForecastQtyOrgGroesse(this)"
+                  oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
                   title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
                   style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">`;
           });
@@ -5388,7 +5450,7 @@ async function renderOrgForecast(){
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
-              onchange="updateForecastQtyOrg(this)"
+              oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
               style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
             ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
@@ -5579,7 +5641,7 @@ function addOrgLasagneSize(cellKey, sizeKey){
   const sz=LASAGNE_SIZES.find(s=>s.k===sizeKey);
   const wrap=document.createElement('div');
   wrap.style.cssText='display:flex;align-items:center;gap:2px;margin-bottom:2px;';
-  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:14px;">${sz?.l.split('·')[0]||sizeKey}</span><input type="number" step="0.25" placeholder="–" data-store="${storeId}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}" onchange="updateForecastQtyOrgGroesse(this)" style="width:40px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:3px 1px;">`;
+  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:14px;">${sz?.l.split('·')[0]||sizeKey}</span><input type="number" step="0.25" placeholder="–" data-store="${storeId}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}" oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)" style="width:40px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:3px 1px;">`;
   btn.parentElement.replaceChild(wrap, btn);
   wrap.querySelector('input')?.focus();
 }
@@ -7929,6 +7991,34 @@ async function renderPack(){
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
 
+  // Zum Vergleich/Nachvollziehen: Bestellungen vom Tag DAVOR (also einen Tag vor bestellDateStr) —
+  // rein informativ, grau hinterlegt, nicht interaktiv. Aufgeklappt, wenn der aktuelle Tag leer ist
+  // (dann ist der Vergleich am wichtigsten), sonst eingeklappt, um nicht zu überladen. Hilft bei
+  // Nachfragen wie "wurde X wirklich bestellt?", ohne erst mehrfach "Vorheriger" klicken zu müssen.
+  const compareDate=new Date(orderEntryDate); compareDate.setDate(compareDate.getDate()-1);
+  const compareDateStr=compareDate.toISOString().split('T')[0];
+  const compareOrdRaw=await api(`orders?order_date=eq.${compareDateStr}&select=store_id,article_id,quantity`).catch(()=>[]);
+  const compareByStore={};
+  (compareOrdRaw||[]).filter(o=>o.quantity>0).forEach(o=>{
+    const artName=articles.find(a=>a.id===o.article_id)?.name;
+    if(!artName) return;
+    (compareByStore[o.store_id]=compareByStore[o.store_id]||[]).push({name:artName, qty:o.quantity});
+  });
+  const compareLabel=compareDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+  const hasCompareData=Object.keys(compareByStore).length>0;
+  html+=`<details style="margin-top:14px;" ${!hasAny?'open':''}>
+    <summary style="font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;padding:8px 10px;background:#F5F5F4;border-radius:8px;">📅 Zum Vergleich: Bestellungen vom ${compareLabel}</summary>
+    <div style="background:#FAFAF9;border-radius:0 0 10px 10px;margin-top:-4px;padding:10px 12px;">
+      ${hasCompareData
+        ? storeList.filter(s=>compareByStore[s.id]?.length).map(s=>`
+          <div style="margin-bottom:8px;">
+            <div style="font-size:11px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};margin-bottom:2px;" data-no-translate>${s.name.split(' ')[0]}</div>
+            ${compareByStore[s.id].map(it=>`<div style="font-size:12px;color:var(--muted);padding-left:8px;">${it.name}: <strong style="color:var(--sub);">${it.qty}</strong></div>`).join('')}
+          </div>`).join('')
+        : `<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0;">Keine Bestellungen an diesem Tag.</div>`}
+    </div>
+  </details>`;
+
   // Alle Transporter-Artikel — auch ohne heutige Bestellung, damit Lieferbarkeit VORAB gemeldet werden
   // kann (z.B. wenn Servietten leer sind, bevor überhaupt eine Filiale sie nachbestellt hat).
   // Gleiches Prinzip wie bei KC: erst die Artikel ohne Bestand-Daten aussortieren, aber jederzeit einsehbar.
@@ -8300,8 +8390,8 @@ async function renderDisposal(){
         </div>
       </td>
       <td>
-        <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid ${isDone?'var(--green)':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;">
-        <input type="text" value="${rec?.note?escAttr(rec.note):''}" onchange="updateDisposalNote('${s.k}','${dishNameSafe}',this.value)" placeholder="Notiz…" style="display:block;width:80px;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:5px;font-size:10px;color:var(--sub);">
+        <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" oninput="debounceFieldSave(this,()=>updateLeftover('${s.k}','${dishNameSafe}',this.value))" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid ${isDone?'var(--green)':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;">
+        <input type="text" value="${rec?.note?escAttr(rec.note):''}" oninput="debounceFieldSave(this,()=>updateDisposalNote('${s.k}','${dishNameSafe}',this.value))" onchange="updateDisposalNote('${s.k}','${dishNameSafe}',this.value)" placeholder="Notiz…" style="display:block;width:80px;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:5px;font-size:10px;color:var(--sub);">
       </td>
     </tr>`;
   });
@@ -8478,7 +8568,7 @@ async function renderSamosaTableHtml(){
       const adjusted=!!rec?.is_adjusted;
       const isOptional=!b; // kein Standard-Liefertag für diese Filiale — dezenter dargestellt
       html+=`<td><input type="number" step="1" value="${val}" data-store="${s.id}" data-weekday="${wd}" data-date="${dateStr}"
-        onchange="updateSamosaQty(this)"
+        oninput="scheduleSamosaSave(this)" onchange="updateSamosaQty(this)"
         style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:3px 1px;background:${adjusted?'#FFF7ED':isOptional?'transparent':'#fff'};color:${isOptional&&!val?'var(--muted)':'inherit'};"></td>`;
     });
     html+='</tr>';
@@ -8540,6 +8630,17 @@ async function updateSamosaQty(input){
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateSamosaQty=updateSamosaQty;
+
+// Speichert automatisch ~600ms nach der letzten Eingabe, statt sich auf's Wegtippen (blur/onchange)
+// zu verlassen — genau die Race-Condition, die zum "20 bestellt, 0 angekommen"-Fall geführt hat.
+// Kein Speichern pro Tastendruck (das wäre bei jeder Ziffer ein DB-Call), sondern kurz entprellt.
+let _samosaSaveTimers={};
+function scheduleSamosaSave(input){
+  const key=input.dataset.store+'|'+input.dataset.date;
+  clearTimeout(_samosaSaveTimers[key]);
+  _samosaSaveTimers[key]=setTimeout(()=>updateSamosaQty(input), 600);
+}
+window.scheduleSamosaSave=scheduleSamosaSave;
 
 // Info-Tab für Michi (Transporter): zeigt Aufgaben, die Tini/Ines in Organisation eingetragen haben,
 // datumsverknüpft — heutige/überfällige zuerst, dann kommende. Direkt abhakbar, kein Umweg über Organisation.
@@ -8881,7 +8982,7 @@ async function renderKitchenDaily(){
         <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:2px;line-height:1.3;">${d.name}</div>
         <div style="font-size:9px;margin-top:4px;background:${allergene?'#FFF7ED':'var(--surface-1)'};color:${allergene?'#C2410C':'var(--muted)'};border-radius:4px;padding:2px 4px;">${allergene||'keine Allergene'}</div>
       </div>
-      <div id="${detailId}" style="display:none;background:var(--card);border:0.5px solid var(--border);border-radius:8px;margin-top:4px;padding:8px 10px;font-size:10px;color:var(--muted);" data-no-translate>${zutaten||'Keine Zutaten hinterlegt'}</div>
+      <div id="${detailId}" style="display:none;background:var(--card);border:0.5px solid var(--border);border-radius:8px;margin-top:4px;padding:8px 10px;font-size:10px;color:var(--muted);">${zutaten||'Keine Zutaten hinterlegt'}</div>
     </div>`;
   });
   html+='</div>';
@@ -9802,9 +9903,9 @@ function renderZutatenManagerBody(){
       const z=l.zutaten||{};
       const isAllergen=z.ist_allergen;
       html += '<div style="display:flex;align-items:center;gap:8px;padding:9px 12px;'+(i>0?'border-top:0.5px solid var(--border);':'')+'">'
-        +'<div style="flex:1;"><span style="font-size:13px;'+(isAllergen?'font-weight:700;color:#92400E;':'')+'" data-no-translate>'+z.name+'</span>'
+        +'<div style="flex:1;"><span style="font-size:13px;'+(isAllergen?'font-weight:700;color:#92400E;':'')+'">'+z.name+'</span>'
         +(z.allergen_code?'<span style="font-size:9px;color:var(--muted);margin-left:4px;">('+z.allergen_code+')</span>':'')+'</div>'
-        +'<input type="text" value="'+(l.menge||'')+'" placeholder="Menge" data-link-id="'+l.id+'" onchange="updateLinkMenge(this)" style="width:65px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;text-align:center;">'
+        +'<input type="text" value="'+(l.menge||'')+'" placeholder="Menge" data-link-id="'+l.id+'" oninput="debounceFieldSave(this,()=>updateLinkMenge(this))" onchange="updateLinkMenge(this)" style="width:65px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;text-align:center;">'
         +'<button onclick="removeZutatFromRezept('+l.id+')" style="background:#FEE2E2;color:#DC2626;border:none;border-radius:6px;width:28px;height:28px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>'
         +'</div>';
     });
@@ -9823,7 +9924,7 @@ function renderZutatenManagerBody(){
     items.forEach(z=>{
       const already=linkedIds.has(z.id);
       html += '<div class="zm-lib-item" data-id="'+z.id+'" data-name="'+z.name.replace(/"/g,'&quot;')+'" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-top:0.5px solid var(--border);'+(already?'opacity:0.4;background:var(--surface-1);':'')+'">'
-        +'<span style="font-size:13px;'+(z.ist_allergen?'font-weight:700;color:#92400E;':'')+'" data-no-translate>'+z.name+'</span>'
+        +'<span style="font-size:13px;'+(z.ist_allergen?'font-weight:700;color:#92400E;':'')+'">'+z.name+'</span>'
         +(already
           ? '<span style="font-size:10px;color:var(--muted);">✓ vorhanden</span>'
           : '<button onclick="addZutatToRezept('+z.id+')" style="background:var(--green-light);color:var(--green);border:1px solid var(--green);border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:600;">+ Add</button>')
@@ -9848,6 +9949,7 @@ function renderZutatenManagerBody(){
 
   html += '<button onclick="closeZutatenManager()" style="width:100%;padding:12px;border:1.5px solid var(--border);border-radius:12px;font-size:13px;cursor:pointer;background:var(--card);">Fertig</button>';
   body.innerHTML = html;
+  translateEl(body);
 }
 window.renderZutatenManagerBody=renderZutatenManagerBody;
 
@@ -10006,11 +10108,14 @@ async function renderSweets(){
   let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Produktion')}${ttab('bestellen','📦 Bestellen')}${ttab('nachschub','⚠️ Nachschub')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
-  // Gleiche Datums-Logik wie bei der Transporter-Bestellliste: Filialen tragen Sweets-Bestellungen
-  // am Vortag ein (order_date = Eintragstag), Team bereitet sie am nächsten Tag vor. "Heute" für
-  // das Team bedeutet daher: Datenbank-Abfrage auf GESTERN, Anzeige/Label bleibt der heutige Tag.
+  // WICHTIG (korrigiert): Anders als beim Transporter packt das Sweets-Team AM SELBEN TAG ein
+  // (deshalb die 14:00-Uhr-Deadline — genug Zeit für den Nachmittag). Die Filiale bestellt heute,
+  // das Team packt heute, Michi liefert dann morgen früh an die Filiale aus. "Heute" für das Team
+  // bedeutet also: Datenbank-Abfrage auf HEUTE, nicht auf gestern (war vorher fälschlich -1 Tag
+  // versetzt wie beim Transporter — dadurch sah das Team nie die frisch eingegangenen Bestellungen
+  // desselben Tages, sondern nur die vom Vortag, die schon gepackt waren).
   const sweetsViewDate=new Date(); sweetsViewDate.setDate(sweetsViewDate.getDate()+sweetsDateOffset);
-  const sweetsEntryDate=new Date(sweetsViewDate); sweetsEntryDate.setDate(sweetsEntryDate.getDate()-1);
+  const sweetsEntryDate=new Date(sweetsViewDate);
   const sweetsDateStr=sweetsEntryDate.toISOString().split('T')[0];
   const isSweetsToday=sweetsDateOffset===0;
   const allOrdRaw=await api(`orders?order_date=eq.${sweetsDateStr}&select=store_id,article_id,quantity`);
@@ -10034,8 +10139,8 @@ async function renderSweets(){
           <button onclick="showTeamRezeptForm(${r.id})" style="background:var(--surface-1);border:none;border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">✏️ Bearbeiten</button>
         </div>
         ${r.ergibt?`<div style="font-size:11px;color:#0EA5E9;font-weight:600;margin-bottom:8px;">Ergibt: ${r.ergibt}</div>`:''}
-        ${r.zutaten?`<div style="margin-bottom:${r.anleitung?'8px':'0'};"><div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Zutaten</div><div style="font-size:12.5px;line-height:1.6;white-space:pre-line;" data-no-translate>${r.zutaten}</div></div>`:''}
-        ${r.anleitung?`<div><div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Zubereitung</div><div style="font-size:12.5px;line-height:1.6;white-space:pre-line;" data-no-translate>${r.anleitung}</div></div>`:''}
+        ${r.zutaten?`<div style="margin-bottom:${r.anleitung?'8px':'0'};"><div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Zutaten</div><div style="font-size:12.5px;line-height:1.6;white-space:pre-line;">${r.zutaten}</div></div>`:''}
+        ${r.anleitung?`<div><div style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">Zubereitung</div><div style="font-size:12.5px;line-height:1.6;white-space:pre-line;">${r.anleitung}</div></div>`:''}
         ${(!r.zutaten && !r.anleitung && !r.ergibt)?`<div style="font-size:11.5px;color:var(--muted);">Noch kein Rezept hinterlegt — auf "Bearbeiten" tippen.</div>`:''}
       </div>`;
     });
@@ -10069,7 +10174,7 @@ async function renderSweets(){
           </div>
           <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
             <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
-            <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0" onclick="this.select()" onchange="setQty(${a.id},this.value)" style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
+            <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0" onclick="this.select()" oninput="setQty(${a.id},this.value)" onchange="setQty(${a.id},this.value)" style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
             <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
           </div>
         </div>`;
@@ -10131,7 +10236,7 @@ async function renderSweets(){
     <button onclick="navSweetsDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
     <div style="text-align:center;">
       <div style="font-size:12.5px;font-weight:600;">${sweetsDateLabel}${isSweetsToday?' · heute':''}</div>
-      <div style="font-size:10px;color:var(--muted);">Bestellungen von ${sweetsEntryDate.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}</div>
+      <div style="font-size:10px;color:var(--muted);">Bestellungen von diesem Tag, bis 14:00 Uhr eingegangen</div>
       ${!isSweetsToday?`<div onclick="navSweetsToday()" style="font-size:10px;color:#EC4899;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
     </div>
     <button onclick="navSweetsDate(1)" ${isSweetsToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
@@ -10211,7 +10316,7 @@ async function renderKCLager(){
       const updatedToday=rec?.updated_date===today;
       html+=`<tr>
         <td style="font-size:12px;">${a.name}</td>
-        <td><input type="number" value="${ist}" data-article="${a.id}" onchange="updateIstBestand(${a.id}, this.value)" style="width:50px;text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:5px;font-size:12px;padding:4px;background:${updatedToday?'#F0FDF4':'#fff'};"></td>
+        <td><input type="number" value="${ist}" data-article="${a.id}" oninput="debounceFieldSave(this,()=>updateIstBestand(${a.id}, this.value))" onchange="updateIstBestand(${a.id}, this.value)" style="width:50px;text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:5px;font-size:12px;padding:4px;background:${updatedToday?'#F0FDF4':'#fff'};"></td>
         <td style="color:var(--muted);">${soll}</td>
         <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
       </tr>`;
@@ -10263,6 +10368,19 @@ function renderLager(){
 }
 
 // ---- UTILS ----
+// Generischer Entprell-Helfer für Felder, die sofort beim Ändern speichern (IST-Bestand, Forecast-
+// Mengen, Entsorgung, Zutaten-Mengen etc.) — speichert automatisch ~600ms nach der letzten Eingabe,
+// statt sich auf's Wegtippen (blur/onchange) zu verlassen. Genau die Race-Condition, die zum
+// "20 bestellt, 0 angekommen"-Fall bei Stadtplatz/Mango Lassi geführt hat (03.08.26).
+let _fieldSaveTimers=new WeakMap();
+function debounceFieldSave(el, fn, ms=600){
+  const existing=_fieldSaveTimers.get(el);
+  if(existing) clearTimeout(existing);
+  const t=setTimeout(()=>{ fn(); _fieldSaveTimers.delete(el); }, ms);
+  _fieldSaveTimers.set(el, t);
+}
+window.debounceFieldSave=debounceFieldSave;
+
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?6000:2500);}
 window.addEventListener('online',()=>{});
 
