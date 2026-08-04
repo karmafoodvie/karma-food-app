@@ -963,7 +963,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.18.7';
+const APP_VERSION = '6.19.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8396,58 +8396,110 @@ async function sendTransportNote(){
 // Gemeinsam genutzt von Organisation (Mengen-Tab) UND Küche (eigener Tab) — vorher gab's hier
 // nur die Einzelfilialen-Eingabemaske, die bei der Organisation leer blieb (store_id='zentrale'
 // hat naturgemäß nie eigene Entsorgungsdaten).
-let disposalOverviewDateOffset=0;
+let disposalWeekOffset=0; // 0 = diese Woche
+let disposalShowExact=false; // Checkbox "Genaue Daten anzeigen"
+
+function disposalRerenderCall(){ return currentView==='orgForecast'?'renderOrgForecast()':'renderKitchen()'; }
+function toggleDisposalExact(cb){ disposalShowExact=cb.checked; }
+window.toggleDisposalExact=toggleDisposalExact;
+
+// Ampel-Einstufung — dieselben Schwellenwerte, die die App auch für die Forecast-Vorschläge nutzt
+// (>10 übrig = zu viel, 5-10 = etwas zu viel, ausverkauft = zu wenig, sonst = genau richtig).
+function disposalAmpel(leftoverQty, soldOutTime){
+  if(leftoverQty==null) return null;
+  if(leftoverQty===0 || soldOutTime) return {icon:'🔥', label:'ausverkauft', bg:'#FEE2E2', border:'#DC2626', color:'#991B1B'};
+  if(leftoverQty>10) return {icon:'📦', label:'zu viel', bg:'#FED7AA', border:'#C2410C', color:'#9A3412'};
+  if(leftoverQty>4) return {icon:'📦', label:'etwas zu viel', bg:'#FEF3C7', border:'#D97706', color:'#92400E'};
+  return {icon:'✓', label:'genau richtig', bg:'#DCFCE7', border:'#16A34A', color:'#166534'};
+}
+
 async function renderDisposalOverviewHtml(){
-  const d=new Date(); d.setDate(d.getDate()+disposalOverviewDateOffset);
-  const dateStr=d.toISOString().split('T')[0];
-  const dateLabel=d.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
-  const isToday=disposalOverviewDateOffset===0;
+  const weekDates=getWeekdayDates(disposalWeekOffset);
+  const kwNum=getIsoWeekNumber(weekDates[1]);
+  const rerenderCall=disposalRerenderCall();
+
+  // KW-Wochen-Tabs — aktuelle + 6 zurückliegende Wochen, horizontal scrollbar
+  let weekTabsHtml='<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;-webkit-overflow-scrolling:touch;">';
+  for(let off=0; off>=-6; off--){
+    const wd=getWeekdayDates(off);
+    const kw=getIsoWeekNumber(wd[1]);
+    const sub=off===0?'(diese Woche)':(off===-1?'(letzte Woche)':'');
+    const dateRange=`${wd[1].split('-').reverse().slice(0,2).join('.')}.–${wd[5].split('-').reverse().slice(0,2).join('.')}.`;
+    const active=off===disposalWeekOffset;
+    weekTabsHtml+=`<button onclick="disposalWeekOffset=${off};${rerenderCall}" style="flex-shrink:0;min-width:110px;padding:8px 10px;border-radius:10px;border:${active?'2px solid #1D3557':'1.5px solid var(--border)'};background:${active?'#1D3557':'#fff'};color:${active?'#fff':'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;text-align:left;">KW ${kw}${sub?' <span style="font-weight:400;opacity:0.85;">'+sub+'</span>':''}<br><span style="font-size:10px;font-weight:400;opacity:0.85;">${dateRange}</span></button>`;
+  }
+  weekTabsHtml+='</div>';
+
+  // Legende
+  const legendHtml=`<div class="card" style="padding:14px;margin-bottom:14px;">
+    <div style="font-weight:700;margin-bottom:10px;">Legende</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <span style="background:#FEE2E2;color:#991B1B;border:1px solid #DC2626;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">🔥 ausverkauft = zu wenig</span>
+      <span style="background:#DCFCE7;color:#166534;border:1px solid #16A34A;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">✓ wenig übrig = genau richtig</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+      <span style="background:#FEF3C7;color:#92400E;border:1px solid #D97706;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">📦 5–10 übrig = etwas zu viel</span>
+      <span style="background:#FED7AA;color:#9A3412;border:1px solid #C2410C;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;">📦 &gt;10 übrig = zu viel</span>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" ${disposalShowExact?'checked':''} onchange="toggleDisposalExact(this);${rerenderCall}">
+      Genaue Daten anzeigen (Menge &amp; Uhrzeit)
+    </label>
+  </div>`;
 
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
-  const disp=await api(`disposal?disposal_date=eq.${dateStr}&select=store_id,slot,dish_name,sold_out_time,leftover_qty,note`).catch(()=>[]);
+  const fromDate=weekDates[1], toDate=weekDates[5];
+  const weekDisp=await api(`disposal?disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=store_id,disposal_date,slot,dish_name,sold_out_time,leftover_qty`).catch(()=>[]);
 
-  let html=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-    <button onclick="disposalOverviewDateOffset--;${currentView==='orgForecast'?'renderOrgForecast()':'renderKitchen()'}" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
-    <div style="text-align:center;">
-      <div style="font-size:12.5px;font-weight:600;">${dateLabel}${isToday?' · heute':''}</div>
-    </div>
-    <button onclick="disposalOverviewDateOffset++;${currentView==='orgForecast'?'renderOrgForecast()':'renderKitchen()'}" ${isToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
-  </div>`;
-
-  if(!disp?.length){
-    return html+'<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Keine Entsorgungsdaten für diesen Tag.</div>';
-  }
-
-  const SLOT_LABEL={salat:'Salat',gericht2:'Gericht 2',gericht3:'Gericht 3',reis:'Reis'};
   const SLOT_ORDER=['salat','gericht2','gericht3','reis'];
-  const bySlot={};
-  disp.forEach(r=>{ (bySlot[r.slot]=bySlot[r.slot]||[]).push(r); });
-  const slots=SLOT_ORDER.filter(s=>bySlot[s]);
+  let html=weekTabsHtml+legendHtml;
+  const DAY_NAMES={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
+  const todayStr=new Date().toISOString().split('T')[0];
 
-  const storeColWidth=(70/(storeList.length+1)).toFixed(1);
-  html+=`<div class="card" style="overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;min-width:280px;">
-    <thead><tr><th style="text-align:left;padding:6px 4px;font-size:11px;">Gericht</th>`;
-  storeList.forEach(s=>html+=`<th style="width:${storeColWidth}%;color:${STORE_COLORS[s.id]||'#888'};padding:6px 2px;font-size:9.5px;font-weight:700;" data-no-translate>${STORE_SHORT[s.id]||s.name.split(' ')[0]}</th>`);
-  html+='</tr></thead><tbody>';
-  slots.forEach(slot=>{
-    const rows=bySlot[slot];
-    const dishName=rows[0]?.dish_name||SLOT_LABEL[slot];
-    html+=`<tr><td style="padding:7px 4px;"><div style="font-weight:600;font-size:12px;" data-no-translate>${dishName}</div><div style="font-size:9.5px;color:var(--muted);">${SLOT_LABEL[slot]}</div></td>`;
-    storeList.forEach(s=>{
-      const rec=rows.find(r=>r.store_id===s.id);
-      if(!rec || rec.leftover_qty==null){ html+=`<td style="text-align:center;color:var(--border);padding:6px 1px;">·</td>`; return; }
-      const soldOut=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
-      html+=`<td style="text-align:center;padding:6px 1px;">
-        <div style="font-size:12.5px;font-weight:700;color:${rec.leftover_qty>0?'#1a1a18':'var(--green)'};">${rec.leftover_qty}</div>
-        ${soldOut?`<div style="font-size:8.5px;color:#DC2626;">${soldOut}</div>`:''}
-        ${rec.note?`<div style="font-size:8px;color:var(--muted);max-width:60px;margin:0 auto;">${escAttr(rec.note)}</div>`:''}
-      </td>`;
+  for(let wd=1; wd<=5; wd++){
+    const dateStr=weekDates[wd];
+    const dayDisp=weekDisp.filter(d=>d.disposal_date===dateStr);
+    const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+    const isToday=dateStr===todayStr;
+    html+=`<div style="font-size:12px;font-weight:700;letter-spacing:0.03em;color:${isToday?'#1D3557':'var(--muted)'};margin:16px 0 6px;text-transform:uppercase;">${DAY_NAMES[wd]} ${dateLabel}${isToday?' — heute':''}</div>`;
+    if(!dayDisp.length){
+      html+=`<div class="card" style="padding:1rem;text-align:center;color:var(--muted);font-size:12.5px;">Keine Daten für diesen Tag.</div>`;
+      continue;
+    }
+    // Gerichte in fester Reihenfolge (Slot), mit dem tatsächlichen Namen aus den Daten
+    const dishBySlot={};
+    dayDisp.forEach(d=>{ if(!dishBySlot[d.slot]) dishBySlot[d.slot]=d.dish_name; });
+    const slots=SLOT_ORDER.filter(s=>dishBySlot[s]);
+
+    html+=`<div class="card" style="overflow:hidden;margin-bottom:4px;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;min-width:${280+slots.length*90}px;">
+      <thead><tr><th style="text-align:left;padding:7px 6px;font-size:11px;">Filiale</th>
+        ${slots.map(s=>`<th style="padding:7px 4px;font-size:11px;" data-no-translate>${dishBySlot[s]}</th>`).join('')}
+      </tr></thead><tbody>`;
+    storeList.forEach(store=>{
+      html+=`<tr><td style="padding:8px 6px;font-size:12px;font-weight:600;" data-no-translate>${store.name.split(' ')[0]}</td>`;
+      slots.forEach(slot=>{
+        const rec=dayDisp.find(d=>d.store_id===store.id && d.slot===slot);
+        if(!rec || rec.leftover_qty==null){ html+=`<td style="text-align:center;padding:8px 4px;color:var(--border);">–</td>`; return; }
+        const ampel=disposalAmpel(rec.leftover_qty, rec.sold_out_time);
+        const soldOutLabel=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
+        if(disposalShowExact){
+          html+=`<td style="text-align:center;padding:6px 3px;">
+            <div style="display:inline-block;background:${ampel.bg};border:1.5px solid ${ampel.border};border-radius:8px;padding:4px 8px;">
+              <div style="font-size:13px;font-weight:700;color:${ampel.color};">${rec.leftover_qty}</div>
+              ${soldOutLabel?`<div style="font-size:9px;color:${ampel.color};">${soldOutLabel}</div>`:''}
+            </div>
+          </td>`;
+        }else{
+          html+=`<td style="text-align:center;padding:6px 3px;">
+            <span style="display:inline-flex;align-items:center;gap:4px;background:${ampel.bg};border:1.5px solid ${ampel.border};border-radius:20px;padding:5px 10px;font-size:13px;font-weight:700;color:${ampel.color};">${ampel.icon} ${rec.leftover_qty}</span>
+          </td>`;
+        }
+      });
+      html+='</tr>';
     });
-    html+='</tr>';
-  });
-  html+='</tbody></table></div></div>';
-  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Restmenge in Portionen · rote Uhrzeit = ausverkauft gemeldet · "·" = noch nicht eingetragen</div>`;
+    html+='</tbody></table></div></div>';
+  }
   return html;
 }
 window.renderDisposalOverviewHtml=renderDisposalOverviewHtml;
