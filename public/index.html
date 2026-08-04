@@ -963,7 +963,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.19.0';
+const APP_VERSION = '6.19.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4169,7 +4169,7 @@ async function renderForecastOrderTab(el, tabHtml){
       const manualColor=isOrgSet?'#2B3A67':'#F97316';
       const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
       h+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LABELS[sz.k]}</span>
-        <input type="number" step="0.25" value="${val}" placeholder="–"
+        <input type="number" step="1" value="${val}" placeholder="–"
           data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
           oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
           style="width:40px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">`;
@@ -4298,7 +4298,7 @@ async function _autoSaveForecastCellInner(inputEl, dateStr, dishName){
     if(isLasagneDish){
       const allSizeInputs=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)];
       allSizeInputs.forEach(inp=>{
-        const qty=parseFloat(inp.value);
+        const qty=Math.round(parseFloat(inp.value));
         if(!isNaN(qty) && qty>=0){
           rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:inp.dataset.groesse||'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
         }
@@ -4396,7 +4396,7 @@ function addLasagneSize(cellKey, sizeKey){
   const wrap=document.createElement('div');
   wrap.style.cssText='display:flex;align-items:center;gap:3px;margin-top:3px;';
   const safeDish=dishName.replace(/"/g,'&quot;');
-  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:18px;">${sLabel}</span><input type="number" step="0.25" placeholder="–" data-dish="${safeDish}" data-date="${dateStr}" data-groesse="${sizeKey}" data-original="" style="width:52px;padding:5px 3px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center;" oninput="markForecastDirty(this)">`;
+  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:18px;">${sLabel}</span><input type="number" step="1" placeholder="–" data-dish="${safeDish}" data-date="${dateStr}" data-groesse="${sizeKey}" data-original="" style="width:52px;padding:5px 3px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;text-align:center;" oninput="markForecastDirty(this)">`;
   btn.replaceWith(wrap);
   wrap.querySelector('input')?.focus();
 }
@@ -5533,7 +5533,7 @@ async function renderOrgForecast(){
               const lasIsSugg=!rec && lasSugg!=null;
               const LBLS={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
               lasHtml+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
-                <input type="number" step="0.25" value="${lasVal}" placeholder="–"
+                <input type="number" step="1" value="${lasVal}" placeholder="–"
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
                   oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
                   title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
@@ -5724,7 +5724,7 @@ async function updateForecastQtyOrgGroesse(inputEl){
 }
 async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr){
   const groesse=inputEl.dataset.groesse||'gross';
-  const qty=inputEl.value===''?null:parseFloat(inputEl.value);
+  const qty=inputEl.value===''?null:Math.round(parseFloat(inputEl.value));
   try{
     // Nur diese Größe löschen — andere Größen bleiben erhalten
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
@@ -5747,7 +5747,7 @@ function addOrgLasagneSize(cellKey, sizeKey){
   const sz=LASAGNE_SIZES.find(s=>s.k===sizeKey);
   const wrap=document.createElement('div');
   wrap.style.cssText='display:flex;align-items:center;gap:2px;margin-bottom:2px;';
-  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:14px;">${sz?.l.split('·')[0]||sizeKey}</span><input type="number" step="0.25" placeholder="–" data-store="${storeId}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}" oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)" style="width:40px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:3px 1px;">`;
+  wrap.innerHTML=`<span style="font-size:9px;color:var(--muted);min-width:14px;">${sz?.l.split('·')[0]||sizeKey}</span><input type="number" step="1" placeholder="–" data-store="${storeId}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sizeKey}" oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)" style="width:40px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:3px 1px;">`;
   btn.parentElement.replaceChild(wrap, btn);
   wrap.querySelector('input')?.focus();
 }
@@ -8472,12 +8472,12 @@ async function renderDisposalOverviewHtml(){
     dayDisp.forEach(d=>{ if(!dishBySlot[d.slot]) dishBySlot[d.slot]=d.dish_name; });
     const slots=SLOT_ORDER.filter(s=>dishBySlot[s]);
 
-    html+=`<div class="card" style="overflow:hidden;margin-bottom:4px;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;min-width:${280+slots.length*90}px;">
-      <thead><tr><th style="text-align:left;padding:7px 6px;font-size:11px;">Filiale</th>
-        ${slots.map(s=>`<th style="padding:7px 4px;font-size:11px;" data-no-translate>${dishBySlot[s]}</th>`).join('')}
+    html+=`<div class="card" style="overflow:hidden;margin-bottom:4px;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;min-width:${180+slots.length*82}px;border-collapse:separate;border-spacing:0;">
+      <thead><tr><th style="position:sticky;left:0;z-index:2;background:#F5F5F4;text-align:left;padding:7px 6px;font-size:11px;box-shadow:2px 0 3px rgba(0,0,0,0.05);">Filiale</th>
+        ${slots.map(s=>`<th style="padding:7px 4px;font-size:11px;min-width:80px;" data-no-translate>${dishBySlot[s]}</th>`).join('')}
       </tr></thead><tbody>`;
     storeList.forEach(store=>{
-      html+=`<tr><td style="padding:8px 6px;font-size:12px;font-weight:600;" data-no-translate>${store.name.split(' ')[0]}</td>`;
+      html+=`<tr><td style="position:sticky;left:0;z-index:1;background:#fff;padding:8px 6px;font-size:12px;font-weight:600;box-shadow:2px 0 3px rgba(0,0,0,0.05);" data-no-translate>${store.name.split(' ')[0]}</td>`;
       slots.forEach(slot=>{
         const rec=dayDisp.find(d=>d.store_id===store.id && d.slot===slot);
         if(!rec || rec.leftover_qty==null){ html+=`<td style="text-align:center;padding:8px 4px;color:var(--border);">–</td>`; return; }
@@ -9679,6 +9679,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     if(!fMapByCat[_cat][f.store_id]) fMapByCat[_cat][f.store_id]=[];
     fMapByCat[_cat][f.store_id].push(f);
   });
+  // Entsorgung desselben Tages — damit die Küche beim Zurückscrollen (vergangene Tage) auf einen
+  // Blick sieht, wie's tatsächlich lief (Ampel neben der Menge), nicht nur was geplant war.
+  const disposalForDay=await api(`disposal?disposal_date=eq.${tomorrowStr}&select=store_id,slot,leftover_qty,sold_out_time`).catch(()=>[]);
+  const disposalBySlotStore={};
+  (disposalForDay||[]).forEach(d=>{ (disposalBySlotStore[d.slot]=disposalBySlotStore[d.slot]||{})[d.store_id]=d; });
 
   // Get tomorrow's menu dishes from MENU_DATA
   const _cookWoche=getMenuWocheForDate(tomorrowStr);
@@ -9816,7 +9821,13 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const changedByOrg=recs.some(r=>r.source==='org');
       const changedColor=changedByOrg?'#2B3A67':'#0369A1';
       const sizeLabel=isLasagne&&recs.length?recs.map(r=>`${formatQty(r.qty)}×${r.groesse==='mittel'?'M':(r.groesse==='klein'?'K':'G')}`).join('+'):null;
-      return `<td style="font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}</td>`;
+      const dispRec=(disposalBySlotStore[dishObj.slot]||{})[s.id];
+      let ampelBadge='';
+      if(dispRec && dispRec.leftover_qty!=null){
+        const a=disposalAmpel(dispRec.leftover_qty, dispRec.sold_out_time);
+        ampelBadge=`<div style="font-size:9.5px;font-weight:700;color:${a.color};margin-top:1px;">${a.icon} ${dispRec.leftover_qty}</div>`;
+      }
+      return `<td style="font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${qty?formatQty(qty):'–'}${sizeLabel?`<div style="font-size:8.5px;color:var(--muted);">${sizeLabel}</div>`:''}${ampelBadge}</td>`;
     }).join('');
     html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
       <td style="text-align:left;border-bottom:1px solid var(--border);border-right:1px solid var(--border);"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
