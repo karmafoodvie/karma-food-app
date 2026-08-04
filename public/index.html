@@ -964,7 +964,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.18.3';
+const APP_VERSION = '6.18.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1404,7 +1404,7 @@ function zutatenKey(woche, tag, slot){
 function guessZutatKat(name){
   const n=name.toLowerCase();
   if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
-  if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|mais|sellerie|blumenkohl|süßkartoffel/.test(n)) return 'Gemüse';
+  if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|mais|sellerie|blumenkohl|karfiol|süßkartoffel/.test(n)) return 'Gemüse';
   if(/limett|zitronen|orange|mango|kokos|ananas|apfel|banane|granatapfel|tamarinde|maracuja/.test(n)) return 'Obst';
   if(/linsen|kichererbsen|bohnen|tofu|tempeh|edamame|\bdal\b/.test(n)) return 'Hülsenfrüchte';
   if(/petersilie|koriander.fri|minze|basilikum|thymian|rosmarin|dill|schnittlauch|kräuter/.test(n)) return 'Kräuter';
@@ -1424,9 +1424,14 @@ function parseZutatenText(text){
         && !l.startsWith('ÖL/') && !l.startsWith('DRESSING:') && l!=='';
   });
   const items=lines.join(',').split(',').map(s=>s.trim()).filter(Boolean);
+  const upToTitle={}; ZUTAT_KAT_ORDER.forEach((k,i)=>{ upToTitle[ZUTAT_KAT_ORDER_UP[i]]=k; });
   const byKat={};
   items.forEach(item=>{
-    const k=guessZutatKat(item);
+    // Zutaten-Datenbank zuerst prüfen (wie bei der Kachel-Ansicht/getEffectiveKat) — sonst landen
+    // Zutaten wie "Karfiol" fälschlich in "Sonstiges", nur weil der Text-Rate-Mechanismus das
+    // österreichische Wort nicht kennt, obwohl die Datenbank es korrekt als Gemüse führt.
+    const masterHit=findZutatMasterMatch(item);
+    const k=masterHit ? (upToTitle[masterHit.kategorie]||masterHit.kategorie) : guessZutatKat(item);
     if(!byKat[k]) byKat[k]=[];
     if(!byKat[k].includes(item)) byKat[k].push(item);
   });
@@ -6145,7 +6150,7 @@ window.renderZutatenForGericht=renderZutatenForGericht;
 // Guess category of an ingredient from its name
 function guessZutatKategorie(name){
   const n = name.toLowerCase();
-  if(/spinat|tomate|zwiebel|knoblauch|paprika|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|erbsen|mais|sellerie/.test(n)) return 'Gemüse';
+  if(/spinat|tomate|zwiebel|knoblauch|paprika|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|erbsen|mais|sellerie|karfiol/.test(n)) return 'Gemüse';
   if(/limett|zitronen|orange|mango|kokos|ananas|apfel/.test(n)) return 'Obst';
   if(/linsen|kichererbsen|bohnen|erbsen|tofu|tempeh/.test(n)) return 'Hülsenfrüchte';
   if(/petersilie|koriander|minze|basilikum|thymian|rosmarin|dill/.test(n)) return 'Kräuter';
