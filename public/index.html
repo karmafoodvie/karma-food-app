@@ -966,7 +966,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.19.2';
+const APP_VERSION = '6.19.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3570,7 +3570,7 @@ async function renderEndkontrolleHtml(){
       <div style="font-size:12.5px;font-weight:600;">${dateLabel}${isToday?' · heute':''}</div>
       ${!isToday?`<div onclick="navBestellToday()" style="font-size:10px;color:#F97316;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
     </div>
-    <button onclick="navBestellDate(1)" ${isToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
+    <button onclick="navBestellDate(1)" ${transporterBestellDateOffset>=1?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
   </div>`;
   html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">✅ Endkontrolle vor der Abfahrt — Gerichte & Beilagen zusammen, pro Filiale antippen zum Abhaken</div>`;
 
@@ -8067,9 +8067,11 @@ async function renderPack(){
       <div style="font-size:10px;color:var(--muted);">Bestellungen von ${orderEntryDate.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}</div>
       ${!isBestellToday?`<div onclick="navBestellToday()" style="font-size:10px;color:#F97316;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
     </div>
-    <button onclick="navBestellDate(1)" ${isBestellToday?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
+    <button onclick="navBestellDate(1)" ${transporterBestellDateOffset>=1?'disabled style="opacity:0.35;background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;"':'style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;"'}>Nächster →</button>
   </div>`;
-  if(!isBestellToday){
+  if(transporterBestellDateOffset>0){
+    html+=`<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#1E40AF;">🔍 Vorschau für morgen — basiert auf den bisher heute eingegangenen Bestellungen, kann sich bis Tagesende noch ändern.</div>`;
+  } else if(!isBestellToday){
     html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#9A3412;">📋 Ansicht eines vergangenen Tages — nur Anzeige, "eingepackt" kann hier nicht mehr geändert werden.</div>`;
   }
   const allOrdRaw=await api(`orders?order_date=eq.${bestellDateStr}&select=store_id,article_id,quantity,eingepackt`);
@@ -8093,8 +8095,8 @@ async function renderPack(){
   }
 
   html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
-    <div style="font-size:11px;color:var(--muted);">Zahl antippen = als eingepackt markieren</div>
-    <button onclick="markAllPackedAndReset('${bestellDateStr}')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">✅ Alles eingepackt</button>
+    <div style="font-size:11px;color:var(--muted);">${isBestellToday?'Zahl antippen = als eingepackt markieren':(transporterBestellDateOffset>0?'Vorschau — Einpacken erst morgen möglich':'')}</div>
+    ${isBestellToday?`<button onclick="markAllPackedAndReset('${bestellDateStr}')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">✅ Alles eingepackt</button>`:''}
   </div>`;
 
   let hasAny=false;
