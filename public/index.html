@@ -80,8 +80,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .item-unit{font-size:11px;color:var(--muted);}
 .qty-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .qty-btn:active{background:var(--green-light);}
-.qty-val{width:32px;text-align:center;font-size:15px;font-weight:500;color:var(--muted);}
+.qty-val{width:32px;text-align:center;font-size:15px;font-weight:500;color:var(--muted);border:1px solid var(--border);}
 .qty-val.has-val{color:var(--green);}
+.qty-val.qty-saved{border-color:#16A34A !important;background:#F0FDF4 !important;}
+.qty-val.qty-dirty{border-color:#F97316 !important;background:#FFF7ED !important;color:#C2410C !important;}
 .submit-btn{width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:500;cursor:pointer;margin-top:12px;}
 .section-banner{border-left:3px solid;border-radius:0 8px 8px 0;padding:8px 12px;margin:14px 0 6px;display:flex;align-items:center;gap:8px;}
 
@@ -966,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.19.3';
+const APP_VERSION = '6.19.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -985,6 +987,15 @@ let currentView = 'home';
 let articles = [];
 let templates = {};
 let orderQtys = {};
+let savedQtys = {}; // Letzter bekannter DB-Stand — Basis für Grün/Orange-Färbung der Mengenfelder
+// Grün = aktueller Wert stimmt mit dem gespeicherten Stand überein · Orange = geändert, noch nicht
+// abgeschickt · neutral = leer und war nie gespeichert.
+function qtyStateClass(id){
+  const cur=orderQtys[id]||0;
+  const saved=savedQtys[id]||0;
+  if(cur!==saved) return 'qty-dirty';
+  return cur>0 ? 'qty-saved' : '';
+}
 let orderEingepackt = {}; // article_id -> true, wenn Organisation es fuer heute bereits eingepackt hat (Artikel verschwindet dann aus der Store-Bestellliste)
 let activeCl = 'oeffnung';
 let schichtendeReturnFlag = false; // true = Nutzer kam von "Schicht abschließen" her, nach dem Speichern soll's dahin zurückgehen
@@ -1292,6 +1303,10 @@ async function loadAll(){
   variantRows={};
   lasagneExtraSizes={};
   (ord||[]).forEach(o=>{orderQtys[o.article_id]=o.quantity; if(o.eingepackt) orderEingepackt[o.article_id]=true;});
+  // Schnappschuss "das ist gerade in der DB gespeichert" — Grundlage für die Grün/Orange-Färbung
+  // der Mengenfelder (grün=gespeichert, orange=geändert-aber-noch-nicht-abgeschickt), damit auf
+  // einen Blick klar ist, was schon sicher übermittelt wurde.
+  savedQtys={...orderQtys};
   const done=await api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`);
   clDone={};
   (done||[]).forEach(d=>clDone[d.template_id]=true);
@@ -3020,7 +3035,7 @@ function renderOrderSection(cats, label, color, icon){
         `:`
         <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
           <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
-          <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0"
+          <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''} ${qtyStateClass(a.id)}" id="q${a.id}" value="${v}" min="0"
             onclick="this.select()" oninput="setQty(${a.id},this.value)" onchange="setQty(${a.id},this.value)"
             style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
           <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
@@ -3062,7 +3077,7 @@ function renderVariantGroupRow(groupKey, groupItems){
       </select>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;${(!r.articleId||!selVerf)?'opacity:0.3;pointer-events:none;':''}">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},-1)">−</button>
-        <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="vq-${groupKey}-${i}" value="${v}" min="0"
+        <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''} ${r.articleId?qtyStateClass(r.articleId):''}" id="vq-${groupKey}-${i}" value="${v}" min="0"
           onclick="this.select()" oninput="setVariantQty('${groupKey}',${i},this.value)" onchange="setVariantQty('${groupKey}',${i},this.value)"
           style="width:40px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:5px 2px;font-size:14px;">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},1)">+</button>
@@ -3100,7 +3115,7 @@ function variantAdj(groupKey,i,d){
   if(!row || !row.articleId) return;
   orderQtys[row.articleId]=Math.max(0,(orderQtys[row.articleId]||0)+d);
   const el=document.getElementById('vq-'+groupKey+'-'+i);
-  if(el){el.value=orderQtys[row.articleId];el.className='qty-val'+(orderQtys[row.articleId]>0?' has-val':'');}
+  if(el){el.value=orderQtys[row.articleId];el.className='qty-val'+(orderQtys[row.articleId]>0?' has-val':'')+' '+qtyStateClass(row.articleId);}
 }
 window.variantAdj=variantAdj;
 
@@ -3110,7 +3125,7 @@ function setVariantQty(groupKey,i,val){
   const n=Math.max(0, parseInt(val)||0);
   orderQtys[row.articleId]=n;
   const el=document.getElementById('vq-'+groupKey+'-'+i);
-  if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'');}
+  if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'')+' '+qtyStateClass(row.articleId);}
 }
 window.setVariantQty=setVariantQty;
 
@@ -4453,13 +4468,13 @@ window.switchOrderTab=switchOrderTab;
 function adj(id,d){
   orderQtys[id]=Math.max(0,(orderQtys[id]||0)+d);
   const el=document.getElementById('q'+id);
-  if(el){el.value=orderQtys[id];el.className='qty-val'+(orderQtys[id]>0?' has-val':'');}
+  if(el){el.value=orderQtys[id];el.className='qty-val'+(orderQtys[id]>0?' has-val':'')+' '+qtyStateClass(id);}
 }
 function setQty(id,val){
   const n=Math.max(0, parseInt(val)||0);
   orderQtys[id]=n;
   const el=document.getElementById('q'+id);
-  if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'');}
+  if(el){el.value=n;el.className='qty-val'+(n>0?' has-val':'')+' '+qtyStateClass(id);}
 }
 window.setQty=setQty;
 // Genaue Mengen-Quittung — aktuell nur für Stadtplatz (auf Wunsch, wegen wiederholter Probleme
@@ -4560,6 +4575,16 @@ async function submitOrder(){
       await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
     }
+    // Erfolgreich gespeichert — Grün/Orange-Zustand aktualisieren: alle Artikel dieses Tabs gelten
+    // jetzt als "gespeichert" (auch die, die gerade auf 0 gesetzt wurden), sichtbare Felder sofort
+    // auf Grün umfärben, damit man's noch sieht, bevor die Seite weiterspringt.
+    tabArticleIds.forEach(aid=>{ savedQtys[aid]=orderQtys[aid]||0; });
+    document.querySelectorAll('input.qty-val[id^="q"],input.qty-val[id^="vq-"]').forEach(inp=>{
+      const aid=inp.id.startsWith('vq-') ? (variantRows[inp.id.split('-')[1]]?.[parseInt(inp.id.split('-')[2])]?.articleId) : parseInt(inp.id.slice(1));
+      if(aid && tabArticleIds.has(aid)){
+        inp.className='qty-val'+(orderQtys[aid]>0?' has-val':'')+' '+qtyStateClass(aid);
+      }
+    });
     if(btn){ btn.textContent='✓ Gespeichert!'; btn.style.background='#15803D'; btn.style.opacity='1'; }
     showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!', submissionMarkerFailed);
     const goBackToSchichtende=schichtendeReturnFlag;
