@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.19.8';
+const APP_VERSION = '6.20.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4034,7 +4034,7 @@ async function renderForecastOrderTab(el, tabHtml){
   html+=`<div class="section-banner" style="background:${tab.color}12;border-left-color:${tab.color};">
     <span style="font-size:18px;">${tab.icon}</span>
     <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
-    <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen</div></div>
+    <div style="font-size:10px;color:var(--muted);">Menge in Behältern für die Küche — bei Bedarf anpassen · <span style="color:#0D9488;">türkis</span> = automatisch von Vorwoche übernommen</div></div>
   </div>`;
 
   html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
@@ -4172,11 +4172,41 @@ async function renderForecastOrderTab(el, tabHtml){
     suggestionMap[j.dateStr][j.dish]={qty,reason:reasons.join(' · ')};
   });
 
+  // Automatisches Vorausfüllen leerer Felder mit dem reinen Vorwochen-Wert (1:1, KEINE Wetter-/
+  // Entsorgungs-Anpassung — die bleibt bewusst deaktiviert) — passiert automatisch im Hintergrund,
+  // kein Klick nötig. Wird sofort als echter Datensatz gespeichert (source='copied', eigene
+  // Einfärbung), damit Küche/Organisation die Zahl sofort sehen, auch wenn niemand die Zelle
+  // anfasst. Nur für leere Zellen, überschreibt nie einen bereits vorhandenen (auch nicht 0-)Wert.
+  const carryForwardRows=[];
+  Object.keys(lastWeekQtyMap).forEach(dateStr=>{
+    Object.keys(lastWeekQtyMap[dateStr]).forEach(dish=>{
+      const already=(fMap[dateStr]||{})[dish];
+      const lwQty=lastWeekQtyMap[dateStr][dish]?.qty;
+      if(!already && lwQty!=null && !isHistoric){
+        carryForwardRows.push({store_id:currentStore.id, forecast_date:dateStr, dish_name:dish, qty:lwQty, groesse:'gross', source:'copied'});
+      }
+    });
+  });
+  if(carryForwardRows.length){
+    await api('forecast_qty?on_conflict=store_id,forecast_date,dish_name,groesse',{method:'POST',headers:{'Prefer':'resolution=ignore-duplicates,return=representation'},body:JSON.stringify(carryForwardRows)}).then(inserted=>{
+      // In-memory Karten sofort nachziehen, damit die gleich folgende Zellen-Darstellung die neuen
+      // Werte korrekt zeigt, ohne die ganze Woche nochmal neu laden zu müssen.
+      (inserted||carryForwardRows).forEach(r=>{
+        if(!fRecordsMap[r.forecast_date])fRecordsMap[r.forecast_date]={};
+        if(!fRecordsMap[r.forecast_date][r.dish_name])fRecordsMap[r.forecast_date][r.dish_name]=[];
+        fRecordsMap[r.forecast_date][r.dish_name].push(r);
+        if(!fMap[r.forecast_date])fMap[r.forecast_date]={};
+        fMap[r.forecast_date][r.dish_name]=r;
+      });
+    }).catch(e=>console.error('Vorwoche-Vorausfüllen fehlgeschlagen:',e));
+  }
+
   // Kompaktes Eingabefeld für eine Zelle (Tag × Gericht)
   function cellInput(dateStr, dish, lockedNote){
     const rec=(fMap[dateStr]||{})[dish];
     const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
     const isOrgSet=rec?.source==='org';
+    const isCopied=rec?.source==='copied';
     const manualColor=isOrgSet?'#2B3A67':'#F97316';
     const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
     const autoSuggestion=FORECAST_SUGGESTIONS_ENABLED?(suggestionMap[dateStr]||{})[dish]:null;
@@ -4196,11 +4226,12 @@ async function renderForecastOrderTab(el, tabHtml){
     // Vorwoche-Info nur als Tooltip (title) — kein div darunter damit Layout sauber bleibt
     const lwTitle=lwQty!=null?` Vorwoche: ${lwIcon} ${formatQty(lwQty)} Bhlt`:'';
     const orgTitle=isOrgSet?' · von Operations gesetzt':'';
-    const fullTitle=escAttr((suggReason+lwTitle+orgTitle+(lockedNote?' · '+lockedNote:'')).trim());
+    const copiedTitle=isCopied?' · automatisch von Vorwoche übernommen, bei Bedarf anpassen':'';
+    const fullTitle=escAttr((suggReason+lwTitle+orgTitle+copiedTitle+(lockedNote?' · '+lockedNote:'')).trim());
     const inputHtml=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
       oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
       title="${fullTitle}"
-      style="width:48px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isSuggestion?'#0EA5E9':'var(--border)'))};border-radius:6px;font-size:12px;padding:4px 1px;background:${lockedNote?'#FFF7ED':(manual?manualBg:(isSuggestion?'#F0F9FF':'#fff'))};">`;
+      style="width:48px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isCopied?'#0D9488':(isSuggestion?'#0EA5E9':'var(--border)')))};border-radius:6px;font-size:12px;padding:4px 1px;background:${lockedNote?'#FFF7ED':(manual?manualBg:(isCopied?'#F0FDFA':(isSuggestion?'#F0F9FF':'#fff')))};">`;
     if(lockedNote){
       return `<div style="text-align:center;"><div style="font-size:14px;line-height:1;margin-bottom:2px;" title="${escAttr(lockedNote)}">⚠️</div>${inputHtml}</div>`;
     }
@@ -4571,13 +4602,24 @@ async function submitOrder(){
   const originalLabel=btn?.textContent;
   if(btn){ btn.disabled=true; btn.textContent='Wird gespeichert…'; btn.style.opacity='0.7'; }
   try{
+    // Löschen mit bis zu 2 Wiederholungen bei Fehlschlag (Netzwerk-Hänger etc.) — das ist genau
+    // der Fall, der zum "0 gesetzt, aber alter Wert blieb stehen"-Bug bei Stadtplatz/Cake geführt
+    // hat (06.08.26): einzelne Löschung schlug still fehl, für Artikel mit neuer Menge 0 gibt's
+    // danach keinen Upsert-Fallback mehr, der das kompensieren könnte — im Gegensatz zu Artikeln
+    // mit Menge>0, die über den Upsert unten trotzdem korrekt landen.
+    const failedDeletes=[];
     for(const aid of tabArticleIds){
-      // WICHTIG: .catch() hier ist entscheidend — schlägt eine einzelne Löschung fehl (Netzwerk-
-      // Hänger etc.), darf das nicht die ganze Schleife abbrechen. Sonst behalten Artikel weiter
-      // hinten in der Liste ihre alte Zeile, die dann beim Einfügen mit der neuen kollidiert
-      // ("duplicate key value violates unique constraint orders_store_id_article_id_order_date") —
-      // genau der Fehler, den Börse gemeldet hat.
-      await api(`orders?store_id=eq.${currentStore.id}&article_id=eq.${aid}&order_date=eq.${today}`,{method:'DELETE'}).catch(e=>console.error('orders delete failed for article',aid,e));
+      let ok=false;
+      for(let attempt=0; attempt<3 && !ok; attempt++){
+        try{
+          await api(`orders?store_id=eq.${currentStore.id}&article_id=eq.${aid}&order_date=eq.${today}`,{method:'DELETE'});
+          ok=true;
+        }catch(e){
+          console.error(`orders delete failed for article ${aid} (Versuch ${attempt+1}/3):`,e);
+          if(attempt<2) await new Promise(r=>setTimeout(r,400));
+        }
+      }
+      if(!ok) failedDeletes.push(aid);
     }
     // Zusätzlich als Upsert (nicht reines Insert): falls trotz obigem Löschen doch noch eine alte
     // Zeile übrig sein sollte, wird sie aktualisiert statt einen Konflikt zu werfen.
@@ -4602,7 +4644,9 @@ async function submitOrder(){
     // Erfolgreich gespeichert — Grün/Orange-Zustand aktualisieren: alle Artikel dieses Tabs gelten
     // jetzt als "gespeichert" (auch die, die gerade auf 0 gesetzt wurden), sichtbare Felder sofort
     // auf Grün umfärben, damit man's noch sieht, bevor die Seite weiterspringt.
-    tabArticleIds.forEach(aid=>{ savedQtys[aid]=orderQtys[aid]||0; });
+    // AUSNAHME: Artikel, deren Löschung trotz Wiederholung fehlgeschlagen ist, bleiben bewusst auf
+    // Orange stehen (nicht fälschlich Grün) — der alte Wert könnte noch in der DB stehen.
+    tabArticleIds.forEach(aid=>{ if(!failedDeletes.includes(aid)) savedQtys[aid]=orderQtys[aid]||0; });
     document.querySelectorAll('input.qty-val[id^="q"],input.qty-val[id^="vq-"]').forEach(inp=>{
       const aid=inp.id.startsWith('vq-') ? (variantRows[inp.id.split('-')[1]]?.[parseInt(inp.id.split('-')[2])]?.articleId) : parseInt(inp.id.slice(1));
       if(aid && tabArticleIds.has(aid)){
@@ -4610,7 +4654,12 @@ async function submitOrder(){
       }
     });
     if(btn){ btn.textContent='✓ Gespeichert!'; btn.style.background='#15803D'; btn.style.opacity='1'; }
-    showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!', submissionMarkerFailed);
+    if(failedDeletes.length){
+      const failedNames=failedDeletes.map(aid=>articles.find(a=>a.id===aid)?.name||('Artikel #'+aid)).join(', ');
+      showToast(`⚠️ Bitte nochmal prüfen: ${failedNames} — Änderung evtl. nicht angekommen`, true);
+    } else {
+      showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!', submissionMarkerFailed);
+    }
     const goBackToSchichtende=schichtendeReturnFlag;
     schichtendeReturnFlag=false;
     // Stadtplatz bekommt zusätzlich eine genaue Mengen-Quittung, die aktiv weggeklickt werden muss
