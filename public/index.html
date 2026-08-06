@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.19.4';
+const APP_VERSION = '6.19.8';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2524,6 +2524,7 @@ async function renderHome(){
   let dcStatus={wek:false,reinCount:0,kuehl:false};
   let gamificationHtml='';
   let disposalDone=false;
+  let quickSoldOutDishes=[];
   let uebergabeNotiz=null;
   let isKCDay=false;
   let transporterDone=false, kcDone=false, sweetsDone=false;
@@ -2549,6 +2550,25 @@ async function renderHome(){
     // Entsorgung heute Status
     const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=id`).catch(()=>[]);
     disposalDone=(disposalToday||[]).length>0;
+    // "Schon ausverkauft?"-Schnellmeldung — dieselben Gerichte/Helfer wie im Entsorgung-Tab, damit
+    // die Filiale nie selbst wissen muss, in welcher Menü-Woche sie gerade ist. Nur Gerichte zeigen,
+    // die heute noch NICHT als ausverkauft gemeldet wurden (sonst wird's unübersichtlich).
+    quickSoldOutDishes=[];
+    if(isWeekday){
+      try{
+        const weekday=WEEKDAYS[dayIdx]?.k;
+        const menuDishes=getMenuDishNamesForDay(weekday);
+        const salatName=getSalatNameForDate(todayDate);
+        const daySlotsQ=[
+          {k:'salat', name:salatName},
+          ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', name})),
+          {k:'reis', name:REIS_DISH_NAME}
+        ];
+        const dispRaw=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=slot,sold_out_time`).catch(()=>[]);
+        const soldOutSlots=new Set((dispRaw||[]).filter(d=>d.sold_out_time).map(d=>d.slot));
+        quickSoldOutDishes=daySlotsQ.filter(s=>s.name && !soldOutSlots.has(s.k));
+      }catch(e){console.error(e);}
+    }
     // Übergabe-Notiz von gestern laden
     const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
     const ydStr=yesterday.toISOString().split('T')[0];
@@ -2672,6 +2692,12 @@ async function renderHome(){
 
   el.innerHTML=`
     <div class="kf-greeting" style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
+    ${quickSoldOutDishes.length?`<div class="card" style="padding:12px 14px;margin:0 0 8px;background:linear-gradient(135deg,#FEF2F2,#FEE2E2);border:1.5px solid #FCA5A5;">
+      <div style="font-size:13px;font-weight:700;color:#991B1B;margin-bottom:8px;">🔥 Schon ausverkauft?</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${quickSoldOutDishes.map(s=>`<button onclick="quickReportSoldOut('${s.k}','${escForInlineHandler(s.name)}')" data-no-translate style="background:#fff;border:1.5px solid #FCA5A5;border-radius:20px;padding:7px 12px;font-size:12.5px;font-weight:600;color:#991B1B;cursor:pointer;">${s.name}</button>`).join('')}
+      </div>
+    </div>`:''}
     ${messeInfoHtml}
     ${messeBewertungHtml}
     <div id="broadcast-banner-widget"></div>
@@ -3825,8 +3851,10 @@ function mapDishNameToCategory(dishName, slot){
 
 
 function isLasagneLocked(dateStr){
-  const cutoff=new Date(dateStr+'T12:00:00');
-  cutoff.setDate(cutoff.getDate()-1); // Vortag, 12:00 Uhr
+  // Kein hartes Sperren mehr (05.08.26) — ab 14:00 Uhr am Vortag wird nur noch gewarnt, dass eine
+  // Änderung jetzt eventuell eine Nachbestellung bei der Küche braucht, das Feld bleibt aber editierbar.
+  const cutoff=new Date(dateStr+'T14:00:00');
+  cutoff.setDate(cutoff.getDate()-1); // Vortag, 14:00 Uhr
   return new Date()>cutoff;
 }
 // Liest die tatsächlichen Hauptgerichte (ohne Salat) für einen Wochentag aus dem rotierenden Menü,
@@ -4161,9 +4189,6 @@ async function renderForecastOrderTab(el, tabHtml){
       // Historie: nur Anzeige, nicht mehr veraenderbar
       return `<div style="width:48px;margin:0 auto;text-align:center;font-size:13px;font-weight:600;color:${manual?manualColor:'#1a1a18'};">${val!=null?formatQty(val):'–'}</div>`;
     }
-    if(lockedNote){
-      return `<div title="${lockedNote}" style="width:48px;margin:0 auto;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:11px;padding:4px 1px;background:#F3F4F6;color:var(--muted);">🔒 ${val!=null?formatQty(val):'–'}</div>`;
-    }
     const lwData=(lastWeekQtyMap[dateStr]||{})[dish];
     const lwQty=lwData?.qty;
     const lwIcon=lwData?.soldOutEarly?'🔥':(lwData?.leftover>5?'📦':'•');
@@ -4171,11 +4196,15 @@ async function renderForecastOrderTab(el, tabHtml){
     // Vorwoche-Info nur als Tooltip (title) — kein div darunter damit Layout sauber bleibt
     const lwTitle=lwQty!=null?` Vorwoche: ${lwIcon} ${formatQty(lwQty)} Bhlt`:'';
     const orgTitle=isOrgSet?' · von Operations gesetzt':'';
-    const fullTitle=escAttr((suggReason+lwTitle+orgTitle).trim());
-    return `<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
+    const fullTitle=escAttr((suggReason+lwTitle+orgTitle+(lockedNote?' · '+lockedNote:'')).trim());
+    const inputHtml=`<input type="number" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
       oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
       title="${fullTitle}"
-      style="width:48px;text-align:center;border:1.5px solid ${manual?manualColor:(isSuggestion?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSuggestion?'#F0F9FF':'#fff')};">`;
+      style="width:48px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isSuggestion?'#0EA5E9':'var(--border)'))};border-radius:6px;font-size:12px;padding:4px 1px;background:${lockedNote?'#FFF7ED':(manual?manualBg:(isSuggestion?'#F0F9FF':'#fff'))};">`;
+    if(lockedNote){
+      return `<div style="text-align:center;"><div style="font-size:14px;line-height:1;margin-bottom:2px;" title="${escAttr(lockedNote)}">⚠️</div>${inputHtml}</div>`;
+    }
+    return inputHtml;
   }
 
   // Lasagne kann in mehreren Behälter-Größen gleichzeitig gebraucht werden (z.B. 2x Groß + 1x Klein) —
@@ -4190,28 +4219,23 @@ async function renderForecastOrderTab(el, tabHtml){
         return `<span style="font-size:8px;color:var(--muted);">${LABELS[s.k]}</span><span>${r?formatQty(r.qty):'–'}</span>`;
       }).join('')}</div>`;
     }
-    if(lockedNote){
-      return `<div title="${lockedNote}" style="display:grid;grid-template-columns:52px 32px;gap:3px 4px;font-size:10px;text-align:left;background:#F3F4F6;border-radius:6px;padding:4px 6px;">${LASAGNE_SIZES.map(s=>{
-        const r=records.find(x=>x.groesse===s.k);
-        return `<span style="font-size:8px;color:var(--muted);">${LABELS[s.k]}</span><span>🔒 ${r?formatQty(r.qty):'–'}</span>`;
-      }).join('')}</div>`;
-    }
     // Immer alle 3 Größen fix anzeigen — Grid statt Flex, damit Label-Spalte und Eingabefeld-Spalte
     // exakt untereinander ausgerichtet sind, unabhängig von der Textlänge des Labels.
-    let h='<div style="display:grid;grid-template-columns:52px 40px;gap:4px 4px;align-items:center;">';
+    let h=lockedNote?`<div style="font-size:8px;color:#C2410C;font-weight:600;margin-bottom:2px;" title="${escAttr(lockedNote)}">⚠️ ${lockedNote}</div>`:'';
+    h+='<div style="display:grid;grid-template-columns:52px 40px;gap:4px 4px;align-items:center;">';
     LASAGNE_SIZES.forEach(sz=>{
       const rec=records.find(r=>r.groesse===sz.k);
       const val=rec ? rec.qty : (sz.k==='gross' && autoVal!=null ? autoVal : '');
       const isSugg=sz.k==='gross' && !rec && autoVal!=null;
       const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
       const isOrgSet=rec?.source==='org';
-      const manualColor=isOrgSet?'#2B3A67':'#F97316';
-      const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
+      const manualColor=lockedNote?'#F97316':(isOrgSet?'#2B3A67':'#F97316');
+      const manualBg=lockedNote?'#FFF7ED':(isOrgSet?'#EEF1F8':'#FFF7ED');
       h+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LABELS[sz.k]}</span>
         <input type="number" step="1" value="${val}" placeholder="–"
           data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
           oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
-          style="width:40px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">`;
+          style="width:40px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isSugg?'#0EA5E9':'var(--border)'))};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual||lockedNote?manualBg:(isSugg?'#F0F9FF':'#fff')};">`;
     });
     h+='</div>';
     return h;
@@ -4265,10 +4289,10 @@ async function renderForecastOrderTab(el, tabHtml){
       </td>
       <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">${cellWrap(dishLabel(salatName), cellInput(dateStr, salatName))}</td>
       <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g2?cellWrap(dishLabel(g2), cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
+        ${g2?cellWrap(dishLabel(g2), cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Nach 14 Uhr geändert — ggf. bei der Küche nachbestellen':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
       </td>
       <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g3?cellWrap(dishLabel(g3), cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Lasagne wird bereits produziert':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
+        ${g3?cellWrap(dishLabel(g3), cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Nach 14 Uhr geändert — ggf. bei der Küche nachbestellen':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
       </td>
       <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}">${cellWrap('', reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>')}</td>
     </tr>`;
@@ -4276,7 +4300,7 @@ async function renderForecastOrderTab(el, tabHtml){
   html+='</tbody></table></div></div>';
 
   if(anyLasagne){
-    html+=`<div style="font-size:10.5px;color:#15803D;padding:6px 2px 2px;">🥗 An Lasagne-Tagen wird grüner Salat + Dressing automatisch mitproduziert · 🔒 Lasagne-Menge ist am Vortag ab 12:00 Uhr fixiert</div>`;
+    html+=`<div style="font-size:10.5px;color:#15803D;padding:6px 2px 2px;">🥗 An Lasagne-Tagen wird grüner Salat + Dressing automatisch mitproduziert · ⚠️ Änderung nach 14:00 Uhr am Vortag weiterhin möglich, ggf. aber Rücksprache mit der Küche nötig</div>`;
   }
   html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">
     🔵 Blau = KI-Vorschlag (Vorwoche + Wetter + Ferien) — antippen für Begründung &nbsp;·&nbsp; 🟠 Orange = von dir angepasst &nbsp;·&nbsp; 🟣 Navy = von Operations gesetzt<br>
@@ -8702,6 +8726,15 @@ function commitSoldOutTimeText(slot, dishName, el){
 }
 window.commitSoldOutTimeText=commitSoldOutTimeText;
 
+// Ein-Tap-Meldung vom Startbildschirm — trägt die aktuelle Uhrzeit ein und ruft dieselbe,
+// bereits bestehende Speicherfunktion wie im Entsorgung-Tab auf (kein doppelter Code-Pfad).
+function quickReportSoldOut(slot, dishName){
+  const n=new Date();
+  const nowStr=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
+  updateSoldOutTime(slot, dishName, nowStr);
+}
+window.quickReportSoldOut=quickReportSoldOut;
+
 async function updateSoldOutTime(slot, dishName, value){
   const today=new Date().toISOString().split('T')[0];
   const v=value===''?null:value+':00';
@@ -8716,7 +8749,7 @@ async function updateSoldOutTime(slot, dishName, value){
       await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:v,leftover_qty:leftover,note}])});
     }
     showToast('✓ Gespeichert');
-    renderDisposal();
+    if(currentView==='home') renderHome(); else renderDisposal();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateLeftover(slot, dishName, value){
