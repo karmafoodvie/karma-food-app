@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.20.3';
+const APP_VERSION = '6.20.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5734,14 +5734,14 @@ async function renderOrgForecast(){
           const cmpPrevDate=dateMinusDays(dateStr,7);
           const cmpPrevQty=prevFcMap[cmpPrevDate]?.[s.id]?.[cmpCat]?.['gross'];
           const cmpDisp=prevDispMap[s.id]?.[cmpCat];
-          let cmpAmpel='', cmpColor='var(--muted)';
+          let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='';
           if(cmpDisp && (cmpDisp.soldOutEarly||cmpDisp.leftover>0)){
-            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; }
-            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; }
-            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; }
-            else { cmpAmpel='✓'; cmpColor='#16A34A'; }
+            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail='ausverkauft'; }
+            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
+            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
+            else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
           }
-          const cmpLine=cmpPrevQty!=null?`<div style="font-size:8.5px;color:${cmpColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Vorwoche-Menge & Entsorgungs-Ergebnis">VW ${formatQty(cmpPrevQty)}${cmpAmpel?' '+cmpAmpel:''}</div>`:'';
+          const cmpLine=cmpPrevQty!=null?`<div style="font-size:8.5px;color:${cmpColor};text-align:center;margin-top:2px;line-height:1.3;max-width:52px;margin-left:auto;margin-right:auto;" title="Vorwoche-Menge & Entsorgungs-Ergebnis">VW ${formatQty(cmpPrevQty)}${cmpAmpel?' '+cmpAmpel:''}${cmpDetail?`<br>(${cmpDetail})`:''}</div>`:'';
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
