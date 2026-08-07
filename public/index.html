@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.20.2';
+const APP_VERSION = '6.20.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4194,7 +4194,8 @@ async function renderForecastOrderTab(el, tabHtml){
       const already=(fMap[dateStr]||{})[dish];
       const lwQty=lastWeekQtyMap[dateStr][dish]?.qty;
       if(!already && lwQty!=null && !isHistoric){
-        carryForwardRows.push({store_id:currentStore.id, forecast_date:dateStr, dish_name:dish, qty:lwQty, groesse:'gross', source:'copied'});
+        // 0 als übernommener Wert geht nie — es braucht immer etwas zum Verkaufen.
+        carryForwardRows.push({store_id:currentStore.id, forecast_date:dateStr, dish_name:dish, qty:(lwQty>0?lwQty:0.25), groesse:'gross', source:'copied'});
       }
     });
   });
@@ -5468,7 +5469,7 @@ async function renderOrgForecast(){
   }
 
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
-  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='kloster2'&&s.id!=='1070');
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kloster2'&&s.id!=='1070');
 
   // Wochenauswahl — diese oder nächste Woche
   const weekDates=getWeekdayDates(orgForecastWeekOffset);
@@ -5481,7 +5482,8 @@ async function renderOrgForecast(){
     <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===0?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===0?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===0?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Diese Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(0)[1].split('-').reverse().slice(0,2).join('.')}.–${getWeekdayDates(0)[5].split('-').reverse().slice(0,2).join('.')}.</span></button>
     <button onclick="orgForecastWeekOffset=1;renderOrgForecast()" style="flex:1;padding:9px 4px;border-radius:10px;border:${orgForecastWeekOffset===1?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${orgForecastWeekOffset===1?'#2B3A67':'var(--card)'};color:${orgForecastWeekOffset===1?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:12px;line-height:1.3;cursor:pointer;">📅 Nächste Woche<br><span style="font-size:10px;opacity:0.8;">${getWeekdayDates(1)[1].split('-').reverse().slice(0,2).join('.')}.–${getWeekdayDates(1)[5].split('-').reverse().slice(0,2).join('.')}.</span></button>
   </div>
-  <div style="font-size:11px;color:var(--muted);margin:0 0 12px;text-align:center;">${weekLabel}</div>`;
+  <div style="font-size:11px;color:var(--muted);margin:0 0 6px;text-align:center;">${weekLabel}</div>
+  <div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:6px 10px;margin:0 0 12px;text-align:center;">"VW X" unter jedem Feld = Menge & Entsorgungs-Ergebnis derselben Kategorie letzte Woche · 🔥 ausverkauft · ✓ genau richtig · 📦 übrig</div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
   const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
@@ -5620,6 +5622,13 @@ async function renderOrgForecast(){
       if(wReason) reasons.push(wReason);
     }
 
+    // Letzte Sicherheitsschwelle: 0 als Vorschlag geht nie — es braucht immer etwas zum Verkaufen,
+    // egal was die Rechnung oben ergeben hat (z.B. wenn schon die Vorwoche selbst 0 war).
+    if(qty<=0){
+      qty=isLasagneSize?1:0.25;
+      reasons.push('⚠️ Mindestmenge (0 nie sinnvoll)');
+    }
+
     return {qty, reason:reasons.join(' · ')};
   }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
@@ -5719,6 +5728,20 @@ async function renderOrgForecast(){
           const displayVal=rec?.qty??sugg?.qty??'';
           const isSugg=!rec && sugg!=null;
           const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
+          // Vorwoche-Vergleich SICHTBAR unter der Zelle (nicht nur als Hover-Tooltip — der
+          // funktioniert am Tablet/Handy ohne Maus gar nicht, genau das war der Kern des Problems).
+          const cmpCat=mapDishNameToCategory(dish);
+          const cmpPrevDate=dateMinusDays(dateStr,7);
+          const cmpPrevQty=prevFcMap[cmpPrevDate]?.[s.id]?.[cmpCat]?.['gross'];
+          const cmpDisp=prevDispMap[s.id]?.[cmpCat];
+          let cmpAmpel='', cmpColor='var(--muted)';
+          if(cmpDisp && (cmpDisp.soldOutEarly||cmpDisp.leftover>0)){
+            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; }
+            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; }
+            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; }
+            else { cmpAmpel='✓'; cmpColor='#16A34A'; }
+          }
+          const cmpLine=cmpPrevQty!=null?`<div style="font-size:8.5px;color:${cmpColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Vorwoche-Menge & Entsorgungs-Ergebnis">VW ${formatQty(cmpPrevQty)}${cmpAmpel?' '+cmpAmpel:''}</div>`:'';
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
@@ -5726,6 +5749,7 @@ async function renderOrgForecast(){
               title="${escAttr(title)}"
               style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
             ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
+            ${cmpLine}
           </td>`;
         }
       });
