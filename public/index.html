@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.20.4';
+const APP_VERSION = '6.20.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5534,6 +5534,20 @@ async function renderOrgForecast(){
     prevDispMap[d.store_id][cat]=prev;
   });
 
+  // prevDispByDateStore[date][store][category] = {leftover, soldOutEarly} — GENAU der Tag/die
+  // Filiale, nicht über die ganze Vorwoche summiert (das macht prevDispMap für die Vorschlags-
+  // Anpassung, aber für den sichtbaren "VW"-Tagesvergleich unten braucht's die exakte Zuordnung).
+  const prevDispByDateStore={};
+  (prevDisposals||[]).forEach(d=>{
+    if(!prevDispByDateStore[d.disposal_date])prevDispByDateStore[d.disposal_date]={};
+    if(!prevDispByDateStore[d.disposal_date][d.store_id])prevDispByDateStore[d.disposal_date][d.store_id]={};
+    const cat=mapDishNameToCategory(d.dish_name, d.slot);
+    const ex=prevDispByDateStore[d.disposal_date][d.store_id][cat]||{leftover:0,soldOutEarly:false};
+    ex.leftover+=(d.leftover_qty||0);
+    if(d.sold_out_time) ex.soldOutEarly=true;
+    prevDispByDateStore[d.disposal_date][d.store_id][cat]=ex;
+  });
+
   // prevDisposalByDate[date][category] = {leftoverPortionen, soldOutEarly}
   const prevDisposalByDate={};
   (prevDisposals||[]).forEach(d=>{
@@ -5733,7 +5747,7 @@ async function renderOrgForecast(){
           const cmpCat=mapDishNameToCategory(dish);
           const cmpPrevDate=dateMinusDays(dateStr,7);
           const cmpPrevQty=prevFcMap[cmpPrevDate]?.[s.id]?.[cmpCat]?.['gross'];
-          const cmpDisp=prevDispMap[s.id]?.[cmpCat];
+          const cmpDisp=prevDispByDateStore[cmpPrevDate]?.[s.id]?.[cmpCat];
           let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='';
           if(cmpDisp && (cmpDisp.soldOutEarly||cmpDisp.leftover>0)){
             if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail='ausverkauft'; }
