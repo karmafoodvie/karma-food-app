@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.21.1';
+const APP_VERSION = '6.21.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10084,6 +10084,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     ${storeList.map((s,si)=>`<th data-no-translate style="padding:6px 2px;font-size:9px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};border-bottom:1.5px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}overflow:hidden;text-overflow:ellipsis;">${STORE_SHORT[s.id]||s.name.split(' ')[0]}</th>`).join('')}
     <th style="padding:6px 2px;font-size:10px;font-weight:700;color:var(--green);border-bottom:1.5px solid var(--border);border-left:1px solid var(--border);">Σ</th>
   </tr></thead><tbody>`;
+  const lasagneBreakdownByIdx={};
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
     // Lookup by exact name, fallback to category (cross-week matching)
@@ -10093,22 +10094,29 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
     const hasData = total>0;
     const detailId = `morgen_zut_${dIdx}`;
+    const SIZE_FULL_MK={mittel:'Mittel (12)',klein:'Klein (8)',gross:'Groß (18)'};
+    // Bei Lasagne die Blech-Aufteilung NICHT mehr in die (zu schmale) Tabellenzelle quetschen —
+    // landet stattdessen im Detail-Fenster unten, wo genug Platz für lesbare Badges ist.
+    const lasagneBreakdownRows=[];
     const cells=storeList.map((s,si)=>{
       const recs=storeData[s.id]||[];
       const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
       const changed=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
       const changedByOrg=recs.some(r=>r.source==='org');
       const changedColor=changedByOrg?'#2B3A67':'#0369A1';
-      const SIZE_FULL_MK={mittel:'Mittel (12)',klein:'Klein (8)',gross:'Groß (18)'};
-      const sizeLabel=isLasagne&&recs.length?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;align-items:center;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 6px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL_MK[r.groesse]||'Groß'}</span>`).join('')}</div>`:null;
+      if(isLasagne && recs.filter(r=>r.qty>0).length){
+        lasagneBreakdownRows.push({store:s, recs:recs.filter(r=>r.qty>0)});
+      }
+      const sizeHint=(isLasagne && recs.length>1)?`<div style="font-size:8px;color:#D97706;margin-top:2px;">▤ antippen</div>`:'';
       const dispRec=(disposalBySlotStore[dishObj.slot]||{})[s.id];
       let ampelBadge='';
       if(dispRec && dispRec.leftover_qty!=null){
         const a=disposalAmpel(dispRec.leftover_qty, dispRec.sold_out_time);
         ampelBadge=`<div style="font-size:9.5px;font-weight:700;color:${a.color};margin-top:1px;">${a.icon} ${dispRec.leftover_qty}</div>`;
       }
-      return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${qty?formatQty(qty):'–'}${sizeLabel||''}${ampelBadge}</td>`;
+      return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${qty?formatQty(qty):'–'}${sizeHint}${ampelBadge}</td>`;
     }).join('');
+    lasagneBreakdownByIdx[dIdx]=lasagneBreakdownRows;
     html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
       <td style="text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);word-break:break-word;"><span style="display:flex;align-items:center;gap:4px;"><span style="flex-shrink:0;">${dishImgHtml(dish, 16)}</span><span style="font-weight:600;font-size:11px;line-height:1.25;">${dish}</span></span></td>
       ${cells}
@@ -10147,6 +10155,19 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const override = (zKey && overrideMap[zKey]) || overrideMap[dish];
     const zutaten = (override?.zutaten||dishObj.zutaten||'').replace(/\n/g,' ').trim();
     const detailId = `morgen_zut_${dIdx}`;
+    const SIZE_FULL_DETAIL={mittel:'Mittel (12)',klein:'Klein (8)',gross:'Groß (18)'};
+    const breakdownRows=lasagneBreakdownByIdx[dIdx]||[];
+    const lasagneBreakdownHtml=breakdownRows.length?`<div style="margin-bottom:12px;padding-right:36px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">🍽️ Blech-Aufteilung</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${breakdownRows.map(row=>`<div style="display:flex;align-items:center;gap:8px;">
+          <span data-no-translate style="font-size:12px;font-weight:600;color:${STORE_COLORS[row.store.id]||'#888'};min-width:64px;flex-shrink:0;">${STORE_SHORT[row.store.id]||row.store.name.split(' ')[0]}</span>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;">
+            ${row.recs.map(r=>`<span style="font-size:11px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:3px 8px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL_DETAIL[r.groesse]||'Groß (18)'}</span>`).join('')}
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`:'';
     html+=`<div id="${detailId}" class="card" style="display:none;position:relative;margin-top:-4px;margin-bottom:8px;padding:12px 14px;background:#fff;border:1px solid var(--border);border-radius:12px;">
       <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${_cookWoche}, '${tomorrowWd}', '${dishObj.slot||''}')" data-dish="${dish}" data-zutaten="${zutaten.replace(/"/g,'&quot;')}"
         title="Zutaten bearbeiten"
@@ -10155,6 +10176,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
         <span style="font-size:20px;">${getDishEmoji(dish)}</span>
         <span style="font-size:13.5px;font-weight:700;" data-no-translate>${dish}</span>
       </div>
+      ${lasagneBreakdownHtml}
       <div style="font-size:11px;line-height:1.6;">${renderZutatenReadOnly(zutaten)}</div>
     </div>`;
   });
