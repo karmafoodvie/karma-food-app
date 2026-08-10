@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.20.6';
+const APP_VERSION = '6.20.7';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1008,7 +1008,17 @@ let activePackTab = 'transporter';
 let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen' | 'info' | 'endkontrolle'
 let transporterInfoAutoShown = false; // einmal pro Sitzung automatisch auf Info springen, wenn was offen ist
 let transporterBestellDateOffset = 0; // 0=heute, -1=gestern, ... für Bestellliste-Verlauf
-function navBestellDate(delta){ transporterBestellDateOffset+=delta; renderPack(); }
+function navBestellDate(delta){
+  transporterBestellDateOffset+=delta;
+  // Samstag/Sonntag nie als Ansichtstag zeigen — weiterspringen in dieselbe Richtung, bis wieder
+  // ein Werktag erreicht ist (Store hat ja Sa/So ohnehin geschlossen).
+  let d=new Date(); d.setDate(d.getDate()+transporterBestellDateOffset);
+  while([0,6].includes(d.getDay())){
+    transporterBestellDateOffset+=(delta>=0?1:-1);
+    d=new Date(); d.setDate(d.getDate()+transporterBestellDateOffset);
+  }
+  renderPack();
+}
 function navBestellToday(){ transporterBestellDateOffset=0; renderPack(); }
 window.navBestellDate=navBestellDate;
 window.navBestellToday=navBestellToday;
@@ -5477,20 +5487,21 @@ async function renderOrgForecast(){
   const weekLabel=new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})
     +' – '+new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
-  // Woche-Switcher oben — scrollbare KW-Reihe (1 Woche voraus bis 6 Wochen zurück), damit man wie
-  // bei der Entsorgung frei zurückblättern kann, nicht nur zwischen "diese/nächste Woche" wählen.
-  let weekSwitcher='<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch;">';
-  for(let off=1; off>=-6; off--){
-    const wd=getWeekdayDates(off);
-    const kw=getIsoWeekNumber(wd[1]);
-    const sub=off===0?'diese Woche':(off===1?'nächste Woche':(off===-1?'letzte Woche':''));
-    const dateRange=`${wd[1].split('-').reverse().slice(0,2).join('.')}.–${wd[5].split('-').reverse().slice(0,2).join('.')}.`;
-    const active=off===orgForecastWeekOffset;
-    weekSwitcher+=`<button onclick="orgForecastWeekOffset=${off};renderOrgForecast()" style="flex-shrink:0;min-width:112px;padding:8px 10px;border-radius:10px;border:${active?'2px solid #2B3A67':'1.5px solid var(--border)'};background:${active?'#2B3A67':'#fff'};color:${active?'#fff':'var(--sub)'};font-family:'Boldonse',sans-serif;font-size:11.5px;line-height:1.3;cursor:pointer;text-align:left;">KW ${kw}${sub?' <span style="font-weight:400;opacity:0.85;">'+sub+'</span>':''}<br><span style="font-size:10px;font-weight:400;opacity:0.85;">${dateRange}</span></button>`;
-  }
-  weekSwitcher+='</div>';
-  weekSwitcher+=`<div style="font-size:11px;color:var(--muted);margin:0 0 6px;text-align:center;">${weekLabel}</div>
-  <div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:6px 10px;margin:0 0 12px;text-align:center;">"VW X" unter jedem Feld = Menge & Entsorgungs-Ergebnis derselben Kategorie letzte Woche · 🔥 ausverkauft · ✓ genau richtig · 📦 übrig</div>`;
+  // Woche-Switcher oben — einfaches Vorherige/Nächste-Klicken statt fixer KW-Liste, genau wie die
+  // Tages-Navigation bei "Kochtermin" in der Küche (kein Limit nach hinten oder vorne).
+  const kwNumSwitch=getIsoWeekNumber(fromDate);
+  let weekSwitcher=`<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px;">
+    <div style="background:#2B3A67;color:#fff;padding:14px 16px;">
+      <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.75;">📅 KW ${kwNumSwitch}</div>
+      <div style="font-size:22px;font-weight:800;font-family:'Boldonse',sans-serif;line-height:1.15;margin-top:2px;">${weekLabel}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:10px 12px;gap:8px;">
+      <button onclick="orgForecastWeekOffset--;renderOrgForecast()" style="flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">← Vorherige</button>
+      <button onclick="orgForecastWeekOffset=0;renderOrgForecast()" style="flex:1;padding:9px 6px;border:none;border-radius:9px;background:${orgForecastWeekOffset===0?'#2B3A67':'#EEF1F8'};color:${orgForecastWeekOffset===0?'#fff':'#2B3A67'};font-size:12.5px;font-weight:600;cursor:pointer;">Diese Woche</button>
+      <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">Nächste →</button>
+    </div>
+  </div>`;
+  weekSwitcher+=`<div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:6px 10px;margin:0 0 12px;text-align:center;">"VW X" unter jedem Feld = Menge & Entsorgungs-Ergebnis derselben Kategorie letzte Woche · 🔥 ausverkauft · ✓ genau richtig · 📦 übrig</div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
   const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
@@ -8210,7 +8221,10 @@ async function renderPack(){
   // dafür braucht, stehen unter GESTERN. bestellViewDate/Label zeigen weiterhin Michis heutigen
   // Packtag; bestellDateStr (die tatsächliche DB-Abfrage) ist bewusst einen Tag früher.
   const bestellViewDate=new Date(); bestellViewDate.setDate(bestellViewDate.getDate()+transporterBestellDateOffset);
+  // Vorheriger WERKTAG, nicht einfach "-1 Tag" — sonst landet die Freitags-Bestellung unter
+  // "Samstag" (den niemand je aufruft) statt korrekt unter "Montag", wo Michi tatsächlich schaut.
   const orderEntryDate=new Date(bestellViewDate); orderEntryDate.setDate(orderEntryDate.getDate()-1);
+  while([0,6].includes(orderEntryDate.getDay())){ orderEntryDate.setDate(orderEntryDate.getDate()-1); }
   const bestellDateStr=orderEntryDate.toISOString().split('T')[0];
   const isBestellToday=transporterBestellDateOffset===0;
   const bestellDateLabel=bestellViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
