@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.20.7';
+const APP_VERSION = '6.20.8';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5709,7 +5709,7 @@ async function renderOrgForecast(){
 
     html+=`<div class="section-lbl" style="${isToday?'color:#2B3A67;font-weight:700;':''}">${dateLabel}${isToday?' — heute':''}</div>`;
     if(reason) html+=`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${reason}</div>`;
-    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    html+=`<div id="orgfc-day-${dateStr}"><div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Filiale</th>
       ${allDishes.map(d=>`<th data-no-translate style="font-size:10.5px;">${d}</th>`).join('')}
     </tr></thead><tbody>`;
@@ -5787,7 +5787,9 @@ async function renderOrgForecast(){
       });
       html+='</tr>';
     });
-    html+='</tbody></table></div></div>';
+    html+=`</tbody></table></div></div>
+      <button id="orgfc-daysave-${dateStr}" onclick="orgFcSaveDay('${dateStr}')" style="width:100%;padding:9px;margin:6px 0 14px;background:#EEF1F8;color:#2B3A67;border:1.5px solid #2B3A67;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;">💾 Nur ${dateLabel.split(',')[0]} speichern</button>
+    </div>`;
   }
 
   // Zähle wie viele Felder noch leer sind
@@ -5890,6 +5892,40 @@ async function orgFcAutoFill(){
 window.orgFcAutoFill=orgFcAutoFill;
 
 // Alle sichtbaren Org-Forecast Inputs auf einmal speichern
+// Speichert NUR einen einzelnen Tag (statt der ganzen sichtbaren Woche wie orgFcSaveAll) —
+// gleiche Speicherlogik, aber auf den Tages-Container beschränkt, und OHNE den automatischen
+// Sprung zur nächsten Woche danach, da man ja bewusst nur diesen einen Tag bestätigen wollte.
+async function orgFcSaveDay(dateStr){
+  const container=document.getElementById('orgfc-day-'+dateStr);
+  if(!container) return;
+  const inputs=container.querySelectorAll('input[type=number]');
+  const btn=document.getElementById('orgfc-daysave-'+dateStr);
+  if(btn){ btn.disabled=true; btn.textContent='Speichert…'; }
+
+  let saved=0, errors=0;
+  for(const inp of inputs){
+    const store=inp.dataset.store;
+    const dish=inp.dataset.dish;
+    const groesse=inp.dataset.groesse||'gross';
+    const qty=inp.value===''?null:parseFloat(inp.value);
+    if(!store||!dish||qty==null) continue;
+    const src=inp.dataset.copied==='1'?'copied':'org';
+    try{
+      await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
+      await api(`forecast_qty?store_id=eq.${store}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:store,dish_name:dish,forecast_date:dateStr,qty,groesse,source:src}])});
+      inp.style.borderColor='#22C55E';
+      inp.style.background='#F0FDF4';
+      saved++;
+    }catch(e){ errors++; }
+  }
+
+  const dayLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+  if(btn){ btn.disabled=false; btn.textContent=`💾 Nur ${dayLabel.split(',')[0]} speichern`; }
+  showToast(errors?`${saved} gespeichert, ${errors} Fehler`:`✓ ${dayLabel} gespeichert!`, !!errors);
+}
+window.orgFcSaveDay=orgFcSaveDay;
+
 async function orgFcSaveAll(){
   const inputs=document.querySelectorAll('#orgfc-content input[type=number]');
   let saved=0; let errors=0;
