@@ -968,7 +968,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.21.4';
+const APP_VERSION = '6.21.6';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7747,13 +7747,19 @@ function hideSubmitOverlay(){
   if(ov) ov.style.display='none';
 }
 
-async function sendToAsana(betreff, beschreibung, storeName, gemeldetVon, fotoUrl, dueOn){
+async function sendToAsana(betreff, beschreibung, storeName, gemeldetVon, fotoUrl, dueOn, mangelId){
   try{
-    await fetch(`${SUPABASE_URL}/functions/v1/asana-schadensmeldung`, {
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/asana-schadensmeldung`, {
       method:'POST',
       headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},
       body: JSON.stringify({betreff, beschreibung, store_name:storeName, gemeldet_von:gemeldetVon, foto_url:fotoUrl, due_on:dueOn})
     });
+    const json=await res.json().catch(()=>null);
+    // Asana-Task-ID am Meldungs-Eintrag hinterlegen — Grundlage für den späteren "Asana-Updates
+    // holen"-Knopf (Kommentare & Erledigt-Status zurückholen).
+    if(json?.task_gid && mangelId){
+      await api(`maengel?id=eq.${mangelId}`,{method:'PATCH',body:JSON.stringify({asana_task_gid:json.task_gid})}).catch(e=>console.error('Asana-Task-ID speichern fehlgeschlagen:',e));
+    }
   }catch(e){ console.error('Asana-Weiterleitung fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', e); }
 }
 
@@ -7794,26 +7800,85 @@ async function sendMangelMeldung(){
     const faelligDate=new Date(Date.now()+dringlichkeitTage*24*60*60*1000);
     const faelligkeitAm=faelligDate.toISOString().split('T')[0]; // YYYY-MM-DD
     const verlauf=[{t:'erstellt', text:'Meldung erstellt', autor:gemeldetVon, zeit:new Date().toISOString()}];
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf,faelligkeit_am:faelligkeitAm}])});
-    sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm); // nicht blockierend — Meldung ist bereits gespeichert
-    await emailjs.send('service_xla195w','template_9uiq1wf',{
-      name: targetStoreName+' — Schadensmeldung: '+betreff,
-      time: now,
-      message: text,
-      title: 'Karma Food Schadensmeldung',
-      to_email: 'tini@karmafood.at'
-    });
-    showToast('✓ Gemeldet & E-Mail verschickt!');
+    // WICHTIG: DB-Speicherung und E-Mail-Versand bewusst in GETRENNTEN try/catch-Blöcken. Vorher
+    // hing beides im selben Block — schlug nur die E-Mail fehl (z.B. Netzwerk-Hänger), zeigte die
+    // App trotzdem "Fehler — bitte nochmal versuchen", obwohl die Meldung längst gespeichert war.
+    // Ergebnis: Doppel-Meldungen, weil Leute (verständlicherweise) nochmal draufgetippt haben.
+    const newRows=await api('maengel',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf,faelligkeit_am:faelligkeitAm}])});
+    const newMangelId=newRows?.[0]?.id||null;
+    sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm, newMangelId); // nicht blockierend — Meldung ist bereits gespeichert
+    // Ab hier ist die Meldung sicher gespeichert — Formular leeren & Liste aktualisieren passiert
+    // JETZT, unabhängig davon ob der E-Mail-Versand gleich klappt oder nicht.
     document.getElementById('mangel-betreff').value='';
     document.getElementById('mangel-text').value='';
     if(storeSelect) storeSelect.value='';
     clearMangelFoto();
     renderMaengel();
+    try{
+      await emailjs.send('service_xla195w','template_9uiq1wf',{
+        name: targetStoreName+' — Schadensmeldung: '+betreff,
+        time: now,
+        message: text,
+        title: 'Karma Food Schadensmeldung',
+        to_email: 'tini@karmafood.at'
+      });
+      showToast('✓ Gemeldet & E-Mail verschickt!');
+    }catch(emailErr){
+      console.error('E-Mail-Versand fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', emailErr);
+      showToast('✓ Gemeldet — E-Mail-Versand hat aber nicht geklappt', true);
+    }
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
   finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } hideSubmitOverlay(); }
 }
 
 // ---- Detailansicht mit chronologischem Verlauf (Status-Änderungen + Rückmeldungen) ----
+// Holt per Knopfdruck Adis Kommentare + Erledigt-Status aus Asana und ergänzt sie in der App —
+// bewusst kein automatischer Webhook (viel simpler, kein zusätzlicher Infrastruktur-Aufwand),
+// dafür muss aktiv auf "Asana-Updates holen" getippt werden.
+async function syncMangelFromAsana(id){
+  const btn=document.getElementById('mangel-asana-sync-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Wird geholt…'; }
+  try{
+    const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
+    const m=(rows||[])[0];
+    if(!m?.asana_task_gid){ showToast('Keine Asana-Verknüpfung vorhanden'); return; }
+
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/asana-schadensmeldung-sync`, {
+      method:'POST',
+      headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},
+      body: JSON.stringify({task_gid:m.asana_task_gid})
+    });
+    const json=await res.json().catch(()=>null);
+    if(!res.ok || !json?.ok){ showToast('Asana-Abruf fehlgeschlagen — bitte später nochmal'); return; }
+
+    // Neue Kommentare (die noch nicht übernommen wurden) an den Verlauf anhängen
+    const alreadySynced=new Set(m.asana_synced_story_gids||[]);
+    const newComments=(json.comments||[]).filter(c=>!alreadySynced.has(c.gid));
+    const verlauf=[...(m.verlauf||[])];
+    newComments.forEach(c=>{
+      verlauf.push({t:'asana_kommentar', text:'💬 '+c.text, autor:c.autor+' (Asana)', zeit:c.zeit});
+    });
+    const updatedSyncedGids=[...alreadySynced, ...newComments.map(c=>c.gid)];
+
+    const patch={verlauf, asana_synced_story_gids:updatedSyncedGids};
+    // Wenn Adi die Aufgabe in Asana als erledigt markiert hat, hier automatisch mitziehen.
+    if(json.completed && m.status!=='behoben'){
+      patch.status='behoben';
+      patch.behoben_am=json.completed_at||new Date().toISOString();
+      patch.behoben_von='Asana (Adi)';
+      verlauf.push({t:'status', text:'✓ In Asana als erledigt markiert', autor:'Asana (Adi)', zeit:json.completed_at||new Date().toISOString()});
+    }
+    await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
+
+    showToast(newComments.length||json.completed ? `✓ ${newComments.length} neue Kommentar(e) geholt${json.completed?', als erledigt markiert':''}` : 'Keine neuen Updates in Asana');
+    closeMangelDetail();
+    openMangelDetail(id);
+    renderMaengel();
+  }catch(e){ console.error(e); showToast('Fehler beim Asana-Abruf', true); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='🔄 Asana-Updates holen'; } }
+}
+window.syncMangelFromAsana=syncMangelFromAsana;
+
 async function openMangelDetail(id){
   const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
   const m=(rows||[])[0];
@@ -7852,6 +7917,8 @@ async function openMangelDetail(id){
             <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
           `:''}
           <button onclick="toggleMangelEdit(true)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--sub);cursor:pointer;">✏️ Bearbeiten</button>
+          ${m.asana_task_gid?`<a href="https://app.asana.com/0/1206467470914728/${m.asana_task_gid}" target="_blank" rel="noopener" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#7B3FE4;text-decoration:none;">🔗 In Asana öffnen</a>
+          <button id="mangel-asana-sync-btn" onclick="syncMangelFromAsana(${m.id})" style="background:var(--green-light);border:1px solid var(--green);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">🔄 Asana-Updates holen</button>`:''}
         </div>
       </div>
 
