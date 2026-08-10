@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.22.0';
+const APP_VERSION = '6.23.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3934,110 +3934,448 @@ async function fetchHistoricalWeather(storeId, fromDate, toDate){
 
 // ---- UMSATZ-DASHBOARD ----
 // Datenquelle: wöchentlicher Odoo-Export (Verkauf → Berichtswesen → Verkauf), manuell hochgeladen.
-// Kein Live-API-Zugriff — bewusste Entscheidung (siehe Absprache), einfacher & sicherer.
-let umsatzPeriod='month'; // 'week' | 'month' | 'all'
+// Kein Live-API-Zugriff — bewusste Entscheidung, einfacher & sicherer.
+//
+// WICHTIG: Alle Aggregation läuft serverseitig über die Postgres-Funktion sales_report().
+// Früher wurde die komplette sales_data-Tabelle in den Browser geladen (~13.000 Zeilen und
+// wachsend) und dort summiert — das skaliert nicht und lief in das 3s-statement_timeout der
+// anon-Rolle. Jetzt: ein RPC-Call pro Ansicht, zurück kommen nur fertige Kennzahlen.
+const UMSATZ_LS_KEY='umsatz_filter_v2';
+let umsatzMeta=null, umsatzData=null, umsatzStoreMap={}, umsatzOpenPanel=null;
+let umsatzProductSort='netto';
+
+const umsatzState={preset:'monat',from:null,to:null,cmp:'prev',cmpFrom:null,cmpTo:null,stores:[],groups:[],products:[],bucket:'auto'};
+
+const UMSATZ_PRESETS=[
+  {id:'heute',label:'Heute'},{id:'gestern',label:'Gestern'},
+  {id:'woche',label:'Diese Woche'},{id:'letzteWoche',label:'Letzte Woche'},
+  {id:'monat',label:'Dieser Monat'},{id:'letzterMonat',label:'Letzter Monat'},
+  {id:'quartal',label:'Dieses Quartal'},{id:'letztesQuartal',label:'Letztes Quartal'},
+  {id:'jahr',label:'Dieses Jahr'},{id:'letztesJahr',label:'Letztes Jahr'},
+  {id:'custom',label:'Eigener Zeitraum'}
+];
+const UMSATZ_CMP=[{id:'none',label:'Kein Vergleich'},{id:'prev',label:'Vorperiode'},{id:'year',label:'Vorjahr'},{id:'custom',label:'Individuell'}];
+const UMSATZ_PURPLE='#7B3FE4';
+
+// --- Datums-Helfer (alle lokal, nie toISOString — sonst Off-by-one in AT/UTC+2) ---
+function uFmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function uParse(s){const p=String(s).split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);}
+function uAddDays(s,n){const d=uParse(s);d.setDate(d.getDate()+n);return uFmt(d);}
+function uDayCount(a,b){return Math.round((uParse(b)-uParse(a))/86400000)+1;}
+function uNiceDate(s){if(!s)return '';const p=String(s).split('-');return p[2]+'.'+p[1]+'.'+p[0];}
+function uEuro(n){return (Number(n)||0).toLocaleString('de-AT',{maximumFractionDigits:0})+' €';}
+function uNum(n){return (Number(n)||0).toLocaleString('de-AT',{maximumFractionDigits:0});}
+
+function umsatzRange(){
+  if(umsatzState.preset==='custom') return {from:umsatzState.from,to:umsatzState.to};
+  const t=new Date(), today=uFmt(t), y=t.getFullYear(), m=t.getMonth();
+  const dow=(t.getDay()+6)%7, q=Math.floor(m/3);
+  if(umsatzState.preset==='heute') return {from:today,to:today};
+  if(umsatzState.preset==='gestern'){const g=uAddDays(today,-1);return {from:g,to:g};}
+  if(umsatzState.preset==='woche'){const mo=uAddDays(today,-dow);return {from:mo,to:today};}
+  if(umsatzState.preset==='letzteWoche'){const mo=uAddDays(today,-dow-7);return {from:mo,to:uAddDays(mo,6)};}
+  if(umsatzState.preset==='monat') return {from:uFmt(new Date(y,m,1)),to:today};
+  if(umsatzState.preset==='letzterMonat') return {from:uFmt(new Date(y,m-1,1)),to:uFmt(new Date(y,m,0))};
+  if(umsatzState.preset==='quartal') return {from:uFmt(new Date(y,q*3,1)),to:today};
+  if(umsatzState.preset==='letztesQuartal') return {from:uFmt(new Date(y,q*3-3,1)),to:uFmt(new Date(y,q*3,0))};
+  if(umsatzState.preset==='jahr') return {from:uFmt(new Date(y,0,1)),to:today};
+  if(umsatzState.preset==='letztesJahr') return {from:uFmt(new Date(y-1,0,1)),to:uFmt(new Date(y-1,11,31))};
+  return {from:today,to:today};
+}
+
+function umsatzCmpRange(r){
+  if(umsatzState.cmp==='none'||!r.from||!r.to) return {from:null,to:null};
+  if(umsatzState.cmp==='custom') return {from:umsatzState.cmpFrom||null,to:umsatzState.cmpTo||null};
+  if(umsatzState.cmp==='year'){
+    const f=uParse(r.from), t=uParse(r.to);
+    f.setFullYear(f.getFullYear()-1); t.setFullYear(t.getFullYear()-1);
+    return {from:uFmt(f),to:uFmt(t)};
+  }
+  const days=uDayCount(r.from,r.to);
+  return {from:uAddDays(r.from,-days),to:uAddDays(r.from,-1)};
+}
+
+function umsatzSaveState(){
+  try{localStorage.setItem(UMSATZ_LS_KEY,JSON.stringify(umsatzState));}catch(e){}
+}
+function umsatzLoadState(){
+  try{
+    const raw=localStorage.getItem(UMSATZ_LS_KEY);
+    if(!raw) return;
+    const s=JSON.parse(raw);
+    Object.keys(umsatzState).forEach(k=>{ if(s[k]!==undefined) umsatzState[k]=s[k]; });
+    ['stores','groups','products'].forEach(k=>{ if(!Array.isArray(umsatzState[k])) umsatzState[k]=[]; });
+  }catch(e){}
+}
+function umsatzReset(){
+  umsatzState.preset='monat'; umsatzState.from=null; umsatzState.to=null;
+  umsatzState.cmp='prev'; umsatzState.cmpFrom=null; umsatzState.cmpTo=null;
+  umsatzState.stores=[]; umsatzState.groups=[]; umsatzState.products=[];
+  umsatzState.bucket='auto'; umsatzOpenPanel=null;
+  umsatzSaveState(); renderUmsatzContent();
+}
+
+function umsatzToggleFilter(kind,val){
+  const arr=umsatzState[kind];
+  const i=arr.indexOf(val);
+  if(i>=0) arr.splice(i,1); else arr.push(val);
+  if(kind==='groups') umsatzState.products=[]; // Produktauswahl passt sonst nicht mehr zur Gruppe
+  umsatzSaveState(); renderUmsatzContent();
+}
+function umsatzSetPreset(p){
+  umsatzState.preset=p;
+  if(p==='custom'&&!umsatzState.from){
+    const r={from:uFmt(new Date(new Date().getFullYear(),new Date().getMonth(),1)),to:uFmt(new Date())};
+    umsatzState.from=r.from; umsatzState.to=r.to;
+  }
+  umsatzSaveState(); renderUmsatzContent();
+}
+function umsatzSetCmp(c){ umsatzState.cmp=c; umsatzSaveState(); renderUmsatzContent(); }
+function umsatzSetDate(field,val){ umsatzState[field]=val||null; umsatzSaveState(); renderUmsatzContent(); }
+function umsatzSetBucket(b){ umsatzState.bucket=b; umsatzSaveState(); renderUmsatzContent(); }
+function umsatzTogglePanel(p){ umsatzOpenPanel=umsatzOpenPanel===p?null:p; renderUmsatzContent(); }
+function umsatzSetProductSort(s){ umsatzProductSort=s; renderUmsatzContent(); }
 
 async function renderUmsatz(){
   const el=document.getElementById('v-umsatz');
-  el.innerHTML=backToHomeHtml()+pageHeaderHtml('💶','Umsatz','Aus wöchentlichem Odoo-Export — Netto','#7B3FE4')+`<div id="umsatz-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  if(currentStore?.id!=='zentrale'){
+    el.innerHTML=backToHomeHtml()+'<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Dieser Bereich ist der Organisation vorbehalten.</div>';
+    translateEl(el); return;
+  }
+  umsatzLoadState();
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('💶','Umsatz','Netto aus dem Odoo-Export',UMSATZ_PURPLE)+'<div id="umsatz-content"><div style="text-align:center;color:var(--muted);padding:2rem;">Wird geladen…</div></div>';
   translateEl(el);
+  const st=await api('stores?select=id,name').catch(()=>[]);
+  umsatzStoreMap=Object.fromEntries((st||[]).map(s=>[s.id,s.name]));
+  umsatzMeta=await api('rpc/sales_meta',{method:'POST',body:'{}'}).catch(()=>null);
   await renderUmsatzContent();
 }
 
 async function renderUmsatzContent(){
   const target=document.getElementById('umsatz-content');
-  const latest=await api('sales_data?select=imported_at&order=imported_at.desc&limit=1').catch(()=>[]);
-  const lastImport=latest?.[0]?.imported_at?new Date(latest[0].imported_at).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null;
+  if(!target) return;
+  const r=umsatzRange(), c=umsatzCmpRange(r);
 
-  let html=`<div class="card" style="padding:14px;margin-bottom:12px;">
-    <div style="font-size:12px;font-weight:600;margin-bottom:2px;">📤 Neuen Export hochladen</div>
-    <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">${lastImport?`Zuletzt aktualisiert: ${lastImport}`:'Noch keine Daten importiert'}</div>
-    <input type="file" id="umsatz-file-input" accept=".xlsx" style="display:none;" onchange="handleUmsatzUpload(this)">
-    <button onclick="document.getElementById('umsatz-file-input').click()" id="umsatz-upload-btn" style="width:100%;padding:11px;background:#7B3FE4;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">📊 Odoo-Export (.xlsx) auswählen</button>
-  </div>`;
+  let head=umsatzDatenstandHtml()+umsatzPeriodHtml(r,c)+umsatzFilterHtml();
+  if(!r.from||!r.to){
+    target.innerHTML=head+'<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted);font-size:13px;">Bitte Start- und Enddatum wählen.</div>';
+    translateEl(target); return;
+  }
+  target.innerHTML=head+'<div style="text-align:center;color:var(--muted);padding:2rem;font-size:13px;">Wird berechnet…</div>';
 
-  const rows=await api('sales_data?select=*').catch(()=>[]);
-  if(!rows?.length){
-    html+=`<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Noch keine Umsatzdaten — Export oben hochladen.</div>`;
-    target.innerHTML=html;
-    translateEl(target);
-    return;
+  const days=uDayCount(r.from,r.to);
+  const bucket=umsatzState.bucket!=='auto'?umsatzState.bucket:(days<=31?'day':(days<=182?'week':'month'));
+  try{
+    umsatzData=await api('rpc/sales_report',{method:'POST',body:JSON.stringify({
+      p_from:r.from,p_to:r.to,p_cmp_from:c.from,p_cmp_to:c.to,
+      p_stores:umsatzState.stores.length?umsatzState.stores:null,
+      p_groups:umsatzState.groups.length?umsatzState.groups:null,
+      p_products:umsatzState.products.length?umsatzState.products:null,
+      p_bucket:bucket
+    })});
+  }catch(e){
+    console.error(e);
+    target.innerHTML=head+'<div class="card" style="padding:1.5rem;text-align:center;color:#DC2626;font-size:12.5px;">Auswertung fehlgeschlagen. Bitte nochmal versuchen.</div>';
+    translateEl(target); return;
   }
 
-  const today=new Date();
-  const weekAgo=new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
-  const monthAgo=new Date(today); monthAgo.setDate(monthAgo.getDate()-30);
-  const cutoff=umsatzPeriod==='week'?weekAgo:(umsatzPeriod==='month'?monthAgo:null);
-  const filtered=cutoff?rows.filter(r=>new Date(r.sale_date)>=cutoff):rows;
-
-  html+=`<div style="display:flex;gap:6px;margin-bottom:12px;">
-    ${['week','month','all'].map(p=>`<button onclick="umsatzPeriod='${p}';renderUmsatzContent()" style="flex:1;padding:8px;border-radius:9px;border:${umsatzPeriod===p?'2px solid #7B3FE4':'1.5px solid var(--border)'};background:${umsatzPeriod===p?'#7B3FE4':'#fff'};color:${umsatzPeriod===p?'#fff':'var(--sub)'};font-size:12px;font-weight:600;cursor:pointer;">${p==='week'?'7 Tage':(p==='month'?'30 Tage':'Alles')}</button>`).join('')}
-  </div>`;
-
-  const totalNetto=filtered.reduce((a,r)=>a+(Number(r.net_amount)||0),0);
-  const totalMenge=filtered.reduce((a,r)=>a+(Number(r.quantity)||0),0);
-  const days=new Set(filtered.map(r=>r.sale_date)).size;
-
-  html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-    <div class="card" style="padding:12px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#7B3FE4;">${totalNetto.toLocaleString('de-AT',{maximumFractionDigits:0})} €</div>
-      <div style="font-size:10px;color:var(--muted);">Umsatz (Netto)</div>
-    </div>
-    <div class="card" style="padding:12px;text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#1a1a18;">${totalMenge.toLocaleString('de-AT',{maximumFractionDigits:0})}</div>
-      <div style="font-size:10px;color:var(--muted);">Portionen verkauft</div>
-    </div>
-  </div>`;
-
-  // Filial-Vergleich
-  const byStore={};
-  filtered.forEach(r=>{ byStore[r.store_id]=(byStore[r.store_id]||0)+(Number(r.net_amount)||0); });
-  const storeNames=await api('stores?select=id,name').catch(()=>[]);
-  const storeMap=Object.fromEntries((storeNames||[]).map(s=>[s.id,s.name]));
-  const maxStoreVal=Math.max(...Object.values(byStore),1);
-  html+=`<div class="section-lbl">🏪 Filial-Vergleich</div><div class="card" style="padding:12px;">`;
-  Object.entries(byStore).sort((a,b)=>b[1]-a[1]).forEach(([sid,val])=>{
-    const pct=(val/maxStoreVal*100).toFixed(0);
-    html+=`<div style="margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px;"><span data-no-translate>${storeMap[sid]||sid}</span><span style="font-weight:700;">${val.toLocaleString('de-AT',{maximumFractionDigits:0})} €</span></div>
-      <div style="background:var(--surface-1);border-radius:4px;height:7px;overflow:hidden;"><div style="width:${pct}%;background:#7B3FE4;height:100%;"></div></div>
-    </div>`;
-  });
-  html+=`</div>`;
-
-  // Bestseller nach Umsatz
-  const byProduct={};
-  filtered.forEach(r=>{
-    if(!byProduct[r.product_name]) byProduct[r.product_name]={menge:0,netto:0};
-    byProduct[r.product_name].menge+=Number(r.quantity)||0;
-    byProduct[r.product_name].netto+=Number(r.net_amount)||0;
-  });
-  const topByRevenue=Object.entries(byProduct).sort((a,b)=>b[1].netto-a[1].netto).slice(0,10);
-  const topByQty=Object.entries(byProduct).sort((a,b)=>b[1].menge-a[1].menge).slice(0,10);
-
-  html+=`<div class="section-lbl" style="margin-top:14px;">🏆 Bestseller nach Umsatz</div><div class="card" style="overflow:hidden;">`;
-  topByRevenue.forEach(([name,d],i)=>{
-    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;${i<topByRevenue.length-1?'border-bottom:0.5px solid var(--border);':''}">
-      <div style="font-size:12px;" data-no-translate>${i+1}. ${name}</div>
-      <div style="font-size:12px;font-weight:700;color:#7B3FE4;white-space:nowrap;">${d.netto.toLocaleString('de-AT',{maximumFractionDigits:0})} €</div>
-    </div>`;
-  });
-  html+=`</div>`;
-
-  html+=`<div class="section-lbl" style="margin-top:14px;">📦 Meistverkauft (Menge)</div><div class="card" style="overflow:hidden;">`;
-  topByQty.forEach(([name,d],i)=>{
-    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;${i<topByQty.length-1?'border-bottom:0.5px solid var(--border);':''}">
-      <div style="font-size:12px;" data-no-translate>${i+1}. ${name}</div>
-      <div style="font-size:12px;font-weight:700;white-space:nowrap;">${formatQty(d.menge)} Stk</div>
-    </div>`;
-  });
-  html+=`</div>`;
-
-  html+=`<div style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0;">${days} Verkaufstage im gewählten Zeitraum · ${filtered.length} Zeilen</div>`;
-
+  const d=umsatzData||{};
+  let html=head;
+  if(!d.kpi||!Number(d.kpi.zeilen)){
+    html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Keine Verkäufe im gewählten Zeitraum.'+umsatzLeerHinweis(r)+'</div>';
+    target.innerHTML=html; translateEl(target); return;
+  }
+  html+=umsatzKpiHtml(d);
+  html+=umsatzChartHtml(d,bucket);
+  html+=umsatzStoreHtml(d);
+  html+=umsatzGroupHtml(d);
+  html+=umsatzProductHtml(d);
+  html+=umsatzWeekdayHtml(d);
+  html+=umsatzUploadHtml();
+  html+='<div style="font-size:10px;color:var(--muted);text-align:center;padding:14px 0 24px;">'+uNum(d.kpi.tage)+' Verkaufstage · '+uNum(d.kpi.zeilen)+' Datenzeilen ausgewertet</div>';
   target.innerHTML=html;
   translateEl(target);
 }
+
+function umsatzLeerHinweis(r){
+  if(!umsatzMeta?.max_date) return '';
+  if(r.from>umsatzMeta.max_date) return '<div style="margin-top:8px;font-size:11.5px;">Die Daten reichen aktuell nur bis '+uNiceDate(umsatzMeta.max_date)+'.</div>';
+  const d=uParse(r.from).getDay();
+  if(d===0||d===6) return '<div style="margin-top:8px;font-size:11.5px;">Der gewählte Tag ist ein Wochenende — da wird nicht verkauft.</div>';
+  return '';
+}
+
+// Datenstand: der Export kommt wöchentlich per Hand, deshalb ist "Heute" fast immer leer.
+// Ohne diesen Hinweis wirkt das wie ein Umsatzeinbruch statt wie fehlende Daten.
+function umsatzDatenstandHtml(){
+  if(!umsatzMeta?.max_date) return '';
+  const alter=uDayCount(umsatzMeta.max_date,uFmt(new Date()))-1;
+  const warn=alter>8;
+  const bg=warn?'#FEF3C7':'#F5F5F3', col=warn?'#92400E':'var(--sub)';
+  let txt='Daten aktuell bis '+uNiceDate(umsatzMeta.max_date);
+  if(warn) txt+=' — das ist '+alter+' Tage her. Neuen Export hochladen (unten).';
+  return '<div style="background:'+bg+';border-radius:10px;padding:8px 11px;margin-bottom:10px;font-size:11.5px;color:'+col+';display:flex;gap:6px;align-items:center;"><span>'+(warn?'⚠️':'🕓')+'</span><span>'+txt+'</span></div>';
+}
+
+function umsatzPeriodHtml(r,c){
+  let h='<div class="card" style="padding:11px;margin-bottom:10px;">';
+  h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:7px;">Zeitraum</div>';
+  h+='<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;-webkit-overflow-scrolling:touch;">';
+  UMSATZ_PRESETS.forEach(p=>{
+    const on=umsatzState.preset===p.id;
+    h+='<button onclick="umsatzSetPreset(\''+p.id+'\')" style="flex:0 0 auto;padding:6px 11px;border-radius:20px;border:1.5px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?UMSATZ_PURPLE:'#fff')+';color:'+(on?'#fff':'var(--sub)')+';font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;">'+p.label+'</button>';
+  });
+  h+='</div>';
+  if(umsatzState.preset==='custom'){
+    h+='<div style="display:flex;gap:6px;margin-top:8px;">'
+      +'<input type="date" value="'+(umsatzState.from||'')+'" onchange="umsatzSetDate(\'from\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
+      +'<input type="date" value="'+(umsatzState.to||'')+'" onchange="umsatzSetDate(\'to\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
+      +'</div>';
+  }
+  h+='<div style="font-size:12px;font-weight:700;color:'+UMSATZ_PURPLE+';margin-top:8px;">'+uNiceDate(r.from)+' – '+uNiceDate(r.to)+'</div>';
+
+  h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin:11px 0 6px;">Vergleich mit</div>';
+  h+='<div style="display:flex;gap:5px;">';
+  UMSATZ_CMP.forEach(p=>{
+    const on=umsatzState.cmp===p.id;
+    h+='<button onclick="umsatzSetCmp(\''+p.id+'\')" style="flex:1;padding:6px 4px;border-radius:8px;border:1.5px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?'#F3ECFD':'#fff')+';color:'+(on?UMSATZ_PURPLE:'var(--sub)')+';font-size:11px;font-weight:600;cursor:pointer;">'+p.label+'</button>';
+  });
+  h+='</div>';
+  if(umsatzState.cmp==='custom'){
+    h+='<div style="display:flex;gap:6px;margin-top:7px;">'
+      +'<input type="date" value="'+(umsatzState.cmpFrom||'')+'" onchange="umsatzSetDate(\'cmpFrom\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
+      +'<input type="date" value="'+(umsatzState.cmpTo||'')+'" onchange="umsatzSetDate(\'cmpTo\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
+      +'</div>';
+  }
+  if(c.from&&c.to) h+='<div style="font-size:11px;color:var(--muted);margin-top:6px;">Vergleich: '+uNiceDate(c.from)+' – '+uNiceDate(c.to)+'</div>';
+  h+='</div>';
+  return h;
+}
+
+function umsatzFilterHtml(){
+  const chips=[];
+  umsatzState.stores.forEach(s=>chips.push({kind:'stores',val:s,label:umsatzStoreMap[s]||s}));
+  umsatzState.groups.forEach(g=>chips.push({kind:'groups',val:g,label:g}));
+  umsatzState.products.forEach(p=>chips.push({kind:'products',val:p,label:p}));
+
+  let h='<div class="card" style="padding:11px;margin-bottom:10px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">';
+  h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Filter</div>';
+  if(chips.length||umsatzState.preset!=='monat'||umsatzState.cmp!=='prev') h+='<button onclick="umsatzReset()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;">Alles zurücksetzen</button>';
+  h+='</div>';
+
+  const btn=(id,label,count)=>'<button onclick="umsatzTogglePanel(\''+id+'\')" style="flex:1;padding:7px 4px;border-radius:8px;border:1.5px solid '+(count?UMSATZ_PURPLE:'var(--border)')+';background:'+(umsatzOpenPanel===id?'#F3ECFD':'#fff')+';color:'+(count?UMSATZ_PURPLE:'var(--sub)')+';font-size:11px;font-weight:600;cursor:pointer;">'+label+(count?' ('+count+')':'')+'</button>';
+  h+='<div style="display:flex;gap:5px;">'+btn('stores','Filiale',umsatzState.stores.length)+btn('groups','Gruppe',umsatzState.groups.length)+btn('products','Produkt',umsatzState.products.length)+'</div>';
+
+  if(umsatzOpenPanel) h+=umsatzPanelHtml(umsatzOpenPanel);
+
+  if(chips.length){
+    h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;">';
+    chips.forEach(ch=>{
+      h+='<span onclick="umsatzToggleFilter(\''+ch.kind+'\',\''+String(ch.val).replace(/'/g,"\\'")+'\')" style="display:inline-flex;align-items:center;gap:5px;background:#F3ECFD;color:'+UMSATZ_PURPLE+';border-radius:14px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer;" data-no-translate>'+ch.label+' ×</span>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function umsatzPanelHtml(panel){
+  let items=[];
+  if(panel==='stores') items=Object.keys(umsatzStoreMap).sort().map(id=>({val:id,label:umsatzStoreMap[id]||id}));
+  else if(panel==='groups') items=((umsatzMeta&&umsatzMeta.groups)||[]).map(g=>({val:g,label:g}));
+  else {
+    let prods=(umsatzMeta&&umsatzMeta.products)||[];
+    if(umsatzState.groups.length) prods=prods.filter(p=>umsatzState.groups.indexOf(p.product_group)>=0);
+    items=prods.map(p=>({val:p.product_name,label:p.product_name}));
+  }
+  const sel=umsatzState[panel];
+  let h='<div style="margin-top:8px;max-height:210px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">';
+  if(!items.length) h+='<div style="padding:12px;text-align:center;color:var(--muted);font-size:11.5px;">Nichts verfügbar.</div>';
+  items.forEach((it,i)=>{
+    const on=sel.indexOf(it.val)>=0;
+    h+='<div onclick="umsatzToggleFilter(\''+panel+'\',\''+String(it.val).replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;'+(i<items.length-1?'border-bottom:0.5px solid var(--border);':'')+(on?'background:#FAF7FE;':'')+'">'
+      +'<div style="width:16px;height:16px;border-radius:4px;flex-shrink:0;border:1.5px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?UMSATZ_PURPLE:'#fff')+';display:flex;align-items:center;justify-content:center;">'+(on?'<svg width="10" height="10" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div>'
+      +'<span style="font-size:12px;" data-no-translate>'+it.label+'</span></div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+// Delta-Baustein: Prozentveränderung gegenüber dem Vergleichszeitraum, farbig.
+function umsatzDelta(cur,prev,size){
+  const c=Number(cur)||0, p=Number(prev)||0;
+  if(!p) return '<span style="font-size:'+(size||10)+'px;color:var(--muted);">–</span>';
+  const pct=((c-p)/p)*100;
+  const up=pct>=0, col=up?'#0F6E56':'#DC2626';
+  return '<span style="font-size:'+(size||10)+'px;color:'+col+';font-weight:700;">'+(up?'▲':'▼')+' '+Math.abs(pct).toFixed(1).replace('.',',')+' %</span>';
+}
+
+function umsatzKpiHtml(d){
+  const k=d.kpi, cm=d.cmp;
+  const proTag=k.tage?k.netto/k.tage:0;
+  const proTagCmp=(cm&&cm.tage)?cm.netto/cm.tage:0;
+  const card=(val,label,delta,hint)=>'<div class="card" style="padding:11px;">'
+    +'<div style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;">'+label+'</div>'
+    +'<div style="font-size:19px;font-weight:800;color:#1a1a18;margin:2px 0 3px;">'+val+'</div>'
+    +(delta||'')+(hint?'<div style="font-size:9.5px;color:var(--muted);margin-top:2px;">'+hint+'</div>':'')+'</div>';
+  let h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px;">';
+  h+=card(uEuro(k.netto),'Umsatz netto',cm?umsatzDelta(k.netto,cm.netto,11):'',cm?uEuro(cm.netto)+' davor':'');
+  h+=card(uNum(k.menge),'Portionen',cm?umsatzDelta(k.menge,cm.menge,11):'',cm?uNum(cm.menge)+' davor':'');
+  h+=card(uEuro(proTag),'Ø pro Verkaufstag',cm?umsatzDelta(proTag,proTagCmp,11):'',k.tage+' Tage');
+  h+=card(uNum(k.tage),'Verkaufstage','',cm?uNum(cm.tage)+' im Vergleich':'');
+  h+='</div>';
+  // Der Ø-pro-Tag-Wert ist der ehrlichere Vergleich, weil Monate 15–23 Verkaufstage haben.
+  if(cm&&cm.tage&&cm.tage!==k.tage){
+    h+='<div style="font-size:10.5px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:7px 10px;margin:-4px 0 12px;">ℹ️ Die Zeiträume haben unterschiedlich viele Verkaufstage ('+k.tage+' vs. '+cm.tage+'). Für den fairen Vergleich zählt „Ø pro Verkaufstag".</div>';
+  }
+  return h;
+}
+
+function umsatzChartHtml(d,bucket){
+  const tr=d.trend||[];
+  if(!tr.length) return '';
+  const cmp=d.trend_cmp||[];
+  const W=320, H=110, pad=4;
+  const max=Math.max.apply(null,tr.map(t=>Number(t.netto)).concat(cmp.map(t=>Number(t.netto))).concat([1]));
+  const n=tr.length;
+  const bw=Math.max(2,(W-pad*2)/n*0.7), gap=(W-pad*2)/n;
+  let bars='', line='';
+  tr.forEach((t,i)=>{
+    const hgt=Math.max(1,(Number(t.netto)/max)*(H-18));
+    const x=pad+i*gap+(gap-bw)/2;
+    bars+='<rect x="'+x.toFixed(1)+'" y="'+(H-14-hgt).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hgt.toFixed(1)+'" rx="1.5" fill="'+UMSATZ_PURPLE+'"><title>'+umsatzBucketLabel(t.bucket,bucket)+': '+uEuro(t.netto)+'</title></rect>';
+  });
+  if(cmp.length){
+    const pts=[];
+    cmp.forEach((t,i)=>{
+      if(i>=n) return;
+      const hgt=(Number(t.netto)/max)*(H-18);
+      pts.push((pad+i*gap+gap/2).toFixed(1)+','+(H-14-hgt).toFixed(1));
+    });
+    if(pts.length>1) line='<polyline points="'+pts.join(' ')+'" fill="none" stroke="#B9A2E8" stroke-width="1.5" stroke-dasharray="3 2"/>';
+  }
+  const first=umsatzBucketLabel(tr[0].bucket,bucket), last=umsatzBucketLabel(tr[n-1].bucket,bucket);
+  let h='<div class="section-lbl">📈 Verlauf</div><div class="card" style="padding:11px;">';
+  h+='<div style="display:flex;gap:4px;margin-bottom:8px;">';
+  [['auto','Auto'],['day','Tag'],['week','Woche'],['month','Monat']].forEach(b=>{
+    const on=umsatzState.bucket===b[0];
+    h+='<button onclick="umsatzSetBucket(\''+b[0]+'\')" style="flex:1;padding:4px;border-radius:6px;border:1px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?'#F3ECFD':'#fff')+';color:'+(on?UMSATZ_PURPLE:'var(--muted)')+';font-size:10.5px;font-weight:600;cursor:pointer;">'+b[1]+'</button>';
+  });
+  h+='</div>';
+  h+='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;">'+bars+line+'</svg>';
+  h+='<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-top:2px;"><span>'+first+'</span><span>max. '+uEuro(max)+'</span><span>'+last+'</span></div>';
+  if(cmp.length) h+='<div style="font-size:10px;color:var(--muted);margin-top:6px;">— — Gestrichelt: Vergleichszeitraum</div>';
+  h+='</div>';
+  return h;
+}
+
+function umsatzBucketLabel(b,bucket){
+  if(!b) return '';
+  const p=String(b).split('-');
+  if(bucket==='month') return p[2]?p[1]+'/'+p[0].slice(2):b;
+  return p[2]+'.'+p[1]+'.';
+}
+
+function umsatzBarRow(label,val,maxVal,cmpVal,hasCmp,unit){
+  const pct=maxVal?(val/maxVal*100):0;
+  let h='<div style="margin-bottom:9px;">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11.5px;margin-bottom:3px;">';
+  h+='<span data-no-translate style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+label+'</span>';
+  h+='<span style="white-space:nowrap;"><b>'+(unit==='stk'?uNum(val)+' Stk':uEuro(val))+'</b>'+(hasCmp?' '+umsatzDelta(val,cmpVal,10):'')+'</span></div>';
+  h+='<div style="background:var(--surface-1,#F0F0EE);border-radius:4px;height:6px;overflow:hidden;"><div style="width:'+pct.toFixed(0)+'%;background:'+UMSATZ_PURPLE+';height:100%;"></div></div>';
+  h+='</div>';
+  return h;
+}
+
+function umsatzStoreHtml(d){
+  const rows=d.by_store||[];
+  if(rows.length<2) return '';
+  const hasCmp=!!d.cmp;
+  const max=Math.max.apply(null,rows.map(r=>Number(r.netto)).concat([1]));
+  let h='<div class="section-lbl" style="margin-top:14px;">🏪 Filialen</div><div class="card" style="padding:12px;">';
+  rows.forEach(r=>{ h+=umsatzBarRow(umsatzStoreMap[r.store_id]||r.store_id,Number(r.netto),max,Number(r.netto_cmp),hasCmp,'eur'); });
+  h+='</div>';
+  return h;
+}
+
+function umsatzGroupHtml(d){
+  const rows=d.by_group||[];
+  if(rows.length<2) return '';
+  const hasCmp=!!d.cmp;
+  const total=rows.reduce((s,r)=>s+Number(r.netto),0)||1;
+  let h='<div class="section-lbl" style="margin-top:14px;">🍛 Produktgruppen</div><div class="card" style="overflow:hidden;">';
+  rows.forEach((r,i)=>{
+    const anteil=(Number(r.netto)/total*100).toFixed(0);
+    h+='<div onclick="umsatzToggleFilter(\'groups\',\''+String(r.product_group).replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;'+(i<rows.length-1?'border-bottom:0.5px solid var(--border);':'')+'">'
+      +'<div><div style="font-size:12.5px;font-weight:600;" data-no-translate>'+r.product_group+'</div><div style="font-size:10px;color:var(--muted);">'+anteil+' % vom Umsatz · '+uNum(r.menge)+' Stk</div></div>'
+      +'<div style="text-align:right;white-space:nowrap;"><div style="font-size:12.5px;font-weight:700;color:'+UMSATZ_PURPLE+';">'+uEuro(r.netto)+'</div>'+(hasCmp?umsatzDelta(r.netto,r.netto_cmp,10):'')+'</div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+function umsatzProductHtml(d){
+  let rows=(d.by_product||[]).slice();
+  if(!rows.length) return '';
+  const hasCmp=!!d.cmp;
+  if(umsatzProductSort==='menge') rows.sort((a,b)=>Number(b.menge)-Number(a.menge));
+  else if(umsatzProductSort==='delta'&&hasCmp) rows.sort((a,b)=>{
+    const da=Number(a.netto_cmp)?(Number(a.netto)-Number(a.netto_cmp))/Number(a.netto_cmp):-Infinity;
+    const db=Number(b.netto_cmp)?(Number(b.netto)-Number(b.netto_cmp))/Number(b.netto_cmp):-Infinity;
+    return db-da;
+  });
+  else rows.sort((a,b)=>Number(b.netto)-Number(a.netto));
+
+  let h='<div class="section-lbl" style="margin-top:14px;">🏆 Produkte</div>';
+  h+='<div style="display:flex;gap:4px;margin-bottom:7px;">';
+  const sorts=[['netto','Umsatz'],['menge','Menge']];
+  if(hasCmp) sorts.push(['delta','Veränderung']);
+  sorts.forEach(s=>{
+    const on=umsatzProductSort===s[0];
+    h+='<button onclick="umsatzSetProductSort(\''+s[0]+'\')" style="flex:1;padding:5px;border-radius:7px;border:1px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?'#F3ECFD':'#fff')+';color:'+(on?UMSATZ_PURPLE:'var(--muted)')+';font-size:10.5px;font-weight:600;cursor:pointer;">'+s[1]+'</button>';
+  });
+  h+='</div><div class="card" style="overflow:hidden;">';
+  rows.forEach((r,i)=>{
+    h+='<div onclick="umsatzToggleFilter(\'products\',\''+String(r.product_name).replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;'+(i<rows.length-1?'border-bottom:0.5px solid var(--border);':'')+'">'
+      +'<div style="min-width:0;"><div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-no-translate>'+(i+1)+'. '+r.product_name+'</div><div style="font-size:9.5px;color:var(--muted);">'+uNum(r.menge)+' Stk'+(hasCmp&&Number(r.menge_cmp)?' (davor '+uNum(r.menge_cmp)+')':'')+'</div></div>'
+      +'<div style="text-align:right;white-space:nowrap;"><div style="font-size:12px;font-weight:700;color:'+UMSATZ_PURPLE+';">'+uEuro(r.netto)+'</div>'+(hasCmp?umsatzDelta(r.netto,r.netto_cmp,10):'')+'</div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+
+const UMSATZ_DOW=['','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
+function umsatzWeekdayHtml(d){
+  const rows=d.by_weekday||[];
+  if(rows.length<2) return '';
+  const avg=rows.map(r=>({dow:r.dow,val:r.tage?Number(r.netto)/Number(r.tage):0,tage:r.tage}));
+  const max=Math.max.apply(null,avg.map(a=>a.val).concat([1]));
+  let h='<div class="section-lbl" style="margin-top:14px;">📅 Wochentage (Ø pro Tag)</div><div class="card" style="padding:12px;">';
+  avg.forEach(a=>{ h+=umsatzBarRow(UMSATZ_DOW[a.dow]||('Tag '+a.dow),a.val,max,0,false,'eur'); });
+  h+='<div style="font-size:10px;color:var(--muted);">Basis: '+rows.reduce((s,r)=>s+Number(r.tage),0)+' Verkaufstage im Zeitraum</div>';
+  h+='</div>';
+  return h;
+}
+
+function umsatzUploadHtml(){
+  const last=umsatzMeta&&umsatzMeta.last_import?new Date(umsatzMeta.last_import).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null;
+  return '<div class="card" style="padding:13px;margin-top:16px;">'
+    +'<div style="font-size:12px;font-weight:600;margin-bottom:2px;">📤 Neuen Export hochladen</div>'
+    +'<div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">'+(last?'Zuletzt importiert: '+last:'Noch keine Daten importiert')+'</div>'
+    +'<input type="file" id="umsatz-file-input" accept=".xlsx" style="display:none;" onchange="handleUmsatzUpload(this)">'
+    +'<button onclick="document.getElementById(\'umsatz-file-input\').click()" id="umsatz-upload-btn" style="width:100%;padding:10px;background:'+UMSATZ_PURPLE+';color:#fff;border:none;border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;">Odoo-Export (.xlsx) auswählen</button>'
+    +'</div>';
+}
+
+window.umsatzSetPreset=umsatzSetPreset;
+window.umsatzSetCmp=umsatzSetCmp;
+window.umsatzSetDate=umsatzSetDate;
+window.umsatzSetBucket=umsatzSetBucket;
+window.umsatzTogglePanel=umsatzTogglePanel;
+window.umsatzToggleFilter=umsatzToggleFilter;
+window.umsatzSetProductSort=umsatzSetProductSort;
+window.umsatzReset=umsatzReset;
 
 // Parst denselben gruppierten Odoo-Pivot-Export (Filiale-Blöcke, Tagesreihen, Produkt-Spaltenpaare
 // Nettobetrag+Menge) wie beim ersten manuellen Import — jetzt clientseitig im Browser mit SheetJS,
@@ -4087,7 +4425,9 @@ async function handleUmsatzUpload(inputEl){
       for(let r=startRow+1;r<endRow;r++){
         const dateVal=getCell(r,0);
         if(!(dateVal instanceof Date)) continue;
-        const dateStr=dateVal.toISOString().split('T')[0];
+        // NICHT toISOString() — das rechnet auf UTC um und macht in AT (UTC+1/+2) aus
+        // Mitternacht Ortszeit den Vortag. Genau dadurch war der komplette Bestand um einen Tag verschoben.
+        const dateStr=dateVal.getFullYear()+'-'+String(dateVal.getMonth()+1).padStart(2,'0')+'-'+String(dateVal.getDate()).padStart(2,'0');
         Object.entries(productCols).forEach(([prod,cols])=>{
           const netto=getCell(r,cols.netto);
           const menge=getCell(r,cols.menge);
