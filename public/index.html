@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.22.4';
+const APP_VERSION = '6.23.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5697,7 +5697,11 @@ async function renderOrgForecast(){
       <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">Nächste →</button>
     </div>
   </div>`;
-  weekSwitcher+=`<div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:6px 10px;margin:0 0 12px;text-align:center;">"VW X" unter jedem Feld = Menge & Entsorgungs-Ergebnis derselben Kategorie letzte Woche · 🔥 ausverkauft · ✓ genau richtig · 📦 übrig</div>`;
+  weekSwitcher+=`<div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.6;">
+    <div><span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:4px;padding:1px 5px;color:#64748B;">grau</span> = App-Vorschlag (noch nicht bestätigt) · tippen = deine Entscheidung</div>
+    <div style="margin-top:3px;"><b>↑ erhöhen</b> / <span style="color:#16A34A;">→ halten</span> / <b>↓ senken</b> = empfohlene Richtung (aus Vorwoche + Umsatz-Trend)</div>
+    <div style="margin-top:3px;">VW = letzte Woche gleicher Tag · <span style="color:#DC2626;">🔥 ausverkauft</span> · <span style="color:#16A34A;">✓ kleiner Rest = ideal</span> · 📦 zu viel</div>
+  </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
   const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
@@ -5752,6 +5756,37 @@ async function renderOrgForecast(){
   // Filiale, nicht über die ganze Vorwoche summiert (das macht prevDispMap für die Vorschlags-
   // Anpassung, aber für den sichtbaren "VW"-Tagesvergleich unten braucht's die exakte Zuordnung).
   const prevDispByDateStore={};
+  // Umsatz-Trend je Filiale/Wochentag — Grundlage für den Richtungs-Pfeil. Vergleicht die letzten 2
+  // gleichen Wochentage gegen die 2 davor (steigt/fällt/stabil). Umsatz (€) ist die verlässliche
+  // Größe (Stückzahlen im Odoo-Export sind unzuverlässig), daher rechnen wir hier bewusst in €.
+  const salesTrend={}; // salesTrend[store_id][weekdayNum] = {pct, dir}
+  try{
+    const sinceDate=dateMinusDays(fromDate, 42); // ~6 Wochen zurück reicht für 4 gleiche Wochentage
+    const salesRows=await api(`sales_data?sale_date=gte.${sinceDate}&select=store_id,sale_date,net_amount`).catch(()=>[]);
+    const byStoreDay={}; // [store][date] = summe
+    (salesRows||[]).forEach(r=>{
+      if(!byStoreDay[r.store_id])byStoreDay[r.store_id]={};
+      byStoreDay[r.store_id][r.sale_date]=(byStoreDay[r.store_id][r.sale_date]||0)+(Number(r.net_amount)||0);
+    });
+    Object.keys(byStoreDay).forEach(sid=>{
+      const byWeekday={}; // wdNum -> [{date,sum}] absteigend nach Datum
+      Object.entries(byStoreDay[sid]).forEach(([d,sum])=>{
+        const wd=new Date(d+'T00:00:00').getDay();
+        (byWeekday[wd]=byWeekday[wd]||[]).push({date:d,sum});
+      });
+      salesTrend[sid]={};
+      Object.keys(byWeekday).forEach(wd=>{
+        const arr=byWeekday[wd].sort((a,b)=>b.date.localeCompare(a.date));
+        if(arr.length>=3){
+          const recent=(arr[0].sum+(arr[1]?.sum||arr[0].sum))/(arr[1]?2:1);
+          const prior=(arr[2].sum+(arr[3]?.sum||arr[2].sum))/(arr[3]?2:1);
+          const pct=prior>0?Math.round((recent-prior)/prior*100):0;
+          salesTrend[sid][wd]={pct, dir: pct>=8?'up':(pct<=-8?'down':'flat')};
+        }
+      });
+    });
+  }catch(e){ console.error('Umsatz-Trend laden fehlgeschlagen:', e); }
+
   (prevDisposals||[]).forEach(d=>{
     if(!prevDispByDateStore[d.disposal_date])prevDispByDateStore[d.disposal_date]={};
     if(!prevDispByDateStore[d.disposal_date][d.store_id])prevDispByDateStore[d.disposal_date][d.store_id]={};
@@ -5956,27 +5991,43 @@ async function renderOrgForecast(){
           const displayVal=rec?.qty??sugg?.qty??'';
           const isSugg=!rec && sugg!=null;
           const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
-          // Vorwoche-Vergleich SICHTBAR unter der Zelle (nicht nur als Hover-Tooltip — der
-          // funktioniert am Tablet/Handy ohne Maus gar nicht, genau das war der Kern des Problems).
           const cmpCat=mapDishNameToCategory(dish);
           const cmpPrevDate=dateMinusDays(dateStr,7);
           const cmpPrevQty=prevFcMap[cmpPrevDate]?.[s.id]?.[cmpCat]?.['gross'];
           const cmpDisp=prevDispByDateStore[cmpPrevDate]?.[s.id]?.[cmpCat];
-          let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='';
+          // Ampel des letzten gleichen Wochentags — kleiner Rest (1-4) ist GRÜN = Zielzustand (bewusst,
+          // damit kein Druck auf Null-Rest entsteht), ausverkauft ist ROT = das teurere Problem.
+          let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='', ampelScore=0;
           if(cmpDisp && (cmpDisp.soldOutEarly||cmpDisp.leftover>0)){
-            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail=cmpDisp.soldOutTime||'ausverkauft'; }
-            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
-            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
-            else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
+            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail=cmpDisp.soldOutTime||'ausverkauft'; ampelScore=2; }
+            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=-2; }
+            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=-1; }
+            else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=0; }
           }
-          const cmpLine=cmpPrevQty!=null?`<div style="font-size:8.5px;color:${cmpColor};text-align:center;margin-top:2px;line-height:1.3;max-width:52px;margin-left:auto;margin-right:auto;" title="Vorwoche-Menge & Entsorgungs-Ergebnis">VW ${formatQty(cmpPrevQty)}${cmpAmpel?' '+cmpAmpel:''}${cmpDetail?`<br>(${cmpDetail})`:''}</div>`:'';
+          // Umsatz-Trend desselben Wochentags fließt mit ein (verdichtet, nicht als eigene Zeile).
+          const wdNum=new Date(dateStr+'T00:00:00').getDay();
+          const trend=salesTrend[s.id]?.[wdNum];
+          const trendScore=trend?(trend.dir==='up'?1:(trend.dir==='down'?-1:0)):0;
+          // Richtungs-Ableitung = Ampel (Hauptgewicht) + Umsatz-Trend (Feinjustierung).
+          const dirScore=ampelScore+trendScore;
+          let dirLabel='', dirColor='', dirIcon='';
+          if(cmpPrevQty!=null || cmpDisp){
+            if(dirScore>=2){ dirIcon='↑'; dirLabel='erhöhen'; dirColor='#DC2626'; }
+            else if(dirScore<=-2){ dirIcon='↓'; dirLabel='senken'; dirColor='#C2410C'; }
+            else if(dirScore===1){ dirIcon='↗'; dirLabel='leicht mehr'; dirColor='#D97706'; }
+            else if(dirScore===-1){ dirIcon='↘'; dirLabel='leicht weniger'; dirColor='#D97706'; }
+            else { dirIcon='→'; dirLabel='halten'; dirColor='#16A34A'; }
+          }
+          const trendTip=trend?` · Umsatz ${trend.pct>0?'+':''}${trend.pct}%`:'';
+          const dirLine=dirLabel?`<div style="font-size:8.5px;font-weight:700;color:${dirColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Empfohlene Richtung${trendTip}">${dirIcon} ${dirLabel}</div>`:'';
+          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:8px;color:var(--muted);text-align:center;margin-top:1px;line-height:1.25;" title="Letzte Woche gleicher Tag">VW ${cmpPrevQty!=null?formatQty(cmpPrevQty):'?'}${cmpAmpel?' <span style="color:'+cmpColor+'">'+cmpAmpel+'</span>':''}${cmpDetail?`<br><span style="color:${cmpColor};">${cmpDetail}</span>`:''}</div>`:'';
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
-              style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
-            ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
+              style="width:46px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#CBD5E1':'var(--border)')};border-radius:6px;font-size:13px;font-weight:${manual?'700':'400'};padding:5px 1px;background:${manual?manualBg:(isSugg?'#F1F5F9':'#fff')};color:${manual?manualColor:(isSugg?'#64748B':'#1a1a18')};">
+            ${dirLine}
             ${cmpLine}
           </td>`;
         }
