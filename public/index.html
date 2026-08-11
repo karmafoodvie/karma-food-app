@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.8';
+const APP_VERSION = '6.23.9';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5774,9 +5774,8 @@ async function renderOrgForecast(){
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
-  const prevFromDate=getWeekdayDates(orgForecastWeekOffset-6)[1]; // 6 Wochen zurück statt nur 1 —
-  // wechselnde Spezialgerichte (Gulasch, Chili sin Carne...) kommen nicht jede Woche vor, die
-  // Rückwärtssuche unten braucht daher mehr Historie als nur die letzte Woche.
+  const prevFromDate=getWeekdayDates(orgForecastWeekOffset-12)[1]; // 12 Wochen zurück — Gulasch kam
+  // z.B. zuletzt vor 7 Wochen, 6 Wochen Suchfenster war knapp zu kurz.
   const prevToDate=getWeekdayDates(orgForecastWeekOffset-1)[5];
 
   // Lade alles parallel: aktueller Forecast, Vorwoche Forecast, Entsorgung Vorwoche,
@@ -5899,7 +5898,7 @@ async function renderOrgForecast(){
     const cat=mapDishNameToCategory(dish);
     // Rückwärtssuche statt fix "letzte Woche" — siehe Kommentar bei der VW-Anzeige oben, gleicher Grund.
     let prevDateStr=null, prevQty=null;
-    for(let wBack=1; wBack<=6; wBack++){
+    for(let wBack=1; wBack<=12; wBack++){
       const tryDate=dateMinusDays(dateStr, wBack*7);
       const tryQty=prevFcMap[tryDate]?.[storeId]?.[cat]?.[groesse||'gross'];
       if(tryQty!=null){ prevDateStr=tryDate; prevQty=tryQty; break; }
@@ -6071,7 +6070,7 @@ async function renderOrgForecast(){
           // sin Carne...) kommen nicht jede Woche vor. Sucht bis zu 6 Wochen zurück nach dem letzten
           // tatsächlichen Vorkommen dieser Kategorie bei dieser Filiale (Forecast ODER Entsorgung).
           let cmpPrevDate=null, cmpPrevQty=null, cmpDisp=null;
-          for(let wBack=1; wBack<=6; wBack++){
+          for(let wBack=1; wBack<=12; wBack++){
             const tryDate=dateMinusDays(dateStr, wBack*7);
             const tryQty=prevFcMap[tryDate]?.[s.id]?.[cmpCat]?.['gross'];
             const tryDisp=prevDispByDateStore[tryDate]?.[s.id]?.[cmpCat];
