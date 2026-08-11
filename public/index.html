@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.22.1';
+const APP_VERSION = '6.22.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7427,7 +7427,7 @@ async function renderDailyCheck(){
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
-    api(`wareneingang?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temperatur&order=datum.desc&limit=1`).catch(()=>[]),
+    api(`wareneingang?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temperatur,temperaturen&order=datum.desc&limit=1`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temp_klein,temp_gross&order=datum.desc&limit=1`).catch(()=>[])
   ]);
   const wek=(wekRows||[])[0];
@@ -7481,7 +7481,11 @@ async function renderDailyCheck(){
           const sel=wek ? (wek.ware||'').includes(w) : true;
           const tval=existingTemps[w] ?? '';
           const exception=getDishTempException(w);
-          const fallbackVal=(tval!=='')?tval:(exception?'':(wek?.temperatur ?? wekPrev?.temperatur ?? ''));
+          // Bei Gerichten mit eigener Regel (z.B. Wochensalat, max. 6°C statt ≥65°C) NICHT den
+          // allgemeinen Warmhalte-Fallback nehmen (der wäre viel zu hoch/falsch) — stattdessen den
+          // eigenen letzten Wert für GENAU dieses Gericht, aus heute oder notfalls von gestern.
+          const prevOwnTemp=wekPrev?.temperaturen?.[w];
+          const fallbackVal=(tval!=='')?tval:(exception?(prevOwnTemp??''):(wek?.temperatur ?? wekPrev?.temperatur ?? ''));
           return `<div class="item-row" id="wek-temp-row-${i}" data-max="${exception?exception.max:''}" style="display:${sel?'flex':'none'};padding:8px 0;">
             <div class="item-name" data-no-translate>${w}${exception?`<div style="font-size:10px;color:#0369A1;font-weight:500;">❄️ Ausnahme: max. ${exception.max}°C</div>`:''}</div>
             <input id="wek-temp-${i}" data-dish="${w.replace(/"/g,'&quot;')}" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${fallbackVal}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
@@ -7521,18 +7525,28 @@ async function saveDailyCheckAll(){
   if(!tempRows.length){ showToast('Bitte mindestens eine angelieferte Ware auswählen'); return; }
   const temperaturen={};
   let anyInvalid=false, minTemp=null;
+  const exceptionBreaches=[]; // Gerichte mit eigener Regel (z.B. Wochensalat), die ÜBER ihrem Max liegen
   tempRows.forEach(row=>{
     const input=row.querySelector('input');
     const dish=input?.dataset.dish;
     const v=parseFloat(input?.value);
     if(isNaN(v)){ anyInvalid=true; return; }
     if(dish) temperaturen[dish]=v;
-    if(minTemp===null||v<minTemp) minTemp=v;
+    // Gerichte mit eigener Regel (z.B. Wochensalat: kalt, max. 6°C) fließen NICHT in die allgemeine
+    // ≥65°C-Warmhalte-Prüfung mit ein — sonst verlangt die App jeden Tag fälschlich eine "Maßnahme",
+    // obwohl ein kaltes Gericht bei 5°C völlig korrekt ist. Stattdessen eigene Prüfung gegen das Max.
+    const exception=dish?getDishTempException(dish):null;
+    if(exception){
+      if(v>exception.max) exceptionBreaches.push(`${dish} (${v}°C, erlaubt max. ${exception.max}°C)`);
+    } else {
+      if(minTemp===null||v<minTemp) minTemp=v;
+    }
   });
   if(anyInvalid || minTemp===null){ showToast('Bitte bei jedem Gericht eine Temperatur eintragen'); return; }
   const massnahmeEl=document.getElementById('wek-massnahme');
   const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
   if(minTemp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
+  if(exceptionBreaches.length && !massnahme){ showToast('Zu warm für: '+exceptionBreaches.join(', ')+' — bitte Maßnahme eintragen'); return; }
   const klein=parseFloat(document.getElementById('kuehl-klein')?.value);
   const gross=parseFloat(document.getElementById('kuehl-gross')?.value);
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Kühltemperaturen eintragen'); return; }
