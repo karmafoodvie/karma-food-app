@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.9';
+const APP_VERSION = '6.24.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3857,7 +3857,8 @@ async function getCalendarEvents(){
 
 async function getForecastSettings(storeId){
   if(_forecastSettingsCache[storeId]) return _forecastSettingsCache[storeId];
-  const cacheKey=`fc_settings_${storeId}`;
+  const cacheKey=`fc_settings_v2_${storeId}`; // v2: nach Korrektur der Ferien-Faktoren je Filiale
+  // (11.08.26) — neuer Schlüssel, damit alte zwischengespeicherte −10%-Werte nicht weiterwirken.
   const stored=cacheGet(cacheKey);
   if(stored){ _forecastSettingsCache[storeId]=stored; return stored; }
   const rows = await api(`forecast_settings?store_id=eq.${storeId}&select=*`).catch(()=>[]);
@@ -3875,15 +3876,18 @@ async function getForecastSettings(storeId){
 function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings){
   let pct = 0;
   const reasons = [];
+  // Prozentwert immer mit ausschreiben ("Sommerferien −29%") statt nur das Ereignis zu nennen —
+  // sonst ist nicht nachvollziehbar, WARUM ein Vorschlag höher oder niedriger ausfällt.
+  const fmtPct=(p)=>!p?'':` ${p>0?'+':'−'}${Math.abs(Math.round(p))}%`;
 
   const w = weatherMap[dateStr];
   if(w && w.tempMax!=null){
     if(w.tempMax>=22 && (w.precipProb??0)<=30){
       pct += settings.weather_sunny_pct;
-      reasons.push(`☀️ ${Math.round(w.tempMax)}°C`);
+      reasons.push(`☀️ ${Math.round(w.tempMax)}°C${fmtPct(settings.weather_sunny_pct)}`);
     } else if((w.precipProb??0)>=60){
       pct += settings.weather_rain_pct;
-      reasons.push(`🌧️ ${Math.round(w.precipProb)}% Regen`);
+      reasons.push(`🌧️ ${Math.round(w.precipProb)}% Regen${fmtPct(settings.weather_rain_pct)}`);
     } else {
       reasons.push(`⛅ ${Math.round(w.tempMax)}°C`);
     }
@@ -3892,13 +3896,13 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
   const feiertag = calendarEvents.find(e=>e.event_type==='feiertag' && e.event_date===dateStr && (!e.store_id||e.store_id===storeId));
   if(feiertag){
     pct += settings.feiertag_pct;
-    reasons.push(`🎉 ${feiertag.label}`);
+    reasons.push(`🎉 ${feiertag.label}${fmtPct(settings.feiertag_pct)}`);
   }
 
   const ferien = calendarEvents.find(e=>e.event_type==='ferien' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
   if(ferien && !feiertag){
     pct += settings.ferien_pct;
-    reasons.push(`🏖️ ${ferien.label}`);
+    reasons.push(`🏖️ ${ferien.label}${fmtPct(settings.ferien_pct)}`);
   }
 
   const sondertag = calendarEvents.find(e=>e.event_type==='sondertag' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
@@ -5790,7 +5794,13 @@ async function renderOrgForecast(){
   ]);
 
   // Settings für Wetter/Ferien-Zuschläge
-  const settingsRec=(fcSettings||[])[0]||{weather_sunny_pct:-10,weather_rain_pct:10,feiertag_pct:-20,ferien_pct:-5};
+  // Einstellungen PRO FILIALE — vorher wurde pauschal die erste Zeile für alle Filialen verwendet,
+  // wodurch filialspezifische Werte (z.B. Ferien-Effekt: Börse −29% vs. Stadtplatz −10%) wirkungslos
+  // blieben. Der Ferien-Effekt unterscheidet sich real um den Faktor 3 zwischen den Filialen.
+  const SETTINGS_FALLBACK={weather_sunny_pct:10,weather_rain_pct:-8,feiertag_pct:-25,ferien_pct:-18};
+  const settingsByStore={};
+  (fcSettings||[]).forEach(s=>{ settingsByStore[s.store_id]=s; });
+  const settingsFor=(sid)=>settingsByStore[sid]||SETTINGS_FALLBACK;
 
   // fMap[date][store][dish][groesse] = rec
   const fMap={};
@@ -5947,7 +5957,7 @@ async function renderOrgForecast(){
     }
 
     // Wetter (optional, nur kleine Anpassung)
-    const {pct:wPct, reason:wReason}=getDayModifiers(dateStr, storeId, refWeather, calendarEvents, settingsRec);
+    const {pct:wPct, reason:wReason}=getDayModifiers(dateStr, storeId, refWeather, calendarEvents, settingsFor(storeId));
     if(wPct!==0 && qty>0){
       if(isLasagneSize){
         const portionsW=qty*yieldPerContainer*(1+wPct/100);
