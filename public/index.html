@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.0';
+const APP_VERSION = '6.23.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4054,9 +4054,19 @@ async function renderUmsatz(){
 async function renderUmsatzContent(){
   const target=document.getElementById('umsatz-content');
   if(!target) return;
-  const r=umsatzRange(), c=umsatzCmpRange(r);
+  const r=umsatzRange();
+  // Angefangene Zeiträume gegen volle Vergleichszeiträume zu stellen erzeugt Schein-Einbrüche
+  // (z.B. "Letzte Woche" mit 2 hochgeladenen von 5 Tagen gegen eine volle Vorwoche = -56%).
+  // Deshalb: Zeitraum hart auf den Datenstand kürzen und den Vergleich AUS dem gekürzten
+  // Zeitraum ableiten, damit beide Seiten gleich lang sind. Wird sichtbar ausgewiesen.
+  let cap=null;
+  if(umsatzMeta&&umsatzMeta.max_date&&r.from&&r.to&&r.to>umsatzMeta.max_date&&r.from<=umsatzMeta.max_date){
+    cap={orig:r.to,fehlend:uDayCount(uAddDays(umsatzMeta.max_date,1),r.to)};
+    r.to=umsatzMeta.max_date;
+  }
+  const c=umsatzCmpRange(r);
 
-  let head=umsatzDatenstandHtml()+umsatzPeriodHtml(r,c)+umsatzFilterHtml();
+  let head=umsatzDatenstandHtml()+umsatzPeriodHtml(r,c,cap)+umsatzFilterHtml();
   if(!r.from||!r.to){
     target.innerHTML=head+'<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted);font-size:13px;">Bitte Start- und Enddatum wählen.</div>';
     translateEl(target); return;
@@ -4117,7 +4127,7 @@ function umsatzDatenstandHtml(){
   return '<div style="background:'+bg+';border-radius:10px;padding:8px 11px;margin-bottom:10px;font-size:11.5px;color:'+col+';display:flex;gap:6px;align-items:center;"><span>'+(warn?'⚠️':'🕓')+'</span><span>'+txt+'</span></div>';
 }
 
-function umsatzPeriodHtml(r,c){
+function umsatzPeriodHtml(r,c,cap){
   let h='<div class="card" style="padding:11px;margin-bottom:10px;">';
   h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:7px;">Zeitraum</div>';
   h+='<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;-webkit-overflow-scrolling:touch;">';
@@ -4133,6 +4143,10 @@ function umsatzPeriodHtml(r,c){
       +'</div>';
   }
   h+='<div style="font-size:12px;font-weight:700;color:'+UMSATZ_PURPLE+';margin-top:8px;">'+uNiceDate(r.from)+' – '+uNiceDate(r.to)+'</div>';
+  if(cap){
+    h+='<div style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:7px 10px;margin-top:7px;font-size:11px;line-height:1.45;">'
+      +'✂️ Gekürzt auf den Datenstand — gewählt war bis '+uNiceDate(cap.orig)+'. Für die fehlenden Tage gibt es noch keinen Export, deshalb zählen sie nicht mit. Der Vergleichszeitraum ist gleich lang.</div>';
+  }
 
   h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin:11px 0 6px;">Vergleich mit</div>';
   h+='<div style="display:flex;gap:5px;">';
