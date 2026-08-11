@@ -971,7 +971,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.26.1';
+const APP_VERSION = '6.27.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5896,8 +5896,8 @@ async function renderOrgForecast(){
     </div>
   </div>`;
   weekSwitcher+=`<div style="font-size:10.5px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.5;">
-    Unter jedem Feld steht, wie es <b>beim letzten Mal</b> lief (Menge + Ergebnis).<br>
-    Die App-Vorschläge stehen gesammelt unter jedem Tag zum Aufklappen — sie werden <b>nicht automatisch übernommen</b>.
+    <span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:4px;padding:1px 5px;color:#64748B;font-style:italic;">grau</span> = Vorschlag der App, <b>noch nicht gespeichert</b> — die Küche sieht ihn erst nach dem Speichern.<br>
+    Darunter steht, wie es <b>beim letzten Mal</b> lief. Begründungen gibt's unter jedem Tag zum Aufklappen.
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
@@ -6024,6 +6024,7 @@ async function renderOrgForecast(){
   // z.B. Ausstellungsstraße: 04.08. noch 20 Portionen übrig, aber 07.08./10.08. schon wieder knapp
   // und 11.08. alles bis 12:35 ausverkauft. Ein einzelner Ausreißertag darf nicht die Referenz sein.
   const _momentumCache={};
+  const biryaniDayFlag={value:false}; // wird pro Tag gesetzt, von computeOrgSuggestion gelesen
   const suggestionLogRows=[]; // Vorschläge zum Planungszeitpunkt einfrieren (Schattenbetrieb)
   function computeMomentum(storeId, dateStr){
     const key=storeId+'|'+dateStr;
@@ -6147,6 +6148,13 @@ async function renderOrgForecast(){
       reasons.push('⚠️ Mindestmenge (0 nie sinnvoll)');
     }
 
+    // Biryani-Tag-Regel: Biryani enthält bereits Reis, dadurch wird deutlich weniger loser Reis
+    // gebraucht. Aus euren Daten gemessen (Ø 9,7 statt 6,8 Portionen Reis übrig) → ca. −30%.
+    if(cat==='Reis' && biryaniDayFlag.value){
+      qty=Math.max(0.25, Math.round(qty*0.7*4)/4);
+      reasons.push('🍚 Biryani-Tag → weniger loser Reis nötig (−30%)');
+    }
+
     return {qty, reason:reasons.join(' · ')};
   }
   const zeroSettings={weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0};
@@ -6190,10 +6198,17 @@ async function renderOrgForecast(){
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
     const salatName=getSalatNameForDate(dateStr);
     const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    // Biryani bringt seinen Reis schon mit → an Biryani-Tagen wird deutlich weniger loser Reis
+    // gebraucht. In den Daten belegt: Ø 9,7 Portionen Reis übrig an Biryani-Tagen gegenüber 6,8 an
+    // anderen Tagen (Juni–August 2026). Wird beim Reis-Vorschlag berücksichtigt.
+    biryaniDayFlag.value=allDishes.some(d=>mapDishNameToCategory(d)==='Biryani');
     const {reason}=getDayModifiers(dateStr, 'lb', refWeather, calendarEvents, zeroSettings);
     const isToday=new Date().toISOString().split('T')[0]===dateStr;
 
     html+=`<div class="section-lbl" style="${isToday?'color:#2B3A67;font-weight:700;':''}">${dateLabel}${isToday?' — heute':''}</div>`;
+    if(biryaniDayFlag.value){
+      html+=`<div style="font-size:10.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:7px;padding:5px 9px;margin:-2px 0 5px;">🍚 Biryani-Tag — Biryani bringt Reis mit, daher weniger losen Reis einplanen</div>`;
+    }
     if(reason) html+=`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${reason}</div>`;
     const dayDetailRows=[];
     html+=`<div id="orgfc-day-${dateStr}"><div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
@@ -6244,12 +6259,15 @@ async function renderOrgForecast(){
           const manualColor=isOrgSet?'#2B3A67':(isCopiedSet?'#0D9488':'#F97316');
           const manualBg=isOrgSet?'#EEF1F8':(isCopiedSet?'#F0FDFA':'#FFF7ED');
           const sugg=computeOrgSuggestion(s.id, dish, dateStr, 'gross');
-          // TESTPHASE: Der Vorschlag füllt das Feld bewusst NICHT vor. Sonst würde man ihn meistens
-          // einfach übernehmen (Ankereffekt) und die spätere Auswertung "Vorschlag vs. eure Zahl"
-          // verglichen den Vorschlag gegen sich selbst — also wertlos. Er steht getrennt darunter.
-          const displayVal=rec?.qty??'';
-          const isSugg=false;
-          const title=(isOrgSet?'bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
+          // Leere Felder werden mit dem Vorschlag GRAU vorbelegt, damit nie ein Feld leer bleibt.
+          // Grau = nur Vorschlag, noch nicht gespeichert (die Küche sieht ihn also noch nicht) —
+          // erst "Speichern" macht daraus eine verbindliche Menge. Getippte Werte werden farbig.
+          const isSugg=!rec && sugg!=null;
+          const displayVal=rec?.qty ?? (sugg?sugg.qty:'') ?? '';
+          const title=isSugg?('Vorschlag der App — noch nicht gespeichert. '+(sugg.reason||'')):((isOrgSet?'von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''));
+          if(sugg && dateStr>=_todayStrFc){
+            suggestionLogRows.push({store_id:s.id, forecast_date:dateStr, dish_name:dish, category:mapDishNameToCategory(dish), suggested_qty:sugg.qty, suggestion_reason:(sugg.reason||'').slice(0,500)});
+          }
           if(sugg && dateStr>=_todayStrFc){
             suggestionLogRows.push({store_id:s.id, forecast_date:dateStr, dish_name:dish, category:mapDishNameToCategory(dish), suggested_qty:sugg.qty, suggestion_reason:(sugg.reason||'').slice(0,500)});
           }
@@ -6328,7 +6346,7 @@ async function renderOrgForecast(){
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
-              style="width:48px;text-align:center;border:1.5px solid ${manual?manualColor:'var(--border)'};border-radius:6px;font-size:14px;font-weight:${manual?'700':'400'};padding:6px 1px;background:${manual?manualBg:'#fff'};color:${manual?manualColor:'#1a1a18'};">
+              style="width:48px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#CBD5E1':'var(--border)')};border-radius:6px;font-size:14px;font-weight:${manual?'700':'400'};padding:6px 1px;background:${manual?manualBg:(isSugg?'#F1F5F9':'#fff')};color:${manual?manualColor:(isSugg?'#64748B':'#1a1a18')};font-style:${isSugg?'italic':'normal'};">
             ${cmpLine}
           </td>`;
         }
