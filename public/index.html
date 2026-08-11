@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.6';
+const APP_VERSION = '6.23.7';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1238,15 +1238,16 @@ async function toggleOrgShopPicker(){
   box.innerHTML='<div style="font-size:11px;color:var(--muted);padding:4px;">Wird geladen…</div>';
   const shops=await api('stores?select=id,name&order=name').catch(()=>[]);
   const visible=(shops||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
-  box.innerHTML=visible.map(s=>{
-    const col=STORE_COLORS[s.id]||'#1D9E75';
-    return `<div style="position:relative;">
-      <button class="role-btn-color" onclick="openShopFromOrg('${s.id}','${escForInlineHandler(s.name)}')" data-no-translate style="background:${col};">
-        <span class="role-btn-role">${s.name}</span>
-        <span class="role-btn-name">Filiale öffnen</span>
-      </button>
-    </div>`;
-  }).join('');
+  box.innerHTML=`<div style="margin-left:16px;padding-left:12px;border-left:2px solid var(--border);display:flex;flex-direction:column;gap:5px;">
+    ${visible.map(s=>{
+      const col=STORE_COLORS[s.id]||'#1D9E75';
+      return `<div onclick="openShopFromOrg('${s.id}','${escForInlineHandler(s.name)}')" data-no-translate style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--border);border-radius:9px;padding:8px 12px;cursor:pointer;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+        <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--sub);">${s.name}</span>
+        <span style="color:var(--muted);font-size:12px;">→</span>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 window.toggleOrgShopPicker=toggleOrgShopPicker;
 
