@@ -975,7 +975,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.24.0';
+const APP_VERSION = '6.25.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4104,7 +4104,7 @@ async function renderUmsatzContent(){
     target.innerHTML=html; translateEl(target); return;
   }
   html+=umsatzKpiHtml(d);
-  html+=umsatzChartHtml(d,bucket);
+  html+=umsatzChartHtml(d,bucket,r);
   html+=umsatzStoreHtml(d);
   html+=umsatzGroupHtml(d);
   html+=umsatzProductHtml(d);
@@ -4328,9 +4328,46 @@ function umsatzCalHtml(){
 // ---- LINIENDIAGRAMM ----
 // Fläche + Linie für den aktuellen Zeitraum, gestrichelte Linie für den Vergleich.
 // Punkte nur bei wenigen Werten, sonst wird es auf dem Handy unlesbar.
-function umsatzChartHtml(d,bucket){
+// Wie viele Punkte ergibt eine Granularität im gewählten Zeitraum? Weniger als zwei
+// ergeben keine Linie — dann wird der Umschalter deaktiviert statt einen einsamen Punkt zu zeigen.
+function umsatzBucketCount(r,b){
+  if(!r||!r.from||!r.to) return 0;
+  if(b==='day') return uDayCount(r.from,r.to);
+  if(b==='month'){
+    const a=uParse(r.from), z=uParse(r.to);
+    return (z.getFullYear()-a.getFullYear())*12+(z.getMonth()-a.getMonth())+1;
+  }
+  const a=uParse(r.from), z=uParse(r.to);
+  const moA=uAddDays(r.from,-((a.getDay()+6)%7)), moZ=uAddDays(r.to,-((z.getDay()+6)%7));
+  return Math.round((uParse(moZ)-uParse(moA))/(7*86400000))+1;
+}
+
+function umsatzBucketSwitchHtml(r){
+  let h='<div style="display:flex;gap:4px;margin-bottom:8px;">';
+  [['auto','Auto'],['day','Tag'],['week','Woche'],['month','Monat']].forEach(b=>{
+    const on=umsatzState.bucket===b[0];
+    const cnt=b[0]==='auto'?99:umsatzBucketCount(r,b[0]);
+    const off=cnt<2;
+    const bd=off?'var(--border)':(on?UMSATZ_PURPLE:'var(--border)');
+    const bg=off?'#F7F7F5':(on?'#F3ECFD':'#fff');
+    const cl=off?'#C4C4BE':(on?UMSATZ_PURPLE:'var(--muted)');
+    h+='<button '+(off?'':'onclick="umsatzSetBucket(\''+b[0]+'\')" ')+'style="flex:1;padding:4px;border-radius:6px;border:1px solid '+bd+';background:'+bg+';color:'+cl+';font-size:10.5px;font-weight:600;cursor:'+(off?'default':'pointer')+';">'+b[1]+'</button>';
+  });
+  h+='</div>';
+  return h;
+}
+
+function umsatzChartHtml(d,bucket,r){
   const tr=d.trend||[];
   if(!tr.length) return '';
+  if(tr.length<2){
+    const nice={day:'Tag',week:'Woche',month:'Monat'}[bucket]||bucket;
+    return '<div class="section-lbl">📈 Verlauf</div><div class="card" style="padding:11px;">'
+      +umsatzBucketSwitchHtml(r)
+      +'<div style="padding:22px 12px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5;">'
+      +'Der gewählte Zeitraum ergibt in der Ansicht „'+nice+'" nur einen einzigen Wert ('+uEuro(tr[0].netto)+') — für einen Verlauf braucht es mindestens zwei.'
+      +'<div style="margin-top:6px;font-size:11px;">Wechsle auf eine feinere Ansicht oder wähle einen längeren Zeitraum.</div></div></div>';
+  }
   const cmp=d.trend_cmp||[];
   const W=320, H=130, L=6, R=6, T=8, B=20;
   const vals=tr.map(t=>Number(t.netto));
@@ -4380,12 +4417,7 @@ function umsatzChartHtml(d,bucket){
   });
 
   let h='<div class="section-lbl">📈 Verlauf</div><div class="card" style="padding:11px;">';
-  h+='<div style="display:flex;gap:4px;margin-bottom:8px;">';
-  [['auto','Auto'],['day','Tag'],['week','Woche'],['month','Monat']].forEach(b=>{
-    const on=umsatzState.bucket===b[0];
-    h+='<button onclick="umsatzSetBucket(\''+b[0]+'\')" style="flex:1;padding:4px;border-radius:6px;border:1px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?'#F3ECFD':'#fff')+';color:'+(on?UMSATZ_PURPLE:'var(--muted)')+';font-size:10.5px;font-weight:600;cursor:pointer;">'+b[1]+'</button>';
-  });
-  h+='</div>';
+  h+=umsatzBucketSwitchHtml(r);
   h+='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;overflow:visible;">'+grid+area+cline+line+dots+marks+axis+'</svg>';
   if(cvals.length>1) h+='<div style="display:flex;gap:12px;font-size:10px;color:var(--muted);margin-top:6px;"><span><span style="display:inline-block;width:14px;border-top:2px solid '+UMSATZ_PURPLE+';vertical-align:middle;"></span> Zeitraum</span><span><span style="display:inline-block;width:14px;border-top:1.6px dashed #B9A2E8;vertical-align:middle;"></span> Vergleich</span></div>';
   h+='</div>';
@@ -4487,6 +4519,7 @@ function umsatzUploadHtml(){
     +'<div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">'+(last?'Zuletzt importiert: '+last:'Noch keine Daten importiert')+'</div>'
     +'<input type="file" id="umsatz-file-input" accept=".xlsx" style="display:none;" onchange="handleUmsatzUpload(this)">'
     +'<button onclick="document.getElementById(\'umsatz-file-input\').click()" id="umsatz-upload-btn" style="width:100%;padding:10px;background:'+UMSATZ_PURPLE+';color:#fff;border:none;border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;">Odoo-Export (.xlsx) auswählen</button>'
+    +'<div id="umsatz-import-preview"></div>'
     +'</div>';
 }
 
@@ -4502,86 +4535,219 @@ window.umsatzOpenCal=umsatzOpenCal;
 window.umsatzCalShift=umsatzCalShift;
 window.umsatzCalPick=umsatzCalPick;
 
-// Parst denselben gruppierten Odoo-Pivot-Export (Filiale-Blöcke, Tagesreihen, Produkt-Spaltenpaare
-// Nettobetrag+Menge) wie beim ersten manuellen Import — jetzt clientseitig im Browser mit SheetJS,
-// damit Tini (oder wer auch immer) den wöchentlichen Export einfach direkt hochladen kann.
-const UMSATZ_STORE_MAP={'Ausstellungsstraße':'1020','Börse':'boerse','Kitchen':'kitchen','Laurenzerberg':'lb','Stadtplatz':'3400'};
+// ---- IMPORT DES ODOO-EXPORTS ----
+// Aufbau der Datei: Filialen stehen als Spalten nebeneinander (je Filiale ein Block aus
+// mehreren Messwert-Spalten), die Zeilen sind Produkt → darunter die einzelnen Tage.
+// Der Parser liest die Kopfzeilen aus, statt feste Spaltenpositionen anzunehmen — dadurch
+// ist es egal, welche Messwerte in Odoo gewählt wurden und in welcher Reihenfolge die
+// Filialen stehen. Unbekannte Filialen werden gemeldet und NICHT stillschweigend übersprungen.
+let umsatzPendingImport=null;
+
+const UMSATZ_MONATE_KURZ={jan:1,feb:2,mar:3,'mär':3,apr:4,mai:5,jun:6,jul:7,aug:8,sep:9,okt:10,nov:11,dez:12};
+
+function umsatzNormName(s){
+  return String(s||'').toLowerCase()
+    .replace(/ß/g,'ss').replace(/ä/g,'a').replace(/ö/g,'o').replace(/ü/g,'u')
+    .replace(/[^a-z]/g,'');
+}
+
+function umsatzParseDate(v){
+  if(v instanceof Date && !isNaN(v)) return uFmt(v);
+  if(v==null) return null;
+  const s=String(v).trim();
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);                       // 2025-05-07 00:00:00
+  if(m) return m[1]+'-'+m[2]+'-'+m[3];
+  m=s.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/);              // 07.05.2025
+  if(m) return m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
+  m=s.match(/^(\d{1,2})\.?\s+([A-Za-zÄÖÜäöüß.]+)\.?\s+(\d{4})$/);  // 07 Mai 2025 / 07 Sept. 2025
+  if(m){
+    const mo=UMSATZ_MONATE_KURZ[m[2].toLowerCase().replace(/\./g,'').slice(0,3)];
+    if(mo) return m[3]+'-'+String(mo).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
+  }
+  return null;
+}
+
+function umsatzNum(v){
+  if(v==null||v==='') return 0;
+  if(typeof v==='number') return v;
+  let s=String(v).trim().replace(/[\s€]/g,'');
+  if(s.indexOf(',')>=0 && s.indexOf('.')>=0) s=s.replace(/\./g,'').replace(',','.');
+  else if(s.indexOf(',')>=0) s=s.replace(',','.');
+  const n=parseFloat(s);
+  return isNaN(n)?0:n;
+}
 
 async function handleUmsatzUpload(inputEl){
-  const file=inputEl.files?.[0];
+  const file=inputEl.files&&inputEl.files[0];
   if(!file) return;
   const btn=document.getElementById('umsatz-upload-btn');
   if(btn){ btn.disabled=true; btn.textContent='Wird gelesen…'; }
   try{
     const buf=await file.arrayBuffer();
-    const wb=XLSX.read(buf, {type:'array', cellDates:true});
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]];
     const range=XLSX.utils.decode_range(ws['!ref']);
-    const getCell=(r,c)=>{ const cell=ws[XLSX.utils.encode_cell({r,c})]; return cell?cell.v:null; };
+    const cell=(r,c)=>{ const x=ws[XLSX.utils.encode_cell({r,c})]; return x?x.v:null; };
 
-    // Produkt-Spaltenpaare aus Zeile 2/3 (0-indiziert: Zeile 1/2) auslesen
-    const productCols={};
-    let c=1; // Spalte B = Index 1
-    while(c<=range.e.c){
-      const name=getCell(1,c);
-      if(name && String(name).trim() && String(name).trim()!=='Gesamt'){
-        const sub1=getCell(2,c), sub2=getCell(2,c+1);
-        if(sub1 && String(sub1).toLowerCase().includes('netto') && sub2 && (String(sub2).toLowerCase().includes('menge')||String(sub2).toLowerCase().includes('geliefert'))){
-          productCols[String(name).trim()]={netto:c, menge:c+1};
-          c+=2; continue;
-        }
+    // 1) Kopfzeile mit den Filialnamen suchen (in den ersten Zeilen)
+    const known=Object.keys(umsatzStoreMap).filter(id=>id!=='zentrale')
+      .map(id=>({id, norm:umsatzNormName(umsatzStoreMap[id])}));
+    let headRow=-1, cols=[], unknown=[];
+    for(let r=0;r<=Math.min(8,range.e.r);r++){
+      const found=[], unk=[];
+      for(let c=1;c<=range.e.c;c++){
+        const v=cell(r,c);
+        if(v==null||String(v).trim()==='') continue;
+        const raw=String(v).trim();
+        if(raw.toLowerCase()==='gesamt') continue;          // Summenspalte, keine Filiale
+        const n=umsatzNormName(raw);
+        if(!n) continue;
+        const hit=known.find(k=>k.norm===n||k.norm.indexOf(n)===0||n.indexOf(k.norm)===0);
+        if(hit) found.push({col:c, id:hit.id, raw:raw}); else unk.push(raw);
       }
-      c++;
+      if(found.length>=2){ headRow=r; cols=found; unknown=unk; break; }
     }
-    if(!Object.keys(productCols).length) throw new Error('Konnte keine Produkt-Spalten erkennen — Format passt nicht zum erwarteten Export.');
+    if(headRow<0) throw new Error('Keine Filial-Spalten gefunden. Steht in der Kopfzeile die Verkaufsstelle?');
 
-    // Filial-Gruppen (Spalte A, Zeile >=4 / Index >=3) finden
-    const storeRows=[];
-    for(let r=3;r<=range.e.r;r++){
-      const v=getCell(r,0);
-      if(v!=null && !(v instanceof Date)) storeRows.push([r, String(v).trim()]);
-    }
-
-    const records=[];
-    storeRows.forEach(([startRow, storeName], i)=>{
-      const storeId=UMSATZ_STORE_MAP[storeName];
-      if(!storeId) return;
-      const endRow=i+1<storeRows.length?storeRows[i+1][0]:range.e.r+1;
-      for(let r=startRow+1;r<endRow;r++){
-        const dateVal=getCell(r,0);
-        if(!(dateVal instanceof Date)) continue;
-        // NICHT toISOString() — das rechnet auf UTC um und macht in AT (UTC+1/+2) aus
-        // Mitternacht Ortszeit den Vortag. Genau dadurch war der komplette Bestand um einen Tag verschoben.
-        const dateStr=dateVal.getFullYear()+'-'+String(dateVal.getMonth()+1).padStart(2,'0')+'-'+String(dateVal.getDate()).padStart(2,'0');
-        Object.entries(productCols).forEach(([prod,cols])=>{
-          const netto=getCell(r,cols.netto);
-          const menge=getCell(r,cols.menge);
-          if((netto||0)===0 && (menge||0)===0) return;
-          records.push({store_id:storeId, sale_date:dateStr, product_name:prod, quantity:Number(menge)||0, net_amount:Number(netto)||0});
-        });
+    // 2) Messwerte je Filial-Block bestimmen (Netto / Menge)
+    const measRow=headRow+1;
+    cols.forEach((s,i)=>{
+      const endCol=(i+1<cols.length?cols[i+1].col:range.e.c+1);
+      s.netCol=null; s.qtyCol=null;
+      for(let c=s.col;c<endCol;c++){
+        const m=String(cell(measRow,c)||'').toLowerCase();
+        if(s.netCol===null && m.indexOf('netto')>=0) s.netCol=c;
+        if(s.qtyCol===null && (m.indexOf('menge')>=0||m.indexOf('anzahl')>=0||m.indexOf('geliefert')>=0)) s.qtyCol=c;
       }
+      if(s.netCol===null) s.netCol=s.col;   // Rückfall: erste Spalte des Blocks
     });
+    const hasQty=cols.some(s=>s.qtyCol!==null);
 
-    if(!records.length) throw new Error('Keine Datensätze im Export gefunden.');
-
-    if(btn) btn.textContent=`Speichere ${records.length} Zeilen…`;
-    const chunkSize=500;
-    for(let i=0;i<records.length;i+=chunkSize){
-      const chunk=records.slice(i, i+chunkSize);
-      await api('sales_data?on_conflict=store_id,sale_date,product_name',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(chunk)});
-      if(btn) btn.textContent=`Speichere… ${Math.min(i+chunkSize,records.length)}/${records.length}`;
+    // 3) Zeilen lesen: Produktzeile vs. Datumszeile
+    const records=[]; let product=null; const dateSet={}; let weekend=0;
+    for(let r=measRow+1;r<=range.e.r;r++){
+      const a=cell(r,0);
+      if(a==null||String(a).trim()==='') continue;
+      const ds=umsatzParseDate(a);
+      if(!ds){ 
+        const label=String(a).trim();
+        product=(label.toLowerCase()==='gesamt')?null:label;   // Summenzeile ignorieren
+        continue;
+      }
+      if(!product) continue;
+      const dow=uParse(ds).getDay();
+      if(dow===0||dow===6) weekend++;
+      cols.forEach(s=>{
+        const net=umsatzNum(cell(r,s.netCol));
+        const qty=s.qtyCol!==null?umsatzNum(cell(r,s.qtyCol)):null;
+        if(!net && !qty) return;
+        records.push({store_id:s.id, sale_date:ds, product_name:product, quantity:qty, net_amount:net});
+        dateSet[ds]=1;
+      });
     }
-    showToast(`✓ ${records.length} Zeilen importiert`);
-    await renderUmsatzContent();
+    if(!records.length) throw new Error('Keine Tageszeilen gefunden. Sind in der Pivot-Ansicht alle Produkte aufgeklappt?');
+
+    const dates=Object.keys(dateSet).sort();
+    const perStore={};
+    records.forEach(x=>{
+      if(!perStore[x.store_id]) perStore[x.store_id]={rows:0,net:0};
+      perStore[x.store_id].rows++; perStore[x.store_id].net+=x.net_amount;
+    });
+    umsatzPendingImport={records, from:dates[0], to:dates[dates.length-1], perStore, unknown, hasQty, weekend, tage:dates.length};
+    umsatzRenderPreview();
   }catch(e){
     console.error(e);
-    showToast('Fehler beim Import: '+(e?.message||String(e)).slice(0,140), true);
+    showToast('Import fehlgeschlagen: '+((e&&e.message)||String(e)).slice(0,140), true);
   }finally{
-    if(btn){ btn.disabled=false; btn.textContent='📊 Odoo-Export (.xlsx) auswählen'; }
+    if(btn){ btn.disabled=false; btn.textContent='Odoo-Export (.xlsx) auswählen'; }
     inputEl.value='';
   }
 }
+
+// Vorschau VOR dem Speichern — damit ein fehlender Standort oder ein schiefes Datum auffällt,
+// bevor die Zahlen in der Datenbank landen. Genau das hat bisher gefehlt.
+function umsatzRenderPreview(){
+  const box=document.getElementById('umsatz-import-preview');
+  if(!box||!umsatzPendingImport) return;
+  const p=umsatzPendingImport;
+  let h='<div style="border:1.5px solid '+UMSATZ_PURPLE+';border-radius:10px;padding:12px;margin-top:10px;background:#FAF7FE;">';
+  h+='<div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">Vorschau — noch nichts gespeichert</div>';
+  h+='<div style="font-size:11.5px;color:var(--sub);line-height:1.6;margin-bottom:9px;">'
+    +uNum(p.records.length)+' Zeilen · '+p.tage+' Verkaufstage<br>'
+    +uNiceDate(p.from)+' – '+uNiceDate(p.to)+'</div>';
+  h+='<div style="background:#fff;border-radius:8px;overflow:hidden;margin-bottom:9px;">';
+  Object.keys(p.perStore).sort((a,b)=>p.perStore[b].net-p.perStore[a].net).forEach((id,i)=>{
+    h+='<div style="display:flex;justify-content:space-between;padding:6px 10px;font-size:11.5px;'+(i?'border-top:0.5px solid var(--border);':'')+'">'
+      +'<span data-no-translate>'+(umsatzStoreMap[id]||id)+'</span>'
+      +'<span><b>'+uEuro(p.perStore[id].net)+'</b> <span style="color:var(--muted);">'+uNum(p.perStore[id].rows)+'</span></span></div>';
+  });
+  h+='</div>';
+
+  const warn=[];
+  if(p.unknown.length) warn.push('Nicht zugeordnet: '+p.unknown.join(', ')+' — diese Spalten werden NICHT importiert.');
+  if(!p.hasQty) warn.push('Der Export enthält keine Mengen. Die Umsätze werden aktualisiert, bereits gespeicherte Portionen bleiben unangetastet — neue Tage haben aber keine Portionszahlen. Dafür in Odoo zusätzlich den Messwert „Menge" anhaken.');
+  if(p.weekend) warn.push(p.weekend+' Zeilen fallen auf Samstag oder Sonntag — bitte das Datumsformat prüfen.');
+  warn.forEach(w=>{ h+='<div style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:7px 9px;font-size:11px;line-height:1.45;margin-bottom:7px;">⚠️ '+w+'</div>'; });
+
+  h+='<div style="font-size:10.5px;color:var(--muted);margin-bottom:9px;">'+(p.hasQty
+    ?'Bestehende Zahlen dieser Filialen werden im Zeitraum '+uNiceDate(p.from)+' – '+uNiceDate(p.to)+' ersetzt.'
+    :'Die Umsätze werden zusammengeführt, nichts wird gelöscht.')+'</div>';
+  h+='<div style="display:flex;gap:7px;">'
+    +'<button onclick="umsatzCancelImport()" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12px;cursor:pointer;">Abbrechen</button>'
+    +'<button onclick="umsatzConfirmImport()" id="umsatz-confirm-btn" style="flex:2;padding:9px;border:none;border-radius:9px;background:'+UMSATZ_PURPLE+';color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Jetzt importieren</button>'
+    +'</div></div>';
+  box.innerHTML=h;
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function umsatzCancelImport(){
+  umsatzPendingImport=null;
+  const box=document.getElementById('umsatz-import-preview');
+  if(box) box.innerHTML='';
+}
+
+async function umsatzConfirmImport(){
+  if(!umsatzPendingImport) return;
+  const p=umsatzPendingImport;
+  const btn=document.getElementById('umsatz-confirm-btn');
+  const set=t=>{ if(btn) btn.textContent=t; };
+  if(btn) btn.disabled=true;
+  try{
+    // Zwei Wege, je nachdem was der Export liefert:
+    // MIT Mengen  -> Zeitraum leeren und komplett neu schreiben. Sauber, räumt auch Produkte
+    //               weg, die in Odoo umbenannt wurden.
+    // OHNE Mengen -> NICHT löschen, sondern per sales_upsert() zusammenführen. Die Funktion
+    //               behält eine bereits gespeicherte Menge, wenn der Export keine mitbringt —
+    //               sonst wären die Portionen nach dem Import weg.
+    const ids=Object.keys(p.perStore);
+    const size=500;
+    if(p.hasQty){
+      set('Räume auf…');
+      await api('sales_data?sale_date=gte.'+p.from+'&sale_date=lte.'+p.to+'&store_id=in.('+ids.join(',')+')',{method:'DELETE'});
+      for(let i=0;i<p.records.length;i+=size){
+        set('Speichere… '+Math.min(i+size,p.records.length)+'/'+p.records.length);
+        await api('sales_data',{method:'POST',body:JSON.stringify(p.records.slice(i,i+size))});
+      }
+    }else{
+      for(let i=0;i<p.records.length;i+=size){
+        set('Speichere… '+Math.min(i+size,p.records.length)+'/'+p.records.length);
+        await api('rpc/sales_upsert',{method:'POST',body:JSON.stringify({p_rows:p.records.slice(i,i+size)})});
+      }
+    }
+    umsatzPendingImport=null;
+    showToast('✓ '+p.records.length+' Zeilen importiert');
+    umsatzMeta=await api('rpc/sales_meta',{method:'POST',body:'{}'}).catch(()=>umsatzMeta);
+    await renderUmsatzContent();
+  }catch(e){
+    console.error(e);
+    showToast('Import fehlgeschlagen: '+((e&&e.message)||String(e)).slice(0,140), true);
+    if(btn){ btn.disabled=false; set('Nochmal versuchen'); }
+  }
+}
+
 window.handleUmsatzUpload=handleUmsatzUpload;
+window.umsatzConfirmImport=umsatzConfirmImport;
+window.umsatzCancelImport=umsatzCancelImport;
 
 async function renderForecastReview(){
   const el = document.getElementById('v-forecastReview');
