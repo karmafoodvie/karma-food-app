@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.22.2';
+const APP_VERSION = '6.22.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5756,9 +5756,9 @@ async function renderOrgForecast(){
     if(!prevDispByDateStore[d.disposal_date])prevDispByDateStore[d.disposal_date]={};
     if(!prevDispByDateStore[d.disposal_date][d.store_id])prevDispByDateStore[d.disposal_date][d.store_id]={};
     const cat=mapDishNameToCategory(d.dish_name, d.slot);
-    const ex=prevDispByDateStore[d.disposal_date][d.store_id][cat]||{leftover:0,soldOutEarly:false};
+    const ex=prevDispByDateStore[d.disposal_date][d.store_id][cat]||{leftover:0,soldOutEarly:false,soldOutTime:null};
     ex.leftover+=(d.leftover_qty||0);
-    if(d.sold_out_time) ex.soldOutEarly=true;
+    if(d.sold_out_time){ ex.soldOutEarly=true; ex.soldOutTime=d.sold_out_time.slice(0,5); }
     prevDispByDateStore[d.disposal_date][d.store_id][cat]=ex;
   });
 
@@ -5964,7 +5964,7 @@ async function renderOrgForecast(){
           const cmpDisp=prevDispByDateStore[cmpPrevDate]?.[s.id]?.[cmpCat];
           let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='';
           if(cmpDisp && (cmpDisp.soldOutEarly||cmpDisp.leftover>0)){
-            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail='ausverkauft'; }
+            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail=cmpDisp.soldOutTime||'ausverkauft'; }
             else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
             else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
             else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
