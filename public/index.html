@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.1';
+const APP_VERSION = '6.23.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5578,15 +5578,15 @@ async function loadOrgDashboard(){
     const [stores, ordersToday, kcPending, forecastTomorrow, disposalToday, submissionsAllToday] = await Promise.all([
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
-      api(`kc_submissions?select=store_id`).catch(()=>[]),
+      api(`kc_submissions?order_date=eq.${today}&select=store_id`).catch(()=>[]),
       api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=in.(store,org)&select=store_id`).catch(()=>[]),
       api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[]),
       api(`order_submissions?order_date=eq.${today}&select=store_id,tab`).catch(()=>[])
     ]);
     const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
-    // "Shop" bleibt grün, solange die Meldung noch aussteht (nicht eingepackt/verschickt) — wird
-    // NICHT mehr täglich auf Rot zurückgesetzt, sondern erst wenn Ines "Alles eingepackt" klickt
-    // (das räumt kc_submissions dann auf, siehe kcAllesErledigt).
+    // "Shop" zeigt jetzt korrekt nur den HEUTIGEN Tag — vorher fehlte hier der Datums-Filter
+    // komplett, wodurch alte, nie aufgeräumte Einträge aus vergangenen Tagen die Filiale dauerhaft
+    // fälschlich als "erledigt" zeigten, auch wenn heute gar nichts eingetragen wurde.
     const kcSet=new Set((kcPending||[]).map(k=>k.store_id));
     const forecastSet=new Set((forecastTomorrow||[]).map(f=>f.store_id));
     const disposalSet=new Set((disposalToday||[]).filter(d=>d.leftover_qty!=null).map(d=>d.store_id));
