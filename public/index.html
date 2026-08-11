@@ -30,6 +30,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .store-btn{padding:12px 16px;border:2px solid var(--border);border-radius:10px;background:#fff;font-size:14px;color:#1a1a18;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:border-color .15s;}
 .store-btn-color{position:relative;height:64px;border-radius:12px;border:none;cursor:pointer;display:flex;align-items:center;padding:0 16px;width:100%;}
 .role-btn-color{position:relative;min-height:64px;border-radius:12px;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:10px 16px;width:100%;}
+summary::-webkit-details-marker{display:none;}
+summary::marker{content:'';}
 .role-btn-role{color:#fff;font-family:'Boldonse',sans-serif;font-weight:400;font-size:16px;letter-spacing:0.3px;}
 .role-btn-name{color:rgba(255,255,255,0.85);font-family:inherit;font-size:12.5px;margin-top:3px;}
 .store-btn-color-label{color:#fff;font-family:'Boldonse',sans-serif;font-weight:400;font-size:14.5px;letter-spacing:0.3px;}
@@ -971,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.27.0';
+const APP_VERSION = '6.27.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3930,20 +3932,25 @@ function dateMinusDays(dateStr, days){
 
 function mapDishNameToCategory(dishName, slot){
   const n=(dishName||'').toLowerCase();
-  if(slot==='salat') return 'Salat'; // Slot hat immer Vorrang
-  if(n==='reis'||n.includes('basmati')||n.includes('reis')) return 'Reis';
-  if(n.includes('curry')) return 'Curry';
-  if(n.includes('dal')||n.includes('linsen')) return 'Dal';
-  if(n.includes('biryani')) return 'Biryani';
+  // Slot hat immer Vorrang — das ist die verlässlichste Information.
+  if(slot==='salat') return 'Salat';
+  if(slot==='reis') return 'Reis';
+  // WICHTIG: Erst die konkreten Hauptgerichte prüfen, DANN erst Reis. Sonst wird z.B.
+  // "Parmesan-Basilikum-Meatballs mit Gewürzreis" wegen des Wortteils "…reis" fälschlich als
+  // Beilagen-Reis einsortiert und zeigt dann die Reis-Zahlen statt der echten Meatballs-Historie.
   if(n.includes('lasagne')) return 'Lasagne';
-  if(n.includes('salat')||n.includes('salad')||n.includes('bowl')) return 'Salat'; // inkl. englisch + bowl
-  // Wechselnde Spezialgerichte einzeln erkennen — sonst landen Gulasch, Chili sin Carne, Meatballs
-  // etc. alle im selben "Special"-Topf und der Vorwoche-Vergleich zeigt die falsche Referenz.
+  if(n.includes('biryani')) return 'Biryani';
   if(n.includes('gulasch')) return 'Gulasch';
   if(n.includes('chili')) return 'Chili';
   if(n.includes('meatball')) return 'Meatballs';
   if(n.includes('tofu')) return 'Tofu';
   if(n.includes('mix portion')||n.includes('mixportion')) return 'MixPortion';
+  if(n.includes('dal')||n.includes('linsen')) return 'Dal';
+  if(n.includes('curry')) return 'Curry';
+  if(n.includes('salat')||n.includes('salad')||n.includes('bowl')) return 'Salat'; // inkl. englisch + bowl
+  // Reis nur noch als eigenständiges Gericht erkennen (Wortgrenze) — "Gewürzreis"/"Safranreis"
+  // als Beilage in einem Gerichtsnamen zählt NICHT als Kategorie Reis.
+  if(n==='reis'||/\breis\b/.test(n)||n.includes('basmati')) return 'Reis';
   return 'Special';
 }
 
@@ -6354,30 +6361,48 @@ async function renderOrgForecast(){
       html+='</tr>';
     });
     html+=`</tbody></table></div></div>`;
-    // Aufklappbare Begründung — alles Erklärende gebündelt an EINEM Ort statt in jeder Zelle.
+    // Begründungen pro FILIALE aufklappbar — statt einer langen Liste, durch die man scrollen muss.
+    // Ein Klick auf "Ausst." zeigt genau deren Gerichte für diesen Tag.
     const detailWithSugg=dayDetailRows.filter(r=>r.sugg!=null||r.dirLabel);
     if(detailWithSugg.length){
-      html+=`<details style="margin:6px 0 0;">
-        <summary style="cursor:pointer;font-size:11.5px;color:#0369A1;padding:7px 10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;list-style:none;">🧪 App-Vorschläge & Begründung anzeigen</summary>
-        <div class="card" style="margin-top:6px;overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;font-size:10.5px;">
-          <thead><tr><th style="text-align:left;">Filiale / Gericht</th><th>App</th><th>Richtung</th><th>Referenz</th><th>Hinweise</th></tr></thead><tbody>`;
-      detailWithSugg.forEach(r=>{
-        const hints=[];
-        if(r.weeksAgo) hints.push(r.exact?`gleiches Gericht (vor ${r.weeksAgo} Wo)`:`ähnliches Gericht (vor ${r.weeksAgo} Wo)`);
-        if(r.mom) hints.push(r.mom);
-        if(r.trendPct!=null && Math.abs(r.trendPct)>=8) hints.push(`Umsatz ${r.trendPct>0?'+':''}${r.trendPct}%`);
-        html+=`<tr>
-          <td style="text-align:left;padding:6px;"><div style="font-weight:600;" data-no-translate>${STORE_SHORT[r.store]||r.store}</div><div style="font-size:9.5px;color:var(--muted);" data-no-translate>${r.dish}</div></td>
-          <td style="font-weight:700;color:#0369A1;">${r.sugg!=null?formatQty(r.sugg):'–'}</td>
-          <td style="color:${r.dirColor||'var(--muted)'};font-weight:600;white-space:nowrap;">${r.dirLabel?r.dirIcon+' '+r.dirLabel:'–'}</td>
-          <td style="white-space:nowrap;">${r.refQty?r.refQty+' Bhlt':'–'}${r.refTxt?'<br>'+r.refTxt:''}</td>
-          <td style="text-align:left;font-size:9.5px;color:var(--muted);">${hints.join('<br>')||'–'}</td>
-        </tr>`;
+      const byStore={};
+      detailWithSugg.forEach(r=>{ (byStore[r.store]=byStore[r.store]||[]).push(r); });
+      html+=`<div style="margin:6px 0 0;">
+        <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">🧪 Begründung ansehen — Filiale antippen:</div>`;
+      Object.keys(byStore).forEach(sid=>{
+        const rs=byStore[sid];
+        const col=STORE_COLORS[sid]||'#888';
+        // Kurzüberblick schon in der zugeklappten Zeile: welche Richtungen kommen vor
+        const ups=rs.filter(r=>r.dirIcon==='↑'||r.dirIcon==='↗').length;
+        const downs=rs.filter(r=>r.dirIcon==='↓'||r.dirIcon==='↘').length;
+        const summaryHint=[ups?`${ups}× mehr`:'', downs?`${downs}× weniger`:''].filter(Boolean).join(' · ')||'unverändert';
+        html+=`<details style="margin-bottom:4px;">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:11.5px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+            <span style="font-weight:600;" data-no-translate>${STORE_SHORT[sid]||sid}</span>
+            <span style="color:var(--muted);font-size:10.5px;margin-left:auto;">${summaryHint} ▾</span>
+          </summary>
+          <div class="card" style="margin:4px 0 0;overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;font-size:10.5px;">
+            <thead><tr><th style="text-align:left;">Gericht</th><th>App</th><th>Richtung</th><th>Referenz</th><th>Hinweise</th></tr></thead><tbody>`;
+        rs.forEach(r=>{
+          const hints=[];
+          if(r.weeksAgo) hints.push(r.exact?`gleiches Gericht (vor ${r.weeksAgo} Wo)`:`ähnliches Gericht (vor ${r.weeksAgo} Wo)`);
+          if(r.mom) hints.push(r.mom);
+          if(r.trendPct!=null && Math.abs(r.trendPct)>=8) hints.push(`Umsatz ${r.trendPct>0?'+':''}${r.trendPct}%`);
+          html+=`<tr>
+            <td style="text-align:left;padding:6px;font-size:10px;" data-no-translate>${r.dish}</td>
+            <td style="font-weight:700;color:#0369A1;">${r.sugg!=null?formatQty(r.sugg):'–'}</td>
+            <td style="color:${r.dirColor||'var(--muted)'};font-weight:600;white-space:nowrap;">${r.dirLabel?r.dirIcon+' '+r.dirLabel:'–'}</td>
+            <td style="white-space:nowrap;">${r.refQty?r.refQty+' Bhlt':'–'}${r.refTxt?'<br>'+r.refTxt:''}</td>
+            <td style="text-align:left;font-size:9.5px;color:var(--muted);">${hints.join('<br>')||'–'}</td>
+          </tr>`;
+        });
+        html+='</tbody></table></div></div></details>';
       });
-      html+='</tbody></table></div></div></details>';
+      html+='</div>';
     }
     html+=`
-      <button id="orgfc-daysave-${dateStr}" onclick="orgFcSaveDay('${dateStr}')" style="width:100%;padding:9px;margin:6px 0 14px;background:#EEF1F8;color:#2B3A67;border:1.5px solid #2B3A67;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;">💾 Nur ${dateLabel.split(',')[0]} speichern</button>
+      <button id="orgfc-daysave-${dateStr}" onclick="orgFcSaveDay('${dateStr}')" style="width:100%;padding:9px;margin:8px 0 14px;background:#EEF1F8;color:#2B3A67;border:1.5px solid #2B3A67;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;">💾 Nur ${dateLabel.split(',')[0]} speichern</button>
     </div>`;
   }
 
