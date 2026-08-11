@@ -971,7 +971,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.26.0';
+const APP_VERSION = '6.26.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5895,11 +5895,9 @@ async function renderOrgForecast(){
       <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">Nächste →</button>
     </div>
   </div>`;
-  weekSwitcher+=`<div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.6;">
-    <div><span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:4px;padding:1px 5px;color:#64748B;">grau</span> = Vorschlag der App · tippen = deine Entscheidung</div>
-    <div style="margin-top:3px;"><b>↑ erhöhen</b> / <span style="color:#16A34A;">→ halten</span> / <b>↓ senken</b> = empfohlene Richtung</div>
-    <div style="margin-top:3px;"><b>damals X</b> = Menge beim letzten Mal · <span style="color:#DC2626;">🔥 ausverkauft</span> · <span style="color:#16A34A;">✓ kleiner Rest = ideal</span> · 📦 zu viel</div>
-    <div style="margin-top:3px;">🔁 = exakt dasselbe Gericht (4-Wochen-Rotation) · ≈ = ähnliches Gericht</div>
+  weekSwitcher+=`<div style="font-size:10.5px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.5;">
+    Unter jedem Feld steht, wie es <b>beim letzten Mal</b> lief (Menge + Ergebnis).<br>
+    Die App-Vorschläge stehen gesammelt unter jedem Tag zum Aufklappen — sie werden <b>nicht automatisch übernommen</b>.
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
@@ -6197,6 +6195,7 @@ async function renderOrgForecast(){
 
     html+=`<div class="section-lbl" style="${isToday?'color:#2B3A67;font-weight:700;':''}">${dateLabel}${isToday?' — heute':''}</div>`;
     if(reason) html+=`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${reason}</div>`;
+    const dayDetailRows=[];
     html+=`<div id="orgfc-day-${dateStr}"><div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Filiale</th>
       ${allDishes.map(d=>`<th data-no-translate style="font-size:10.5px;">${d}</th>`).join('')}
@@ -6301,9 +6300,6 @@ async function renderOrgForecast(){
           const trend=salesTrend[s.id]?.[wdNum];
           const trendScore=trend?(trend.dir==='up'?1:(trend.dir==='down'?-1:0)):0;
           const mom=computeMomentum(s.id, dateStr);
-          // Richtung = Ampel (Vergangenheit, gleicher Wochentag) + Umsatz-Trend + Kurzfrist-Momentum
-          // (die jüngsten Tage). Momentum ist das schnellste Signal und gleicht aus, wenn der
-          // Wochenvergleich auf einem untypischen Tag sitzt.
           const dirScore=ampelScore+trendScore+mom.score;
           let dirLabel='', dirColor='', dirIcon='';
           if(cmpPrevQty!=null || cmpDisp || mom.label){
@@ -6313,37 +6309,56 @@ async function renderOrgForecast(){
             else if(dirScore===-1){ dirIcon='↘'; dirLabel='leicht weniger'; dirColor='#D97706'; }
             else { dirIcon='→'; dirLabel='halten'; dirColor='#16A34A'; }
           }
-          const trendTip=trend?` · Umsatz ${trend.pct>0?'+':''}${trend.pct}%`:'';
-          const refTip=cmpExact?`Selbes Gericht aus der 4-Wochen-Rotation (vor ${cmpWeeksAgo} Wochen)`:`Ähnliches Gericht derselben Kategorie (vor ${cmpWeeksAgo} Wochen)`;
-          const dirLine=dirLabel?`<div style="font-size:9px;font-weight:700;color:${dirColor};text-align:center;margin-top:3px;white-space:nowrap;" title="${escAttr('Empfohlene Richtung'+trendTip+(mom.label?' · '+mom.label:''))}">${dirIcon} ${dirLabel}</div>`:'';
-          // Kernzeile: "damals X → Ergebnis". Das ist die Zahl, die man beim Planen wirklich braucht.
-          // Alles Erklärende (Rotation, Momentum) steckt im Tooltip bzw. winzigen Markern, damit die
-          // Zelle nicht zur Textwand wird.
-          const refQtyTxt=cmpPrevQty!=null?`${formatQty(Math.round(cmpPrevQty*4)/4)}`:'?';
-          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:9px;color:var(--sub);text-align:center;margin-top:2px;line-height:1.3;white-space:nowrap;" title="${escAttr(refTip)}">damals ${refQtyTxt}${cmpAmpel?` <span style="color:${cmpColor};">→ ${cmpAmpel}${cmpDetail?' '+cmpDetail.replace('Ø ','').replace(' übrig','↑'):''}</span>`:''}</div>`:'';
-          const suggLine=sugg?`<div style="font-size:8.5px;color:#0369A1;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:4px;padding:1px 4px;display:inline-block;margin-top:3px;" title="${escAttr('App-Vorschlag (Testphase — zählt nicht automatisch): '+(sugg.reason||''))}">App: ${formatQty(sugg.qty)}</div>`:'';
-          const metaBits=[];
-          if(cmpExact) metaBits.push(`🔁${cmpWeeksAgo}Wo`);
-          else if(cmpWeeksAgo) metaBits.push(`≈${cmpWeeksAgo}Wo`);
-          if(mom.score>0) metaBits.push('🔥zuletzt knapp');
-          else if(mom.score<0) metaBits.push('📦zuletzt viel');
-          const momLine=metaBits.length?`<div style="font-size:7.5px;color:var(--muted);text-align:center;line-height:1.2;margin-top:1px;">${metaBits.join(' · ')}</div>`:'';
+          // ZELLE BEWUSST MINIMAL: nur Eingabefeld + EINE kurze Referenzzeile. Alles Erklärende
+          // (App-Vorschlag, Richtung, Rotation, Momentum, Umsatztrend) wandert in die aufklappbare
+          // Detailtabelle unter dem Tag — vorher war die Zelle eine unlesbare Textwand.
+          let refTxt='';
+          if(cmpDisp?.soldOutEarly) refTxt=`<span style="color:#DC2626;">🔥 ausverkauft${cmpDisp.soldOutTime?' '+cmpDisp.soldOutTime:''}</span>`;
+          else if(avgLeftover!=null) refTxt=`<span style="color:${cmpColor};">${formatQty(Math.round(avgLeftover))} übrig</span>`;
+          const refQty=cmpPrevQty!=null?formatQty(Math.round(cmpPrevQty*4)/4):null;
+          const cmpLine=(refQty||refTxt)?`<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:3px;line-height:1.3;">${refQty?`letztes Mal ${refQty}`:''}${refQty&&refTxt?'<br>':''}${refTxt}</div>`:'';
+          // Detailzeile für die aufklappbare Begründungstabelle sammeln
+          dayDetailRows.push({
+            store:s.id, dish, sugg:sugg?sugg.qty:null, dirIcon, dirLabel, dirColor,
+            refQty, refTxt, weeksAgo:cmpWeeksAgo, exact:cmpExact,
+            mom:mom.label, trendPct:trend?trend.pct:null, reason:sugg?.reason||''
+          });
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
-              style="width:46px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#CBD5E1':'var(--border)')};border-radius:6px;font-size:13px;font-weight:${manual?'700':'400'};padding:5px 1px;background:${manual?manualBg:(isSugg?'#F1F5F9':'#fff')};color:${manual?manualColor:(isSugg?'#64748B':'#1a1a18')};">
-            ${suggLine}
-            ${dirLine}
+              style="width:48px;text-align:center;border:1.5px solid ${manual?manualColor:'var(--border)'};border-radius:6px;font-size:14px;font-weight:${manual?'700':'400'};padding:6px 1px;background:${manual?manualBg:'#fff'};color:${manual?manualColor:'#1a1a18'};">
             ${cmpLine}
-            ${momLine}
           </td>`;
         }
       });
       html+='</tr>';
     });
-    html+=`</tbody></table></div></div>
+    html+=`</tbody></table></div></div>`;
+    // Aufklappbare Begründung — alles Erklärende gebündelt an EINEM Ort statt in jeder Zelle.
+    const detailWithSugg=dayDetailRows.filter(r=>r.sugg!=null||r.dirLabel);
+    if(detailWithSugg.length){
+      html+=`<details style="margin:6px 0 0;">
+        <summary style="cursor:pointer;font-size:11.5px;color:#0369A1;padding:7px 10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;list-style:none;">🧪 App-Vorschläge & Begründung anzeigen</summary>
+        <div class="card" style="margin-top:6px;overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;font-size:10.5px;">
+          <thead><tr><th style="text-align:left;">Filiale / Gericht</th><th>App</th><th>Richtung</th><th>Referenz</th><th>Hinweise</th></tr></thead><tbody>`;
+      detailWithSugg.forEach(r=>{
+        const hints=[];
+        if(r.weeksAgo) hints.push(r.exact?`gleiches Gericht (vor ${r.weeksAgo} Wo)`:`ähnliches Gericht (vor ${r.weeksAgo} Wo)`);
+        if(r.mom) hints.push(r.mom);
+        if(r.trendPct!=null && Math.abs(r.trendPct)>=8) hints.push(`Umsatz ${r.trendPct>0?'+':''}${r.trendPct}%`);
+        html+=`<tr>
+          <td style="text-align:left;padding:6px;"><div style="font-weight:600;" data-no-translate>${STORE_SHORT[r.store]||r.store}</div><div style="font-size:9.5px;color:var(--muted);" data-no-translate>${r.dish}</div></td>
+          <td style="font-weight:700;color:#0369A1;">${r.sugg!=null?formatQty(r.sugg):'–'}</td>
+          <td style="color:${r.dirColor||'var(--muted)'};font-weight:600;white-space:nowrap;">${r.dirLabel?r.dirIcon+' '+r.dirLabel:'–'}</td>
+          <td style="white-space:nowrap;">${r.refQty?r.refQty+' Bhlt':'–'}${r.refTxt?'<br>'+r.refTxt:''}</td>
+          <td style="text-align:left;font-size:9.5px;color:var(--muted);">${hints.join('<br>')||'–'}</td>
+        </tr>`;
+      });
+      html+='</tbody></table></div></div></details>';
+    }
+    html+=`
       <button id="orgfc-daysave-${dateStr}" onclick="orgFcSaveDay('${dateStr}')" style="width:100%;padding:9px;margin:6px 0 14px;background:#EEF1F8;color:#2B3A67;border:1.5px solid #2B3A67;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;">💾 Nur ${dateLabel.split(',')[0]} speichern</button>
     </div>`;
   }
