@@ -67,8 +67,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border:none;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;}
 .nav-btn svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 .nav-btn.active{color:var(--green);}
-#bottomnav.six .nav-btn{font-size:9px;padding:8px 1px;gap:1px;}
-#bottomnav.six .nav-btn svg{width:20px;height:20px;}
 
 /* CARDS */
 .card{background:var(--card);border-radius:12px;border:1px solid var(--border);overflow:hidden;margin-bottom:10px;}
@@ -275,9 +273,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </button>
     <button class="nav-btn" onclick="goTo('orgForecast')" id="nav-org-mengen" style="display:none;">
       <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Mengen
-    </button>
-    <button class="nav-btn" onclick="goTo('umsatz')" id="nav-org-umsatz" style="display:none;">
-      <svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="21 12 21 7 16 7"/></svg>Umsatz
     </button>
     <button class="nav-btn" onclick="goTo('hygieneSchulung')" id="nav-org-hygiene" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Hygiene
@@ -975,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.27.0';
+const APP_VERSION = '6.22.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1257,9 +1252,7 @@ async function loginAs(store){
     document.getElementById('nav-org-ueberblick').style.display='flex';
     document.getElementById('nav-org-msg').style.display='flex';
     document.getElementById('nav-org-mengen').style.display='flex';
-    document.getElementById('nav-org-umsatz').style.display='flex';
     document.getElementById('nav-org-hygiene').style.display='flex';
-    document.getElementById('bottomnav').classList.add('six');
     document.getElementById('nav-org-schaeden').style.display='flex';
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
@@ -1349,7 +1342,6 @@ function goTo(v, noPush=false){
     if(v==='home') navId='nav-org-ueberblick';
     else if(v==='broadcast' || v==='msg') navId='nav-org-msg';
     else if(v==='orgForecast' || v==='forecastReview') navId='nav-org-mengen';
-    else if(v==='umsatz') navId='nav-org-umsatz';
     else if(v==='hygieneSchulung' || v==='schulung') navId='nav-org-hygiene';
     else if(v==='maengel') navId='nav-org-schaeden';
     // Alte Tabs (Sweets, Küche etc.) behalten ihre IDs
@@ -3057,7 +3049,7 @@ function renderOrderSection(cats, label, color, icon){
         if(gKey){
           if(handledGroups.has(gKey)) return; // Gruppe wurde schon (beim ersten Treffer) komplett gerendert
           handledGroups.add(gKey);
-          const groupItems=items.filter(x=>VARIANT_GROUPS[gKey].match(x.name));
+          const groupItems=items.filter(x=>VARIANT_GROUPS[gKey].match(x.name) && x.verfuegbar!==false);
           html+=renderVariantGroupRow(gKey, groupItems);
           return;
         }
@@ -3942,834 +3934,189 @@ async function fetchHistoricalWeather(storeId, fromDate, toDate){
 
 // ---- UMSATZ-DASHBOARD ----
 // Datenquelle: wöchentlicher Odoo-Export (Verkauf → Berichtswesen → Verkauf), manuell hochgeladen.
-// Kein Live-API-Zugriff — bewusste Entscheidung, einfacher & sicherer.
-//
-// WICHTIG: Alle Aggregation läuft serverseitig über die Postgres-Funktion sales_report().
-// Früher wurde die komplette sales_data-Tabelle in den Browser geladen (~13.000 Zeilen und
-// wachsend) und dort summiert — das skaliert nicht und lief in das 3s-statement_timeout der
-// anon-Rolle. Jetzt: ein RPC-Call pro Ansicht, zurück kommen nur fertige Kennzahlen.
-const UMSATZ_LS_KEY='umsatz_filter_v2';
-let umsatzMeta=null, umsatzData=null, umsatzStoreMap={}, umsatzOpenPanel=null;
-let umsatzProductSort='netto';
-
-const umsatzState={preset:'monat',from:null,to:null,cmp:'prev',cmpFrom:null,cmpTo:null,stores:[],groups:[],products:[],bucket:'auto',mode:'netto'};
-
-const UMSATZ_PRESETS=[
-  {id:'heute',label:'Heute'},{id:'gestern',label:'Gestern'},
-  {id:'woche',label:'Diese Woche'},{id:'letzteWoche',label:'Letzte Woche'},
-  {id:'monat',label:'Dieser Monat'},{id:'letzterMonat',label:'Letzter Monat'},
-  {id:'quartal',label:'Dieses Quartal'},{id:'letztesQuartal',label:'Letztes Quartal'},
-  {id:'jahr',label:'Dieses Jahr'},{id:'letztesJahr',label:'Letztes Jahr'},
-  {id:'custom',label:'Eigener Zeitraum'}
-];
-const UMSATZ_CMP=[{id:'none',label:'Kein Vergleich'},{id:'prev',label:'Vorperiode'},{id:'year',label:'Vorjahr'},{id:'custom',label:'Individuell'}];
-const UMSATZ_PURPLE='#7B3FE4';
-
-// --- Datums-Helfer (alle lokal, nie toISOString — sonst Off-by-one in AT/UTC+2) ---
-function uFmt(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-function uParse(s){const p=String(s).split('-').map(Number);return new Date(p[0],p[1]-1,p[2]);}
-function uAddDays(s,n){const d=uParse(s);d.setDate(d.getDate()+n);return uFmt(d);}
-function uDayCount(a,b){return Math.round((uParse(b)-uParse(a))/86400000)+1;}
-function uNiceDate(s){if(!s)return '';const p=String(s).split('-');return p[2]+'.'+p[1]+'.'+p[0];}
-function uEuro(n){return (Number(n)||0).toLocaleString('de-AT',{maximumFractionDigits:0})+' €';}
-function uNum(n){return (Number(n)||0).toLocaleString('de-AT',{maximumFractionDigits:0});}
-
-function umsatzRange(){
-  if(umsatzState.preset==='custom') return {from:umsatzState.from,to:umsatzState.to};
-  const t=new Date(), today=uFmt(t), y=t.getFullYear(), m=t.getMonth();
-  const dow=(t.getDay()+6)%7, q=Math.floor(m/3);
-  if(umsatzState.preset==='heute') return {from:today,to:today};
-  if(umsatzState.preset==='gestern'){const g=uAddDays(today,-1);return {from:g,to:g};}
-  if(umsatzState.preset==='woche'){const mo=uAddDays(today,-dow);return {from:mo,to:today};}
-  if(umsatzState.preset==='letzteWoche'){const mo=uAddDays(today,-dow-7);return {from:mo,to:uAddDays(mo,6)};}
-  if(umsatzState.preset==='monat') return {from:uFmt(new Date(y,m,1)),to:today};
-  if(umsatzState.preset==='letzterMonat') return {from:uFmt(new Date(y,m-1,1)),to:uFmt(new Date(y,m,0))};
-  if(umsatzState.preset==='quartal') return {from:uFmt(new Date(y,q*3,1)),to:today};
-  if(umsatzState.preset==='letztesQuartal') return {from:uFmt(new Date(y,q*3-3,1)),to:uFmt(new Date(y,q*3,0))};
-  if(umsatzState.preset==='jahr') return {from:uFmt(new Date(y,0,1)),to:today};
-  if(umsatzState.preset==='letztesJahr') return {from:uFmt(new Date(y-1,0,1)),to:uFmt(new Date(y-1,11,31))};
-  return {from:today,to:today};
-}
-
-function umsatzCmpRange(r){
-  if(umsatzState.cmp==='none'||!r.from||!r.to) return {from:null,to:null};
-  if(umsatzState.cmp==='custom') return {from:umsatzState.cmpFrom||null,to:umsatzState.cmpTo||null};
-  if(umsatzState.cmp==='year'){
-    const f=uParse(r.from), t=uParse(r.to);
-    f.setFullYear(f.getFullYear()-1); t.setFullYear(t.getFullYear()-1);
-    return {from:uFmt(f),to:uFmt(t)};
-  }
-  const days=uDayCount(r.from,r.to);
-  return {from:uAddDays(r.from,-days),to:uAddDays(r.from,-1)};
-}
-
-function umsatzSaveState(){
-  try{localStorage.setItem(UMSATZ_LS_KEY,JSON.stringify(umsatzState));}catch(e){}
-}
-function umsatzLoadState(){
-  try{
-    const raw=localStorage.getItem(UMSATZ_LS_KEY);
-    if(!raw) return;
-    const s=JSON.parse(raw);
-    Object.keys(umsatzState).forEach(k=>{ if(s[k]!==undefined) umsatzState[k]=s[k]; });
-    ['stores','groups','products'].forEach(k=>{ if(!Array.isArray(umsatzState[k])) umsatzState[k]=[]; });
-  }catch(e){}
-}
-function umsatzReset(){
-  umsatzState.preset='monat'; umsatzState.from=null; umsatzState.to=null;
-  umsatzState.cmp='prev'; umsatzState.cmpFrom=null; umsatzState.cmpTo=null;
-  umsatzState.stores=[]; umsatzState.groups=[]; umsatzState.products=[];
-  umsatzState.bucket='auto'; umsatzOpenPanel=null;
-  umsatzSaveState(); renderUmsatzContent();
-}
-
-function umsatzToggleFilter(kind,val){
-  const arr=umsatzState[kind];
-  const i=arr.indexOf(val);
-  if(i>=0) arr.splice(i,1); else arr.push(val);
-  if(kind==='groups') umsatzState.products=[]; // Produktauswahl passt sonst nicht mehr zur Gruppe
-  umsatzSaveState(); renderUmsatzContent();
-}
-function umsatzSetPreset(p){
-  umsatzState.preset=p;
-  if(p==='custom'&&!umsatzState.from){
-    const r={from:uFmt(new Date(new Date().getFullYear(),new Date().getMonth(),1)),to:uFmt(new Date())};
-    umsatzState.from=r.from; umsatzState.to=r.to;
-  }
-  umsatzSaveState(); renderUmsatzContent();
-}
-function umsatzSetCmp(c){ umsatzState.cmp=c; umsatzSaveState(); renderUmsatzContent(); }
-function umsatzSetDate(field,val){ umsatzState[field]=val||null; umsatzSaveState(); renderUmsatzContent(); }
-function umsatzSetBucket(b){ umsatzState.bucket=b; umsatzSaveState(); renderUmsatzContent(); }
-function umsatzSetMode(m){ umsatzState.mode=m; umsatzSaveState(); renderUmsatzContent(); }
-// Liest je nach Umschalter Netto oder Brutto aus einem RPC-Objekt — an einer Stelle gebündelt,
-// damit KPI, Chart, Filialen, Gruppen, Produkte und Wochentage immer densel­ben Wert zeigen.
-function uVal(o,suffix){ suffix=suffix||''; return Number(o[umsatzState.mode+suffix])||0; }
-function umsatzModeLabel(){ return umsatzState.mode==='brutto'?'Brutto':'Netto'; }
-function umsatzTogglePanel(p){ umsatzOpenPanel=umsatzOpenPanel===p?null:p; renderUmsatzContent(); }
-function umsatzSetProductSort(s){ umsatzProductSort=s; renderUmsatzContent(); }
+// Kein Live-API-Zugriff — bewusste Entscheidung (siehe Absprache), einfacher & sicherer.
+let umsatzPeriod='month'; // 'week' | 'month' | 'all'
 
 async function renderUmsatz(){
   const el=document.getElementById('v-umsatz');
-  if(currentStore?.id!=='zentrale'){
-    el.innerHTML=backToHomeHtml()+'<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Dieser Bereich ist der Organisation vorbehalten.</div>';
-    translateEl(el); return;
-  }
-  umsatzLoadState();
-  el.innerHTML=backToHomeHtml()+pageHeaderHtml('💶','Umsatz','Netto aus dem Odoo-Export',UMSATZ_PURPLE)+'<div id="umsatz-content"><div style="text-align:center;color:var(--muted);padding:2rem;">Wird geladen…</div></div>';
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('💶','Umsatz','Aus wöchentlichem Odoo-Export — Netto','#7B3FE4')+`<div id="umsatz-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
-  const st=await api('stores?select=id,name').catch(()=>[]);
-  umsatzStoreMap=Object.fromEntries((st||[]).map(s=>[s.id,s.name]));
-  umsatzMeta=await api('rpc/sales_meta',{method:'POST',body:'{}'}).catch(()=>null);
   await renderUmsatzContent();
 }
 
 async function renderUmsatzContent(){
   const target=document.getElementById('umsatz-content');
-  if(!target) return;
-  const r=umsatzRange();
-  // Angefangene Zeiträume gegen volle Vergleichszeiträume zu stellen erzeugt Schein-Einbrüche
-  // (z.B. "Letzte Woche" mit 2 hochgeladenen von 5 Tagen gegen eine volle Vorwoche = -56%).
-  // Deshalb: Zeitraum hart auf den Datenstand kürzen und den Vergleich AUS dem gekürzten
-  // Zeitraum ableiten, damit beide Seiten gleich lang sind. Wird sichtbar ausgewiesen.
-  let cap=null;
-  if(umsatzMeta&&umsatzMeta.max_date&&r.from&&r.to&&r.to>umsatzMeta.max_date&&r.from<=umsatzMeta.max_date){
-    cap={orig:r.to,fehlend:uDayCount(uAddDays(umsatzMeta.max_date,1),r.to)};
-    r.to=umsatzMeta.max_date;
-  }
-  const c=umsatzCmpRange(r);
+  const latest=await api('sales_data?select=imported_at&order=imported_at.desc&limit=1').catch(()=>[]);
+  const lastImport=latest?.[0]?.imported_at?new Date(latest[0].imported_at).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null;
 
-  let head=umsatzDatenstandHtml()+umsatzPeriodHtml(r,c,cap)+umsatzFilterHtml();
-  if(!r.from||!r.to){
-    target.innerHTML=head+'<div class="card" style="padding:1.5rem;text-align:center;color:var(--muted);font-size:13px;">Bitte Start- und Enddatum wählen.</div>';
-    translateEl(target); return;
-  }
-  target.innerHTML=head+'<div style="text-align:center;color:var(--muted);padding:2rem;font-size:13px;">Wird berechnet…</div>';
+  let html=`<div class="card" style="padding:14px;margin-bottom:12px;">
+    <div style="font-size:12px;font-weight:600;margin-bottom:2px;">📤 Neuen Export hochladen</div>
+    <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">${lastImport?`Zuletzt aktualisiert: ${lastImport}`:'Noch keine Daten importiert'}</div>
+    <input type="file" id="umsatz-file-input" accept=".xlsx" style="display:none;" onchange="handleUmsatzUpload(this)">
+    <button onclick="document.getElementById('umsatz-file-input').click()" id="umsatz-upload-btn" style="width:100%;padding:11px;background:#7B3FE4;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">📊 Odoo-Export (.xlsx) auswählen</button>
+  </div>`;
 
-  const days=uDayCount(r.from,r.to);
-  const bucket=umsatzState.bucket!=='auto'?umsatzState.bucket:(days<=31?'day':(days<=182?'week':'month'));
-  try{
-    umsatzData=await api('rpc/sales_report',{method:'POST',body:JSON.stringify({
-      p_from:r.from,p_to:r.to,p_cmp_from:c.from,p_cmp_to:c.to,
-      p_stores:umsatzState.stores.length?umsatzState.stores:null,
-      p_groups:umsatzState.groups.length?umsatzState.groups:null,
-      p_products:umsatzState.products.length?umsatzState.products:null,
-      p_bucket:bucket
-    })});
-  }catch(e){
-    console.error(e);
-    target.innerHTML=head+'<div class="card" style="padding:1.5rem;text-align:center;color:#DC2626;font-size:12.5px;">Auswertung fehlgeschlagen. Bitte nochmal versuchen.</div>';
-    translateEl(target); return;
+  const rows=await api('sales_data?select=*').catch(()=>[]);
+  if(!rows?.length){
+    html+=`<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Noch keine Umsatzdaten — Export oben hochladen.</div>`;
+    target.innerHTML=html;
+    translateEl(target);
+    return;
   }
 
-  const d=umsatzData||{};
-  let html=head;
-  if(!d.kpi||!Number(d.kpi.zeilen)){
-    html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Keine Verkäufe im gewählten Zeitraum.'+umsatzLeerHinweis(r)+'</div>';
-    target.innerHTML=html; translateEl(target); return;
-  }
-  html+=umsatzModeSwitchHtml();
-  html+=umsatzKpiHtml(d);
-  html+=umsatzChartHtml(d,bucket,r);
-  html+=umsatzStoreHtml(d);
-  html+=umsatzGroupHtml(d);
-  html+=umsatzProductHtml(d);
-  html+=umsatzWeekdayHtml(d);
-  html+=umsatzUploadHtml();
-  html+='<div style="font-size:10px;color:var(--muted);text-align:center;padding:14px 0 24px;">'+uNum(d.kpi.tage)+' Verkaufstage · '+uNum(d.kpi.zeilen)+' Datenzeilen ausgewertet</div>';
+  const today=new Date();
+  const weekAgo=new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
+  const monthAgo=new Date(today); monthAgo.setDate(monthAgo.getDate()-30);
+  const cutoff=umsatzPeriod==='week'?weekAgo:(umsatzPeriod==='month'?monthAgo:null);
+  const filtered=cutoff?rows.filter(r=>new Date(r.sale_date)>=cutoff):rows;
+
+  html+=`<div style="display:flex;gap:6px;margin-bottom:12px;">
+    ${['week','month','all'].map(p=>`<button onclick="umsatzPeriod='${p}';renderUmsatzContent()" style="flex:1;padding:8px;border-radius:9px;border:${umsatzPeriod===p?'2px solid #7B3FE4':'1.5px solid var(--border)'};background:${umsatzPeriod===p?'#7B3FE4':'#fff'};color:${umsatzPeriod===p?'#fff':'var(--sub)'};font-size:12px;font-weight:600;cursor:pointer;">${p==='week'?'7 Tage':(p==='month'?'30 Tage':'Alles')}</button>`).join('')}
+  </div>`;
+
+  const totalNetto=filtered.reduce((a,r)=>a+(Number(r.net_amount)||0),0);
+  const totalMenge=filtered.reduce((a,r)=>a+(Number(r.quantity)||0),0);
+  const days=new Set(filtered.map(r=>r.sale_date)).size;
+
+  html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+    <div class="card" style="padding:12px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#7B3FE4;">${totalNetto.toLocaleString('de-AT',{maximumFractionDigits:0})} €</div>
+      <div style="font-size:10px;color:var(--muted);">Umsatz (Netto)</div>
+    </div>
+    <div class="card" style="padding:12px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#1a1a18;">${totalMenge.toLocaleString('de-AT',{maximumFractionDigits:0})}</div>
+      <div style="font-size:10px;color:var(--muted);">Portionen verkauft</div>
+    </div>
+  </div>`;
+
+  // Filial-Vergleich
+  const byStore={};
+  filtered.forEach(r=>{ byStore[r.store_id]=(byStore[r.store_id]||0)+(Number(r.net_amount)||0); });
+  const storeNames=await api('stores?select=id,name').catch(()=>[]);
+  const storeMap=Object.fromEntries((storeNames||[]).map(s=>[s.id,s.name]));
+  const maxStoreVal=Math.max(...Object.values(byStore),1);
+  html+=`<div class="section-lbl">🏪 Filial-Vergleich</div><div class="card" style="padding:12px;">`;
+  Object.entries(byStore).sort((a,b)=>b[1]-a[1]).forEach(([sid,val])=>{
+    const pct=(val/maxStoreVal*100).toFixed(0);
+    html+=`<div style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px;"><span data-no-translate>${storeMap[sid]||sid}</span><span style="font-weight:700;">${val.toLocaleString('de-AT',{maximumFractionDigits:0})} €</span></div>
+      <div style="background:var(--surface-1);border-radius:4px;height:7px;overflow:hidden;"><div style="width:${pct}%;background:#7B3FE4;height:100%;"></div></div>
+    </div>`;
+  });
+  html+=`</div>`;
+
+  // Bestseller nach Umsatz
+  const byProduct={};
+  filtered.forEach(r=>{
+    if(!byProduct[r.product_name]) byProduct[r.product_name]={menge:0,netto:0};
+    byProduct[r.product_name].menge+=Number(r.quantity)||0;
+    byProduct[r.product_name].netto+=Number(r.net_amount)||0;
+  });
+  const topByRevenue=Object.entries(byProduct).sort((a,b)=>b[1].netto-a[1].netto).slice(0,10);
+  const topByQty=Object.entries(byProduct).sort((a,b)=>b[1].menge-a[1].menge).slice(0,10);
+
+  html+=`<div class="section-lbl" style="margin-top:14px;">🏆 Bestseller nach Umsatz</div><div class="card" style="overflow:hidden;">`;
+  topByRevenue.forEach(([name,d],i)=>{
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;${i<topByRevenue.length-1?'border-bottom:0.5px solid var(--border);':''}">
+      <div style="font-size:12px;" data-no-translate>${i+1}. ${name}</div>
+      <div style="font-size:12px;font-weight:700;color:#7B3FE4;white-space:nowrap;">${d.netto.toLocaleString('de-AT',{maximumFractionDigits:0})} €</div>
+    </div>`;
+  });
+  html+=`</div>`;
+
+  html+=`<div class="section-lbl" style="margin-top:14px;">📦 Meistverkauft (Menge)</div><div class="card" style="overflow:hidden;">`;
+  topByQty.forEach(([name,d],i)=>{
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;${i<topByQty.length-1?'border-bottom:0.5px solid var(--border);':''}">
+      <div style="font-size:12px;" data-no-translate>${i+1}. ${name}</div>
+      <div style="font-size:12px;font-weight:700;white-space:nowrap;">${formatQty(d.menge)} Stk</div>
+    </div>`;
+  });
+  html+=`</div>`;
+
+  html+=`<div style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0;">${days} Verkaufstage im gewählten Zeitraum · ${filtered.length} Zeilen</div>`;
+
   target.innerHTML=html;
   translateEl(target);
 }
 
-function umsatzLeerHinweis(r){
-  if(!umsatzMeta?.max_date) return '';
-  if(r.from>umsatzMeta.max_date) return '<div style="margin-top:8px;font-size:11.5px;">Die Daten reichen aktuell nur bis '+uNiceDate(umsatzMeta.max_date)+'.</div>';
-  const d=uParse(r.from).getDay();
-  if(d===0||d===6) return '<div style="margin-top:8px;font-size:11.5px;">Der gewählte Tag ist ein Wochenende — da wird nicht verkauft.</div>';
-  return '';
-}
-
-// Datenstand: der Export kommt wöchentlich per Hand, deshalb ist "Heute" fast immer leer.
-// Ohne diesen Hinweis wirkt das wie ein Umsatzeinbruch statt wie fehlende Daten.
-function umsatzDatenstandHtml(){
-  if(!umsatzMeta?.max_date) return '';
-  const alter=uDayCount(umsatzMeta.max_date,uFmt(new Date()))-1;
-  const warn=alter>8;
-  const bg=warn?'#FEF3C7':'#F5F5F3', col=warn?'#92400E':'var(--sub)';
-  let txt='Daten aktuell bis '+uNiceDate(umsatzMeta.max_date);
-  if(warn) txt+=' — das ist '+alter+' Tage her. Neuen Export hochladen (unten).';
-  return '<div style="background:'+bg+';border-radius:10px;padding:8px 11px;margin-bottom:10px;font-size:11.5px;color:'+col+';display:flex;gap:6px;align-items:center;"><span>'+(warn?'⚠️':'🕓')+'</span><span>'+txt+'</span></div>';
-}
-
-
-function umsatzModeSwitchHtml(){
-  let h='<div style="display:flex;gap:5px;margin-bottom:10px;">';
-  [['netto','Netto'],['brutto','Brutto (inkl. USt)']].forEach(m=>{
-    const on=umsatzState.mode===m[0];
-    h+='<button onclick="umsatzSetMode(\''+m[0]+'\')" style="flex:1;padding:8px 4px;border-radius:9px;border:1.5px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?UMSATZ_PURPLE:'#fff')+';color:'+(on?'#fff':'var(--sub)')+';font-size:12px;font-weight:700;cursor:pointer;">'+m[1]+'</button>';
-  });
-  h+='</div>';
-  return h;
-}
-function umsatzPeriodHtml(r,c,cap){
-  let h='<div class="card" style="padding:11px;margin-bottom:10px;">';
-  h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:7px;">Zeitraum</div>';
-  h+='<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:5px;-webkit-overflow-scrolling:touch;">';
-  UMSATZ_PRESETS.forEach(p=>{
-    const on=umsatzState.preset===p.id;
-    h+='<button onclick="umsatzSetPreset(\''+p.id+'\')" style="flex:0 0 auto;padding:6px 11px;border-radius:20px;border:1.5px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?UMSATZ_PURPLE:'#fff')+';color:'+(on?'#fff':'var(--sub)')+';font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;">'+p.label+'</button>';
-  });
-  h+='</div>';
-  if(umsatzState.preset==='custom'){
-    h+='<button onclick="umsatzOpenCal(\'period\')" style="width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1.5px solid '+(umsatzCalMode==='period'?UMSATZ_PURPLE:'var(--border)')+';background:'+(umsatzCalMode==='period'?'#F3ECFD':'#fff')+';color:'+UMSATZ_PURPLE+';font-size:12px;font-weight:600;cursor:pointer;">📅 '+(umsatzState.from&&umsatzState.to?uNiceDate(umsatzState.from)+' – '+uNiceDate(umsatzState.to):'Zeitraum im Kalender markieren')+'</button>';
-    if(umsatzCalMode==='period') h+=umsatzCalHtml();
-  }
-  h+='<div style="font-size:12px;font-weight:700;color:'+UMSATZ_PURPLE+';margin-top:8px;">'+uNiceDate(r.from)+' – '+uNiceDate(r.to)+'</div>';
-  if(cap){
-    h+='<div style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:7px 10px;margin-top:7px;font-size:11px;line-height:1.45;">'
-      +'✂️ Gekürzt auf den Datenstand — gewählt war bis '+uNiceDate(cap.orig)+'. Für die fehlenden Tage gibt es noch keinen Export, deshalb zählen sie nicht mit. Der Vergleichszeitraum ist gleich lang.</div>';
-  }
-
-  h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin:11px 0 6px;">Vergleich mit</div>';
-  h+='<div style="display:flex;gap:5px;">';
-  UMSATZ_CMP.forEach(p=>{
-    const on=umsatzState.cmp===p.id;
-    h+='<button onclick="umsatzSetCmp(\''+p.id+'\')" style="flex:1;padding:6px 4px;border-radius:8px;border:1.5px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?'#F3ECFD':'#fff')+';color:'+(on?UMSATZ_PURPLE:'var(--sub)')+';font-size:11px;font-weight:600;cursor:pointer;">'+p.label+'</button>';
-  });
-  h+='</div>';
-  if(umsatzState.cmp==='custom'){
-    h+='<button onclick="umsatzOpenCal(\'cmp\')" style="width:100%;margin-top:7px;padding:9px;border-radius:9px;border:1.5px solid '+(umsatzCalMode==='cmp'?UMSATZ_PURPLE:'var(--border)')+';background:'+(umsatzCalMode==='cmp'?'#F3ECFD':'#fff')+';color:'+UMSATZ_PURPLE+';font-size:12px;font-weight:600;cursor:pointer;">📅 '+(umsatzState.cmpFrom&&umsatzState.cmpTo?uNiceDate(umsatzState.cmpFrom)+' – '+uNiceDate(umsatzState.cmpTo):'Vergleichszeitraum markieren')+'</button>';
-    if(umsatzCalMode==='cmp') h+=umsatzCalHtml();
-  }
-  if(c.from&&c.to) h+='<div style="font-size:11px;color:var(--muted);margin-top:6px;">Vergleich: '+uNiceDate(c.from)+' – '+uNiceDate(c.to)+'</div>';
-  h+='</div>';
-  return h;
-}
-
-function umsatzFilterHtml(){
-  const chips=[];
-  umsatzState.stores.forEach(s=>chips.push({kind:'stores',val:s,label:umsatzStoreMap[s]||s}));
-  umsatzState.groups.forEach(g=>chips.push({kind:'groups',val:g,label:g}));
-  umsatzState.products.forEach(p=>chips.push({kind:'products',val:p,label:p}));
-
-  let h='<div class="card" style="padding:11px;margin-bottom:10px;">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">';
-  h+='<div style="font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Filter</div>';
-  if(chips.length||umsatzState.preset!=='monat'||umsatzState.cmp!=='prev') h+='<button onclick="umsatzReset()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;text-decoration:underline;">Alles zurücksetzen</button>';
-  h+='</div>';
-
-  const btn=(id,label,count)=>'<button onclick="umsatzTogglePanel(\''+id+'\')" style="flex:1;padding:7px 4px;border-radius:8px;border:1.5px solid '+(count?UMSATZ_PURPLE:'var(--border)')+';background:'+(umsatzOpenPanel===id?'#F3ECFD':'#fff')+';color:'+(count?UMSATZ_PURPLE:'var(--sub)')+';font-size:11px;font-weight:600;cursor:pointer;">'+label+(count?' ('+count+')':'')+'</button>';
-  h+='<div style="display:flex;gap:5px;">'+btn('stores','Filiale',umsatzState.stores.length)+btn('groups','Gruppe',umsatzState.groups.length)+btn('products','Produkt',umsatzState.products.length)+'</div>';
-
-  if(umsatzOpenPanel) h+=umsatzPanelHtml(umsatzOpenPanel);
-
-  if(chips.length){
-    h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;">';
-    chips.forEach(ch=>{
-      h+='<span onclick="umsatzToggleFilter(\''+ch.kind+'\',\''+String(ch.val).replace(/'/g,"\\'")+'\')" style="display:inline-flex;align-items:center;gap:5px;background:#F3ECFD;color:'+UMSATZ_PURPLE+';border-radius:14px;padding:4px 9px;font-size:11px;font-weight:600;cursor:pointer;" data-no-translate>'+ch.label+' ×</span>';
-    });
-    h+='</div>';
-  }
-  h+='</div>';
-  return h;
-}
-
-function umsatzPanelHtml(panel){
-  let items=[];
-  if(panel==='stores') items=Object.keys(umsatzStoreMap).sort().map(id=>({val:id,label:umsatzStoreMap[id]||id}));
-  else if(panel==='groups') items=((umsatzMeta&&umsatzMeta.groups)||[]).map(g=>({val:g,label:g}));
-  else {
-    let prods=(umsatzMeta&&umsatzMeta.products)||[];
-    if(umsatzState.groups.length) prods=prods.filter(p=>umsatzState.groups.indexOf(p.product_group)>=0);
-    items=prods.map(p=>({val:p.product_name,label:p.product_name}));
-  }
-  const sel=umsatzState[panel];
-  let h='<div style="margin-top:8px;max-height:210px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">';
-  if(!items.length) h+='<div style="padding:12px;text-align:center;color:var(--muted);font-size:11.5px;">Nichts verfügbar.</div>';
-  items.forEach((it,i)=>{
-    const on=sel.indexOf(it.val)>=0;
-    h+='<div onclick="umsatzToggleFilter(\''+panel+'\',\''+String(it.val).replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;'+(i<items.length-1?'border-bottom:0.5px solid var(--border);':'')+(on?'background:#FAF7FE;':'')+'">'
-      +'<div style="width:16px;height:16px;border-radius:4px;flex-shrink:0;border:1.5px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?UMSATZ_PURPLE:'#fff')+';display:flex;align-items:center;justify-content:center;">'+(on?'<svg width="10" height="10" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div>'
-      +'<span style="font-size:12px;" data-no-translate>'+it.label+'</span></div>';
-  });
-  h+='</div>';
-  return h;
-}
-
-// Delta-Baustein: Prozentveränderung gegenüber dem Vergleichszeitraum, farbig.
-function umsatzDelta(cur,prev,size){
-  const c=Number(cur)||0, p=Number(prev)||0;
-  if(!p) return '<span style="font-size:'+(size||10)+'px;color:var(--muted);">–</span>';
-  const pct=((c-p)/p)*100;
-  const up=pct>=0, col=up?'#0F6E56':'#DC2626';
-  return '<span style="font-size:'+(size||10)+'px;color:'+col+';font-weight:700;">'+(up?'▲':'▼')+' '+Math.abs(pct).toFixed(1).replace('.',',')+' %</span>';
-}
-
-function umsatzKpiHtml(d){
-  const k=d.kpi, cm=d.cmp;
-  const umsatz=uVal(k), umsatzCmp=cm?uVal(cm):0;
-  const proTag=k.tage?umsatz/k.tage:0;
-  const proTagCmp=(cm&&cm.tage)?umsatzCmp/cm.tage:0;
-  const card=(val,label,delta,hint)=>'<div class="card" style="padding:11px;">'
-    +'<div style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;">'+label+'</div>'
-    +'<div style="font-size:19px;font-weight:800;color:#1a1a18;margin:2px 0 3px;">'+val+'</div>'
-    +(delta||'')+(hint?'<div style="font-size:9.5px;color:var(--muted);margin-top:2px;">'+hint+'</div>':'')+'</div>';
-  let h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px;">';
-  h+=card(uEuro(umsatz),'Umsatz '+umsatzModeLabel().toLowerCase(),cm?umsatzDelta(umsatz,umsatzCmp,11):'',cm?uEuro(umsatzCmp)+' davor':'');
-  h+=card(uNum(k.menge),'Portionen',cm?umsatzDelta(k.menge,cm.menge,11):'',cm?uNum(cm.menge)+' davor':'');
-  h+=card(uEuro(proTag),'Ø pro Verkaufstag',cm?umsatzDelta(proTag,proTagCmp,11):'',k.tage+' Tage');
-  h+=card(uNum(k.tage),'Verkaufstage','',cm?uNum(cm.tage)+' im Vergleich':'');
-  h+='</div>';
-  // Der Ø-pro-Tag-Wert ist der ehrlichere Vergleich, weil Monate 15–23 Verkaufstage haben.
-  if(cm&&cm.tage&&cm.tage!==k.tage){
-    h+='<div style="font-size:10.5px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:7px 10px;margin:-4px 0 12px;">ℹ️ Die Zeiträume haben unterschiedlich viele Verkaufstage ('+k.tage+' vs. '+cm.tage+'). Für den fairen Vergleich zählt „Ø pro Verkaufstag".</div>';
-  }
-  return h;
-}
-
-// ---- KALENDER: Zeitraum durch Antippen markieren ----
-// Zwei Modi: 'period' (Hauptzeitraum) und 'cmp' (Vergleichszeitraum).
-// Erster Tipp setzt den Start, zweiter das Ende. Tippt man vor den Start, wird neu begonnen.
-// Wochenenden sind ausgegraut und nicht wählbar — es wird nur Mo–Fr verkauft.
-let umsatzCalMonth=null, umsatzCalMode=null, umsatzCalPending=null;
-
-function umsatzOpenCal(mode){
-  if(umsatzCalMode===mode){ umsatzCalMode=null; renderUmsatzContent(); return; }
-  umsatzCalMode=mode; umsatzCalPending=null;
-  const ref=(mode==='cmp'?umsatzState.cmpFrom:umsatzState.from)||(umsatzMeta&&umsatzMeta.max_date)||uFmt(new Date());
-  const d=uParse(ref); umsatzCalMonth=uFmt(new Date(d.getFullYear(),d.getMonth(),1));
-  renderUmsatzContent();
-}
-function umsatzCalShift(n){
-  const d=uParse(umsatzCalMonth); umsatzCalMonth=uFmt(new Date(d.getFullYear(),d.getMonth()+n,1));
-  renderUmsatzContent();
-}
-function umsatzCalPick(day){
-  const isCmp=umsatzCalMode==='cmp';
-  if(!umsatzCalPending||day<umsatzCalPending){
-    umsatzCalPending=day;
-    if(isCmp){ umsatzState.cmpFrom=day; umsatzState.cmpTo=day; }
-    else { umsatzState.preset='custom'; umsatzState.from=day; umsatzState.to=day; }
-  }else{
-    if(isCmp) umsatzState.cmpTo=day; else umsatzState.to=day;
-    umsatzCalPending=null; umsatzCalMode=null; // Bereich vollständig — Kalender schließt sich
-  }
-  umsatzSaveState(); renderUmsatzContent();
-}
-
-const UMSATZ_MONATE=['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-
-function umsatzCalHtml(){
-  if(!umsatzCalMode) return '';
-  const isCmp=umsatzCalMode==='cmp';
-  const selFrom=isCmp?umsatzState.cmpFrom:umsatzState.from;
-  const selTo=isCmp?umsatzState.cmpTo:umsatzState.to;
-  const maxD=(umsatzMeta&&umsatzMeta.max_date)||null;
-  const minD=(umsatzMeta&&umsatzMeta.min_date)||null;
-  const first=uParse(umsatzCalMonth);
-  const y=first.getFullYear(), m=first.getMonth();
-  const lead=(first.getDay()+6)%7;              // Kalender startet am Montag
-  const daysInMonth=new Date(y,m+1,0).getDate();
-
-  let h='<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px;background:#fff;">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-    +'<button onclick="umsatzCalShift(-1)" style="width:28px;height:28px;border:1px solid var(--border);background:#fff;border-radius:7px;font-size:14px;cursor:pointer;line-height:1;">‹</button>'
-    +'<div style="font-size:12.5px;font-weight:700;">'+UMSATZ_MONATE[m]+' '+y+'</div>'
-    +'<button onclick="umsatzCalShift(1)" style="width:28px;height:28px;border:1px solid var(--border);background:#fff;border-radius:7px;font-size:14px;cursor:pointer;line-height:1;">›</button></div>';
-  h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px;">';
-  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(d=>{ h+='<div style="text-align:center;font-size:9.5px;color:var(--muted);font-weight:600;">'+d+'</div>'; });
-  h+='</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
-  for(let i=0;i<lead;i++) h+='<div></div>';
-  for(let day=1;day<=daysInMonth;day++){
-    const ds=uFmt(new Date(y,m,day));
-    const dow=new Date(y,m,day).getDay();
-    const weekend=(dow===0||dow===6);
-    const outside=(maxD&&ds>maxD)||(minD&&ds<minD);
-    const disabled=weekend||outside;
-    const isStart=ds===selFrom, isEnd=ds===selTo;
-    const inRange=selFrom&&selTo&&ds>selFrom&&ds<selTo;
-    let bg='transparent', col='var(--sub)', weight='400';
-    if(disabled){ col='#D4D4D0'; }
-    if(inRange){ bg='#F3ECFD'; col=UMSATZ_PURPLE; }
-    if(isStart||isEnd){ bg=UMSATZ_PURPLE; col='#fff'; weight='700'; }
-    h+='<div '+(disabled?'':'onclick="umsatzCalPick(\''+ds+'\')" ')+'style="text-align:center;padding:6px 0;font-size:11.5px;border-radius:6px;background:'+bg+';color:'+col+';font-weight:'+weight+';cursor:'+(disabled?'default':'pointer')+';">'+day+'</div>';
-  }
-  h+='</div>';
-  const hint=umsatzCalPending?'Jetzt das Enddatum antippen':'Startdatum antippen, danach das Enddatum';
-  h+='<div style="font-size:10.5px;color:var(--muted);margin-top:8px;text-align:center;">'+hint+'</div>';
-  h+='<div style="font-size:9.5px;color:var(--muted);margin-top:3px;text-align:center;">Wochenenden sind nicht wählbar — es wird nur Mo–Fr verkauft.</div>';
-  h+='</div>';
-  return h;
-}
-
-// ---- LINIENDIAGRAMM ----
-// Fläche + Linie für den aktuellen Zeitraum, gestrichelte Linie für den Vergleich.
-// Punkte nur bei wenigen Werten, sonst wird es auf dem Handy unlesbar.
-// Wie viele Punkte ergibt eine Granularität im gewählten Zeitraum? Weniger als zwei
-// ergeben keine Linie — dann wird der Umschalter deaktiviert statt einen einsamen Punkt zu zeigen.
-function umsatzBucketCount(r,b){
-  if(!r||!r.from||!r.to) return 0;
-  if(b==='day') return uDayCount(r.from,r.to);
-  if(b==='month'){
-    const a=uParse(r.from), z=uParse(r.to);
-    return (z.getFullYear()-a.getFullYear())*12+(z.getMonth()-a.getMonth())+1;
-  }
-  const a=uParse(r.from), z=uParse(r.to);
-  const moA=uAddDays(r.from,-((a.getDay()+6)%7)), moZ=uAddDays(r.to,-((z.getDay()+6)%7));
-  return Math.round((uParse(moZ)-uParse(moA))/(7*86400000))+1;
-}
-
-function umsatzBucketSwitchHtml(r){
-  let h='<div style="display:flex;gap:4px;margin-bottom:8px;">';
-  [['auto','Auto'],['day','Tag'],['week','Woche'],['month','Monat']].forEach(b=>{
-    const on=umsatzState.bucket===b[0];
-    const cnt=b[0]==='auto'?99:umsatzBucketCount(r,b[0]);
-    const off=cnt<2;
-    const bd=off?'var(--border)':(on?UMSATZ_PURPLE:'var(--border)');
-    const bg=off?'#F7F7F5':(on?'#F3ECFD':'#fff');
-    const cl=off?'#C4C4BE':(on?UMSATZ_PURPLE:'var(--muted)');
-    h+='<button '+(off?'':'onclick="umsatzSetBucket(\''+b[0]+'\')" ')+'style="flex:1;padding:4px;border-radius:6px;border:1px solid '+bd+';background:'+bg+';color:'+cl+';font-size:10.5px;font-weight:600;cursor:'+(off?'default':'pointer')+';">'+b[1]+'</button>';
-  });
-  h+='</div>';
-  return h;
-}
-
-function umsatzChartHtml(d,bucket,r){
-  const tr=d.trend||[];
-  if(!tr.length) return '';
-  if(tr.length<2){
-    const nice={day:'Tag',week:'Woche',month:'Monat'}[bucket]||bucket;
-    return '<div class="section-lbl">📈 Verlauf</div><div class="card" style="padding:11px;">'
-      +umsatzBucketSwitchHtml(r)
-      +'<div style="padding:22px 12px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5;">'
-      +'Der gewählte Zeitraum ergibt in der Ansicht „'+nice+'" nur einen einzigen Wert ('+uEuro(tr[0].netto)+') — für einen Verlauf braucht es mindestens zwei.'
-      +'<div style="margin-top:6px;font-size:11px;">Wechsle auf eine feinere Ansicht oder wähle einen längeren Zeitraum.</div></div></div>';
-  }
-  const cmp=d.trend_cmp||[];
-  const W=320, H=130, L=6, R=6, T=8, B=20;
-  const vals=tr.map(t=>uVal(t));
-  const cvals=cmp.map(t=>uVal(t));
-  const max=Math.max.apply(null,vals.concat(cvals).concat([1]))*1.08;
-  const n=tr.length;
-  const xAt=i=>n===1?(W/2):(L+i*((W-L-R)/(n-1)));
-  const yAt=v=>T+(1-(v/max))*(H-T-B);
-
-  let grid='';
-  [0.5,1].forEach(f=>{ const yy=yAt(max*f); grid+='<line x1="'+L+'" y1="'+yy.toFixed(1)+'" x2="'+(W-R)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="2 3"/>'; });
-
-  const pts=vals.map((v,i)=>xAt(i).toFixed(1)+','+yAt(v).toFixed(1));
-  let area='';
-  if(n>1) area='<polygon points="'+xAt(0).toFixed(1)+','+(H-B)+' '+pts.join(' ')+' '+xAt(n-1).toFixed(1)+','+(H-B)+'" fill="'+UMSATZ_PURPLE+'" opacity="0.10"/>';
-  const line=n>1?'<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+UMSATZ_PURPLE+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>':'';
-
-  let cline='';
-  if(cvals.length>1){
-    const cp=cvals.slice(0,n).map((v,i)=>xAt(i).toFixed(1)+','+yAt(v).toFixed(1));
-    cline='<polyline points="'+cp.join(' ')+'" fill="none" stroke="#B9A2E8" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round"/>';
-  }
-
-  let dots='';
-  if(n<=20) vals.forEach((v,i)=>{
-    dots+='<circle cx="'+xAt(i).toFixed(1)+'" cy="'+yAt(v).toFixed(1)+'" r="'+(n<=10?2.8:2)+'" fill="#fff" stroke="'+UMSATZ_PURPLE+'" stroke-width="1.6"><title>'+umsatzBucketLabel(tr[i].bucket,bucket)+': '+uEuro(v)+'</title></circle>';
-  });
-
-  // Höchst- und Tiefstwert beschriften — die zwei Punkte, die man wirklich sucht
-  let marks='';
-  if(n>1){
-    const hi=vals.indexOf(Math.max.apply(null,vals)), lo=vals.indexOf(Math.min.apply(null,vals));
-    [[hi,-6],[lo,12]].forEach(p=>{
-      const i=p[0]; if(i<0) return;
-      let anchor='middle', x=xAt(i);
-      if(i===0) anchor='start'; else if(i===n-1) anchor='end';
-      marks+='<text x="'+x.toFixed(1)+'" y="'+(yAt(vals[i])+p[1]).toFixed(1)+'" text-anchor="'+anchor+'" font-size="8.5" font-weight="700" fill="'+UMSATZ_PURPLE+'">'+uEuro(vals[i])+'</text>';
-    });
-  }
-
-  let axis='';
-  const labIdx=n<=1?[0]:(n<=6?vals.map((v,i)=>i):[0,Math.floor((n-1)/2),n-1]);
-  labIdx.forEach(i=>{
-    let anchor='middle';
-    if(i===0) anchor='start'; else if(i===n-1) anchor='end';
-    axis+='<text x="'+xAt(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="'+anchor+'" font-size="8.5" fill="#9a9a95">'+umsatzBucketLabel(tr[i].bucket,bucket)+'</text>';
-  });
-
-  let h='<div class="section-lbl">📈 Verlauf</div><div class="card" style="padding:11px;">';
-  h+=umsatzBucketSwitchHtml(r);
-  h+='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;overflow:visible;">'+grid+area+cline+line+dots+marks+axis+'</svg>';
-  if(cvals.length>1) h+='<div style="display:flex;gap:12px;font-size:10px;color:var(--muted);margin-top:6px;"><span><span style="display:inline-block;width:14px;border-top:2px solid '+UMSATZ_PURPLE+';vertical-align:middle;"></span> Zeitraum</span><span><span style="display:inline-block;width:14px;border-top:1.6px dashed #B9A2E8;vertical-align:middle;"></span> Vergleich</span></div>';
-  h+='</div>';
-  return h;
-}
-
-function umsatzBucketLabel(b,bucket){
-  if(!b) return '';
-  const p=String(b).split('-');
-  if(bucket==='month') return p[2]?p[1]+'/'+p[0].slice(2):b;
-  return p[2]+'.'+p[1]+'.';
-}
-
-function umsatzBarRow(label,val,maxVal,cmpVal,hasCmp,unit){
-  const pct=maxVal?(val/maxVal*100):0;
-  let h='<div style="margin-bottom:9px;">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11.5px;margin-bottom:3px;">';
-  h+='<span data-no-translate style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+label+'</span>';
-  h+='<span style="white-space:nowrap;"><b>'+(unit==='stk'?uNum(val)+' Stk':uEuro(val))+'</b>'+(hasCmp?' '+umsatzDelta(val,cmpVal,10):'')+'</span></div>';
-  h+='<div style="background:var(--surface-1,#F0F0EE);border-radius:4px;height:6px;overflow:hidden;"><div style="width:'+pct.toFixed(0)+'%;background:'+UMSATZ_PURPLE+';height:100%;"></div></div>';
-  h+='</div>';
-  return h;
-}
-
-function umsatzStoreHtml(d){
-  const rows=d.by_store||[];
-  if(rows.length<2) return '';
-  const hasCmp=!!d.cmp;
-  const max=Math.max.apply(null,rows.map(r=>uVal(r)).concat([1]));
-  let h='<div class="section-lbl" style="margin-top:14px;">🏪 Filialen</div><div class="card" style="padding:12px;">';
-  rows.forEach(r=>{ h+=umsatzBarRow(umsatzStoreMap[r.store_id]||r.store_id,uVal(r),max,uVal(r,'_cmp'),hasCmp,'eur'); });
-  h+='</div>';
-  return h;
-}
-
-function umsatzGroupHtml(d){
-  const rows=d.by_group||[];
-  if(rows.length<2) return '';
-  const hasCmp=!!d.cmp;
-  const total=rows.reduce((s,r)=>s+uVal(r),0)||1;
-  let h='<div class="section-lbl" style="margin-top:14px;">🍛 Produktgruppen</div><div class="card" style="overflow:hidden;">';
-  rows.forEach((r,i)=>{
-    const anteil=(uVal(r)/total*100).toFixed(0);
-    h+='<div onclick="umsatzToggleFilter(\'groups\',\''+String(r.product_group).replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;'+(i<rows.length-1?'border-bottom:0.5px solid var(--border);':'')+'">'
-      +'<div><div style="font-size:12.5px;font-weight:600;" data-no-translate>'+r.product_group+'</div><div style="font-size:10px;color:var(--muted);">'+anteil+' % vom Umsatz · '+uNum(r.menge)+' Stk</div></div>'
-      +'<div style="text-align:right;white-space:nowrap;"><div style="font-size:12.5px;font-weight:700;color:'+UMSATZ_PURPLE+';">'+uEuro(uVal(r))+'</div>'+(hasCmp?umsatzDelta(uVal(r),uVal(r,'_cmp'),10):'')+'</div></div>';
-  });
-  h+='</div>';
-  return h;
-}
-
-function umsatzProductHtml(d){
-  let rows=(d.by_product||[]).slice();
-  if(!rows.length) return '';
-  const hasCmp=!!d.cmp;
-  if(umsatzProductSort==='menge') rows.sort((a,b)=>Number(b.menge)-Number(a.menge));
-  else if(umsatzProductSort==='delta'&&hasCmp) rows.sort((a,b)=>{
-    const da=uVal(a,'_cmp')?(uVal(a)-uVal(a,'_cmp'))/uVal(a,'_cmp'):-Infinity;
-    const db=uVal(b,'_cmp')?(uVal(b)-uVal(b,'_cmp'))/uVal(b,'_cmp'):-Infinity;
-    return db-da;
-  });
-  else rows.sort((a,b)=>uVal(b)-uVal(a));
-
-  let h='<div class="section-lbl" style="margin-top:14px;">🏆 Produkte</div>';
-  h+='<div style="display:flex;gap:4px;margin-bottom:7px;">';
-  const sorts=[['netto','Umsatz'],['menge','Menge']];
-  if(hasCmp) sorts.push(['delta','Veränderung']);
-  sorts.forEach(s=>{
-    const on=umsatzProductSort===s[0];
-    h+='<button onclick="umsatzSetProductSort(\''+s[0]+'\')" style="flex:1;padding:5px;border-radius:7px;border:1px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?'#F3ECFD':'#fff')+';color:'+(on?UMSATZ_PURPLE:'var(--muted)')+';font-size:10.5px;font-weight:600;cursor:pointer;">'+s[1]+'</button>';
-  });
-  h+='</div><div class="card" style="overflow:hidden;">';
-  rows.forEach((r,i)=>{
-    h+='<div onclick="umsatzToggleFilter(\'products\',\''+String(r.product_name).replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;'+(i<rows.length-1?'border-bottom:0.5px solid var(--border);':'')+'">'
-      +'<div style="min-width:0;"><div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-no-translate>'+(i+1)+'. '+r.product_name+'</div><div style="font-size:9.5px;color:var(--muted);">'+uNum(r.menge)+' Stk'+(hasCmp&&Number(r.menge_cmp)?' (davor '+uNum(r.menge_cmp)+')':'')+'</div></div>'
-      +'<div style="text-align:right;white-space:nowrap;"><div style="font-size:12px;font-weight:700;color:'+UMSATZ_PURPLE+';">'+uEuro(uVal(r))+'</div>'+(hasCmp?umsatzDelta(uVal(r),uVal(r,'_cmp'),10):'')+'</div></div>';
-  });
-  h+='</div>';
-  return h;
-}
-
-const UMSATZ_DOW=['','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
-function umsatzWeekdayHtml(d){
-  const rows=d.by_weekday||[];
-  if(rows.length<2) return '';
-  const avg=rows.map(r=>({dow:r.dow,val:r.tage?uVal(r)/Number(r.tage):0,tage:r.tage}));
-  const max=Math.max.apply(null,avg.map(a=>a.val).concat([1]));
-  let h='<div class="section-lbl" style="margin-top:14px;">📅 Wochentage (Ø pro Tag)</div><div class="card" style="padding:12px;">';
-  avg.forEach(a=>{ h+=umsatzBarRow(UMSATZ_DOW[a.dow]||('Tag '+a.dow),a.val,max,0,false,'eur'); });
-  h+='<div style="font-size:10px;color:var(--muted);">Basis: '+rows.reduce((s,r)=>s+Number(r.tage),0)+' Verkaufstage im Zeitraum</div>';
-  h+='</div>';
-  return h;
-}
-
-function umsatzUploadHtml(){
-  const last=umsatzMeta&&umsatzMeta.last_import?new Date(umsatzMeta.last_import).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null;
-  return '<div class="card" style="padding:13px;margin-top:16px;">'
-    +'<div style="font-size:12px;font-weight:600;margin-bottom:2px;">📤 Neuen Export hochladen</div>'
-    +'<div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">'+(last?'Zuletzt importiert: '+last:'Noch keine Daten importiert')+'</div>'
-    +'<input type="file" id="umsatz-file-input" accept=".xlsx" style="display:none;" onchange="handleUmsatzUpload(this)">'
-    +'<button onclick="document.getElementById(\'umsatz-file-input\').click()" id="umsatz-upload-btn" style="width:100%;padding:10px;background:'+UMSATZ_PURPLE+';color:#fff;border:none;border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;">Odoo-Export (.xlsx) auswählen</button>'
-    +'<div id="umsatz-import-preview"></div>'
-    +'</div>';
-}
-
-window.umsatzSetPreset=umsatzSetPreset;
-window.umsatzSetCmp=umsatzSetCmp;
-window.umsatzSetDate=umsatzSetDate;
-window.umsatzSetBucket=umsatzSetBucket;
-window.umsatzSetMode=umsatzSetMode;
-window.umsatzTogglePanel=umsatzTogglePanel;
-window.umsatzToggleFilter=umsatzToggleFilter;
-window.umsatzSetProductSort=umsatzSetProductSort;
-window.umsatzReset=umsatzReset;
-window.umsatzOpenCal=umsatzOpenCal;
-window.umsatzCalShift=umsatzCalShift;
-window.umsatzCalPick=umsatzCalPick;
-
-// ---- IMPORT DES ODOO-EXPORTS ----
-// Aufbau der Datei: Filialen stehen als Spalten nebeneinander (je Filiale ein Block aus
-// mehreren Messwert-Spalten), die Zeilen sind Produkt → darunter die einzelnen Tage.
-// Der Parser liest die Kopfzeilen aus, statt feste Spaltenpositionen anzunehmen — dadurch
-// ist es egal, welche Messwerte in Odoo gewählt wurden und in welcher Reihenfolge die
-// Filialen stehen. Unbekannte Filialen werden gemeldet und NICHT stillschweigend übersprungen.
-let umsatzPendingImport=null;
-
-const UMSATZ_MONATE_KURZ={jan:1,feb:2,mar:3,'mär':3,apr:4,mai:5,jun:6,jul:7,aug:8,sep:9,okt:10,nov:11,dez:12};
-
-function umsatzNormName(s){
-  return String(s||'').toLowerCase()
-    .replace(/ß/g,'ss').replace(/ä/g,'a').replace(/ö/g,'o').replace(/ü/g,'u')
-    .replace(/[^a-z]/g,'');
-}
-
-function umsatzParseDate(v){
-  if(v instanceof Date && !isNaN(v)) return uFmt(v);
-  if(v==null) return null;
-  const s=String(v).trim();
-  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);                       // 2025-05-07 00:00:00
-  if(m) return m[1]+'-'+m[2]+'-'+m[3];
-  m=s.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/);              // 07.05.2025
-  if(m) return m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
-  m=s.match(/^(\d{1,2})\.?\s+([A-Za-zÄÖÜäöüß.]+)\.?\s+(\d{4})$/);  // 07 Mai 2025 / 07 Sept. 2025
-  if(m){
-    const mo=UMSATZ_MONATE_KURZ[m[2].toLowerCase().replace(/\./g,'').slice(0,3)];
-    if(mo) return m[3]+'-'+String(mo).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
-  }
-  return null;
-}
-
-function umsatzNum(v){
-  if(v==null||v==='') return 0;
-  if(typeof v==='number') return v;
-  let s=String(v).trim().replace(/[\s€]/g,'');
-  if(s.indexOf(',')>=0 && s.indexOf('.')>=0) s=s.replace(/\./g,'').replace(',','.');
-  else if(s.indexOf(',')>=0) s=s.replace(',','.');
-  const n=parseFloat(s);
-  return isNaN(n)?0:n;
-}
+// Parst denselben gruppierten Odoo-Pivot-Export (Filiale-Blöcke, Tagesreihen, Produkt-Spaltenpaare
+// Nettobetrag+Menge) wie beim ersten manuellen Import — jetzt clientseitig im Browser mit SheetJS,
+// damit Tini (oder wer auch immer) den wöchentlichen Export einfach direkt hochladen kann.
+const UMSATZ_STORE_MAP={'Ausstellungsstraße':'1020','Börse':'boerse','Kitchen':'kitchen','Laurenzerberg':'lb','Stadtplatz':'3400'};
 
 async function handleUmsatzUpload(inputEl){
-  const file=inputEl.files&&inputEl.files[0];
+  const file=inputEl.files?.[0];
   if(!file) return;
   const btn=document.getElementById('umsatz-upload-btn');
   if(btn){ btn.disabled=true; btn.textContent='Wird gelesen…'; }
   try{
     const buf=await file.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const wb=XLSX.read(buf, {type:'array', cellDates:true});
     const ws=wb.Sheets[wb.SheetNames[0]];
     const range=XLSX.utils.decode_range(ws['!ref']);
-    const cell=(r,c)=>{ const x=ws[XLSX.utils.encode_cell({r,c})]; return x?x.v:null; };
+    const getCell=(r,c)=>{ const cell=ws[XLSX.utils.encode_cell({r,c})]; return cell?cell.v:null; };
 
-    // 1) Kopfzeile mit den Filialnamen suchen (in den ersten Zeilen)
-    const known=Object.keys(umsatzStoreMap).filter(id=>id!=='zentrale')
-      .map(id=>({id, norm:umsatzNormName(umsatzStoreMap[id])}));
-    let headRow=-1, cols=[], unknown=[];
-    for(let r=0;r<=Math.min(8,range.e.r);r++){
-      const found=[], unk=[];
-      for(let c=1;c<=range.e.c;c++){
-        const v=cell(r,c);
-        if(v==null||String(v).trim()==='') continue;
-        const raw=String(v).trim();
-        if(raw.toLowerCase()==='gesamt') continue;          // Summenspalte, keine Filiale
-        const n=umsatzNormName(raw);
-        if(!n) continue;
-        const hit=known.find(k=>k.norm===n||k.norm.indexOf(n)===0||n.indexOf(k.norm)===0);
-        if(hit) found.push({col:c, id:hit.id, raw:raw}); else unk.push(raw);
+    // Produkt-Spaltenpaare aus Zeile 2/3 (0-indiziert: Zeile 1/2) auslesen
+    const productCols={};
+    let c=1; // Spalte B = Index 1
+    while(c<=range.e.c){
+      const name=getCell(1,c);
+      if(name && String(name).trim() && String(name).trim()!=='Gesamt'){
+        const sub1=getCell(2,c), sub2=getCell(2,c+1);
+        if(sub1 && String(sub1).toLowerCase().includes('netto') && sub2 && (String(sub2).toLowerCase().includes('menge')||String(sub2).toLowerCase().includes('geliefert'))){
+          productCols[String(name).trim()]={netto:c, menge:c+1};
+          c+=2; continue;
+        }
       }
-      if(found.length>=2){ headRow=r; cols=found; unknown=unk; break; }
+      c++;
     }
-    if(headRow<0) throw new Error('Keine Filial-Spalten gefunden. Steht in der Kopfzeile die Verkaufsstelle?');
+    if(!Object.keys(productCols).length) throw new Error('Konnte keine Produkt-Spalten erkennen — Format passt nicht zum erwarteten Export.');
 
-    // 2) Messwerte je Filial-Block bestimmen (Netto / Menge)
-    const measRow=headRow+1;
-    cols.forEach((s,i)=>{
-      const endCol=(i+1<cols.length?cols[i+1].col:range.e.c+1);
-      s.netCol=null; s.qtyCol=null; s.grossCol=null;
-      for(let c=s.col;c<endCol;c++){
-        const m=String(cell(measRow,c)||'').toLowerCase();
-        if(s.netCol===null && m.indexOf('netto')>=0) s.netCol=c;
-        if(s.qtyCol===null && (m.indexOf('menge')>=0||m.indexOf('anzahl')>=0||m.indexOf('geliefert')>=0)) s.qtyCol=c;
-        // "Gesamt" ohne "netto" davor ist in diesem Export der Bruttobetrag (Netto × 1,10 USt).
-        if(s.grossCol===null && m.indexOf('gesamt')>=0 && m.indexOf('netto')<0) s.grossCol=c;
+    // Filial-Gruppen (Spalte A, Zeile >=4 / Index >=3) finden
+    const storeRows=[];
+    for(let r=3;r<=range.e.r;r++){
+      const v=getCell(r,0);
+      if(v!=null && !(v instanceof Date)) storeRows.push([r, String(v).trim()]);
+    }
+
+    const records=[];
+    storeRows.forEach(([startRow, storeName], i)=>{
+      const storeId=UMSATZ_STORE_MAP[storeName];
+      if(!storeId) return;
+      const endRow=i+1<storeRows.length?storeRows[i+1][0]:range.e.r+1;
+      for(let r=startRow+1;r<endRow;r++){
+        const dateVal=getCell(r,0);
+        if(!(dateVal instanceof Date)) continue;
+        const dateStr=dateVal.toISOString().split('T')[0];
+        Object.entries(productCols).forEach(([prod,cols])=>{
+          const netto=getCell(r,cols.netto);
+          const menge=getCell(r,cols.menge);
+          if((netto||0)===0 && (menge||0)===0) return;
+          records.push({store_id:storeId, sale_date:dateStr, product_name:prod, quantity:Number(menge)||0, net_amount:Number(netto)||0});
+        });
       }
-      if(s.netCol===null) s.netCol=s.col;   // Rückfall: erste Spalte des Blocks
     });
-    const hasQty=cols.some(s=>s.qtyCol!==null);
-    const hasGross=cols.some(s=>s.grossCol!==null);
 
-    // 3) Zeilen lesen: Produktzeile vs. Datumszeile
-    const records=[]; let product=null; const dateSet={}; let weekend=0;
-    for(let r=measRow+1;r<=range.e.r;r++){
-      const a=cell(r,0);
-      if(a==null||String(a).trim()==='') continue;
-      const ds=umsatzParseDate(a);
-      if(!ds){ 
-        const label=String(a).trim();
-        product=(label.toLowerCase()==='gesamt')?null:label;   // Summenzeile ignorieren
-        continue;
-      }
-      if(!product) continue;
-      const dow=uParse(ds).getDay();
-      if(dow===0||dow===6) weekend++;
-      cols.forEach(s=>{
-        const net=umsatzNum(cell(r,s.netCol));
-        const qty=s.qtyCol!==null?umsatzNum(cell(r,s.qtyCol)):null;
-        const gross=s.grossCol!==null?umsatzNum(cell(r,s.grossCol)):null;
-        if(!net && !qty && !gross) return;
-        records.push({store_id:s.id, sale_date:ds, product_name:product, quantity:qty, net_amount:net, gross_amount:gross});
-        dateSet[ds]=1;
-      });
+    if(!records.length) throw new Error('Keine Datensätze im Export gefunden.');
+
+    if(btn) btn.textContent=`Speichere ${records.length} Zeilen…`;
+    const chunkSize=500;
+    for(let i=0;i<records.length;i+=chunkSize){
+      const chunk=records.slice(i, i+chunkSize);
+      await api('sales_data?on_conflict=store_id,sale_date,product_name',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(chunk)});
+      if(btn) btn.textContent=`Speichere… ${Math.min(i+chunkSize,records.length)}/${records.length}`;
     }
-    if(!records.length) throw new Error('Keine Tageszeilen gefunden. Sind in der Pivot-Ansicht alle Produkte aufgeklappt?');
-
-    const dates=Object.keys(dateSet).sort();
-    const perStore={};
-    records.forEach(x=>{
-      if(!perStore[x.store_id]) perStore[x.store_id]={rows:0,net:0};
-      perStore[x.store_id].rows++; perStore[x.store_id].net+=x.net_amount;
-    });
-    umsatzPendingImport={records, from:dates[0], to:dates[dates.length-1], perStore, unknown, hasQty, hasGross, weekend, tage:dates.length};
-    umsatzRenderPreview();
-  }catch(e){
-    console.error(e);
-    showToast('Import fehlgeschlagen: '+((e&&e.message)||String(e)).slice(0,140), true);
-  }finally{
-    if(btn){ btn.disabled=false; btn.textContent='Odoo-Export (.xlsx) auswählen'; }
-    inputEl.value='';
-  }
-}
-
-// Vorschau VOR dem Speichern — damit ein fehlender Standort oder ein schiefes Datum auffällt,
-// bevor die Zahlen in der Datenbank landen. Genau das hat bisher gefehlt.
-function umsatzRenderPreview(){
-  const box=document.getElementById('umsatz-import-preview');
-  if(!box||!umsatzPendingImport) return;
-  const p=umsatzPendingImport;
-  let h='<div style="border:1.5px solid '+UMSATZ_PURPLE+';border-radius:10px;padding:12px;margin-top:10px;background:#FAF7FE;">';
-  h+='<div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">Vorschau — noch nichts gespeichert</div>';
-  h+='<div style="font-size:11.5px;color:var(--sub);line-height:1.6;margin-bottom:9px;">'
-    +uNum(p.records.length)+' Zeilen · '+p.tage+' Verkaufstage<br>'
-    +uNiceDate(p.from)+' – '+uNiceDate(p.to)+'</div>';
-  h+='<div style="background:#fff;border-radius:8px;overflow:hidden;margin-bottom:9px;">';
-  Object.keys(p.perStore).sort((a,b)=>p.perStore[b].net-p.perStore[a].net).forEach((id,i)=>{
-    h+='<div style="display:flex;justify-content:space-between;padding:6px 10px;font-size:11.5px;'+(i?'border-top:0.5px solid var(--border);':'')+'">'
-      +'<span data-no-translate>'+(umsatzStoreMap[id]||id)+'</span>'
-      +'<span><b>'+uEuro(p.perStore[id].net)+'</b> <span style="color:var(--muted);">'+uNum(p.perStore[id].rows)+'</span></span></div>';
-  });
-  h+='</div>';
-
-  const warn=[];
-  if(p.unknown.length) warn.push('Nicht zugeordnet: '+p.unknown.join(', ')+' — diese Spalten werden NICHT importiert.');
-  if(!p.hasQty) warn.push('Der Export enthält keine Mengen. Die Umsätze werden aktualisiert, bereits gespeicherte Portionen bleiben unangetastet — neue Tage haben aber keine Portionszahlen. Dafür in Odoo zusätzlich den Messwert „Menge" anhaken.');
-  if(p.weekend) warn.push(p.weekend+' Zeilen fallen auf Samstag oder Sonntag — bitte das Datumsformat prüfen.');
-  warn.forEach(w=>{ h+='<div style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:7px 9px;font-size:11px;line-height:1.45;margin-bottom:7px;">⚠️ '+w+'</div>'; });
-
-  h+='<div style="font-size:10.5px;color:var(--muted);margin-bottom:9px;">'+(p.hasQty
-    ?'Bestehende Zahlen dieser Filialen werden im Zeitraum '+uNiceDate(p.from)+' – '+uNiceDate(p.to)+' ersetzt.'
-    :'Die Umsätze werden zusammengeführt, nichts wird gelöscht.')+'</div>';
-  h+='<div style="display:flex;gap:7px;">'
-    +'<button onclick="umsatzCancelImport()" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12px;cursor:pointer;">Abbrechen</button>'
-    +'<button onclick="umsatzConfirmImport()" id="umsatz-confirm-btn" style="flex:2;padding:9px;border:none;border-radius:9px;background:'+UMSATZ_PURPLE+';color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Jetzt importieren</button>'
-    +'</div></div>';
-  box.innerHTML=h;
-  box.scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-
-function umsatzCancelImport(){
-  umsatzPendingImport=null;
-  const box=document.getElementById('umsatz-import-preview');
-  if(box) box.innerHTML='';
-}
-
-async function umsatzConfirmImport(){
-  if(!umsatzPendingImport) return;
-  const p=umsatzPendingImport;
-  const btn=document.getElementById('umsatz-confirm-btn');
-  const set=t=>{ if(btn) btn.textContent=t; };
-  if(btn) btn.disabled=true;
-  try{
-    // Zwei Wege, je nachdem was der Export liefert:
-    // MIT Mengen  -> Zeitraum leeren und komplett neu schreiben. Sauber, räumt auch Produkte
-    //               weg, die in Odoo umbenannt wurden.
-    // OHNE Mengen -> NICHT löschen, sondern per sales_upsert() zusammenführen. Die Funktion
-    //               behält eine bereits gespeicherte Menge, wenn der Export keine mitbringt —
-    //               sonst wären die Portionen nach dem Import weg.
-    const ids=Object.keys(p.perStore);
-    const size=500;
-    if(p.hasQty){
-      set('Räume auf…');
-      await api('sales_data?sale_date=gte.'+p.from+'&sale_date=lte.'+p.to+'&store_id=in.('+ids.join(',')+')',{method:'DELETE'});
-      for(let i=0;i<p.records.length;i+=size){
-        set('Speichere… '+Math.min(i+size,p.records.length)+'/'+p.records.length);
-        await api('sales_data',{method:'POST',body:JSON.stringify(p.records.slice(i,i+size))});
-      }
-    }else{
-      for(let i=0;i<p.records.length;i+=size){
-        set('Speichere… '+Math.min(i+size,p.records.length)+'/'+p.records.length);
-        await api('rpc/sales_upsert',{method:'POST',body:JSON.stringify({p_rows:p.records.slice(i,i+size)})});
-      }
-    }
-    umsatzPendingImport=null;
-    showToast('✓ '+p.records.length+' Zeilen importiert');
-    umsatzMeta=await api('rpc/sales_meta',{method:'POST',body:'{}'}).catch(()=>umsatzMeta);
+    showToast(`✓ ${records.length} Zeilen importiert`);
     await renderUmsatzContent();
   }catch(e){
     console.error(e);
-    showToast('Import fehlgeschlagen: '+((e&&e.message)||String(e)).slice(0,140), true);
-    if(btn){ btn.disabled=false; set('Nochmal versuchen'); }
+    showToast('Fehler beim Import: '+(e?.message||String(e)).slice(0,140), true);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='📊 Odoo-Export (.xlsx) auswählen'; }
+    inputEl.value='';
   }
 }
-
 window.handleUmsatzUpload=handleUmsatzUpload;
-window.umsatzConfirmImport=umsatzConfirmImport;
-window.umsatzCancelImport=umsatzCancelImport;
 
 async function renderForecastReview(){
   const el = document.getElementById('v-forecastReview');
