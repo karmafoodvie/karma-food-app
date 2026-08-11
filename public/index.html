@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.7';
+const APP_VERSION = '6.23.8';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3932,6 +3932,13 @@ function mapDishNameToCategory(dishName, slot){
   if(n.includes('biryani')) return 'Biryani';
   if(n.includes('lasagne')) return 'Lasagne';
   if(n.includes('salat')||n.includes('salad')||n.includes('bowl')) return 'Salat'; // inkl. englisch + bowl
+  // Wechselnde Spezialgerichte einzeln erkennen — sonst landen Gulasch, Chili sin Carne, Meatballs
+  // etc. alle im selben "Special"-Topf und der Vorwoche-Vergleich zeigt die falsche Referenz.
+  if(n.includes('gulasch')) return 'Gulasch';
+  if(n.includes('chili')) return 'Chili';
+  if(n.includes('meatball')) return 'Meatballs';
+  if(n.includes('tofu')) return 'Tofu';
+  if(n.includes('mix portion')||n.includes('mixportion')) return 'MixPortion';
   return 'Special';
 }
 
@@ -5767,7 +5774,9 @@ async function renderOrgForecast(){
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
-  const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
+  const prevFromDate=getWeekdayDates(orgForecastWeekOffset-6)[1]; // 6 Wochen zurück statt nur 1 —
+  // wechselnde Spezialgerichte (Gulasch, Chili sin Carne...) kommen nicht jede Woche vor, die
+  // Rückwärtssuche unten braucht daher mehr Historie als nur die letzte Woche.
   const prevToDate=getWeekdayDates(orgForecastWeekOffset-1)[5];
 
   // Lade alles parallel: aktueller Forecast, Vorwoche Forecast, Entsorgung Vorwoche,
@@ -5888,17 +5897,20 @@ async function renderOrgForecast(){
     const yieldPerContainer = isLasagneSize ? LASAGNE_SIZE_YIELD[groesse] : null;
 
     const cat=mapDishNameToCategory(dish);
-    const prevDateStr=dateMinusDays(dateStr,7);
-
-    // Vorwoche Forecast — lookup via Kategorie (nicht dish_name, da Gerichte wöchentlich wechseln)
-    const prevQty=(prevFcMap[prevDateStr]?.[storeId]?.[cat]?.[groesse||'gross'])||null;
+    // Rückwärtssuche statt fix "letzte Woche" — siehe Kommentar bei der VW-Anzeige oben, gleicher Grund.
+    let prevDateStr=null, prevQty=null;
+    for(let wBack=1; wBack<=6; wBack++){
+      const tryDate=dateMinusDays(dateStr, wBack*7);
+      const tryQty=prevFcMap[tryDate]?.[storeId]?.[cat]?.[groesse||'gross'];
+      if(tryQty!=null){ prevDateStr=tryDate; prevQty=tryQty; break; }
+    }
     if(prevQty==null) return null; // Noch keine History → kein Vorschlag, leer lassen
 
     let qty=prevQty;
-    const reasons=[`Vorwoche: ${formatQty(prevQty)} Bhlt`];
+    const reasons=[`Letztes Vorkommen: ${formatQty(prevQty)} Bhlt`];
 
     // Entsorgung Vorwoche
-    const disp=prevDispMap[storeId]?.[cat];
+    const disp=prevDispByDateStore[prevDateStr]?.[storeId]?.[cat];
     if(disp && (disp.soldOutEarly || disp.leftover>0)){
       if(isLasagneSize){
         // In Portionen rechnen, dann auf ganze Bleche dieser Größe runden.
@@ -6055,9 +6067,17 @@ async function renderOrgForecast(){
           const isSugg=!rec && sugg!=null;
           const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
           const cmpCat=mapDishNameToCategory(dish);
-          const cmpPrevDate=dateMinusDays(dateStr,7);
-          const cmpPrevQty=prevFcMap[cmpPrevDate]?.[s.id]?.[cmpCat]?.['gross'];
-          const cmpDisp=prevDispByDateStore[cmpPrevDate]?.[s.id]?.[cmpCat];
+          // Rückwärtssuche statt fix "letzte Woche" — wechselnde Spezialgerichte (Gulasch, Chili
+          // sin Carne...) kommen nicht jede Woche vor. Sucht bis zu 6 Wochen zurück nach dem letzten
+          // tatsächlichen Vorkommen dieser Kategorie bei dieser Filiale (Forecast ODER Entsorgung).
+          let cmpPrevDate=null, cmpPrevQty=null, cmpDisp=null;
+          for(let wBack=1; wBack<=6; wBack++){
+            const tryDate=dateMinusDays(dateStr, wBack*7);
+            const tryQty=prevFcMap[tryDate]?.[s.id]?.[cmpCat]?.['gross'];
+            const tryDisp=prevDispByDateStore[tryDate]?.[s.id]?.[cmpCat];
+            if(tryQty!=null || tryDisp){ cmpPrevDate=tryDate; cmpPrevQty=tryQty??null; cmpDisp=tryDisp||null; break; }
+          }
+          const cmpWeeksAgo=cmpPrevDate?Math.round((new Date(dateStr)-new Date(cmpPrevDate))/(7*86400000)):null;
           // Ampel des letzten gleichen Wochentags — kleiner Rest (1-4) ist GRÜN = Zielzustand (bewusst,
           // damit kein Druck auf Null-Rest entsteht), ausverkauft ist ROT = das teurere Problem.
           let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='', ampelScore=0;
@@ -6083,7 +6103,8 @@ async function renderOrgForecast(){
           }
           const trendTip=trend?` · Umsatz ${trend.pct>0?'+':''}${trend.pct}%`:'';
           const dirLine=dirLabel?`<div style="font-size:8.5px;font-weight:700;color:${dirColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Empfohlene Richtung${trendTip}">${dirIcon} ${dirLabel}</div>`:'';
-          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:8px;color:var(--muted);text-align:center;margin-top:1px;line-height:1.25;" title="Letzte Woche gleicher Tag">VW ${cmpPrevQty!=null?formatQty(cmpPrevQty):'?'}${cmpAmpel?' <span style="color:'+cmpColor+'">'+cmpAmpel+'</span>':''}${cmpDetail?`<br><span style="color:${cmpColor};">${cmpDetail}</span>`:''}</div>`:'';
+          const cmpLabel=cmpWeeksAgo===1?'VW':(cmpWeeksAgo?`vor ${cmpWeeksAgo}Wo`:'VW');
+          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:8px;color:var(--muted);text-align:center;margin-top:1px;line-height:1.25;" title="Letztes Vorkommen dieses Gerichts: vor ${cmpWeeksAgo||1} Woche(n)">${cmpLabel} ${cmpPrevQty!=null?formatQty(cmpPrevQty):'?'}${cmpAmpel?' <span style="color:'+cmpColor+'">'+cmpAmpel+'</span>':''}${cmpDetail?`<br><span style="color:${cmpColor};">${cmpDetail}</span>`:''}</div>`:'';
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
