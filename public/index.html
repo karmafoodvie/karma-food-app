@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.24.0';
+const APP_VERSION = '6.25.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5778,9 +5778,15 @@ async function renderOrgForecast(){
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
-  const prevFromDate=getWeekdayDates(orgForecastWeekOffset-12)[1]; // 12 Wochen zurück — Gulasch kam
-  // z.B. zuletzt vor 7 Wochen, 6 Wochen Suchfenster war knapp zu kurz.
+  const prevFromDate=getWeekdayDates(orgForecastWeekOffset-16)[1]; // 16 Wochen = vier volle
+  // 4-Wochen-Menürotationen, damit die Suche nach dem exakt gleichen Gericht (4/8/12/16 Wo zurück)
+  // auch wirklich Treffer findet.
   const prevToDate=getWeekdayDates(orgForecastWeekOffset-1)[5];
+  // Entsorgung zusätzlich bis HEUTE laden — der Wochenbereich endet sonst bei letztem Freitag,
+  // wodurch genau die jüngsten (aussagekräftigsten) Tage fehlen. Die waren aber der Grund, warum
+  // ein Umschwung wie am 10./11.08. (plötzlich alles ausverkauft) komplett übersehen wurde.
+  const _todayStrFc=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
+  const dispToDate=_todayStrFc>prevToDate?_todayStrFc:prevToDate;
 
   // Lade alles parallel: aktueller Forecast, Vorwoche Forecast, Entsorgung Vorwoche,
   // Wetter Vorwoche (für Vergleich), Sales History für alle Stores
@@ -5789,7 +5795,7 @@ async function renderOrgForecast(){
     getCalendarEvents().catch(()=>[]),
     fetchWeatherForStore('lb', fromDate, toDate).catch(()=>({})),
     api(`forecast_qty?forecast_date=gte.${prevFromDate}&forecast_date=lte.${prevToDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
-    api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${prevToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time,slot`).catch(()=>[]),
+    api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${dispToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time,slot`).catch(()=>[]),
     api('forecast_settings?select=*').catch(()=>[])
   ]);
 
@@ -5889,6 +5895,39 @@ async function renderOrgForecast(){
     prevDisposalByDate[d.disposal_date][cat]=ex;
   });
 
+  // Kurzfrist-Momentum je Filiale: die letzten 3 Tage MIT Entsorgungsdaten vor dem Forecast-Tag,
+  // unabhängig vom Wochentag und über alle Gerichte hinweg. Der reine Wochenvergleich schaut nur
+  // auf "gleicher Wochentag letzte Woche" und übersieht dadurch strukturell schnelle Umschwünge —
+  // z.B. Ausstellungsstraße: 04.08. noch 20 Portionen übrig, aber 07.08./10.08. schon wieder knapp
+  // und 11.08. alles bis 12:35 ausverkauft. Ein einzelner Ausreißertag darf nicht die Referenz sein.
+  const _momentumCache={};
+  function computeMomentum(storeId, dateStr){
+    const key=storeId+'|'+dateStr;
+    if(_momentumCache[key]!==undefined) return _momentumCache[key];
+    const days=Object.keys(prevDispByDateStore)
+      .filter(d=>d<dateStr && prevDispByDateStore[d][storeId])
+      .sort().reverse().slice(0,3);
+    let soldOut=0, entries=0, leftoverSum=0;
+    days.forEach(d=>{
+      Object.values(prevDispByDateStore[d][storeId]).forEach(v=>{
+        entries++;
+        if(v.soldOutEarly) soldOut++;
+        leftoverSum+=(v.leftover||0);
+      });
+    });
+    let res={score:0, label:'', days:days.length};
+    if(entries>0){
+      const rate=soldOut/entries;
+      const avgLeft=leftoverSum/entries;
+      if(rate>=0.5){ res={score:2, label:'letzte Tage oft ausverkauft', days:days.length}; }
+      else if(rate>=0.2){ res={score:1, label:'zuletzt teils ausverkauft', days:days.length}; }
+      else if(avgLeft<=4){ res={score:1, label:'zuletzt knapp gereicht', days:days.length}; }
+      else if(avgLeft>10){ res={score:-1, label:'zuletzt viel übrig', days:days.length}; }
+    }
+    _momentumCache[key]=res;
+    return res;
+  }
+
   function computeOrgSuggestion(storeId, dish, dateStr, groesse){
     // Einfache, nachvollziehbare Logik — baut ab dieser Woche eigene Historie auf:
     // 1. Vorwoche bestätigte Menge als Basis (1:1 übernehmen)
@@ -5906,17 +5945,25 @@ async function renderOrgForecast(){
     const yieldPerContainer = isLasagneSize ? LASAGNE_SIZE_YIELD[groesse] : null;
 
     const cat=mapDishNameToCategory(dish);
-    // Rückwärtssuche statt fix "letzte Woche" — siehe Kommentar bei der VW-Anzeige oben, gleicher Grund.
-    let prevDateStr=null, prevQty=null;
-    for(let wBack=1; wBack<=12; wBack++){
+    // Menü rotiert im 4-Wochen-Rhythmus → 4/8/12 Wochen zurück ist exakt dasselbe Gericht am selben
+    // Wochentag. Diese Referenz zuerst versuchen, erst danach auf ähnliche Gerichte ausweichen.
+    let prevDateStr=null, prevQty=null, isExactRef=false;
+    for(const wBack of [4,8,12,16]){
       const tryDate=dateMinusDays(dateStr, wBack*7);
       const tryQty=prevFcMap[tryDate]?.[storeId]?.[cat]?.[groesse||'gross'];
-      if(tryQty!=null){ prevDateStr=tryDate; prevQty=tryQty; break; }
+      if(tryQty!=null){ prevDateStr=tryDate; prevQty=tryQty; isExactRef=true; break; }
+    }
+    if(prevQty==null){
+      for(let wBack=1; wBack<=12; wBack++){
+        const tryDate=dateMinusDays(dateStr, wBack*7);
+        const tryQty=prevFcMap[tryDate]?.[storeId]?.[cat]?.[groesse||'gross'];
+        if(tryQty!=null){ prevDateStr=tryDate; prevQty=tryQty; break; }
+      }
     }
     if(prevQty==null) return null; // Noch keine History → kein Vorschlag, leer lassen
 
     let qty=prevQty;
-    const reasons=[`Letztes Vorkommen: ${formatQty(prevQty)} Bhlt`];
+    const reasons=[`${isExactRef?'Gleiches Gericht':'Ähnliches Gericht'}: ${formatQty(prevQty)} Bhlt`];
 
     // Entsorgung Vorwoche
     const disp=prevDispByDateStore[prevDateStr]?.[storeId]?.[cat];
@@ -6076,34 +6123,55 @@ async function renderOrgForecast(){
           const isSugg=!rec && sugg!=null;
           const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
           const cmpCat=mapDishNameToCategory(dish);
-          // Rückwärtssuche statt fix "letzte Woche" — wechselnde Spezialgerichte (Gulasch, Chili
-          // sin Carne...) kommen nicht jede Woche vor. Sucht bis zu 6 Wochen zurück nach dem letzten
-          // tatsächlichen Vorkommen dieser Kategorie bei dieser Filiale (Forecast ODER Entsorgung).
-          let cmpPrevDate=null, cmpPrevQty=null, cmpDisp=null;
-          for(let wBack=1; wBack<=12; wBack++){
+          // Das Menü rotiert im 4-Wochen-Rhythmus (siehe getMenuWocheForDate) — 4/8/12 Wochen zurück
+          // ist derselbe Wochentag in derselben Menü-Woche, also EXAKT dasselbe Gericht. Das ist die
+          // mit Abstand beste Referenz. Erst wenn dort nichts gefunden wird (z.B. bei Specials, die
+          // außerhalb der Rotation eingeschoben wurden), wird auf ähnliche Gerichte derselben
+          // Kategorie aus beliebigen Vorwochen ausgewichen.
+          const occurrences=[];
+          let cmpExact=false;
+          for(const wBack of [4,8,12,16]){
+            if(occurrences.length>=3) break;
             const tryDate=dateMinusDays(dateStr, wBack*7);
             const tryQty=prevFcMap[tryDate]?.[s.id]?.[cmpCat]?.['gross'];
             const tryDisp=prevDispByDateStore[tryDate]?.[s.id]?.[cmpCat];
-            if(tryQty!=null || tryDisp){ cmpPrevDate=tryDate; cmpPrevQty=tryQty??null; cmpDisp=tryDisp||null; break; }
+            if(tryQty!=null || tryDisp){ occurrences.push({date:tryDate, qty:tryQty??null, disp:tryDisp||null}); cmpExact=true; }
           }
+          if(!occurrences.length){
+            for(let wBack=1; wBack<=12 && occurrences.length<3; wBack++){
+              const tryDate=dateMinusDays(dateStr, wBack*7);
+              const tryQty=prevFcMap[tryDate]?.[s.id]?.[cmpCat]?.['gross'];
+              const tryDisp=prevDispByDateStore[tryDate]?.[s.id]?.[cmpCat];
+              if(tryQty!=null || tryDisp) occurrences.push({date:tryDate, qty:tryQty??null, disp:tryDisp||null});
+            }
+          }
+          const cmpPrevDate=occurrences[0]?.date||null;
+          const cmpPrevQty=occurrences[0]?.qty??null;
+          const cmpDisp=occurrences[0]?.disp||null;
           const cmpWeeksAgo=cmpPrevDate?Math.round((new Date(dateStr)-new Date(cmpPrevDate))/(7*86400000)):null;
-          // Ampel des letzten gleichen Wochentags — kleiner Rest (1-4) ist GRÜN = Zielzustand (bewusst,
-          // damit kein Druck auf Null-Rest entsteht), ausverkauft ist ROT = das teurere Problem.
+          // Ampel aus dem DURCHSCHNITT der gefundenen Vorkommen — kleiner Rest (1-4) ist GRÜN =
+          // Zielzustand (kein Druck auf Null-Rest), ausverkauft ist ROT = das teurere Problem.
+          const dispOccs=occurrences.filter(o=>o.disp);
+          const anySoldOut=dispOccs.some(o=>o.disp.soldOutEarly);
+          const avgLeftover=dispOccs.length?dispOccs.reduce((a,o)=>a+(o.disp.leftover||0),0)/dispOccs.length:null;
           let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='', ampelScore=0;
-          if(cmpDisp && (cmpDisp.soldOutEarly||cmpDisp.leftover>0)){
-            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail=cmpDisp.soldOutTime||'ausverkauft'; ampelScore=2; }
-            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=-2; }
-            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=-1; }
-            else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=0; }
+          if(dispOccs.length){
+            if(anySoldOut && (avgLeftover??0)<=4){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail=cmpDisp?.soldOutTime||'ausverkauft'; ampelScore=2; }
+            else if(avgLeftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`Ø ${formatQty(Math.round(avgLeftover))} übrig`; ampelScore=-2; }
+            else if(avgLeftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`Ø ${formatQty(Math.round(avgLeftover))} übrig`; ampelScore=-1; }
+            else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`Ø ${formatQty(Math.round(avgLeftover))} übrig`; ampelScore=0; }
           }
           // Umsatz-Trend desselben Wochentags fließt mit ein (verdichtet, nicht als eigene Zeile).
           const wdNum=new Date(dateStr+'T00:00:00').getDay();
           const trend=salesTrend[s.id]?.[wdNum];
           const trendScore=trend?(trend.dir==='up'?1:(trend.dir==='down'?-1:0)):0;
-          // Richtungs-Ableitung = Ampel (Hauptgewicht) + Umsatz-Trend (Feinjustierung).
-          const dirScore=ampelScore+trendScore;
+          const mom=computeMomentum(s.id, dateStr);
+          // Richtung = Ampel (Vergangenheit, gleicher Wochentag) + Umsatz-Trend + Kurzfrist-Momentum
+          // (die jüngsten Tage). Momentum ist das schnellste Signal und gleicht aus, wenn der
+          // Wochenvergleich auf einem untypischen Tag sitzt.
+          const dirScore=ampelScore+trendScore+mom.score;
           let dirLabel='', dirColor='', dirIcon='';
-          if(cmpPrevQty!=null || cmpDisp){
+          if(cmpPrevQty!=null || cmpDisp || mom.label){
             if(dirScore>=2){ dirIcon='↑'; dirLabel='erhöhen'; dirColor='#DC2626'; }
             else if(dirScore<=-2){ dirIcon='↓'; dirLabel='senken'; dirColor='#C2410C'; }
             else if(dirScore===1){ dirIcon='↗'; dirLabel='leicht mehr'; dirColor='#D97706'; }
@@ -6111,9 +6179,10 @@ async function renderOrgForecast(){
             else { dirIcon='→'; dirLabel='halten'; dirColor='#16A34A'; }
           }
           const trendTip=trend?` · Umsatz ${trend.pct>0?'+':''}${trend.pct}%`:'';
-          const dirLine=dirLabel?`<div style="font-size:8.5px;font-weight:700;color:${dirColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Empfohlene Richtung${trendTip}">${dirIcon} ${dirLabel}</div>`:'';
-          const cmpLabel=cmpWeeksAgo===1?'VW':(cmpWeeksAgo?`vor ${cmpWeeksAgo}Wo`:'VW');
-          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:8px;color:var(--muted);text-align:center;margin-top:1px;line-height:1.25;" title="Letztes Vorkommen dieses Gerichts: vor ${cmpWeeksAgo||1} Woche(n)">${cmpLabel} ${cmpPrevQty!=null?formatQty(cmpPrevQty):'?'}${cmpAmpel?' <span style="color:'+cmpColor+'">'+cmpAmpel+'</span>':''}${cmpDetail?`<br><span style="color:${cmpColor};">${cmpDetail}</span>`:''}</div>`:'';
+          const dirLine=dirLabel?`<div style="font-size:8.5px;font-weight:700;color:${dirColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Empfohlene Richtung${trendTip}${mom.label?' · '+mom.label:''}">${dirIcon} ${dirLabel}</div>`:'';
+          const momLine=mom.label?`<div style="font-size:7.5px;color:${mom.score>0?'#DC2626':'#C2410C'};text-align:center;line-height:1.2;margin-top:1px;">${mom.label}</div>`:'';
+          const cmpLabel=cmpExact?`gleiches Gericht (vor ${cmpWeeksAgo}Wo)`:(cmpWeeksAgo===1?'VW':`vor ${cmpWeeksAgo}Wo`);
+          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:8px;color:var(--muted);text-align:center;margin-top:1px;line-height:1.25;" title="${cmpExact?'Selbes Gericht aus der 4-Wochen-Rotation':'Ähnliches Gericht derselben Kategorie'} · Referenz aus ${occurrences.length} Vorkommen">${cmpExact?'🔁':''} ${cmpLabel}<br>${cmpPrevQty!=null?formatQty(cmpPrevQty)+' Bhlt':''}${cmpAmpel?' <span style="color:'+cmpColor+'">'+cmpAmpel+'</span>':''}${cmpDetail?`<br><span style="color:${cmpColor};">${cmpDetail}</span>`:''}</div>`:'';
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
@@ -6121,6 +6190,7 @@ async function renderOrgForecast(){
               title="${escAttr(title)}"
               style="width:46px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#CBD5E1':'var(--border)')};border-radius:6px;font-size:13px;font-weight:${manual?'700':'400'};padding:5px 1px;background:${manual?manualBg:(isSugg?'#F1F5F9':'#fff')};color:${manual?manualColor:(isSugg?'#64748B':'#1a1a18')};">
             ${dirLine}
+            ${momLine}
             ${cmpLine}
           </td>`;
         }
