@@ -135,6 +135,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -204,6 +205,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="v-kontrolle" class="view"></div>
     <div id="v-guide" class="view"></div>
     <div id="v-forecastReview" class="view"></div>
+    <div id="v-umsatz" class="view"></div>
     <div id="v-healthcheck" class="view"></div>
     <div id="v-zutatenDB" class="view"></div>
     <div id="v-oeffnungHilfe" class="view"></div>
@@ -311,7 +313,7 @@ const STORE_COLORS = {'lb':'#22C55E','boerse':'#A855F7','1020':'#3B82F6','1070':
 // Kurzform der Filialnamen für enge Tabellenköpfe (z.B. Transporter-Bestellliste) — bei manchen
 // Filialen (z.B. "Ausstellungsstraße") gibt's kein Leerzeichen, an dem sich automatisch abkürzen
 // ließe, deshalb fix hinterlegt statt automatisch berechnet.
-const STORE_SHORT = {'lb':'Laurenz.','boerse':'Börse','1020':'Ausst.','3400':'Stadtpl.'};
+const STORE_SHORT = {'lb':'Laurenz.','boerse':'Börse','1020':'Ausst.','3400':'Stadtpl.','kitchen':'Kitchen'};
 // Portionen pro Lasagne-Blech-Größe — global, da sowohl Store- als auch Organisation-Vorschlagslogik
 // in echten Portionen statt "Behälter" rechnen müssen, um niemals krumme Bleche vorzuschlagen.
 const LASAGNE_SIZE_YIELD={gross:18, mittel:12, klein:8};
@@ -968,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.21.0';
+const APP_VERSION = '6.23.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1222,6 +1224,44 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('pin-input').addEventListener('keydown',e=>{ if(e.key==='Enter') checkPin(); });
   applySavedUiSize(); // Zoom-Einstellung gilt auch schon auf dem Login-Screen
 });
+// Von Organisation aus direkt in eine Filiale wechseln — ohne aus-/einloggen. Weil man bereits als
+// Organisation (Admin) authentifiziert ist, ist kein erneuter Filial-PIN nötig. Ein Merker sorgt
+// dafür, dass in der Filiale ein "Zurück zu Organisation"-Weg angeboten wird.
+let enteredStoreViaOrg=false;
+async function toggleOrgShopPicker(){
+  const box=document.getElementById('org-shop-picker');
+  const arrow=document.getElementById('org-shop-picker-arrow');
+  if(!box) return;
+  if(box.style.display==='flex'){ box.style.display='none'; if(arrow)arrow.textContent='→'; return; }
+  box.style.display='flex';
+  if(arrow)arrow.textContent='▾';
+  box.innerHTML='<div style="font-size:11px;color:var(--muted);padding:4px;">Wird geladen…</div>';
+  const shops=await api('stores?select=id,name&order=name').catch(()=>[]);
+  const visible=(shops||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
+  box.innerHTML=visible.map(s=>{
+    const col=STORE_COLORS[s.id]||'#1D9E75';
+    return `<div style="position:relative;">
+      <button class="role-btn-color" onclick="openShopFromOrg('${s.id}','${escForInlineHandler(s.name)}')" data-no-translate style="background:${col};">
+        <span class="role-btn-role">${s.name}</span>
+        <span class="role-btn-name">Filiale öffnen</span>
+      </button>
+    </div>`;
+  }).join('');
+}
+window.toggleOrgShopPicker=toggleOrgShopPicker;
+
+function openShopFromOrg(id, name){
+  enteredStoreViaOrg=true;
+  loginAs({id, name});
+}
+window.openShopFromOrg=openShopFromOrg;
+
+function backToOrg(){
+  enteredStoreViaOrg=false;
+  loginAs({id:'zentrale', name:'Organisation'});
+}
+window.backToOrg=backToOrg;
+
 async function loginAs(store){
   currentStore=store;
   document.getElementById('login-screen').style.display='none';
@@ -1352,7 +1392,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1361,7 +1401,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz};
   if(renders[v]) renders[v]();
 }
 // Der normale "Bestellen"-Nav-Button soll IMMER auf die übliche Tab-Ansicht (Transporter/Shop
@@ -2701,6 +2741,7 @@ async function renderHome(){
   }
 
   el.innerHTML=`
+    ${enteredStoreViaOrg && currentStore?.id!=='zentrale'?`<div onclick="backToOrg()" style="display:flex;align-items:center;gap:8px;background:#2B3A67;color:#fff;border-radius:10px;padding:9px 14px;margin:0 0 8px;cursor:pointer;font-size:12.5px;font-weight:600;">← Zurück zu Organisation<span style="margin-left:auto;opacity:0.8;font-weight:400;">gerade in: ${currentStore?.name||''}</span></div>`:''}
     <div class="kf-greeting" style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
     ${quickSoldOutDishes.length?`<div class="card" style="padding:12px 14px;margin:0 0 8px;background:linear-gradient(135deg,#FEF2F2,#FEE2E2);border:1.5px solid #FCA5A5;">
       <div style="font-size:13px;font-weight:700;color:#991B1B;margin-bottom:8px;">🔥 Schon ausverkauft?</div>
@@ -2830,6 +2871,15 @@ async function renderHome(){
     ${currentStore?.id==='zentrale'?`
     <div id="org-dashboard-widget"></div>
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
+    <div onclick="toggleOrgShopPicker()" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
+      <span style="font-size:18px;">🏪</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#166534;">Shop öffnen</div>
+        <div style="font-size:10.5px;color:#15803D;">Direkt in eine Filiale wechseln — ohne aus-/einloggen</div>
+      </div>
+      <span id="org-shop-picker-arrow" style="color:#15803D;">→</span>
+    </div>
+    <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:0 0 8px;"></div>
     <div onclick="goTo('management')" style="display:flex;align-items:center;gap:10px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🧭</span>
       <div style="flex:1;">
@@ -3047,7 +3097,7 @@ function renderOrderSection(cats, label, color, icon){
         if(gKey){
           if(handledGroups.has(gKey)) return; // Gruppe wurde schon (beim ersten Treffer) komplett gerendert
           handledGroups.add(gKey);
-          const groupItems=items.filter(x=>VARIANT_GROUPS[gKey].match(x.name));
+          const groupItems=items.filter(x=>VARIANT_GROUPS[gKey].match(x.name) && x.verfuegbar!==false);
           html+=renderVariantGroupRow(gKey, groupItems);
           return;
         }
@@ -3929,6 +3979,192 @@ async function fetchHistoricalWeather(storeId, fromDate, toDate){
     return map;
   }catch(e){ console.error('Historisches Wetter fehlgeschlagen', e); return {}; }
 }
+
+// ---- UMSATZ-DASHBOARD ----
+// Datenquelle: wöchentlicher Odoo-Export (Verkauf → Berichtswesen → Verkauf), manuell hochgeladen.
+// Kein Live-API-Zugriff — bewusste Entscheidung (siehe Absprache), einfacher & sicherer.
+let umsatzPeriod='month'; // 'week' | 'month' | 'all'
+
+async function renderUmsatz(){
+  const el=document.getElementById('v-umsatz');
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('💶','Umsatz','Aus wöchentlichem Odoo-Export — Netto','#7B3FE4')+`<div id="umsatz-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  translateEl(el);
+  await renderUmsatzContent();
+}
+
+async function renderUmsatzContent(){
+  const target=document.getElementById('umsatz-content');
+  const latest=await api('sales_data?select=imported_at&order=imported_at.desc&limit=1').catch(()=>[]);
+  const lastImport=latest?.[0]?.imported_at?new Date(latest[0].imported_at).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null;
+
+  let html=`<div class="card" style="padding:14px;margin-bottom:12px;">
+    <div style="font-size:12px;font-weight:600;margin-bottom:2px;">📤 Neuen Export hochladen</div>
+    <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">${lastImport?`Zuletzt aktualisiert: ${lastImport}`:'Noch keine Daten importiert'}</div>
+    <input type="file" id="umsatz-file-input" accept=".xlsx" style="display:none;" onchange="handleUmsatzUpload(this)">
+    <button onclick="document.getElementById('umsatz-file-input').click()" id="umsatz-upload-btn" style="width:100%;padding:11px;background:#7B3FE4;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">📊 Odoo-Export (.xlsx) auswählen</button>
+  </div>`;
+
+  const rows=await api('sales_data?select=*').catch(()=>[]);
+  if(!rows?.length){
+    html+=`<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Noch keine Umsatzdaten — Export oben hochladen.</div>`;
+    target.innerHTML=html;
+    translateEl(target);
+    return;
+  }
+
+  const today=new Date();
+  const weekAgo=new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
+  const monthAgo=new Date(today); monthAgo.setDate(monthAgo.getDate()-30);
+  const cutoff=umsatzPeriod==='week'?weekAgo:(umsatzPeriod==='month'?monthAgo:null);
+  const filtered=cutoff?rows.filter(r=>new Date(r.sale_date)>=cutoff):rows;
+
+  html+=`<div style="display:flex;gap:6px;margin-bottom:12px;">
+    ${['week','month','all'].map(p=>`<button onclick="umsatzPeriod='${p}';renderUmsatzContent()" style="flex:1;padding:8px;border-radius:9px;border:${umsatzPeriod===p?'2px solid #7B3FE4':'1.5px solid var(--border)'};background:${umsatzPeriod===p?'#7B3FE4':'#fff'};color:${umsatzPeriod===p?'#fff':'var(--sub)'};font-size:12px;font-weight:600;cursor:pointer;">${p==='week'?'7 Tage':(p==='month'?'30 Tage':'Alles')}</button>`).join('')}
+  </div>`;
+
+  const totalNetto=filtered.reduce((a,r)=>a+(Number(r.net_amount)||0),0);
+  const totalMenge=filtered.reduce((a,r)=>a+(Number(r.quantity)||0),0);
+  const days=new Set(filtered.map(r=>r.sale_date)).size;
+
+  html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+    <div class="card" style="padding:12px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#7B3FE4;">${totalNetto.toLocaleString('de-AT',{maximumFractionDigits:0})} €</div>
+      <div style="font-size:10px;color:var(--muted);">Umsatz (Netto)</div>
+    </div>
+    <div class="card" style="padding:12px;text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#1a1a18;">${totalMenge.toLocaleString('de-AT',{maximumFractionDigits:0})}</div>
+      <div style="font-size:10px;color:var(--muted);">Portionen verkauft</div>
+    </div>
+  </div>`;
+
+  // Filial-Vergleich
+  const byStore={};
+  filtered.forEach(r=>{ byStore[r.store_id]=(byStore[r.store_id]||0)+(Number(r.net_amount)||0); });
+  const storeNames=await api('stores?select=id,name').catch(()=>[]);
+  const storeMap=Object.fromEntries((storeNames||[]).map(s=>[s.id,s.name]));
+  const maxStoreVal=Math.max(...Object.values(byStore),1);
+  html+=`<div class="section-lbl">🏪 Filial-Vergleich</div><div class="card" style="padding:12px;">`;
+  Object.entries(byStore).sort((a,b)=>b[1]-a[1]).forEach(([sid,val])=>{
+    const pct=(val/maxStoreVal*100).toFixed(0);
+    html+=`<div style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px;"><span data-no-translate>${storeMap[sid]||sid}</span><span style="font-weight:700;">${val.toLocaleString('de-AT',{maximumFractionDigits:0})} €</span></div>
+      <div style="background:var(--surface-1);border-radius:4px;height:7px;overflow:hidden;"><div style="width:${pct}%;background:#7B3FE4;height:100%;"></div></div>
+    </div>`;
+  });
+  html+=`</div>`;
+
+  // Bestseller nach Umsatz
+  const byProduct={};
+  filtered.forEach(r=>{
+    if(!byProduct[r.product_name]) byProduct[r.product_name]={menge:0,netto:0};
+    byProduct[r.product_name].menge+=Number(r.quantity)||0;
+    byProduct[r.product_name].netto+=Number(r.net_amount)||0;
+  });
+  const topByRevenue=Object.entries(byProduct).sort((a,b)=>b[1].netto-a[1].netto).slice(0,10);
+  const topByQty=Object.entries(byProduct).sort((a,b)=>b[1].menge-a[1].menge).slice(0,10);
+
+  html+=`<div class="section-lbl" style="margin-top:14px;">🏆 Bestseller nach Umsatz</div><div class="card" style="overflow:hidden;">`;
+  topByRevenue.forEach(([name,d],i)=>{
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;${i<topByRevenue.length-1?'border-bottom:0.5px solid var(--border);':''}">
+      <div style="font-size:12px;" data-no-translate>${i+1}. ${name}</div>
+      <div style="font-size:12px;font-weight:700;color:#7B3FE4;white-space:nowrap;">${d.netto.toLocaleString('de-AT',{maximumFractionDigits:0})} €</div>
+    </div>`;
+  });
+  html+=`</div>`;
+
+  html+=`<div class="section-lbl" style="margin-top:14px;">📦 Meistverkauft (Menge)</div><div class="card" style="overflow:hidden;">`;
+  topByQty.forEach(([name,d],i)=>{
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;${i<topByQty.length-1?'border-bottom:0.5px solid var(--border);':''}">
+      <div style="font-size:12px;" data-no-translate>${i+1}. ${name}</div>
+      <div style="font-size:12px;font-weight:700;white-space:nowrap;">${formatQty(d.menge)} Stk</div>
+    </div>`;
+  });
+  html+=`</div>`;
+
+  html+=`<div style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0;">${days} Verkaufstage im gewählten Zeitraum · ${filtered.length} Zeilen</div>`;
+
+  target.innerHTML=html;
+  translateEl(target);
+}
+
+// Parst denselben gruppierten Odoo-Pivot-Export (Filiale-Blöcke, Tagesreihen, Produkt-Spaltenpaare
+// Nettobetrag+Menge) wie beim ersten manuellen Import — jetzt clientseitig im Browser mit SheetJS,
+// damit Tini (oder wer auch immer) den wöchentlichen Export einfach direkt hochladen kann.
+const UMSATZ_STORE_MAP={'Ausstellungsstraße':'1020','Börse':'boerse','Kitchen':'kitchen','Laurenzerberg':'lb','Stadtplatz':'3400'};
+
+async function handleUmsatzUpload(inputEl){
+  const file=inputEl.files?.[0];
+  if(!file) return;
+  const btn=document.getElementById('umsatz-upload-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Wird gelesen…'; }
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf, {type:'array', cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const range=XLSX.utils.decode_range(ws['!ref']);
+    const getCell=(r,c)=>{ const cell=ws[XLSX.utils.encode_cell({r,c})]; return cell?cell.v:null; };
+
+    // Produkt-Spaltenpaare aus Zeile 2/3 (0-indiziert: Zeile 1/2) auslesen
+    const productCols={};
+    let c=1; // Spalte B = Index 1
+    while(c<=range.e.c){
+      const name=getCell(1,c);
+      if(name && String(name).trim() && String(name).trim()!=='Gesamt'){
+        const sub1=getCell(2,c), sub2=getCell(2,c+1);
+        if(sub1 && String(sub1).toLowerCase().includes('netto') && sub2 && (String(sub2).toLowerCase().includes('menge')||String(sub2).toLowerCase().includes('geliefert'))){
+          productCols[String(name).trim()]={netto:c, menge:c+1};
+          c+=2; continue;
+        }
+      }
+      c++;
+    }
+    if(!Object.keys(productCols).length) throw new Error('Konnte keine Produkt-Spalten erkennen — Format passt nicht zum erwarteten Export.');
+
+    // Filial-Gruppen (Spalte A, Zeile >=4 / Index >=3) finden
+    const storeRows=[];
+    for(let r=3;r<=range.e.r;r++){
+      const v=getCell(r,0);
+      if(v!=null && !(v instanceof Date)) storeRows.push([r, String(v).trim()]);
+    }
+
+    const records=[];
+    storeRows.forEach(([startRow, storeName], i)=>{
+      const storeId=UMSATZ_STORE_MAP[storeName];
+      if(!storeId) return;
+      const endRow=i+1<storeRows.length?storeRows[i+1][0]:range.e.r+1;
+      for(let r=startRow+1;r<endRow;r++){
+        const dateVal=getCell(r,0);
+        if(!(dateVal instanceof Date)) continue;
+        const dateStr=dateVal.toISOString().split('T')[0];
+        Object.entries(productCols).forEach(([prod,cols])=>{
+          const netto=getCell(r,cols.netto);
+          const menge=getCell(r,cols.menge);
+          if((netto||0)===0 && (menge||0)===0) return;
+          records.push({store_id:storeId, sale_date:dateStr, product_name:prod, quantity:Number(menge)||0, net_amount:Number(netto)||0});
+        });
+      }
+    });
+
+    if(!records.length) throw new Error('Keine Datensätze im Export gefunden.');
+
+    if(btn) btn.textContent=`Speichere ${records.length} Zeilen…`;
+    const chunkSize=500;
+    for(let i=0;i<records.length;i+=chunkSize){
+      const chunk=records.slice(i, i+chunkSize);
+      await api('sales_data?on_conflict=store_id,sale_date,product_name',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(chunk)});
+      if(btn) btn.textContent=`Speichere… ${Math.min(i+chunkSize,records.length)}/${records.length}`;
+    }
+    showToast(`✓ ${records.length} Zeilen importiert`);
+    await renderUmsatzContent();
+  }catch(e){
+    console.error(e);
+    showToast('Fehler beim Import: '+(e?.message||String(e)).slice(0,140), true);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='📊 Odoo-Export (.xlsx) auswählen'; }
+    inputEl.value='';
+  }
+}
+window.handleUmsatzUpload=handleUmsatzUpload;
 
 async function renderForecastReview(){
   const el = document.getElementById('v-forecastReview');
@@ -4902,6 +5138,14 @@ async function renderManagement(){
       </div>
     </button>
 
+    <button class="org-btn" onclick="goTo('umsatz')" style="border-color:#7B3FE4;">
+      <span class="org-btn-icon">💶</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#7B3FE4;">Umsatz</span>
+        <span class="org-btn-sub">Tages-/Wochenumsatz, Bestseller — aus Odoo-Export</span>
+      </div>
+    </button>
+
     <div class="section-lbl" style="margin-top:16px;">🩺 System</div>
     <button class="org-btn" onclick="goTo('healthcheck')" style="border-color:#15803D;">
       <span class="org-btn-icon">🩺</span>
@@ -5335,15 +5579,15 @@ async function loadOrgDashboard(){
     const [stores, ordersToday, kcPending, forecastTomorrow, disposalToday, submissionsAllToday] = await Promise.all([
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
-      api(`kc_submissions?select=store_id`).catch(()=>[]),
+      api(`kc_submissions?order_date=eq.${today}&select=store_id`).catch(()=>[]),
       api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=in.(store,org)&select=store_id`).catch(()=>[]),
       api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[]),
       api(`order_submissions?order_date=eq.${today}&select=store_id,tab`).catch(()=>[])
     ]);
     const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
-    // "Shop" bleibt grün, solange die Meldung noch aussteht (nicht eingepackt/verschickt) — wird
-    // NICHT mehr täglich auf Rot zurückgesetzt, sondern erst wenn Ines "Alles eingepackt" klickt
-    // (das räumt kc_submissions dann auf, siehe kcAllesErledigt).
+    // "Shop" zeigt jetzt korrekt nur den HEUTIGEN Tag — vorher fehlte hier der Datums-Filter
+    // komplett, wodurch alte, nie aufgeräumte Einträge aus vergangenen Tagen die Filiale dauerhaft
+    // fälschlich als "erledigt" zeigten, auch wenn heute gar nichts eingetragen wurde.
     const kcSet=new Set((kcPending||[]).map(k=>k.store_id));
     const forecastSet=new Set((forecastTomorrow||[]).map(f=>f.store_id));
     const disposalSet=new Set((disposalToday||[]).filter(d=>d.leftover_qty!=null).map(d=>d.store_id));
@@ -5501,7 +5745,11 @@ async function renderOrgForecast(){
       <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">Nächste →</button>
     </div>
   </div>`;
-  weekSwitcher+=`<div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:6px 10px;margin:0 0 12px;text-align:center;">"VW X" unter jedem Feld = Menge & Entsorgungs-Ergebnis derselben Kategorie letzte Woche · 🔥 ausverkauft · ✓ genau richtig · 📦 übrig</div>`;
+  weekSwitcher+=`<div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.6;">
+    <div><span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:4px;padding:1px 5px;color:#64748B;">grau</span> = App-Vorschlag (noch nicht bestätigt) · tippen = deine Entscheidung</div>
+    <div style="margin-top:3px;"><b>↑ erhöhen</b> / <span style="color:#16A34A;">→ halten</span> / <b>↓ senken</b> = empfohlene Richtung (aus Vorwoche + Umsatz-Trend)</div>
+    <div style="margin-top:3px;">VW = letzte Woche gleicher Tag · <span style="color:#DC2626;">🔥 ausverkauft</span> · <span style="color:#16A34A;">✓ kleiner Rest = ideal</span> · 📦 zu viel</div>
+  </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
   const prevFromDate=getWeekdayDates(orgForecastWeekOffset-1)[1];
@@ -5556,13 +5804,44 @@ async function renderOrgForecast(){
   // Filiale, nicht über die ganze Vorwoche summiert (das macht prevDispMap für die Vorschlags-
   // Anpassung, aber für den sichtbaren "VW"-Tagesvergleich unten braucht's die exakte Zuordnung).
   const prevDispByDateStore={};
+  // Umsatz-Trend je Filiale/Wochentag — Grundlage für den Richtungs-Pfeil. Vergleicht die letzten 2
+  // gleichen Wochentage gegen die 2 davor (steigt/fällt/stabil). Umsatz (€) ist die verlässliche
+  // Größe (Stückzahlen im Odoo-Export sind unzuverlässig), daher rechnen wir hier bewusst in €.
+  const salesTrend={}; // salesTrend[store_id][weekdayNum] = {pct, dir}
+  try{
+    const sinceDate=dateMinusDays(fromDate, 42); // ~6 Wochen zurück reicht für 4 gleiche Wochentage
+    const salesRows=await api(`sales_data?sale_date=gte.${sinceDate}&select=store_id,sale_date,net_amount`).catch(()=>[]);
+    const byStoreDay={}; // [store][date] = summe
+    (salesRows||[]).forEach(r=>{
+      if(!byStoreDay[r.store_id])byStoreDay[r.store_id]={};
+      byStoreDay[r.store_id][r.sale_date]=(byStoreDay[r.store_id][r.sale_date]||0)+(Number(r.net_amount)||0);
+    });
+    Object.keys(byStoreDay).forEach(sid=>{
+      const byWeekday={}; // wdNum -> [{date,sum}] absteigend nach Datum
+      Object.entries(byStoreDay[sid]).forEach(([d,sum])=>{
+        const wd=new Date(d+'T00:00:00').getDay();
+        (byWeekday[wd]=byWeekday[wd]||[]).push({date:d,sum});
+      });
+      salesTrend[sid]={};
+      Object.keys(byWeekday).forEach(wd=>{
+        const arr=byWeekday[wd].sort((a,b)=>b.date.localeCompare(a.date));
+        if(arr.length>=3){
+          const recent=(arr[0].sum+(arr[1]?.sum||arr[0].sum))/(arr[1]?2:1);
+          const prior=(arr[2].sum+(arr[3]?.sum||arr[2].sum))/(arr[3]?2:1);
+          const pct=prior>0?Math.round((recent-prior)/prior*100):0;
+          salesTrend[sid][wd]={pct, dir: pct>=8?'up':(pct<=-8?'down':'flat')};
+        }
+      });
+    });
+  }catch(e){ console.error('Umsatz-Trend laden fehlgeschlagen:', e); }
+
   (prevDisposals||[]).forEach(d=>{
     if(!prevDispByDateStore[d.disposal_date])prevDispByDateStore[d.disposal_date]={};
     if(!prevDispByDateStore[d.disposal_date][d.store_id])prevDispByDateStore[d.disposal_date][d.store_id]={};
     const cat=mapDishNameToCategory(d.dish_name, d.slot);
-    const ex=prevDispByDateStore[d.disposal_date][d.store_id][cat]||{leftover:0,soldOutEarly:false};
+    const ex=prevDispByDateStore[d.disposal_date][d.store_id][cat]||{leftover:0,soldOutEarly:false,soldOutTime:null};
     ex.leftover+=(d.leftover_qty||0);
-    if(d.sold_out_time) ex.soldOutEarly=true;
+    if(d.sold_out_time){ ex.soldOutEarly=true; ex.soldOutTime=d.sold_out_time.slice(0,5); }
     prevDispByDateStore[d.disposal_date][d.store_id][cat]=ex;
   });
 
@@ -5760,27 +6039,43 @@ async function renderOrgForecast(){
           const displayVal=rec?.qty??sugg?.qty??'';
           const isSugg=!rec && sugg!=null;
           const title=(sugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'');
-          // Vorwoche-Vergleich SICHTBAR unter der Zelle (nicht nur als Hover-Tooltip — der
-          // funktioniert am Tablet/Handy ohne Maus gar nicht, genau das war der Kern des Problems).
           const cmpCat=mapDishNameToCategory(dish);
           const cmpPrevDate=dateMinusDays(dateStr,7);
           const cmpPrevQty=prevFcMap[cmpPrevDate]?.[s.id]?.[cmpCat]?.['gross'];
           const cmpDisp=prevDispByDateStore[cmpPrevDate]?.[s.id]?.[cmpCat];
-          let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='';
+          // Ampel des letzten gleichen Wochentags — kleiner Rest (1-4) ist GRÜN = Zielzustand (bewusst,
+          // damit kein Druck auf Null-Rest entsteht), ausverkauft ist ROT = das teurere Problem.
+          let cmpAmpel='', cmpColor='var(--muted)', cmpDetail='', ampelScore=0;
           if(cmpDisp && (cmpDisp.soldOutEarly||cmpDisp.leftover>0)){
-            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail='ausverkauft'; }
-            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
-            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
-            else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; }
+            if(cmpDisp.soldOutEarly){ cmpAmpel='🔥'; cmpColor='#DC2626'; cmpDetail=cmpDisp.soldOutTime||'ausverkauft'; ampelScore=2; }
+            else if(cmpDisp.leftover>10){ cmpAmpel='📦'; cmpColor='#C2410C'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=-2; }
+            else if(cmpDisp.leftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=-1; }
+            else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`${formatQty(cmpDisp.leftover)} übrig`; ampelScore=0; }
           }
-          const cmpLine=cmpPrevQty!=null?`<div style="font-size:8.5px;color:${cmpColor};text-align:center;margin-top:2px;line-height:1.3;max-width:52px;margin-left:auto;margin-right:auto;" title="Vorwoche-Menge & Entsorgungs-Ergebnis">VW ${formatQty(cmpPrevQty)}${cmpAmpel?' '+cmpAmpel:''}${cmpDetail?`<br>(${cmpDetail})`:''}</div>`:'';
+          // Umsatz-Trend desselben Wochentags fließt mit ein (verdichtet, nicht als eigene Zeile).
+          const wdNum=new Date(dateStr+'T00:00:00').getDay();
+          const trend=salesTrend[s.id]?.[wdNum];
+          const trendScore=trend?(trend.dir==='up'?1:(trend.dir==='down'?-1:0)):0;
+          // Richtungs-Ableitung = Ampel (Hauptgewicht) + Umsatz-Trend (Feinjustierung).
+          const dirScore=ampelScore+trendScore;
+          let dirLabel='', dirColor='', dirIcon='';
+          if(cmpPrevQty!=null || cmpDisp){
+            if(dirScore>=2){ dirIcon='↑'; dirLabel='erhöhen'; dirColor='#DC2626'; }
+            else if(dirScore<=-2){ dirIcon='↓'; dirLabel='senken'; dirColor='#C2410C'; }
+            else if(dirScore===1){ dirIcon='↗'; dirLabel='leicht mehr'; dirColor='#D97706'; }
+            else if(dirScore===-1){ dirIcon='↘'; dirLabel='leicht weniger'; dirColor='#D97706'; }
+            else { dirIcon='→'; dirLabel='halten'; dirColor='#16A34A'; }
+          }
+          const trendTip=trend?` · Umsatz ${trend.pct>0?'+':''}${trend.pct}%`:'';
+          const dirLine=dirLabel?`<div style="font-size:8.5px;font-weight:700;color:${dirColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Empfohlene Richtung${trendTip}">${dirIcon} ${dirLabel}</div>`:'';
+          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:8px;color:var(--muted);text-align:center;margin-top:1px;line-height:1.25;" title="Letzte Woche gleicher Tag">VW ${cmpPrevQty!=null?formatQty(cmpPrevQty):'?'}${cmpAmpel?' <span style="color:'+cmpColor+'">'+cmpAmpel+'</span>':''}${cmpDetail?`<br><span style="color:${cmpColor};">${cmpDetail}</span>`:''}</div>`:'';
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
               title="${escAttr(title)}"
-              style="width:44px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${manual?manualBg:(isSugg?'#F0F9FF':'#fff')};">
-            ${isSugg?`<div style="font-size:7.5px;color:#0EA5E9;text-align:center;margin-top:1px;">Vorschlag</div>`:''}
+              style="width:46px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#CBD5E1':'var(--border)')};border-radius:6px;font-size:13px;font-weight:${manual?'700':'400'};padding:5px 1px;background:${manual?manualBg:(isSugg?'#F1F5F9':'#fff')};color:${manual?manualColor:(isSugg?'#64748B':'#1a1a18')};">
+            ${dirLine}
             ${cmpLine}
           </td>`;
         }
@@ -7231,7 +7526,7 @@ async function renderDailyCheck(){
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
-    api(`wareneingang?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temperatur&order=datum.desc&limit=1`).catch(()=>[]),
+    api(`wareneingang?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temperatur,temperaturen&order=datum.desc&limit=1`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temp_klein,temp_gross&order=datum.desc&limit=1`).catch(()=>[])
   ]);
   const wek=(wekRows||[])[0];
@@ -7285,7 +7580,11 @@ async function renderDailyCheck(){
           const sel=wek ? (wek.ware||'').includes(w) : true;
           const tval=existingTemps[w] ?? '';
           const exception=getDishTempException(w);
-          const fallbackVal=(tval!=='')?tval:(exception?'':(wek?.temperatur ?? wekPrev?.temperatur ?? ''));
+          // Bei Gerichten mit eigener Regel (z.B. Wochensalat, max. 6°C statt ≥65°C) NICHT den
+          // allgemeinen Warmhalte-Fallback nehmen (der wäre viel zu hoch/falsch) — stattdessen den
+          // eigenen letzten Wert für GENAU dieses Gericht, aus heute oder notfalls von gestern.
+          const prevOwnTemp=wekPrev?.temperaturen?.[w];
+          const fallbackVal=(tval!=='')?tval:(exception?(prevOwnTemp??''):(wek?.temperatur ?? wekPrev?.temperatur ?? ''));
           return `<div class="item-row" id="wek-temp-row-${i}" data-max="${exception?exception.max:''}" style="display:${sel?'flex':'none'};padding:8px 0;">
             <div class="item-name" data-no-translate>${w}${exception?`<div style="font-size:10px;color:#0369A1;font-weight:500;">❄️ Ausnahme: max. ${exception.max}°C</div>`:''}</div>
             <input id="wek-temp-${i}" data-dish="${w.replace(/"/g,'&quot;')}" type="number" step="0.1" oninput="checkWareneingangTemp()" value="${fallbackVal}" style="width:72px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
@@ -7325,18 +7624,28 @@ async function saveDailyCheckAll(){
   if(!tempRows.length){ showToast('Bitte mindestens eine angelieferte Ware auswählen'); return; }
   const temperaturen={};
   let anyInvalid=false, minTemp=null;
+  const exceptionBreaches=[]; // Gerichte mit eigener Regel (z.B. Wochensalat), die ÜBER ihrem Max liegen
   tempRows.forEach(row=>{
     const input=row.querySelector('input');
     const dish=input?.dataset.dish;
     const v=parseFloat(input?.value);
     if(isNaN(v)){ anyInvalid=true; return; }
     if(dish) temperaturen[dish]=v;
-    if(minTemp===null||v<minTemp) minTemp=v;
+    // Gerichte mit eigener Regel (z.B. Wochensalat: kalt, max. 6°C) fließen NICHT in die allgemeine
+    // ≥65°C-Warmhalte-Prüfung mit ein — sonst verlangt die App jeden Tag fälschlich eine "Maßnahme",
+    // obwohl ein kaltes Gericht bei 5°C völlig korrekt ist. Stattdessen eigene Prüfung gegen das Max.
+    const exception=dish?getDishTempException(dish):null;
+    if(exception){
+      if(v>exception.max) exceptionBreaches.push(`${dish} (${v}°C, erlaubt max. ${exception.max}°C)`);
+    } else {
+      if(minTemp===null||v<minTemp) minTemp=v;
+    }
   });
   if(anyInvalid || minTemp===null){ showToast('Bitte bei jedem Gericht eine Temperatur eintragen'); return; }
   const massnahmeEl=document.getElementById('wek-massnahme');
   const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
   if(minTemp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
+  if(exceptionBreaches.length && !massnahme){ showToast('Zu warm für: '+exceptionBreaches.join(', ')+' — bitte Maßnahme eintragen'); return; }
   const klein=parseFloat(document.getElementById('kuehl-klein')?.value);
   const gross=parseFloat(document.getElementById('kuehl-gross')?.value);
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Kühltemperaturen eintragen'); return; }
@@ -7747,13 +8056,19 @@ function hideSubmitOverlay(){
   if(ov) ov.style.display='none';
 }
 
-async function sendToAsana(betreff, beschreibung, storeName, gemeldetVon, fotoUrl, dueOn){
+async function sendToAsana(betreff, beschreibung, storeName, gemeldetVon, fotoUrl, dueOn, mangelId){
   try{
-    await fetch(`${SUPABASE_URL}/functions/v1/asana-schadensmeldung`, {
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/asana-schadensmeldung`, {
       method:'POST',
       headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},
       body: JSON.stringify({betreff, beschreibung, store_name:storeName, gemeldet_von:gemeldetVon, foto_url:fotoUrl, due_on:dueOn})
     });
+    const json=await res.json().catch(()=>null);
+    // Asana-Task-ID am Meldungs-Eintrag hinterlegen — Grundlage für den späteren "Asana-Updates
+    // holen"-Knopf (Kommentare & Erledigt-Status zurückholen).
+    if(json?.task_gid && mangelId){
+      await api(`maengel?id=eq.${mangelId}`,{method:'PATCH',body:JSON.stringify({asana_task_gid:json.task_gid})}).catch(e=>console.error('Asana-Task-ID speichern fehlgeschlagen:',e));
+    }
   }catch(e){ console.error('Asana-Weiterleitung fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', e); }
 }
 
@@ -7794,26 +8109,85 @@ async function sendMangelMeldung(){
     const faelligDate=new Date(Date.now()+dringlichkeitTage*24*60*60*1000);
     const faelligkeitAm=faelligDate.toISOString().split('T')[0]; // YYYY-MM-DD
     const verlauf=[{t:'erstellt', text:'Meldung erstellt', autor:gemeldetVon, zeit:new Date().toISOString()}];
-    await api('maengel',{method:'POST',body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf,faelligkeit_am:faelligkeitAm}])});
-    sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm); // nicht blockierend — Meldung ist bereits gespeichert
-    await emailjs.send('service_xla195w','template_9uiq1wf',{
-      name: targetStoreName+' — Schadensmeldung: '+betreff,
-      time: now,
-      message: text,
-      title: 'Karma Food Schadensmeldung',
-      to_email: 'tini@karmafood.at'
-    });
-    showToast('✓ Gemeldet & E-Mail verschickt!');
+    // WICHTIG: DB-Speicherung und E-Mail-Versand bewusst in GETRENNTEN try/catch-Blöcken. Vorher
+    // hing beides im selben Block — schlug nur die E-Mail fehl (z.B. Netzwerk-Hänger), zeigte die
+    // App trotzdem "Fehler — bitte nochmal versuchen", obwohl die Meldung längst gespeichert war.
+    // Ergebnis: Doppel-Meldungen, weil Leute (verständlicherweise) nochmal draufgetippt haben.
+    const newRows=await api('maengel',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf,faelligkeit_am:faelligkeitAm}])});
+    const newMangelId=newRows?.[0]?.id||null;
+    sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm, newMangelId); // nicht blockierend — Meldung ist bereits gespeichert
+    // Ab hier ist die Meldung sicher gespeichert — Formular leeren & Liste aktualisieren passiert
+    // JETZT, unabhängig davon ob der E-Mail-Versand gleich klappt oder nicht.
     document.getElementById('mangel-betreff').value='';
     document.getElementById('mangel-text').value='';
     if(storeSelect) storeSelect.value='';
     clearMangelFoto();
     renderMaengel();
+    try{
+      await emailjs.send('service_xla195w','template_9uiq1wf',{
+        name: targetStoreName+' — Schadensmeldung: '+betreff,
+        time: now,
+        message: text,
+        title: 'Karma Food Schadensmeldung',
+        to_email: 'tini@karmafood.at'
+      });
+      showToast('✓ Gemeldet & E-Mail verschickt!');
+    }catch(emailErr){
+      console.error('E-Mail-Versand fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', emailErr);
+      showToast('✓ Gemeldet — E-Mail-Versand hat aber nicht geklappt', true);
+    }
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
   finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } hideSubmitOverlay(); }
 }
 
 // ---- Detailansicht mit chronologischem Verlauf (Status-Änderungen + Rückmeldungen) ----
+// Holt per Knopfdruck Adis Kommentare + Erledigt-Status aus Asana und ergänzt sie in der App —
+// bewusst kein automatischer Webhook (viel simpler, kein zusätzlicher Infrastruktur-Aufwand),
+// dafür muss aktiv auf "Asana-Updates holen" getippt werden.
+async function syncMangelFromAsana(id){
+  const btn=document.getElementById('mangel-asana-sync-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Wird geholt…'; }
+  try{
+    const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
+    const m=(rows||[])[0];
+    if(!m?.asana_task_gid){ showToast('Keine Asana-Verknüpfung vorhanden'); return; }
+
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/asana-schadensmeldung-sync`, {
+      method:'POST',
+      headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},
+      body: JSON.stringify({task_gid:m.asana_task_gid})
+    });
+    const json=await res.json().catch(()=>null);
+    if(!res.ok || !json?.ok){ showToast('Asana-Abruf fehlgeschlagen — bitte später nochmal'); return; }
+
+    // Neue Kommentare (die noch nicht übernommen wurden) an den Verlauf anhängen
+    const alreadySynced=new Set(m.asana_synced_story_gids||[]);
+    const newComments=(json.comments||[]).filter(c=>!alreadySynced.has(c.gid));
+    const verlauf=[...(m.verlauf||[])];
+    newComments.forEach(c=>{
+      verlauf.push({t:'asana_kommentar', text:'💬 '+c.text, autor:c.autor+' (Asana)', zeit:c.zeit});
+    });
+    const updatedSyncedGids=[...alreadySynced, ...newComments.map(c=>c.gid)];
+
+    const patch={verlauf, asana_synced_story_gids:updatedSyncedGids};
+    // Wenn Adi die Aufgabe in Asana als erledigt markiert hat, hier automatisch mitziehen.
+    if(json.completed && m.status!=='behoben'){
+      patch.status='behoben';
+      patch.behoben_am=json.completed_at||new Date().toISOString();
+      patch.behoben_von='Asana (Adi)';
+      verlauf.push({t:'status', text:'✓ In Asana als erledigt markiert', autor:'Asana (Adi)', zeit:json.completed_at||new Date().toISOString()});
+    }
+    await api(`maengel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
+
+    showToast(newComments.length||json.completed ? `✓ ${newComments.length} neue Kommentar(e) geholt${json.completed?', als erledigt markiert':''}` : 'Keine neuen Updates in Asana');
+    closeMangelDetail();
+    openMangelDetail(id);
+    renderMaengel();
+  }catch(e){ console.error(e); showToast('Fehler beim Asana-Abruf', true); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='🔄 Asana-Updates holen'; } }
+}
+window.syncMangelFromAsana=syncMangelFromAsana;
+
 async function openMangelDetail(id){
   const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
   const m=(rows||[])[0];
@@ -7852,6 +8226,8 @@ async function openMangelDetail(id){
             <button onclick="setMangelStatus(${m.id},'behoben')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">✓ Abschließen</button>
           `:''}
           <button onclick="toggleMangelEdit(true)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--sub);cursor:pointer;">✏️ Bearbeiten</button>
+          ${m.asana_task_gid?`<a href="https://app.asana.com/0/1206467470914728/${m.asana_task_gid}" target="_blank" rel="noopener" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#7B3FE4;text-decoration:none;">🔗 In Asana öffnen</a>
+          <button id="mangel-asana-sync-btn" onclick="syncMangelFromAsana(${m.id})" style="background:var(--green-light);border:1px solid var(--green);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">🔄 Asana-Updates holen</button>`:''}
         </div>
       </div>
 
@@ -9924,6 +10300,16 @@ function formatZutatenFuerKoch(zutaten, allergene){
 let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 
 async function renderMorgenKoch(el, tabHtml, dayOffset=null){
+  // Automatische Aktualisierung alle 60s — diese Ansicht ist für die Küche reiner Lesezugriff
+  // (keine Eingabefelder), daher gefahrlos automatisch neu ladbar. Behebt "Operations ändert
+  // Menge, Küche sieht's nicht", weil die App sonst nirgends von selbst neu lädt.
+  if(window._morgenKochRefreshTimer) clearInterval(window._morgenKochRefreshTimer);
+  window._morgenKochRefreshTimer=setInterval(()=>{
+    // Nur weiterlaufen, solange wirklich der (schreibgeschützte) Morgen-Tab aktiv ist — andere
+    // Küchen-Tabs (z.B. Schrankerl) haben Eingabefelder, die dabei nicht überschrieben werden dürfen.
+    if(currentView==='kitchen' && kitchenTab==='morgen') renderKitchen();
+    else clearInterval(window._morgenKochRefreshTimer);
+  }, 60000);
   // dayOffset: null = auto (morgen), 0 = heute, 1 = übermorgen etc. — außer morgen ist Samstag/Sonntag (nicht gekocht),
   // dann automatisch weiter auf den nächsten Montag springen.
   // Calculate cook day based on offset (skip weekends)
@@ -9944,7 +10330,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const isToday = tomorrowStr===todayStr;
 
   const stores = await api('stores?select=id,name&order=id').catch(()=>[]);
-  const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
+  const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
 
   const forecasts = await api(`forecast_qty?forecast_date=eq.${tomorrowStr}&select=store_id,dish_name,qty,source,changed_at,groesse`).catch(()=>[]);
   const fMap = {}; const fMapByCat = {};
@@ -10056,9 +10442,12 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const validDishObjs=menuDishes.filter(d=>d.name&&!d.name.startsWith('ÖL'));
   // Lasagne-Legende: einmalig oben, kompakt, damit Mitarbeitende die Größen verstehen
   const hasAnyLasagne=validDishObjs.some(d=>d.name.includes('Lasagne'));
-  html+=`<div style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;">
-    <span style="font-size:18px;">🍽️</span>
-    <span style="font-size:14px;font-weight:800;color:#1a1a18;letter-spacing:-0.01em;">Gerichte &amp; Mengen</span>
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:18px;">🍽️</span>
+      <span style="font-size:14px;font-weight:800;color:#1a1a18;letter-spacing:-0.01em;">Gerichte &amp; Mengen</span>
+    </div>
+    <button onclick="renderKitchen()" title="Jetzt aktualisieren" style="background:var(--surface-1);border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:11px;color:var(--sub);cursor:pointer;">🔄</button>
   </div>`;
   if(hasAnyLasagne){
     html+=`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
@@ -10077,11 +10466,12 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     </div>`;
   }
   html+=`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:12px;">
-  <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;">
+  <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;table-layout:fixed;">
+  <colgroup><col style="width:26%;">${storeList.map(()=>`<col style="width:${Math.floor(64/storeList.length)}%;">`).join('')}<col style="width:10%;"></colgroup>
   <thead><tr style="background:var(--surface-1);">
-    <th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:600;letter-spacing:0.04em;color:var(--sub);border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht</th>
-    ${storeList.map((s,si)=>`<th data-no-translate style="padding:8px 6px;font-size:10px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};border-bottom:1.5px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}white-space:nowrap;">${s.name.split(' ')[0]}</th>`).join('')}
-    <th style="padding:8px 6px;font-size:11px;font-weight:700;color:var(--green);border-bottom:1.5px solid var(--border);border-left:1px solid var(--border);">Σ</th>
+    <th style="text-align:left;padding:6px 6px;font-size:10.5px;font-weight:600;letter-spacing:0.02em;color:var(--sub);border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht</th>
+    ${storeList.map((s,si)=>`<th data-no-translate style="padding:6px 2px;font-size:9px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};border-bottom:1.5px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}overflow:hidden;text-overflow:ellipsis;">${STORE_SHORT[s.id]||s.name.split(' ')[0]}</th>`).join('')}
+    <th style="padding:6px 2px;font-size:10px;font-weight:700;color:var(--green);border-bottom:1.5px solid var(--border);border-left:1px solid var(--border);">Σ</th>
   </tr></thead><tbody>`;
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
@@ -10092,26 +10482,32 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
     const hasData = total>0;
     const detailId = `morgen_zut_${dIdx}`;
+    // Bei Lasagne lieber "1x Groß"/"1x Klein" ausgeschrieben zeigen (Version 1) — nur wenn das bei
+    // mehreren Größen gleichzeitig nicht mehr passt, auf "1x G (18)"/"1x K (12)" abkürzen.
+    const SIZE_SHORT_MK={mittel:'M',klein:'K',gross:'G'};
+    const SIZE_FULL_MK={mittel:'Mittel',klein:'Klein',gross:'Groß'};
+    const SIZE_PORTIONS_MK={mittel:12,klein:8,gross:18};
     const cells=storeList.map((s,si)=>{
       const recs=storeData[s.id]||[];
       const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
       const changed=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
       const changedByOrg=recs.some(r=>r.source==='org');
       const changedColor=changedByOrg?'#2B3A67':'#0369A1';
-      const SIZE_FULL_MK={mittel:'Mittel (12)',klein:'Klein (8)',gross:'Groß (18)'};
-      const sizeLabel=isLasagne&&recs.length?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;align-items:center;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 6px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL_MK[r.groesse]||'Groß'}</span>`).join('')}</div>`:null;
+      const activeRecs=recs.filter(r=>r.qty>0);
+      const useShort=activeRecs.length>1; // mehrere Größen gleichzeitig -> abkürzen, sonst ausschreiben
+      const sizeLabel=(isLasagne&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:${useShort?'8px':'8.5px'};font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)}× ${useShort?(SIZE_SHORT_MK[r.groesse]||'G')+' ('+(SIZE_PORTIONS_MK[r.groesse]||18)+')':(SIZE_FULL_MK[r.groesse]||'Groß')}</span>`).join('')}</div>`:'';
       const dispRec=(disposalBySlotStore[dishObj.slot]||{})[s.id];
       let ampelBadge='';
       if(dispRec && dispRec.leftover_qty!=null){
         const a=disposalAmpel(dispRec.leftover_qty, dispRec.sold_out_time);
         ampelBadge=`<div style="font-size:9.5px;font-weight:700;color:${a.color};margin-top:1px;">${a.icon} ${dispRec.leftover_qty}</div>`;
       }
-      return `<td style="font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${qty?formatQty(qty):'–'}${sizeLabel||''}${ampelBadge}</td>`;
+      return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${!isLasagne?(qty?formatQty(qty):'–'):''}${sizeLabel}${ampelBadge}</td>`;
     }).join('');
     html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
-      <td style="text-align:left;border-bottom:1px solid var(--border);border-right:1px solid var(--border);"><span style="display:inline-flex;align-items:center;gap:5px;vertical-align:middle;">${dishImgHtml(dish, 22)}<span style="font-weight:600;">${dish}</span></span></td>
+      <td style="text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);word-break:break-word;"><span style="display:flex;align-items:center;gap:4px;"><span style="flex-shrink:0;">${dishImgHtml(dish, 16)}</span><span style="font-weight:600;font-size:11px;line-height:1.25;">${dish}</span></span></td>
       ${cells}
-      <td style="font-weight:700;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${total>0?formatQty(total):'–'}</td>
+      <td style="font-weight:700;font-size:12px;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${total>0?formatQty(total):'–'}</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
