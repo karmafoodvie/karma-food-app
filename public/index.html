@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.2';
+const APP_VERSION = '6.23.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1240,10 +1240,11 @@ async function toggleOrgShopPicker(){
   const visible=(shops||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
   box.innerHTML=visible.map(s=>{
     const col=STORE_COLORS[s.id]||'#1D9E75';
-    return `<div onclick="openShopFromOrg('${s.id}','${escForInlineHandler(s.name)}')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;">
-      <span style="width:26px;height:26px;border-radius:50%;background:${col}25;color:${col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${s.name.slice(0,2).toUpperCase()}</span>
-      <span style="flex:1;font-size:13px;font-weight:600;" data-no-translate>${s.name}</span>
-      <span style="color:var(--muted);">→</span>
+    return `<div style="position:relative;">
+      <button class="role-btn-color" onclick="openShopFromOrg('${s.id}','${escForInlineHandler(s.name)}')" data-no-translate style="background:${col};">
+        <span class="role-btn-role">${s.name}</span>
+        <span class="role-btn-name">Filiale öffnen</span>
+      </button>
     </div>`;
   }).join('');
 }
@@ -2878,7 +2879,7 @@ async function renderHome(){
       </div>
       <span id="org-shop-picker-arrow" style="color:#15803D;">→</span>
     </div>
-    <div id="org-shop-picker" style="display:none;flex-direction:column;gap:6px;margin:0 0 8px;"></div>
+    <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:0 0 8px;"></div>
     <div onclick="goTo('management')" style="display:flex;align-items:center;gap:10px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🧭</span>
       <div style="flex:1;">
@@ -3510,6 +3511,18 @@ async function renderStoreSamosaHtml(weekDates){
   return html;
 }
 
+async function markBeilagenReviewed(){
+  const btn=document.getElementById('beilagen-review-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Speichert…'; }
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    await api('beilagen_reviewed',{method:'POST',headers:{'Prefer':'resolution=ignore-duplicates'},body:JSON.stringify([{store_id:currentStore.id,review_date:today}])});
+    showToast('✓ Vermerkt — nichts anzupassen');
+    if(btn){ btn.textContent='✓ Erledigt für heute'; btn.style.opacity='0.7'; }
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern', true); if(btn){ btn.disabled=false; btn.textContent='✓ Passt so — nichts anzupassen'; } }
+}
+window.markBeilagenReviewed=markBeilagenReviewed;
+
 async function renderKuecheOrderTab(el, tabHtml){
   const tab=ORDER_TABS.kueche;
   let html=tabHtml;
@@ -3523,6 +3536,9 @@ async function renderKuecheOrderTab(el, tabHtml){
     <div><div style="font-size:12px;font-weight:600;color:${tab.color};">${tab.title}</div>
     <div style="font-size:10px;color:var(--muted);">Fixe Wochenmenge laut Plan — jeder Tag bei Bedarf anpassbar</div></div>
   </div>`;
+  if(currentStore?.id!=='zentrale'){
+    html+=`<button id="beilagen-review-btn" onclick="markBeilagenReviewed()" style="width:100%;padding:10px;margin-bottom:10px;background:var(--green-light);color:var(--green);border:1.5px solid var(--green);border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;">✓ Passt so — nichts anzupassen</button>`;
+  }
 
   html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
     <button onclick="changeBeilagenWeek(-1)" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;cursor:pointer;">← Vorherige</button>
@@ -7503,6 +7519,12 @@ async function renderDailyCheck(){
   }
   const todayKey=new Date().toISOString().split('T')[0];
   const dienstplanKey=`dienstplan_ok_${todayKey}_${currentStore.id}`;
+  // Robuster als nur localStorage (das geht z.B. bei einem Update/anderen Gerät verloren, wodurch
+  // der Hinweis fälschlich später am Tag nochmal auftaucht, sogar bei "Schicht abschließen") —
+  // zusätzlich prüfen, ob heute schon ECHTE Daten in der DB stehen. Dann ist klar: eingecheckt
+  // wurde längst, kein erneutes Nachfragen nötig.
+  const alreadyActiveToday=await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${todayKey}&select=id&limit=1`).catch(()=>[]);
+  if(alreadyActiveToday?.length) localStorage.setItem(dienstplanKey,'1');
   if(!localStorage.getItem(dienstplanKey)){
     el.innerHTML=`
       <div style="display:flex;gap:5px;margin-bottom:16px;">
@@ -8328,7 +8350,7 @@ async function renderSchichtende(){
   const tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
 
   // Alle Daten parallel laden
-  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, submissionsToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow] = await Promise.all([
+  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, submissionsToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow, beilagenReviewedToday] = await Promise.all([
     api('checklist_templates?list_type=eq.abschluss&select=id').catch(()=>[]),
     api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`).catch(()=>[]),
     api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=id`).catch(()=>[]),
@@ -8340,7 +8362,8 @@ async function renderSchichtende(){
     api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=tab`).catch(()=>[]),
     api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=id`).catch(()=>[]),
     api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${tomorrow}&select=id`).catch(()=>[]),
-    api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${tomorrow}&is_adjusted=eq.true&select=id&limit=1`).catch(()=>[])
+    api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${tomorrow}&is_adjusted=eq.true&select=id&limit=1`).catch(()=>[]),
+    api(`beilagen_reviewed?store_id=eq.${currentStore.id}&review_date=eq.${today}&select=id&limit=1`).catch(()=>[])
   ]);
 
   const clDoneIds=new Set((clDoneToday||[]).map(x=>x.template_id));
@@ -8358,7 +8381,7 @@ async function renderSchichtende(){
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
-    {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
+    {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
