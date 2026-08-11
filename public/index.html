@@ -970,7 +970,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.25.0';
+const APP_VERSION = '6.25.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5772,9 +5772,10 @@ async function renderOrgForecast(){
     </div>
   </div>`;
   weekSwitcher+=`<div style="font-size:10px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.6;">
-    <div><span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:4px;padding:1px 5px;color:#64748B;">grau</span> = App-Vorschlag (noch nicht bestätigt) · tippen = deine Entscheidung</div>
-    <div style="margin-top:3px;"><b>↑ erhöhen</b> / <span style="color:#16A34A;">→ halten</span> / <b>↓ senken</b> = empfohlene Richtung (aus Vorwoche + Umsatz-Trend)</div>
-    <div style="margin-top:3px;">VW = letzte Woche gleicher Tag · <span style="color:#DC2626;">🔥 ausverkauft</span> · <span style="color:#16A34A;">✓ kleiner Rest = ideal</span> · 📦 zu viel</div>
+    <div><span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:4px;padding:1px 5px;color:#64748B;">grau</span> = Vorschlag der App · tippen = deine Entscheidung</div>
+    <div style="margin-top:3px;"><b>↑ erhöhen</b> / <span style="color:#16A34A;">→ halten</span> / <b>↓ senken</b> = empfohlene Richtung</div>
+    <div style="margin-top:3px;"><b>damals X</b> = Menge beim letzten Mal · <span style="color:#DC2626;">🔥 ausverkauft</span> · <span style="color:#16A34A;">✓ kleiner Rest = ideal</span> · 📦 zu viel</div>
+    <div style="margin-top:3px;">🔁 = exakt dasselbe Gericht (4-Wochen-Rotation) · ≈ = ähnliches Gericht</div>
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
@@ -5794,8 +5795,8 @@ async function renderOrgForecast(){
     api(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
     getCalendarEvents().catch(()=>[]),
     fetchWeatherForStore('lb', fromDate, toDate).catch(()=>({})),
-    api(`forecast_qty?forecast_date=gte.${prevFromDate}&forecast_date=lte.${prevToDate}&select=store_id,forecast_date,dish_name,qty,groesse,source`).catch(()=>[]),
-    api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${dispToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time,slot`).catch(()=>[]),
+    api(`forecast_qty?forecast_date=gte.${prevFromDate}&forecast_date=lte.${prevToDate}&select=store_id,forecast_date,dish_name,qty,groesse,source&limit=20000`).catch(()=>[]),
+    api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${dispToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time,slot&limit=20000`).catch(()=>[]),
     api('forecast_settings?select=*').catch(()=>[])
   ]);
 
@@ -6146,7 +6147,10 @@ async function renderOrgForecast(){
             }
           }
           const cmpPrevDate=occurrences[0]?.date||null;
-          const cmpPrevQty=occurrences[0]?.qty??null;
+          const qtyOccs=occurrences.filter(o=>o.qty!=null);
+          // Durchschnitt aller gefundenen Vorkommen — wenn beim jüngsten Termin zufällig keine
+          // Menge hinterlegt ist, bleibt die Referenz trotzdem sichtbar (statt einfach leer).
+          const cmpPrevQty=qtyOccs.length?qtyOccs.reduce((a,o)=>a+o.qty,0)/qtyOccs.length:null;
           const cmpDisp=occurrences[0]?.disp||null;
           const cmpWeeksAgo=cmpPrevDate?Math.round((new Date(dateStr)-new Date(cmpPrevDate))/(7*86400000)):null;
           // Ampel aus dem DURCHSCHNITT der gefundenen Vorkommen — kleiner Rest (1-4) ist GRÜN =
@@ -6179,10 +6183,19 @@ async function renderOrgForecast(){
             else { dirIcon='→'; dirLabel='halten'; dirColor='#16A34A'; }
           }
           const trendTip=trend?` · Umsatz ${trend.pct>0?'+':''}${trend.pct}%`:'';
-          const dirLine=dirLabel?`<div style="font-size:8.5px;font-weight:700;color:${dirColor};text-align:center;margin-top:2px;white-space:nowrap;" title="Empfohlene Richtung${trendTip}${mom.label?' · '+mom.label:''}">${dirIcon} ${dirLabel}</div>`:'';
-          const momLine=mom.label?`<div style="font-size:7.5px;color:${mom.score>0?'#DC2626':'#C2410C'};text-align:center;line-height:1.2;margin-top:1px;">${mom.label}</div>`:'';
-          const cmpLabel=cmpExact?`gleiches Gericht (vor ${cmpWeeksAgo}Wo)`:(cmpWeeksAgo===1?'VW':`vor ${cmpWeeksAgo}Wo`);
-          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:8px;color:var(--muted);text-align:center;margin-top:1px;line-height:1.25;" title="${cmpExact?'Selbes Gericht aus der 4-Wochen-Rotation':'Ähnliches Gericht derselben Kategorie'} · Referenz aus ${occurrences.length} Vorkommen">${cmpExact?'🔁':''} ${cmpLabel}<br>${cmpPrevQty!=null?formatQty(cmpPrevQty)+' Bhlt':''}${cmpAmpel?' <span style="color:'+cmpColor+'">'+cmpAmpel+'</span>':''}${cmpDetail?`<br><span style="color:${cmpColor};">${cmpDetail}</span>`:''}</div>`:'';
+          const refTip=cmpExact?`Selbes Gericht aus der 4-Wochen-Rotation (vor ${cmpWeeksAgo} Wochen)`:`Ähnliches Gericht derselben Kategorie (vor ${cmpWeeksAgo} Wochen)`;
+          const dirLine=dirLabel?`<div style="font-size:9px;font-weight:700;color:${dirColor};text-align:center;margin-top:3px;white-space:nowrap;" title="${escAttr('Empfohlene Richtung'+trendTip+(mom.label?' · '+mom.label:''))}">${dirIcon} ${dirLabel}</div>`:'';
+          // Kernzeile: "damals X → Ergebnis". Das ist die Zahl, die man beim Planen wirklich braucht.
+          // Alles Erklärende (Rotation, Momentum) steckt im Tooltip bzw. winzigen Markern, damit die
+          // Zelle nicht zur Textwand wird.
+          const refQtyTxt=cmpPrevQty!=null?`${formatQty(Math.round(cmpPrevQty*4)/4)}`:'?';
+          const cmpLine=(cmpPrevQty!=null||cmpDisp)?`<div style="font-size:9px;color:var(--sub);text-align:center;margin-top:2px;line-height:1.3;white-space:nowrap;" title="${escAttr(refTip)}">damals ${refQtyTxt}${cmpAmpel?` <span style="color:${cmpColor};">→ ${cmpAmpel}${cmpDetail?' '+cmpDetail.replace('Ø ','').replace(' übrig','↑'):''}</span>`:''}</div>`:'';
+          const metaBits=[];
+          if(cmpExact) metaBits.push(`🔁${cmpWeeksAgo}Wo`);
+          else if(cmpWeeksAgo) metaBits.push(`≈${cmpWeeksAgo}Wo`);
+          if(mom.score>0) metaBits.push('🔥zuletzt knapp');
+          else if(mom.score<0) metaBits.push('📦zuletzt viel');
+          const momLine=metaBits.length?`<div style="font-size:7.5px;color:var(--muted);text-align:center;line-height:1.2;margin-top:1px;">${metaBits.join(' · ')}</div>`:'';
           html+=`<td style="vertical-align:top;padding:3px;">
             <input type="number" step="0.25" value="${displayVal}" placeholder="–"
               data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}"
@@ -6190,8 +6203,8 @@ async function renderOrgForecast(){
               title="${escAttr(title)}"
               style="width:46px;text-align:center;border:1.5px solid ${manual?manualColor:(isSugg?'#CBD5E1':'var(--border)')};border-radius:6px;font-size:13px;font-weight:${manual?'700':'400'};padding:5px 1px;background:${manual?manualBg:(isSugg?'#F1F5F9':'#fff')};color:${manual?manualColor:(isSugg?'#64748B':'#1a1a18')};">
             ${dirLine}
-            ${momLine}
             ${cmpLine}
+            ${momLine}
           </td>`;
         }
       });
