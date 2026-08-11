@@ -67,6 +67,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border:none;background:transparent;color:var(--muted);font-size:10px;cursor:pointer;}
 .nav-btn svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 .nav-btn.active{color:var(--green);}
+#bottomnav.six .nav-btn{font-size:9px;padding:8px 1px;gap:1px;}
+#bottomnav.six .nav-btn svg{width:20px;height:20px;}
 
 /* CARDS */
 .card{background:var(--card);border-radius:12px;border:1px solid var(--border);overflow:hidden;margin-bottom:10px;}
@@ -273,6 +275,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </button>
     <button class="nav-btn" onclick="goTo('orgForecast')" id="nav-org-mengen" style="display:none;">
       <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Mengen
+    </button>
+    <button class="nav-btn" onclick="goTo('umsatz')" id="nav-org-umsatz" style="display:none;">
+      <svg viewBox="0 0 24 24"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="21 12 21 7 16 7"/></svg>Umsatz
     </button>
     <button class="nav-btn" onclick="goTo('hygieneSchulung')" id="nav-org-hygiene" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Hygiene
@@ -970,7 +975,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.23.1';
+const APP_VERSION = '6.24.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1252,7 +1257,9 @@ async function loginAs(store){
     document.getElementById('nav-org-ueberblick').style.display='flex';
     document.getElementById('nav-org-msg').style.display='flex';
     document.getElementById('nav-org-mengen').style.display='flex';
+    document.getElementById('nav-org-umsatz').style.display='flex';
     document.getElementById('nav-org-hygiene').style.display='flex';
+    document.getElementById('bottomnav').classList.add('six');
     document.getElementById('nav-org-schaeden').style.display='flex';
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
@@ -1342,6 +1349,7 @@ function goTo(v, noPush=false){
     if(v==='home') navId='nav-org-ueberblick';
     else if(v==='broadcast' || v==='msg') navId='nav-org-msg';
     else if(v==='orgForecast' || v==='forecastReview') navId='nav-org-mengen';
+    else if(v==='umsatz') navId='nav-org-umsatz';
     else if(v==='hygieneSchulung' || v==='schulung') navId='nav-org-hygiene';
     else if(v==='maengel') navId='nav-org-schaeden';
     // Alte Tabs (Sweets, Küche etc.) behalten ihre IDs
@@ -4137,10 +4145,8 @@ function umsatzPeriodHtml(r,c,cap){
   });
   h+='</div>';
   if(umsatzState.preset==='custom'){
-    h+='<div style="display:flex;gap:6px;margin-top:8px;">'
-      +'<input type="date" value="'+(umsatzState.from||'')+'" onchange="umsatzSetDate(\'from\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
-      +'<input type="date" value="'+(umsatzState.to||'')+'" onchange="umsatzSetDate(\'to\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
-      +'</div>';
+    h+='<button onclick="umsatzOpenCal(\'period\')" style="width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1.5px solid '+(umsatzCalMode==='period'?UMSATZ_PURPLE:'var(--border)')+';background:'+(umsatzCalMode==='period'?'#F3ECFD':'#fff')+';color:'+UMSATZ_PURPLE+';font-size:12px;font-weight:600;cursor:pointer;">📅 '+(umsatzState.from&&umsatzState.to?uNiceDate(umsatzState.from)+' – '+uNiceDate(umsatzState.to):'Zeitraum im Kalender markieren')+'</button>';
+    if(umsatzCalMode==='period') h+=umsatzCalHtml();
   }
   h+='<div style="font-size:12px;font-weight:700;color:'+UMSATZ_PURPLE+';margin-top:8px;">'+uNiceDate(r.from)+' – '+uNiceDate(r.to)+'</div>';
   if(cap){
@@ -4156,10 +4162,8 @@ function umsatzPeriodHtml(r,c,cap){
   });
   h+='</div>';
   if(umsatzState.cmp==='custom'){
-    h+='<div style="display:flex;gap:6px;margin-top:7px;">'
-      +'<input type="date" value="'+(umsatzState.cmpFrom||'')+'" onchange="umsatzSetDate(\'cmpFrom\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
-      +'<input type="date" value="'+(umsatzState.cmpTo||'')+'" onchange="umsatzSetDate(\'cmpTo\',this.value)" style="flex:1;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">'
-      +'</div>';
+    h+='<button onclick="umsatzOpenCal(\'cmp\')" style="width:100%;margin-top:7px;padding:9px;border-radius:9px;border:1.5px solid '+(umsatzCalMode==='cmp'?UMSATZ_PURPLE:'var(--border)')+';background:'+(umsatzCalMode==='cmp'?'#F3ECFD':'#fff')+';color:'+UMSATZ_PURPLE+';font-size:12px;font-weight:600;cursor:pointer;">📅 '+(umsatzState.cmpFrom&&umsatzState.cmpTo?uNiceDate(umsatzState.cmpFrom)+' – '+uNiceDate(umsatzState.cmpTo):'Vergleichszeitraum markieren')+'</button>';
+    if(umsatzCalMode==='cmp') h+=umsatzCalHtml();
   }
   if(c.from&&c.to) h+='<div style="font-size:11px;color:var(--muted);margin-top:6px;">Vergleich: '+uNiceDate(c.from)+' – '+uNiceDate(c.to)+'</div>';
   h+='</div>';
@@ -4246,30 +4250,135 @@ function umsatzKpiHtml(d){
   return h;
 }
 
+// ---- KALENDER: Zeitraum durch Antippen markieren ----
+// Zwei Modi: 'period' (Hauptzeitraum) und 'cmp' (Vergleichszeitraum).
+// Erster Tipp setzt den Start, zweiter das Ende. Tippt man vor den Start, wird neu begonnen.
+// Wochenenden sind ausgegraut und nicht wählbar — es wird nur Mo–Fr verkauft.
+let umsatzCalMonth=null, umsatzCalMode=null, umsatzCalPending=null;
+
+function umsatzOpenCal(mode){
+  if(umsatzCalMode===mode){ umsatzCalMode=null; renderUmsatzContent(); return; }
+  umsatzCalMode=mode; umsatzCalPending=null;
+  const ref=(mode==='cmp'?umsatzState.cmpFrom:umsatzState.from)||(umsatzMeta&&umsatzMeta.max_date)||uFmt(new Date());
+  const d=uParse(ref); umsatzCalMonth=uFmt(new Date(d.getFullYear(),d.getMonth(),1));
+  renderUmsatzContent();
+}
+function umsatzCalShift(n){
+  const d=uParse(umsatzCalMonth); umsatzCalMonth=uFmt(new Date(d.getFullYear(),d.getMonth()+n,1));
+  renderUmsatzContent();
+}
+function umsatzCalPick(day){
+  const isCmp=umsatzCalMode==='cmp';
+  if(!umsatzCalPending||day<umsatzCalPending){
+    umsatzCalPending=day;
+    if(isCmp){ umsatzState.cmpFrom=day; umsatzState.cmpTo=day; }
+    else { umsatzState.preset='custom'; umsatzState.from=day; umsatzState.to=day; }
+  }else{
+    if(isCmp) umsatzState.cmpTo=day; else umsatzState.to=day;
+    umsatzCalPending=null; umsatzCalMode=null; // Bereich vollständig — Kalender schließt sich
+  }
+  umsatzSaveState(); renderUmsatzContent();
+}
+
+const UMSATZ_MONATE=['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+function umsatzCalHtml(){
+  if(!umsatzCalMode) return '';
+  const isCmp=umsatzCalMode==='cmp';
+  const selFrom=isCmp?umsatzState.cmpFrom:umsatzState.from;
+  const selTo=isCmp?umsatzState.cmpTo:umsatzState.to;
+  const maxD=(umsatzMeta&&umsatzMeta.max_date)||null;
+  const minD=(umsatzMeta&&umsatzMeta.min_date)||null;
+  const first=uParse(umsatzCalMonth);
+  const y=first.getFullYear(), m=first.getMonth();
+  const lead=(first.getDay()+6)%7;              // Kalender startet am Montag
+  const daysInMonth=new Date(y,m+1,0).getDate();
+
+  let h='<div style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px;background:#fff;">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+    +'<button onclick="umsatzCalShift(-1)" style="width:28px;height:28px;border:1px solid var(--border);background:#fff;border-radius:7px;font-size:14px;cursor:pointer;line-height:1;">‹</button>'
+    +'<div style="font-size:12.5px;font-weight:700;">'+UMSATZ_MONATE[m]+' '+y+'</div>'
+    +'<button onclick="umsatzCalShift(1)" style="width:28px;height:28px;border:1px solid var(--border);background:#fff;border-radius:7px;font-size:14px;cursor:pointer;line-height:1;">›</button></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px;">';
+  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(d=>{ h+='<div style="text-align:center;font-size:9.5px;color:var(--muted);font-weight:600;">'+d+'</div>'; });
+  h+='</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
+  for(let i=0;i<lead;i++) h+='<div></div>';
+  for(let day=1;day<=daysInMonth;day++){
+    const ds=uFmt(new Date(y,m,day));
+    const dow=new Date(y,m,day).getDay();
+    const weekend=(dow===0||dow===6);
+    const outside=(maxD&&ds>maxD)||(minD&&ds<minD);
+    const disabled=weekend||outside;
+    const isStart=ds===selFrom, isEnd=ds===selTo;
+    const inRange=selFrom&&selTo&&ds>selFrom&&ds<selTo;
+    let bg='transparent', col='var(--sub)', weight='400';
+    if(disabled){ col='#D4D4D0'; }
+    if(inRange){ bg='#F3ECFD'; col=UMSATZ_PURPLE; }
+    if(isStart||isEnd){ bg=UMSATZ_PURPLE; col='#fff'; weight='700'; }
+    h+='<div '+(disabled?'':'onclick="umsatzCalPick(\''+ds+'\')" ')+'style="text-align:center;padding:6px 0;font-size:11.5px;border-radius:6px;background:'+bg+';color:'+col+';font-weight:'+weight+';cursor:'+(disabled?'default':'pointer')+';">'+day+'</div>';
+  }
+  h+='</div>';
+  const hint=umsatzCalPending?'Jetzt das Enddatum antippen':'Startdatum antippen, danach das Enddatum';
+  h+='<div style="font-size:10.5px;color:var(--muted);margin-top:8px;text-align:center;">'+hint+'</div>';
+  h+='<div style="font-size:9.5px;color:var(--muted);margin-top:3px;text-align:center;">Wochenenden sind nicht wählbar — es wird nur Mo–Fr verkauft.</div>';
+  h+='</div>';
+  return h;
+}
+
+// ---- LINIENDIAGRAMM ----
+// Fläche + Linie für den aktuellen Zeitraum, gestrichelte Linie für den Vergleich.
+// Punkte nur bei wenigen Werten, sonst wird es auf dem Handy unlesbar.
 function umsatzChartHtml(d,bucket){
   const tr=d.trend||[];
   if(!tr.length) return '';
   const cmp=d.trend_cmp||[];
-  const W=320, H=110, pad=4;
-  const max=Math.max.apply(null,tr.map(t=>Number(t.netto)).concat(cmp.map(t=>Number(t.netto))).concat([1]));
+  const W=320, H=130, L=6, R=6, T=8, B=20;
+  const vals=tr.map(t=>Number(t.netto));
+  const cvals=cmp.map(t=>Number(t.netto));
+  const max=Math.max.apply(null,vals.concat(cvals).concat([1]))*1.08;
   const n=tr.length;
-  const bw=Math.max(2,(W-pad*2)/n*0.7), gap=(W-pad*2)/n;
-  let bars='', line='';
-  tr.forEach((t,i)=>{
-    const hgt=Math.max(1,(Number(t.netto)/max)*(H-18));
-    const x=pad+i*gap+(gap-bw)/2;
-    bars+='<rect x="'+x.toFixed(1)+'" y="'+(H-14-hgt).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hgt.toFixed(1)+'" rx="1.5" fill="'+UMSATZ_PURPLE+'"><title>'+umsatzBucketLabel(t.bucket,bucket)+': '+uEuro(t.netto)+'</title></rect>';
-  });
-  if(cmp.length){
-    const pts=[];
-    cmp.forEach((t,i)=>{
-      if(i>=n) return;
-      const hgt=(Number(t.netto)/max)*(H-18);
-      pts.push((pad+i*gap+gap/2).toFixed(1)+','+(H-14-hgt).toFixed(1));
-    });
-    if(pts.length>1) line='<polyline points="'+pts.join(' ')+'" fill="none" stroke="#B9A2E8" stroke-width="1.5" stroke-dasharray="3 2"/>';
+  const xAt=i=>n===1?(W/2):(L+i*((W-L-R)/(n-1)));
+  const yAt=v=>T+(1-(v/max))*(H-T-B);
+
+  let grid='';
+  [0.5,1].forEach(f=>{ const yy=yAt(max*f); grid+='<line x1="'+L+'" y1="'+yy.toFixed(1)+'" x2="'+(W-R)+'" y2="'+yy.toFixed(1)+'" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="2 3"/>'; });
+
+  const pts=vals.map((v,i)=>xAt(i).toFixed(1)+','+yAt(v).toFixed(1));
+  let area='';
+  if(n>1) area='<polygon points="'+xAt(0).toFixed(1)+','+(H-B)+' '+pts.join(' ')+' '+xAt(n-1).toFixed(1)+','+(H-B)+'" fill="'+UMSATZ_PURPLE+'" opacity="0.10"/>';
+  const line=n>1?'<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+UMSATZ_PURPLE+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>':'';
+
+  let cline='';
+  if(cvals.length>1){
+    const cp=cvals.slice(0,n).map((v,i)=>xAt(i).toFixed(1)+','+yAt(v).toFixed(1));
+    cline='<polyline points="'+cp.join(' ')+'" fill="none" stroke="#B9A2E8" stroke-width="1.6" stroke-dasharray="4 3" stroke-linejoin="round"/>';
   }
-  const first=umsatzBucketLabel(tr[0].bucket,bucket), last=umsatzBucketLabel(tr[n-1].bucket,bucket);
+
+  let dots='';
+  if(n<=20) vals.forEach((v,i)=>{
+    dots+='<circle cx="'+xAt(i).toFixed(1)+'" cy="'+yAt(v).toFixed(1)+'" r="'+(n<=10?2.8:2)+'" fill="#fff" stroke="'+UMSATZ_PURPLE+'" stroke-width="1.6"><title>'+umsatzBucketLabel(tr[i].bucket,bucket)+': '+uEuro(v)+'</title></circle>';
+  });
+
+  // Höchst- und Tiefstwert beschriften — die zwei Punkte, die man wirklich sucht
+  let marks='';
+  if(n>1){
+    const hi=vals.indexOf(Math.max.apply(null,vals)), lo=vals.indexOf(Math.min.apply(null,vals));
+    [[hi,-6],[lo,12]].forEach(p=>{
+      const i=p[0]; if(i<0) return;
+      let anchor='middle', x=xAt(i);
+      if(i===0) anchor='start'; else if(i===n-1) anchor='end';
+      marks+='<text x="'+x.toFixed(1)+'" y="'+(yAt(vals[i])+p[1]).toFixed(1)+'" text-anchor="'+anchor+'" font-size="8.5" font-weight="700" fill="'+UMSATZ_PURPLE+'">'+uEuro(vals[i])+'</text>';
+    });
+  }
+
+  let axis='';
+  const labIdx=n<=1?[0]:(n<=6?vals.map((v,i)=>i):[0,Math.floor((n-1)/2),n-1]);
+  labIdx.forEach(i=>{
+    let anchor='middle';
+    if(i===0) anchor='start'; else if(i===n-1) anchor='end';
+    axis+='<text x="'+xAt(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="'+anchor+'" font-size="8.5" fill="#9a9a95">'+umsatzBucketLabel(tr[i].bucket,bucket)+'</text>';
+  });
+
   let h='<div class="section-lbl">📈 Verlauf</div><div class="card" style="padding:11px;">';
   h+='<div style="display:flex;gap:4px;margin-bottom:8px;">';
   [['auto','Auto'],['day','Tag'],['week','Woche'],['month','Monat']].forEach(b=>{
@@ -4277,9 +4386,8 @@ function umsatzChartHtml(d,bucket){
     h+='<button onclick="umsatzSetBucket(\''+b[0]+'\')" style="flex:1;padding:4px;border-radius:6px;border:1px solid '+(on?UMSATZ_PURPLE:'var(--border)')+';background:'+(on?'#F3ECFD':'#fff')+';color:'+(on?UMSATZ_PURPLE:'var(--muted)')+';font-size:10.5px;font-weight:600;cursor:pointer;">'+b[1]+'</button>';
   });
   h+='</div>';
-  h+='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;">'+bars+line+'</svg>';
-  h+='<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-top:2px;"><span>'+first+'</span><span>max. '+uEuro(max)+'</span><span>'+last+'</span></div>';
-  if(cmp.length) h+='<div style="font-size:10px;color:var(--muted);margin-top:6px;">— — Gestrichelt: Vergleichszeitraum</div>';
+  h+='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;overflow:visible;">'+grid+area+cline+line+dots+marks+axis+'</svg>';
+  if(cvals.length>1) h+='<div style="display:flex;gap:12px;font-size:10px;color:var(--muted);margin-top:6px;"><span><span style="display:inline-block;width:14px;border-top:2px solid '+UMSATZ_PURPLE+';vertical-align:middle;"></span> Zeitraum</span><span><span style="display:inline-block;width:14px;border-top:1.6px dashed #B9A2E8;vertical-align:middle;"></span> Vergleich</span></div>';
   h+='</div>';
   return h;
 }
@@ -4390,6 +4498,9 @@ window.umsatzTogglePanel=umsatzTogglePanel;
 window.umsatzToggleFilter=umsatzToggleFilter;
 window.umsatzSetProductSort=umsatzSetProductSort;
 window.umsatzReset=umsatzReset;
+window.umsatzOpenCal=umsatzOpenCal;
+window.umsatzCalShift=umsatzCalShift;
+window.umsatzCalPick=umsatzCalPick;
 
 // Parst denselben gruppierten Odoo-Pivot-Export (Filiale-Blöcke, Tagesreihen, Produkt-Spaltenpaare
 // Nettobetrag+Menge) wie beim ersten manuellen Import — jetzt clientseitig im Browser mit SheetJS,
