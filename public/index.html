@@ -975,7 +975,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.25.1';
+const APP_VERSION = '6.26.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4613,15 +4613,18 @@ async function handleUmsatzUpload(inputEl){
     const measRow=headRow+1;
     cols.forEach((s,i)=>{
       const endCol=(i+1<cols.length?cols[i+1].col:range.e.c+1);
-      s.netCol=null; s.qtyCol=null;
+      s.netCol=null; s.qtyCol=null; s.grossCol=null;
       for(let c=s.col;c<endCol;c++){
         const m=String(cell(measRow,c)||'').toLowerCase();
         if(s.netCol===null && m.indexOf('netto')>=0) s.netCol=c;
         if(s.qtyCol===null && (m.indexOf('menge')>=0||m.indexOf('anzahl')>=0||m.indexOf('geliefert')>=0)) s.qtyCol=c;
+        // "Gesamt" ohne "netto" davor ist in diesem Export der Bruttobetrag (Netto × 1,10 USt).
+        if(s.grossCol===null && m.indexOf('gesamt')>=0 && m.indexOf('netto')<0) s.grossCol=c;
       }
       if(s.netCol===null) s.netCol=s.col;   // Rückfall: erste Spalte des Blocks
     });
     const hasQty=cols.some(s=>s.qtyCol!==null);
+    const hasGross=cols.some(s=>s.grossCol!==null);
 
     // 3) Zeilen lesen: Produktzeile vs. Datumszeile
     const records=[]; let product=null; const dateSet={}; let weekend=0;
@@ -4640,8 +4643,9 @@ async function handleUmsatzUpload(inputEl){
       cols.forEach(s=>{
         const net=umsatzNum(cell(r,s.netCol));
         const qty=s.qtyCol!==null?umsatzNum(cell(r,s.qtyCol)):null;
-        if(!net && !qty) return;
-        records.push({store_id:s.id, sale_date:ds, product_name:product, quantity:qty, net_amount:net});
+        const gross=s.grossCol!==null?umsatzNum(cell(r,s.grossCol)):null;
+        if(!net && !qty && !gross) return;
+        records.push({store_id:s.id, sale_date:ds, product_name:product, quantity:qty, net_amount:net, gross_amount:gross});
         dateSet[ds]=1;
       });
     }
@@ -4653,7 +4657,7 @@ async function handleUmsatzUpload(inputEl){
       if(!perStore[x.store_id]) perStore[x.store_id]={rows:0,net:0};
       perStore[x.store_id].rows++; perStore[x.store_id].net+=x.net_amount;
     });
-    umsatzPendingImport={records, from:dates[0], to:dates[dates.length-1], perStore, unknown, hasQty, weekend, tage:dates.length};
+    umsatzPendingImport={records, from:dates[0], to:dates[dates.length-1], perStore, unknown, hasQty, hasGross, weekend, tage:dates.length};
     umsatzRenderPreview();
   }catch(e){
     console.error(e);
