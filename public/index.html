@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.28.1';
+const APP_VERSION = '6.28.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4799,7 +4799,15 @@ async function _autoSaveForecastCellInner(inputEl, dateStr, dishName){
     if(isLasagneDish){
       const allSizeInputs=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)];
       allSizeInputs.forEach(inp=>{
-        const qty=Math.round(parseFloat(inp.value));
+        // WICHTIG: Für das Feld, das GERADE geändert wurde (inputEl), den neuen Live-Wert nehmen.
+        // Für alle ANDEREN Größenfelder derselben Zeile bewusst NICHT den aktuellen DOM-Wert nehmen
+        // (der kann durch ein versehentliches Antippen des winzigen Spinner-Pfeils verändert sein,
+        // ohne dass die Person das bemerkt hat) — sondern deren zuletzt bestätigten Wert
+        // (data-original). Nur so wird garantiert nur das gespeichert, was wirklich beabsichtigt war.
+        // Genau das hat bei Stadtplatz/Lasagne dazu geführt, dass ein ungewolltes "1" bei Klein
+        // mitgespeichert wurde, während nur Groß geändert werden sollte.
+        const sourceVal = (inp===inputEl) ? inp.value : (inp.dataset.original ?? '');
+        const qty=Math.round(parseFloat(sourceVal));
         if(!isNaN(qty) && qty>=0){
           rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:inp.dataset.groesse||'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
         }
