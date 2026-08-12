@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.32.0';
+const APP_VERSION = '6.33.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5911,7 +5911,7 @@ window.editOrgRoleName=editOrgRoleName;
 // kommende. Die laufende Woche bleibt über "← Vorherige" jederzeit erreichbar.
 let orgForecastWeekOffset = 1;
 
-let orgMengenTab='forecast';
+let orgMengenTab='simple';
 let orgPlanStore=null; // gewählte Filiale in der Planen-Ansicht
 function switchOrgMengenTab(t){ orgMengenTab=t; renderOrgForecast(); }
 function setOrgPlanStore(id){ orgPlanStore=id; renderOrgForecast(); }
@@ -6038,12 +6038,161 @@ async function renderOrgPlanTab(){
 }
 window.renderOrgPlanTab=renderOrgPlanTab;
 
+// EINFACH-ANSICHT: kein Raster, keine Spalten. Nur eine kurze Liste der Stellen, an denen wirklich
+// eine Entscheidung ansteht (ausverkauft = zu wenig, oder viel übrig = zu viel). Alles andere läuft
+// unverändert weiter und muss gar nicht angeschaut werden.
+async function renderOrgSimple(){
+  const target=document.getElementById('orgfc-content');
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kloster2'&&s.id!=='1070');
+  const wd=getWeekdayDates(1); // nächste Woche
+  const fromDate=wd[1], toDate=wd[5];
+  const histFrom=dateMinusDays(fromDate, 120);
+
+  const [fcRows, dispRows]=await Promise.all([
+    api(`forecast_qty?forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,status&limit=20000`).catch(()=>[]),
+    api(`disposal?disposal_date=gte.${histFrom}&select=store_id,disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=20000`).catch(()=>[])
+  ]);
+  const fcMap={}, plannedMap={};
+  (fcRows||[]).forEach(f=>{
+    const c=mapDishNameToCategory(f.dish_name);
+    const k=f.store_id+'|'+f.forecast_date+'|'+c;
+    fcMap[k]=(fcMap[k]||0)+(Number(f.qty)||0);
+    plannedMap[f.store_id+'|'+f.forecast_date+'|'+f.dish_name]=Number(f.qty)||0;
+  });
+  const dispMap={};
+  (dispRows||[]).forEach(d=>{
+    const c=mapDishNameToCategory(d.dish_name, d.slot);
+    const k=d.store_id+'|'+d.disposal_date+'|'+c;
+    const ex=dispMap[k]||{leftover:0, soldOutTime:null};
+    ex.leftover+=(Number(d.leftover_qty)||0);
+    if(d.sold_out_time) ex.soldOutTime=d.sold_out_time.slice(0,5);
+    dispMap[k]=ex;
+  });
+
+  // Nur echte Handlungsfälle sammeln
+  const todos=[];
+  for(let d=1; d<=5; d++){
+    const dateStr=wd[d];
+    const wdStr=WEEKDAYS[d-1]?.k;
+    const dishes=getMenuDishNamesForDay(wdStr, dateStr);
+    const salat=getSalatNameForDate(dateStr);
+    const _bd=[salat, ...dishes].filter(Boolean);
+    const allDishes=_bd.some(x=>mapDishNameToCategory(x)==='Reis')?_bd:[..._bd, REIS_DISH_NAME];
+    allDishes.forEach(dish=>{
+      const cat=mapDishNameToCategory(dish);
+      storeList.forEach(s=>{
+        // letztes Vorkommen dieses Gerichts bei dieser Filiale suchen
+        let ref=null;
+        for(const wBack of [4,8,12,16,1,2,3]){
+          const td=dateMinusDays(dateStr, wBack*7);
+          const dp=dispMap[s.id+'|'+td+'|'+cat];
+          if(dp){ ref={date:td, disp:dp, qty:fcMap[s.id+'|'+td+'|'+cat]}; break; }
+        }
+        if(!ref) return;
+        const current=plannedMap[s.id+'|'+dateStr+'|'+dish];
+        const refQty=ref.qty!=null?ref.qty:null;
+        if(ref.disp.soldOutTime){
+          const target=refQty!=null?Math.round((refQty+0.25)*4)/4:null;
+          // Nur zeigen, wenn nicht ohnehin schon mehr geplant ist
+          if(target!=null && (current==null || current<target)){
+            todos.push({typ:'mehr', dateStr, dish, store:s, refQty, refDate:ref.date, info:'ausverkauft '+ref.disp.soldOutTime, target, current});
+          }
+        } else if(ref.disp.leftover>10 && refQty!=null){
+          const target=Math.max(0.25, Math.round((refQty-0.5)*4)/4);
+          if(current==null || current>target){
+            todos.push({typ:'weniger', dateStr, dish, store:s, refQty, refDate:ref.date, info:formatQty(ref.disp.leftover)+' übrig', target, current});
+          }
+        }
+      });
+    });
+  }
+
+  const kw=getIsoWeekNumber(fromDate);
+  let html=`<div class="card" style="padding:14px;margin-bottom:12px;background:#2B3A67;color:#fff;">
+    <div style="font-size:10px;opacity:0.75;letter-spacing:0.08em;text-transform:uppercase;">Planung KW ${kw}</div>
+    <div style="font-size:20px;font-weight:800;font-family:'Boldonse',sans-serif;">${new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})} – ${new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
+  </div>`;
+
+  if(!todos.length){
+    html+=`<div class="card" style="padding:24px;text-align:center;">
+      <div style="font-size:32px;margin-bottom:8px;">✓</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Nichts zu tun</div>
+      <div style="font-size:12px;color:var(--muted);">Beim letzten Mal lief alles im grünen Bereich. Die Mengen können so bleiben.</div>
+    </div>`;
+    target.innerHTML=html;
+    translateEl(target);
+    return;
+  }
+
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
+    <div style="font-size:12.5px;font-weight:600;">${todos.length} ${todos.length===1?'Punkt':'Punkte'} zu entscheiden</div>
+    <button onclick="orgSimpleApplyAll()" style="background:#2B3A67;color:#fff;border:none;border-radius:9px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer;">Alle übernehmen</button>
+  </div>`;
+
+  window._orgSimpleTodos=todos;
+  todos.forEach((t,i)=>{
+    const up=t.typ==='mehr';
+    const dl=new Date(t.dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+    const col=STORE_COLORS[t.store.id]||'#888';
+    html+=`<div class="card" id="simple-todo-${i}" style="padding:12px 14px;margin-bottom:8px;border-left:4px solid ${up?'#DC2626':'#D97706'};">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+        <span style="font-size:12.5px;font-weight:700;" data-no-translate>${STORE_SHORT[t.store.id]||t.store.name}</span>
+        <span style="font-size:11px;color:var(--muted);">${dl}</span>
+      </div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:5px;" data-no-translate>${t.dish}</div>
+      <div style="font-size:11.5px;color:${up?'#991B1B':'#9A3412'};margin-bottom:9px;">
+        ${up?'🔥':'📦'} Letztes Mal ${t.refQty!=null?formatQty(t.refQty)+' Behälter':''} → ${t.info}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11.5px;color:var(--muted);">Neu:</span>
+        <input type="number" step="0.25" id="simple-inp-${i}" value="${t.target}" style="width:62px;text-align:center;border:1.5px solid var(--border);border-radius:8px;font-size:15px;font-weight:600;padding:7px 2px;">
+        <button onclick="orgSimpleApply(${i})" style="flex:1;background:${up?'#DC2626':'#D97706'};color:#fff;border:none;border-radius:8px;padding:9px;font-size:12.5px;font-weight:600;cursor:pointer;">Speichern</button>
+      </div>
+    </div>`;
+  });
+
+  target.innerHTML=html;
+  translateEl(target);
+}
+window.renderOrgSimple=renderOrgSimple;
+
+async function orgSimpleApply(i){
+  const t=window._orgSimpleTodos?.[i];
+  if(!t) return;
+  const inp=document.getElementById('simple-inp-'+i);
+  const qty=parseFloat(inp?.value);
+  if(isNaN(qty)) return;
+  const card=document.getElementById('simple-todo-'+i);
+  try{
+    await api(`forecast_qty?store_id=eq.${t.store.id}&dish_name=eq.${encodeURIComponent(t.dish)}&forecast_date=eq.${t.dateStr}`,{method:'DELETE'}).catch(()=>{});
+    await api('forecast_qty',{method:'POST',body:JSON.stringify([{
+      store_id:t.store.id, dish_name:t.dish, forecast_date:t.dateStr, qty, groesse:'gross', source:'org',
+      status:'angepasst', suggested_qty:t.target, confirmed_by:(currentStore?.name||'Operations'), confirmed_at:new Date().toISOString()
+    }])});
+    if(card){ card.style.opacity='0.45'; card.style.borderLeftColor='#16A34A'; card.querySelector('button').textContent='✓ Gespeichert'; }
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern', true); }
+}
+window.orgSimpleApply=orgSimpleApply;
+
+async function orgSimpleApplyAll(){
+  const todos=window._orgSimpleTodos||[];
+  for(let i=0;i<todos.length;i++){ await orgSimpleApply(i); }
+  showToast(`✓ ${todos.length} Änderungen gespeichert`);
+}
+window.orgSimpleApplyAll=orgSimpleApplyAll;
+
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
-  const orgMengenTabBar=tabBarHtml([{key:'forecast',label:'📅 Forecast'},{key:'plan',label:'🗓️ Planen'},{key:'disposal',label:'🗑️ Entsorgung'}], orgMengenTab, 'switchOrgMengenTab', '#2B3A67');
-  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+orgMengenTabBar+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
+  const orgMengenTabBar=tabBarHtml([{key:'simple',label:'✅ Zu tun'},{key:'forecast',label:'📅 Alle Mengen'},{key:'plan',label:'🗓️ Planen'},{key:'disposal',label:'🗑️ Entsorgung'}], orgMengenTab, 'switchOrgMengenTab', '#2B3A67');
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen','Nächste Woche planen','#2B3A67')+orgMengenTabBar+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
 
+  if(orgMengenTab==='simple'){
+    await renderOrgSimple();
+    return;
+  }
   if(orgMengenTab==='disposal'){
     document.getElementById('orgfc-content').innerHTML=await renderDisposalOverviewHtml();
     translateEl(document.getElementById('orgfc-content'));
@@ -6321,6 +6470,15 @@ async function renderOrgForecast(){
         qty=Math.max(0.25,Math.round((qty+wAdj)*4)/4);
       }
       if(wReason) reasons.push(wReason);
+    }
+
+    // HARTE REGEL: War es beim letzten Mal ausverkauft, MUSS der Vorschlag über der damaligen Menge
+    // liegen — sonst plant man denselben Fehler erneut. Vorher konnte der Ausverkauft-Zuschlag durch
+    // den danach angewandten Ferien-/Wetter-Abschlag wieder aufgefressen werden, sodass z.B. bei
+    // "2 Behälter, um 12:00 ausverkauft" erneut nur 2 vorgeschlagen wurden (Fall lb, 19.08.26).
+    if(disp?.soldOutEarly && qty<=prevQty){
+      qty=isLasagneSize?Math.max(prevQty+1, Math.round(prevQty*1.2)):Math.round((prevQty+0.25)*4)/4;
+      reasons.push('🔥 war ausverkauft → mindestens über der letzten Menge');
     }
 
     // Letzte Sicherheitsschwelle: 0 als Vorschlag geht nie — es braucht immer etwas zum Verkaufen,
