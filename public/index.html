@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.28.0';
+const APP_VERSION = '6.28.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5845,6 +5845,10 @@ async function loadOrgRolesRow(){
 }
 
 function orgRoleNav(key){
+  // Kitchen bekommt bei "KC" die ECHTE, bearbeitbare Bestellliste (dieselbe wie jede normale
+  // Filiale — IST-Bestand eintragen, Bestellung wird automatisch berechnet), nicht die reine
+  // Übersichts-Packliste. Organisation sieht bei "KC" weiterhin die gesammelte Übersicht.
+  if(key==='kc' && currentStore?.id==='kitchen'){ activeOrderTab='kc'; goTo('order'); return; }
   const targets={kueche:()=>goTo('kitchen'), operations:()=>goTo('orgForecast'), kc:()=>goToPackTab('kc'), transporter:()=>goToPackTab('transporter'), sweets:()=>goTo('sweets')};
   targets[key]?.();
 }
