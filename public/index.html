@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.30.0';
+const APP_VERSION = '6.31.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6069,12 +6069,8 @@ async function renderOrgForecast(){
       <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">Nächste →</button>
     </div>
   </div>`;
-  weekSwitcher+=`<div style="font-size:10.5px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.7;">
-    <span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:4px;padding:1px 6px;color:#64748B;font-style:italic;">offen</span>
-    <span style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:4px;padding:1px 6px;color:#15803D;">bestätigt</span>
-    <span style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:4px;padding:1px 6px;color:#B45309;">angepasst</span><br>
-    Grau = Vorschlag der App, noch nicht bestätigt. Unverändert speichern = bestätigt, Wert ändern = angepasst.<br>
-    Unter jedem Feld: das <b>letzte Mal mit diesem Gericht</b> (Datum, Menge, Ergebnis) · <span style="color:#C2410C;">⚠️</span> = Referenz unsicher.
+  weekSwitcher+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin:0 0 10px;">
+    Links: letztes Mal (Menge + Ergebnis) · Rechts: deine Menge für diesen Tag
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
@@ -6383,11 +6379,7 @@ async function renderOrgForecast(){
     const isToday=new Date().toISOString().split('T')[0]===dateStr;
 
     html+=`<div class="section-lbl" style="${isToday?'color:#2B3A67;font-weight:700;':''}">${dateLabel}${isToday?' — heute':''}</div>`;
-    if(biryaniDayFlag.value){
-      html+=`<div style="font-size:10.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:7px;padding:5px 9px;margin:-2px 0 5px;">🍚 Biryani-Tag — Biryani bringt Reis mit, daher weniger losen Reis einplanen</div>`;
-    }
     if(reason) html+=`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${reason}</div>`;
-    const dayDetailRows=[];
     html+=`<div id="orgfc-day-${dateStr}"><div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Filiale</th>
       ${allDishes.map(d=>`<th data-no-translate style="font-size:10.5px;">${d}</th>`).join('')}
@@ -6490,132 +6482,38 @@ async function renderOrgForecast(){
             else if(avgLeftover>4){ cmpAmpel='📦'; cmpColor='#D97706'; cmpDetail=`Ø ${formatQty(Math.round(avgLeftover))} übrig`; ampelScore=-1; }
             else { cmpAmpel='✓'; cmpColor='#16A34A'; cmpDetail=`Ø ${formatQty(Math.round(avgLeftover))} übrig`; ampelScore=0; }
           }
-          // Umsatz-Trend desselben Wochentags fließt mit ein (verdichtet, nicht als eigene Zeile).
-          const wdNum=new Date(dateStr+'T00:00:00').getDay();
-          const trend=salesTrend[s.id]?.[wdNum];
-          const trendScore=trend?(trend.dir==='up'?1:(trend.dir==='down'?-1:0)):0;
-          const mom=computeMomentum(s.id, dateStr);
-          const dirScore=ampelScore+trendScore+mom.score;
-          let dirLabel='', dirColor='', dirIcon='';
-          if(cmpPrevQty!=null || cmpDisp || mom.label){
-            if(dirScore>=2){ dirIcon='↑'; dirLabel='erhöhen'; dirColor='#DC2626'; }
-            else if(dirScore<=-2){ dirIcon='↓'; dirLabel='senken'; dirColor='#C2410C'; }
-            else if(dirScore===1){ dirIcon='↗'; dirLabel='leicht mehr'; dirColor='#D97706'; }
-            else if(dirScore===-1){ dirIcon='↘'; dirLabel='leicht weniger'; dirColor='#D97706'; }
-            else { dirIcon='→'; dirLabel='halten'; dirColor='#16A34A'; }
-          }
-          // ZELLE BEWUSST MINIMAL: nur Eingabefeld + EINE kurze Referenzzeile. Alles Erklärende
-          // (App-Vorschlag, Richtung, Rotation, Momentum, Umsatztrend) wandert in die aufklappbare
-          // Detailtabelle unter dem Tag — vorher war die Zelle eine unlesbare Textwand.
-          // ANZEIGE bewusst auf das KONKRETE letzte Vorkommen (mit Datum) — der Durchschnitt aus
-          // mehreren Terminen fließt nur in die Richtungs-Ableitung ein, wäre als angezeigte Zahl
-          // aber irreführend, weil man nicht sieht, woher sie stammt.
+          // ZELLE RADIKAL REDUZIERT: links was letztes Mal war, rechts das Eingabefeld.
+          // Alles andere (Richtungs-Pfeile, Momentum-Text, Trend, Warnzeichen, Rotations-Marker)
+          // bewusst ENTFERNT — es war zu viel Information zum Planen.
           const lastOcc=occurrences[0]||null;
           const lastOccQty=occurrences.find(o=>o.qty!=null)?.qty ?? null;
-          let refTxt='';
-          if(lastOcc?.disp?.soldOutEarly) refTxt=`<span style="color:#DC2626;">🔥 ausverkauft${lastOcc.disp.soldOutTime?' '+lastOcc.disp.soldOutTime:''}</span>`;
-          else if(lastOcc?.disp) refTxt=`<span style="color:${cmpColor};">${formatQty(lastOcc.disp.leftover||0)} übrig</span>`;
           const refQty=lastOccQty!=null?formatQty(Math.round(lastOccQty*4)/4):null;
-          const occDateLbl=lastOcc?new Date(lastOcc.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'';
-          // Schwache Referenz sichtbar machen (kein Rotations-Treffer) — sonst wirkt die Zahl
-          // verlässlicher als sie ist.
-          const weakRef=lastOcc&&!cmpExact;
-          const cmpLine=(refQty||refTxt)?`<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:3px;line-height:1.3;" title="${escAttr(weakRef?'Kein exakter Rotations-Treffer — nur ähnliches Gericht, Referenz unsicher':'Gleiches Gericht aus der 4-Wochen-Rotation')}">${weakRef?'<span style="color:#C2410C;">⚠️</span> ':''}${occDateLbl?`<span style="opacity:0.75;">${occDateLbl}</span> `:''}${refQty||''}${(refQty||occDateLbl)&&refTxt?'<br>':''}${refTxt}</div>`:'';
-          // Detailzeile für die aufklappbare Begründungstabelle sammeln
-          dayDetailRows.push({
-            store:s.id, dish, sugg:sugg?sugg.qty:null, dirIcon, dirLabel, dirColor, status:rec?.status||null,
-            occs:occurrences.map(o=>({
-              date:o.date, qty:o.qty,
-              leftover:o.disp?o.disp.leftover:null,
-              soldOutTime:o.disp?.soldOutEarly?(o.disp.soldOutTime||'ausverkauft'):null
-            })),
-            exact:cmpExact, mom:mom.label, trendPct:trend?trend.pct:null, reason:sugg?.reason||''
-          });
-          // Statusfarben nach Konzept: grau = offen (Vorschlag), grün = bestätigt, gelb = angepasst.
+          let refRes='';
+          if(lastOcc?.disp?.soldOutEarly) refRes=`<span style="color:#DC2626;">🔥${lastOcc.disp.soldOutTime?' '+lastOcc.disp.soldOutTime:''}</span>`;
+          else if(lastOcc?.disp) refRes=`<span style="color:${(lastOcc.disp.leftover||0)>4?'#C2410C':'#16A34A'};">${formatQty(lastOcc.disp.leftover||0)} übrig</span>`;
           const st=rec?.status;
-          let bColor='var(--border)', bBg='#fff', bText='#1a1a18', bItalic='normal';
-          if(isSugg){ bColor='#CBD5E1'; bBg='#F1F5F9'; bText='#64748B'; bItalic='italic'; }
-          else if(st==='bestaetigt'){ bColor='#16A34A'; bBg='#F0FDF4'; bText='#15803D'; }
+          let bColor='var(--border)', bBg='#fff', bText='#1a1a18';
+          if(st==='bestaetigt'){ bColor='#16A34A'; bBg='#F0FDF4'; bText='#15803D'; }
           else if(st==='angepasst'){ bColor='#D97706'; bBg='#FFFBEB'; bText='#B45309'; }
           else if(manual){ bColor=manualColor; bBg=manualBg; bText=manualColor; }
-          html+=`<td style="vertical-align:top;padding:3px;">
-            <input type="number" step="0.25" value="${displayVal}" placeholder="–"
-              data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg="${sugg?sugg.qty:''}"
-              oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
-              title="${escAttr(title)}"
-              style="width:48px;text-align:center;border:1.5px solid ${bColor};border-radius:6px;font-size:14px;font-weight:${(st||manual)?'700':'400'};padding:6px 1px;background:${bBg};color:${bText};font-style:${bItalic};">
-            ${cmpLine}
+          html+=`<td style="padding:4px 3px;">
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+              <div style="font-size:9.5px;color:var(--muted);text-align:right;line-height:1.25;min-width:46px;">
+                ${refQty?`<div>${refQty}</div>`:'<div style="opacity:0.4;">–</div>'}
+                ${refRes?`<div style="font-size:9px;">${refRes}</div>`:''}
+              </div>
+              <input type="number" step="0.25" value="${displayVal}" placeholder="–"
+                data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg="${sugg?sugg.qty:''}"
+                oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
+                style="width:50px;text-align:center;border:1.5px solid ${bColor};border-radius:6px;font-size:14px;font-weight:${st?'700':'400'};padding:6px 1px;background:${bBg};color:${bText};">
+            </div>
+            ${sugg?`<div style="font-size:8.5px;color:#94A3B8;text-align:center;margin-top:2px;">KI ${formatQty(sugg.qty)}</div>`:''}
           </td>`;
         }
       });
       html+='</tr>';
     });
     html+=`</tbody></table></div></div>`;
-    // Status-Zusammenfassung pro Tag — zeigt sofort, was noch offen ist.
-    const openCells=dayDetailRows.filter(r=>!r.status).length;
-    const confirmedCells=dayDetailRows.filter(r=>r.status==='bestaetigt').length;
-    const adjustedCells=dayDetailRows.filter(r=>r.status==='angepasst').length;
-    if(dayDetailRows.length){
-      html+=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 2px;font-size:10.5px;">
-        ${openCells?`<span style="background:#F1F5F9;color:#64748B;border:1px solid #CBD5E1;border-radius:20px;padding:3px 10px;">⚪ ${openCells} offen</span>`:''}
-        ${confirmedCells?`<span style="background:#F0FDF4;color:#15803D;border:1px solid #86EFAC;border-radius:20px;padding:3px 10px;">✓ ${confirmedCells} bestätigt</span>`:''}
-        ${adjustedCells?`<span style="background:#FFFBEB;color:#B45309;border:1px solid #FCD34D;border-radius:20px;padding:3px 10px;">✎ ${adjustedCells} angepasst</span>`:''}
-      </div>`;
-    }
-    // Begründungen pro FILIALE aufklappbar — statt einer langen Liste, durch die man scrollen muss.
-    // Ein Klick auf "Ausst." zeigt genau deren Gerichte für diesen Tag.
-    const detailWithSugg=dayDetailRows.filter(r=>r.sugg!=null||r.dirLabel);
-    if(detailWithSugg.length){
-      const byStore={};
-      detailWithSugg.forEach(r=>{ (byStore[r.store]=byStore[r.store]||[]).push(r); });
-      html+=`<div style="margin:6px 0 0;">
-        <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">🧪 Begründung ansehen — Filiale antippen:</div>`;
-      Object.keys(byStore).forEach(sid=>{
-        const rs=byStore[sid];
-        const col=STORE_COLORS[sid]||'#888';
-        // Kurzüberblick schon in der zugeklappten Zeile: welche Richtungen kommen vor
-        const ups=rs.filter(r=>r.dirIcon==='↑'||r.dirIcon==='↗').length;
-        const downs=rs.filter(r=>r.dirIcon==='↓'||r.dirIcon==='↘').length;
-        const summaryHint=[ups?`${ups}× mehr`:'', downs?`${downs}× weniger`:''].filter(Boolean).join(' · ')||'unverändert';
-        html+=`<details style="margin-bottom:4px;">
-          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fff;border:1px solid var(--border);border-radius:8px;font-size:11.5px;">
-            <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
-            <span style="font-weight:600;" data-no-translate>${STORE_SHORT[sid]||sid}</span>
-            <span style="color:var(--muted);font-size:10.5px;margin-left:auto;">${summaryHint} ▾</span>
-          </summary>
-          <div class="card" style="margin:4px 0 0;overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;font-size:10.5px;">
-            <thead><tr><th style="text-align:left;">Gericht</th><th>App</th><th>Richtung</th><th style="text-align:left;">Vergleichstage</th><th style="text-align:left;">Hinweise</th></tr></thead><tbody>`;
-        rs.forEach(r=>{
-          const hints=[];
-          // Referenzqualität ehrlich benennen — ein Fallback-Treffer darf nicht wie ein exakter
-          // Rotations-Treffer aussehen, sonst wirkt der Vorschlag präziser als er ist.
-          const withData=r.occs.filter(o=>o.leftover!=null||o.soldOutTime).length;
-          if(r.exact) hints.push('✓ gleiches Gericht (4-Wochen-Rotation)');
-          else hints.push('⚠️ nur ähnliches Gericht — Referenz unsicher');
-          if(withData===0) hints.push('⚠️ keine Entsorgungsdaten → Richtung wenig belastbar');
-          else if(withData===1) hints.push('nur 1 Vergleichstag mit Ergebnis');
-          else hints.push(`Richtung aus Ø von ${withData} Terminen`);
-          if(r.mom) hints.push(r.mom);
-          if(r.trendPct!=null && Math.abs(r.trendPct)>=8) hints.push(`Umsatz ${r.trendPct>0?'+':''}${r.trendPct}%`);
-          // Jeden Vergleichstermin EINZELN mit Datum zeigen — sonst ist nicht nachvollziehbar,
-          // woher das "übrig" stammt.
-          const occHtml=r.occs.length?r.occs.map(o=>{
-            const dl=new Date(o.date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
-            const res=o.soldOutTime?`<span style="color:#DC2626;">🔥 ${o.soldOutTime}</span>`:(o.leftover!=null?`<span style="color:${o.leftover>4?'#C2410C':'#16A34A'};">${formatQty(o.leftover)} übrig</span>`:'<span style="color:var(--muted);">kein Eintrag</span>');
-            return `<div style="white-space:nowrap;">${dl} · ${o.qty!=null?formatQty(o.qty)+' Bhlt':'? Bhlt'} → ${res}</div>`;
-          }).join(''):'<span style="color:#C2410C;">⚠️ keine Referenz gefunden</span>';
-          html+=`<tr>
-            <td style="text-align:left;padding:6px;font-size:10px;" data-no-translate>${r.dish}</td>
-            <td style="font-weight:700;color:#0369A1;">${r.sugg!=null?formatQty(r.sugg):'–'}</td>
-            <td style="color:${r.dirColor||'var(--muted)'};font-weight:600;white-space:nowrap;">${r.dirLabel?r.dirIcon+' '+r.dirLabel:'–'}</td>
-            <td style="text-align:left;font-size:9.5px;">${occHtml}</td>
-            <td style="text-align:left;font-size:9.5px;color:var(--muted);">${hints.join('<br>')||'–'}</td>
-          </tr>`;
-        });
-        html+='</tbody></table></div></div></details>';
-      });
-      html+='</div>';
-    }
     html+=`
       <button id="orgfc-daysave-${dateStr}" onclick="orgFcSaveDay('${dateStr}')" style="width:100%;padding:9px;margin:8px 0 14px;background:#EEF1F8;color:#2B3A67;border:1.5px solid #2B3A67;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;">💾 Nur ${dateLabel.split(',')[0]} speichern</button>
     </div>`;
