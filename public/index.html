@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.33.0';
+const APP_VERSION = '6.34.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6053,12 +6053,32 @@ async function renderOrgSimple(){
     api(`forecast_qty?forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=store_id,forecast_date,dish_name,qty,groesse,status&limit=20000`).catch(()=>[]),
     api(`disposal?disposal_date=gte.${histFrom}&select=store_id,disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=20000`).catch(()=>[])
   ]);
-  const fcMap={}, plannedMap={};
+  // WICHTIG: Mengen NICHT über verschiedene Gerichte derselben Kategorie summieren. Am 20.07. gab es
+  // z.B. bei lb sowohl "Salat" (1,5) als auch "Lemon Herb Lentil Bowl…" (1,5) — beide fallen in die
+  // Kategorie Salat. Summiert ergab das fälschlich 3 Behälter als Referenz. Es wird daher pro
+  // GERICHT summiert (nur über die Größen) und beim Nachschlagen der größte Einzelwert genommen,
+  // bzw. bevorzugt der Eintrag mit exakt demselben Gerichtsnamen.
+  const fcByDish={}; // store|date|dish -> Summe über Größen
   (fcRows||[]).forEach(f=>{
-    const c=mapDishNameToCategory(f.dish_name);
-    const k=f.store_id+'|'+f.forecast_date+'|'+c;
-    fcMap[k]=(fcMap[k]||0)+(Number(f.qty)||0);
-    plannedMap[f.store_id+'|'+f.forecast_date+'|'+f.dish_name]=Number(f.qty)||0;
+    const dk=f.store_id+'|'+f.forecast_date+'|'+f.dish_name;
+    fcByDish[dk]=(fcByDish[dk]||0)+(Number(f.qty)||0);
+  });
+  const fcCatIndex={}; // store|date|kategorie -> [{dish, qty}]
+  Object.entries(fcByDish).forEach(([dk,qty])=>{
+    const [sid,dt,dish]=dk.split('|');
+    const ck=sid+'|'+dt+'|'+mapDishNameToCategory(dish);
+    (fcCatIndex[ck]=fcCatIndex[ck]||[]).push({dish, qty});
+  });
+  const lookupQty=(sid,dt,cat,dishName)=>{
+    const list=fcCatIndex[sid+'|'+dt+'|'+cat];
+    if(!list||!list.length) return null;
+    const exact=list.find(x=>x.dish===dishName);
+    if(exact) return exact.qty;
+    return Math.max(...list.map(x=>x.qty));
+  };
+  const plannedMap={};
+  (fcRows||[]).forEach(f=>{
+    plannedMap[f.store_id+'|'+f.forecast_date+'|'+f.dish_name]=(plannedMap[f.store_id+'|'+f.forecast_date+'|'+f.dish_name]||0)+(Number(f.qty)||0);
   });
   const dispMap={};
   (dispRows||[]).forEach(d=>{
@@ -6087,7 +6107,7 @@ async function renderOrgSimple(){
         for(const wBack of [4,8,12,16,1,2,3]){
           const td=dateMinusDays(dateStr, wBack*7);
           const dp=dispMap[s.id+'|'+td+'|'+cat];
-          if(dp){ ref={date:td, disp:dp, qty:fcMap[s.id+'|'+td+'|'+cat]}; break; }
+          if(dp){ ref={date:td, disp:dp, qty:lookupQty(s.id, td, cat, dish)}; break; }
         }
         if(!ref) return;
         const current=plannedMap[s.id+'|'+dateStr+'|'+dish];
@@ -6183,6 +6203,146 @@ async function orgSimpleApplyAll(){
 }
 window.orgSimpleApplyAll=orgSimpleApplyAll;
 
+// OPERATIONS im STORE-LAYOUT: Tage untereinander, Gerichte als Spalten — dieselbe Struktur wie die
+// Filialen sie kennen, nur mit Filial-Umschalter oben. Unter jedem Feld die Entsorgung dieses Tages,
+// und auf Antippen eine Detail-Aufstellung der letzten Termine desselben Gerichts.
+async function renderOrgStoreForecast(){
+  const target=document.getElementById('orgfc-content');
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kloster2'&&s.id!=='1070');
+  if(!orgPlanStore) orgPlanStore=storeList[0]?.id;
+
+  const wd=getWeekdayDates(orgForecastWeekOffset);
+  const fromDate=wd[1], toDate=wd[5];
+  const kw=getIsoWeekNumber(fromDate);
+  const histFrom=dateMinusDays(fromDate, 140);
+
+  const [fcRows, dispRows]=await Promise.all([
+    api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,groesse,status&limit=8000`).catch(()=>[]),
+    api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[])
+  ]);
+  // Mengen pro Gericht (Größen summiert) — NICHT über verschiedene Gerichte derselben Kategorie
+  const qtyByDish={}, qtyBySize={};
+  (fcRows||[]).forEach(f=>{
+    const k=f.forecast_date+'|'+f.dish_name;
+    qtyByDish[k]=(qtyByDish[k]||0)+(Number(f.qty)||0);
+    qtyBySize[k+'|'+(f.groesse||'gross')]={qty:Number(f.qty)||0, status:f.status};
+  });
+  const catIndex={};
+  Object.entries(qtyByDish).forEach(([k,q])=>{
+    const [dt,dish]=k.split('|');
+    const ck=dt+'|'+mapDishNameToCategory(dish);
+    (catIndex[ck]=catIndex[ck]||[]).push({dish,qty:q});
+  });
+  const dispByDateCat={};
+  (dispRows||[]).forEach(d=>{
+    const ck=d.disposal_date+'|'+mapDishNameToCategory(d.dish_name, d.slot);
+    const ex=dispByDateCat[ck]||{leftover:0, soldOutTime:null};
+    ex.leftover+=(Number(d.leftover_qty)||0);
+    if(d.sold_out_time) ex.soldOutTime=d.sold_out_time.slice(0,5);
+    dispByDateCat[ck]=ex;
+  });
+
+  let html=`<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;">`;
+  storeList.forEach(s=>{
+    const active=s.id===orgPlanStore;
+    const col=STORE_COLORS[s.id]||'#1D9E75';
+    html+=`<button onclick="setOrgPlanStore('${s.id}')" data-no-translate style="flex-shrink:0;padding:8px 14px;border-radius:20px;border:${active?'2px solid '+col:'1.5px solid var(--border)'};background:${active?col:'#fff'};color:${active?'#fff':'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;">${STORE_SHORT[s.id]||s.name}</button>`;
+  });
+  html+=`</div>`;
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
+    <button onclick="orgForecastWeekOffset--;renderOrgForecast()" style="padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">←</button>
+    <div style="text-align:center;">
+      <div style="font-size:13px;font-weight:700;">KW ${kw}${orgForecastWeekOffset===0?' (diese Woche)':(orgForecastWeekOffset===1?' (nächste)':'')}</div>
+      <div style="font-size:11px;color:var(--muted);">${new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
+    </div>
+    <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">→</button>
+  </div>`;
+
+  html+=`<div class="card" style="overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
+    <thead><tr><th style="text-align:left;font-size:10.5px;">Tag</th><th style="font-size:10.5px;">Salat</th><th style="font-size:10.5px;">Gericht 1</th><th style="font-size:10.5px;">Gericht 2</th><th style="font-size:10.5px;">Reis</th></tr></thead><tbody>`;
+
+  const todayStr=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
+  window._orgDetailData={};
+  for(let d=1; d<=5; d++){
+    const dateStr=wd[d];
+    const wdStr=WEEKDAYS[d-1]?.k;
+    const dishes=getMenuDishNamesForDay(wdStr, dateStr);
+    const salat=getSalatNameForDate(dateStr);
+    const cols=[salat, dishes[0], dishes[1], REIS_DISH_NAME];
+    const isToday=dateStr===todayStr;
+    const dl=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+    html+=`<tr style="${isToday?'background:#EFF6FF;':''}">
+      <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}</td>`;
+    cols.forEach((dish,ci)=>{
+      if(!dish){ html+='<td style="color:var(--border);">·</td>'; return; }
+      const cat=mapDishNameToCategory(dish);
+      const key=dateStr+'|'+dish;
+      const cur=qtyByDish[key];
+      const disp=dispByDateCat[dateStr+'|'+cat];
+      // Historie für die Detail-Aufstellung sammeln
+      const hist=[];
+      for(const wBack of [4,8,12,16,20]){
+        const td=dateMinusDays(dateStr, wBack*7);
+        const dp=dispByDateCat[td+'|'+cat];
+        const list=catIndex[td+'|'+cat];
+        const exact=list?.find(x=>x.dish===dish);
+        const q=exact?exact.qty:(list?.length?Math.max(...list.map(x=>x.qty)):null);
+        if(dp||q!=null) hist.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null});
+      }
+      const detailId=`ordet-${dateStr}-${ci}`;
+      window._orgDetailData[detailId]={dish, hist};
+      let dispLine='';
+      if(disp?.soldOutTime) dispLine=`<div style="font-size:9px;color:#DC2626;">🔥 ${disp.soldOutTime}</div>`;
+      else if(disp) dispLine=`<div style="font-size:9px;color:${disp.leftover>4?'#C2410C':'#16A34A'};">🗑 ${formatQty(disp.leftover)}</div>`;
+      html+=`<td style="padding:5px 3px;vertical-align:top;">
+        <div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>
+        <input type="number" step="0.25" value="${cur!=null?cur:''}" placeholder="–"
+          data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg=""
+          oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
+          style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13.5px;padding:5px 2px;">
+        ${dispLine}
+      </td>`;
+    });
+    html+='</tr>';
+  }
+  html+='</tbody></table></div></div>';
+  html+=`<div id="orgfc-detail" style="display:none;margin-top:10px;"></div>`;
+  html+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:8px;">🗑 = Entsorgung an diesem Tag · Gerichtsnamen antippen für frühere Termine</div>`;
+
+  target.innerHTML=html;
+  translateEl(target);
+}
+window.renderOrgStoreForecast=renderOrgStoreForecast;
+
+function toggleOrgDetail(id){
+  const box=document.getElementById('orgfc-detail');
+  const d=window._orgDetailData?.[id];
+  if(!box||!d) return;
+  if(box.dataset.open===id){ box.style.display='none'; box.dataset.open=''; return; }
+  box.dataset.open=id;
+  box.style.display='block';
+  let h=`<div class="card" style="padding:12px 14px;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;" data-no-translate>${d.dish}</div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Frühere Termine</div>`;
+  if(d.hist.length){
+    d.hist.forEach(o=>{
+      const dl=new Date(o.date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
+      const res=o.soldOutTime?`<span style="color:#DC2626;font-weight:600;">🔥 ausverkauft ${o.soldOutTime}</span>`:(o.leftover!=null?`<span style="color:${o.leftover>4?'#C2410C':'#16A34A'};font-weight:600;">${formatQty(o.leftover)} entsorgt</span>`:'<span style="color:var(--muted);">keine Entsorgungsdaten</span>');
+      h+=`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--border);">
+        <span>${dl}</span><span>${o.qty!=null?formatQty(o.qty)+' Bhlt':'–'}</span><span>${res}</span>
+      </div>`;
+    });
+  } else {
+    h+=`<div style="font-size:12px;color:var(--muted);">Noch keine früheren Termine mit diesem Gericht.</div>`;
+  }
+  h+=`<button onclick="document.getElementById('orgfc-detail').style.display='none';document.getElementById('orgfc-detail').dataset.open='';" style="width:100%;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:none;font-size:12px;color:var(--muted);cursor:pointer;">Schließen</button></div>`;
+  box.innerHTML=h;
+  translateEl(box);
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+window.toggleOrgDetail=toggleOrgDetail;
+
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
   const orgMengenTabBar=tabBarHtml([{key:'simple',label:'✅ Zu tun'},{key:'forecast',label:'📅 Alle Mengen'},{key:'plan',label:'🗓️ Planen'},{key:'disposal',label:'🗑️ Entsorgung'}], orgMengenTab, 'switchOrgMengenTab', '#2B3A67');
@@ -6191,6 +6351,10 @@ async function renderOrgForecast(){
 
   if(orgMengenTab==='simple'){
     await renderOrgSimple();
+    return;
+  }
+  if(orgMengenTab==='forecast'){
+    await renderOrgStoreForecast();
     return;
   }
   if(orgMengenTab==='disposal'){
@@ -6279,7 +6443,12 @@ async function renderOrgForecast(){
     if(!prevFcMap[f.forecast_date])prevFcMap[f.forecast_date]={};
     if(!prevFcMap[f.forecast_date][f.store_id])prevFcMap[f.forecast_date][f.store_id]={};
     if(!prevFcMap[f.forecast_date][f.store_id][cat])prevFcMap[f.forecast_date][f.store_id][cat]={};
-    prevFcMap[f.forecast_date][f.store_id][cat][f.groesse||'gross']=f.qty;
+    // Fallen an einem Tag zwei Gerichte in dieselbe Kategorie (z.B. "Salat" und "… Bowl …"),
+    // gewinnt der größere Wert — vorher überschrieb zufällig der zuletzt gelesene Datensatz,
+    // was zu willkürlichen Referenzwerten führte.
+    const g=f.groesse||'gross';
+    const cur=prevFcMap[f.forecast_date][f.store_id][cat][g];
+    prevFcMap[f.forecast_date][f.store_id][cat][g]=(cur==null)?f.qty:Math.max(Number(cur), Number(f.qty));
   });
 
   // prevDispMap[store][category] = {leftover, soldOutEarly}
