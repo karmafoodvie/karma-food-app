@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.31.0';
+const APP_VERSION = '6.32.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4537,7 +4537,10 @@ async function renderForecastOrderTab(el, tabHtml){
     const dateStr=weekDates[wd];
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
     const salatName=getSalatNameForDate(dateStr);
-    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    // Reis genau EINMAL — je nach Menü-Woche ist er in dishNames schon enthalten, dann darf er nicht
+    // zusätzlich angehängt werden (sonst doppelte Spalte).
+    const _bd=[salatName, ...dishNames].filter(Boolean);
+    const allDishes=_bd.some(d=>mapDishNameToCategory(d)==='Reis')?_bd:[..._bd, REIS_DISH_NAME];
     allDishes.forEach(dish=>{
       if(!(fMap[dateStr]||{})[dish]) suggestionJobs.push({dateStr, dish, wdStr});
     });
@@ -4550,7 +4553,10 @@ async function renderForecastOrderTab(el, tabHtml){
     const dateStr=weekDates[wd];
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
     const salatName=getSalatNameForDate(dateStr);
-    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    // Reis genau EINMAL — je nach Menü-Woche ist er in dishNames schon enthalten, dann darf er nicht
+    // zusätzlich angehängt werden (sonst doppelte Spalte).
+    const _bd=[salatName, ...dishNames].filter(Boolean);
+    const allDishes=_bd.some(d=>mapDishNameToCategory(d)==='Reis')?_bd:[..._bd, REIS_DISH_NAME];
     const lastWeekDateStr=dateMinusDays(dateStr,7);
     allDishes.forEach(dish=>{
       const category=mapDishNameToCategory(dish);
@@ -5901,7 +5907,9 @@ async function editOrgRoleName(ev, key, currentName){
 }
 window.editOrgRoleName=editOrgRoleName;
 
-let orgForecastWeekOffset = 0; // 0 = diese Woche, 1 = nächste Woche
+// Startet bewusst auf NÄCHSTER Woche: diese Woche ist bereits gekocht/geliefert, geplant wird die
+// kommende. Die laufende Woche bleibt über "← Vorherige" jederzeit erreichbar.
+let orgForecastWeekOffset = 1;
 
 let orgMengenTab='forecast';
 let orgPlanStore=null; // gewählte Filiale in der Planen-Ansicht
@@ -6069,8 +6077,9 @@ async function renderOrgForecast(){
       <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="flex:1;padding:9px 6px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">Nächste →</button>
     </div>
   </div>`;
-  weekSwitcher+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin:0 0 10px;">
-    Links: letztes Mal (Menge + Ergebnis) · Rechts: deine Menge für diesen Tag
+  weekSwitcher+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin:0 0 10px;line-height:1.5;">
+    Links: <b>als es dieses Gericht zuletzt gab</b> (Menge + wie's ausging)<br>
+    Rechts: deine Menge für diesen Tag
   </div>`;
 
   // Vorwoche-Daten für lernfähigen Forecast
@@ -6370,15 +6379,51 @@ async function renderOrgForecast(){
     const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
     const dishNames=getMenuDishNamesForDay(wdStr, dateStr);
     const salatName=getSalatNameForDate(dateStr);
-    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
-    // Biryani bringt seinen Reis schon mit → an Biryani-Tagen wird deutlich weniger loser Reis
-    // gebraucht. In den Daten belegt: Ø 9,7 Portionen Reis übrig an Biryani-Tagen gegenüber 6,8 an
-    // anderen Tagen (Juni–August 2026). Wird beim Reis-Vorschlag berücksichtigt.
+    // Reis IMMER als eigene Spalte garantieren — je nach Menü-Woche liefert getMenuDishNamesForDay
+    // teils schon einen Reis-Eintrag, teils nicht (dann fehlte die Spalte komplett, obwohl Reis
+    // jeden Tag gebraucht wird). Doppelte werden dabei herausgefiltert.
+    const _baseDishes=[salatName, ...dishNames].filter(Boolean);
+    const _hasReis=_baseDishes.some(d=>mapDishNameToCategory(d)==='Reis');
+    const allDishes=_hasReis?_baseDishes:[..._baseDishes, REIS_DISH_NAME];
+    // Biryani bringt seinen Reis schon mit → an Biryani-Tagen weniger loser Reis nötig (in euren
+    // Daten belegt). Wird im Reis-Vorschlag berücksichtigt.
     biryaniDayFlag.value=allDishes.some(d=>mapDishNameToCategory(d)==='Biryani');
     const {reason}=getDayModifiers(dateStr, 'lb', refWeather, calendarEvents, zeroSettings);
     const isToday=new Date().toISOString().split('T')[0]===dateStr;
 
     html+=`<div class="section-lbl" style="${isToday?'color:#2B3A67;font-weight:700;':''}">${dateLabel}${isToday?' — heute':''}</div>`;
+    // AUTOMATISCHE WARNUNG pro Tag: Welche Gerichte waren beim letzten Mal an mehreren Standorten
+    // ausverkauft bzw. blieben überall stark liegen? Das ist die Information, wegen der man sonst
+    // selbst durch alle Zellen suchen müsste — sie steht jetzt oben, bevor man plant.
+    const dayAlerts=[];
+    allDishes.forEach(dish=>{
+      const cat=mapDishNameToCategory(dish);
+      let soldOutStores=0, tooMuchStores=0, checked=0;
+      storeList.forEach(s=>{
+        let occ=null;
+        for(const wBack of [4,8,12,16,1,2,3]){
+          const td=dateMinusDays(dateStr, wBack*7);
+          const dp=prevDispByDateStore[td]?.[s.id]?.[cat];
+          if(dp){ occ=dp; break; }
+        }
+        if(!occ) return;
+        checked++;
+        if(occ.soldOutEarly) soldOutStores++;
+        else if((occ.leftover||0)>10) tooMuchStores++;
+      });
+      if(soldOutStores>=2) dayAlerts.push({t:'up', dish, n:soldOutStores});
+      else if(tooMuchStores>=2) dayAlerts.push({t:'down', dish, n:tooMuchStores});
+    });
+    if(dayAlerts.length){
+      html+=`<div style="margin:-2px 0 6px;display:flex;flex-direction:column;gap:4px;">`;
+      dayAlerts.forEach(a=>{
+        const up=a.t==='up';
+        html+=`<div style="font-size:11px;padding:6px 10px;border-radius:8px;background:${up?'#FEF2F2':'#FFF7ED'};border:1px solid ${up?'#FCA5A5':'#FDBA74'};color:${up?'#991B1B':'#9A3412'};">
+          ${up?'🔥':'📦'} <b data-no-translate>${a.dish}</b> — letztes Mal ${up?`an ${a.n} Standorten ausverkauft → mehr einplanen`:`an ${a.n} Standorten viel übrig → weniger einplanen`}
+        </div>`;
+      });
+      html+=`</div>`;
+    }
     if(reason) html+=`<div style="font-size:10.5px;color:var(--muted);margin:-2px 0 4px 2px;">${reason}</div>`;
     html+=`<div id="orgfc-day-${dateStr}"><div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Filiale</th>
@@ -10627,7 +10672,10 @@ async function renderKitchen(){
       const dishNames=getMenuDishNamesForDay(wdStr, dateStr); // aus dem aktuell laufenden Menü
       const hasLasagne=dishNames.some(n=>n.includes('Lasagne'));
       const salatName=getSalatNameForDate(dateStr);
-    const allDishes=[salatName, ...dishNames, REIS_DISH_NAME].filter(Boolean);
+    // Reis genau EINMAL — je nach Menü-Woche ist er in dishNames schon enthalten, dann darf er nicht
+    // zusätzlich angehängt werden (sonst doppelte Spalte).
+    const _bd=[salatName, ...dishNames].filter(Boolean);
+    const allDishes=_bd.some(d=>mapDishNameToCategory(d)==='Reis')?_bd:[..._bd, REIS_DISH_NAME];
       const isToday=wd===todayWeekday;
       const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
 
