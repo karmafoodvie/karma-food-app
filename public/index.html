@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.29.0';
+const APP_VERSION = '6.30.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1208,12 +1208,15 @@ window.addEventListener('popstate',(e)=>{
   goTo(v, true);
 });
 
+let _updateBannerShown=false;
 async function checkForUpdate(){
+  if(_updateBannerShown) return;
   try{
     const res=await fetch('/index.html?v='+Date.now(),{cache:'no-store'});
     const text=await res.text();
     const m=text.match(/APP_VERSION = '([^']+)'/);
     if(m && m[1] && m[1]!==APP_VERSION){
+      _updateBannerShown=true;
       const b=document.createElement('div');
       b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#1a1a18;color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
       b.innerHTML='<span>🆕 Neue Version verfügbar</span><button onclick="window.location.reload(true)" style="background:#D4FF3F;color:#1a1a18;border:none;border-radius:8px;padding:7px 14px;font-weight:700;font-size:13px;cursor:pointer;">Jetzt aktualisieren</button>';
@@ -1221,7 +1224,27 @@ async function checkForUpdate(){
     }
   }catch(e){}
 }
+// Die Prüfung lief bisher NUR einmal 3 Sekunden nach dem Öffnen. Im Store bleibt die App aber den
+// ganzen Tag offen — dort kam nie wieder eine Prüfung, und man arbeitete stundenlang mit einer
+// veralteten Version (Fall Laurenzerberg, 12.08.26: Artikel-Verfügbarkeit war längst korrigiert,
+// im Store aber noch alter Stand). Deshalb jetzt: alle 15 Minuten UND bei jeder Rückkehr zur App.
 setTimeout(checkForUpdate, 3000);
+setInterval(checkForUpdate, 15*60*1000);
+
+// Stammdaten (Artikel inkl. Verfügbarkeit) beim Zurückkehren zur App neu laden — die wurden bisher
+// nur beim Login geholt. Wer die App tagsüber im Hintergrund hatte, sah Änderungen sonst nie.
+let _lastDataRefresh=Date.now();
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState!=='visible' || !currentStore) return;
+  checkForUpdate();
+  // Nicht bei jedem kurzen Wechsel neu laden — nur wenn länger als 5 Minuten weg.
+  if(Date.now()-_lastDataRefresh < 5*60*1000) return;
+  _lastDataRefresh=Date.now();
+  try{
+    articles=await api('articles?select=*&order=sort_order');
+    if(currentView==='order') renderOrder();
+  }catch(e){ console.error('Stammdaten-Aktualisierung fehlgeschlagen:', e); }
+});
 
 document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('pin-input').addEventListener('keydown',e=>{ if(e.key==='Enter') checkPin(); });
@@ -2618,9 +2641,12 @@ async function renderHome(){
           ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', name})),
           {k:'reis', name:REIS_DISH_NAME}
         ];
-        const dispRaw=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=slot,sold_out_time`).catch(()=>[]);
-        const soldOutSlots=new Set((dispRaw||[]).filter(d=>d.sold_out_time).map(d=>d.slot));
-        quickSoldOutDishes=daySlotsQ.filter(s=>s.name && !soldOutSlots.has(s.k));
+        const dispRaw=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=slot,sold_out_time,leftover_qty`).catch(()=>[]);
+        // Gericht verschwindet aus der Schnellmeldung, sobald es HEUTE überhaupt einen
+        // Entsorgungs-Eintrag hat — nicht nur bei "ausverkauft". Sonst wirkt es so, als wäre die
+        // eingetragene Restmenge nicht angekommen, und man meldet aus Unsicherheit doppelt.
+        const erledigteSlots=new Set((dispRaw||[]).filter(d=>d.sold_out_time || d.leftover_qty!=null).map(d=>d.slot));
+        quickSoldOutDishes=daySlotsQ.filter(s=>s.name && !erledigteSlots.has(s.k));
       }catch(e){console.error(e);}
     }
     // Übergabe-Notiz von gestern laden
@@ -5022,6 +5048,21 @@ async function submitOrder(){
     // hat (06.08.26): einzelne Löschung schlug still fehl, für Artikel mit neuer Menge 0 gibt's
     // danach keinen Upsert-Fallback mehr, der das kompensieren könnte — im Gegensatz zu Artikeln
     // mit Menge>0, die über den Upsert unten trotzdem korrekt landen.
+    // WICHTIG: Abschick-Marker ZUERST schreiben, bevor die (potenziell langsame) Löschschleife
+    // läuft. Bei vielen Artikeln und schwachem Netz im Store kann die Schleife mehrere Sekunden
+    // dauern (3 Wiederholungen à 400ms pro Artikel) — verlässt jemand in der Zeit die Seite, war die
+    // Bestellung vorher nie als "abgeschickt" markiert, obwohl gedrückt wurde (Fall Laurenzerberg/
+    // Sweets, 12.08.26). Der Marker ist die wichtigste Information und darf nie hinten anstehen.
+    await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.${activeOrderTab}`,{method:'DELETE'}).catch(e=>console.error('order_submissions delete failed:',e));
+    let submissionMarkerFailed=false;
+    let submissionErrorDetail='';
+    try{
+      await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:activeOrderTab}])});
+    }catch(e){
+      console.error('order_submissions insert failed:',e);
+      submissionMarkerFailed=true;
+      submissionErrorDetail=(e?.message||String(e)).slice(0,140);
+    }
     const failedDeletes=[];
     for(const aid of tabArticleIds){
       let ok=false;
@@ -5039,19 +5080,6 @@ async function submitOrder(){
     // Zusätzlich als Upsert (nicht reines Insert): falls trotz obigem Löschen doch noch eine alte
     // Zeile übrig sein sollte, wird sie aktualisiert statt einen Konflikt zu werfen.
     if(rows.length) await api('orders?on_conflict=store_id,article_id,order_date',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rows)});
-    // Abschick-Marker — unabhängig davon ob irgendeine Menge >0 war. Sonst zählt "bewusst überall 0
-    // gewählt, weil von gestern noch alles da ist" nie als "erledigt" (genau der Bug, den ein Store
-    // gemeldet hat: 0 bei Sweets gewählt, "Let's wrap up the shift" zeigte trotzdem "nicht erledigt").
-    await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.${activeOrderTab}`,{method:'DELETE'}).catch(e=>console.error('order_submissions delete failed:',e));
-    let submissionMarkerFailed=false;
-    let submissionErrorDetail='';
-    try{
-      await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:activeOrderTab}])});
-    }catch(e){
-      console.error('order_submissions insert failed:',e);
-      submissionMarkerFailed=true;
-      submissionErrorDetail=(e?.message||String(e)).slice(0,140);
-    }
     if(note){
       await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
