@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.28.2';
+const APP_VERSION = '6.29.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5876,18 +5876,145 @@ window.editOrgRoleName=editOrgRoleName;
 let orgForecastWeekOffset = 0; // 0 = diese Woche, 1 = nächste Woche
 
 let orgMengenTab='forecast';
+let orgPlanStore=null; // gewählte Filiale in der Planen-Ansicht
 function switchOrgMengenTab(t){ orgMengenTab=t; renderOrgForecast(); }
+function setOrgPlanStore(id){ orgPlanStore=id; renderOrgForecast(); }
+window.setOrgPlanStore=setOrgPlanStore;
 window.switchOrgMengenTab=switchOrgMengenTab;
+
+// PLANEN-ANSICHT: Filiale wählen → pro Gericht die Historie UND beide kommenden Termine
+// (nächste Woche + Wiederholungstermin aus der 4-Wochen-Rotation) direkt nebeneinander.
+// Löst das ständige Hin- und Herwechseln zwischen "heute anschauen" und "nächste Woche planen".
+async function renderOrgPlanTab(){
+  const target=document.getElementById('orgfc-content');
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='kloster2'&&s.id!=='1070');
+  if(!orgPlanStore) orgPlanStore=storeList[0]?.id;
+
+  // Filial-Umschalter
+  let html=`<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;">`;
+  storeList.forEach(s=>{
+    const active=s.id===orgPlanStore;
+    const col=STORE_COLORS[s.id]||'#1D9E75';
+    html+=`<button onclick="setOrgPlanStore('${s.id}')" data-no-translate style="flex-shrink:0;padding:8px 14px;border-radius:20px;border:${active?'2px solid '+col:'1.5px solid var(--border)'};background:${active?col:'#fff'};color:${active?'#fff':'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;">${STORE_SHORT[s.id]||s.name}</button>`;
+  });
+  html+=`</div>`;
+
+  const todayStr=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
+  // Kommende Termine sammeln: die nächsten 4 Wochen (deckt nächste Woche + Rotations-Wiederholung ab)
+  const upcoming=[]; // {date, dish, slot}
+  for(let wOff=0; wOff<=4; wOff++){
+    const wd=getWeekdayDates(wOff);
+    for(let d=1; d<=5; d++){
+      const ds=wd[d];
+      if(ds<=todayStr) continue;
+      const wdStr=WEEKDAYS[d-1]?.k;
+      const dishes=getMenuDishNamesForDay(wdStr, ds);
+      const salat=getSalatNameForDate(ds);
+      [salat, ...dishes, REIS_DISH_NAME].filter(Boolean).forEach(dn=>upcoming.push({date:ds, dish:dn}));
+    }
+  }
+  // Historie + bereits geplante Mengen laden
+  const histFrom=dateMinusDays(todayStr, 120);
+  const lastDate=upcoming.length?upcoming[upcoming.length-1].date:todayStr;
+  const [fcRows, dispRows]=await Promise.all([
+    api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${lastDate}&select=forecast_date,dish_name,qty,groesse,status&limit=5000`).catch(()=>[]),
+    api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=5000`).catch(()=>[])
+  ]);
+  const fcByDateCat={}, plannedByDateDish={};
+  (fcRows||[]).forEach(f=>{
+    const c=mapDishNameToCategory(f.dish_name);
+    const k=f.forecast_date+'|'+c;
+    fcByDateCat[k]=(fcByDateCat[k]||0)+(Number(f.qty)||0);
+    plannedByDateDish[f.forecast_date+'|'+f.dish_name]={qty:Number(f.qty)||0, status:f.status};
+  });
+  const dispByDateCat={};
+  (dispRows||[]).forEach(d=>{
+    const c=mapDishNameToCategory(d.dish_name, d.slot);
+    const k=d.disposal_date+'|'+c;
+    const ex=dispByDateCat[k]||{leftover:0, soldOutTime:null};
+    ex.leftover+=(Number(d.leftover_qty)||0);
+    if(d.sold_out_time) ex.soldOutTime=d.sold_out_time.slice(0,5);
+    dispByDateCat[k]=ex;
+  });
+
+  // Nach Gericht gruppieren — jedes Gericht EINMAL, mit allen kommenden Terminen
+  const byDish={};
+  upcoming.forEach(u=>{ (byDish[u.dish]=byDish[u.dish]||[]).push(u.date); });
+
+  if(!Object.keys(byDish).length){
+    target.innerHTML=html+'<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine kommenden Termine gefunden.</div>';
+    translateEl(target);
+    return;
+  }
+
+  html+=`<div style="font-size:10.5px;color:var(--muted);background:var(--surface-1);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">
+    Pro Gericht: links wie es <b>zuletzt lief</b>, rechts die <b>kommenden Termine</b> zum Eintragen.<br>
+    Alles für <b>${STORE_SHORT[orgPlanStore]||orgPlanStore}</b> — oben umschalten für andere Filialen.
+  </div>`;
+
+  Object.keys(byDish).forEach(dish=>{
+    const cat=mapDishNameToCategory(dish);
+    const dates=byDish[dish].sort();
+    // Historie: bis zu 3 vergangene Termine derselben Kategorie
+    const past=Object.keys(dispByDateCat)
+      .filter(k=>k.endsWith('|'+cat))
+      .map(k=>k.split('|')[0])
+      .filter(d=>d<=todayStr)
+      .sort().reverse().slice(0,3);
+    html+=`<div class="card" style="padding:12px;margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;" data-no-translate>${getDishEmoji(dish)} ${dish}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <div style="font-size:9.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Wie es zuletzt lief</div>`;
+    if(past.length){
+      past.forEach(pd=>{
+        const q=fcByDateCat[pd+'|'+cat];
+        const dp=dispByDateCat[pd+'|'+cat];
+        const dl=new Date(pd+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+        const res=dp?.soldOutTime?`<span style="color:#DC2626;font-weight:600;">🔥 ${dp.soldOutTime}</span>`:(dp?`<span style="color:${dp.leftover>4?'#C2410C':'#16A34A'};font-weight:600;">${formatQty(dp.leftover)} übrig</span>`:'<span style="color:var(--muted);">–</span>');
+        html+=`<div style="font-size:11px;padding:4px 0;border-bottom:0.5px solid var(--border);">${dl} · ${q!=null?formatQty(q)+' Bhlt':'?'} → ${res}</div>`;
+      });
+    } else {
+      html+=`<div style="font-size:11px;color:var(--muted);">Noch keine Historie</div>`;
+    }
+    html+=`</div><div>
+          <div style="font-size:9.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Kommende Termine</div>`;
+    dates.forEach(fd=>{
+      const dl=new Date(fd+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+      const pl=plannedByDateDish[fd+'|'+dish];
+      const st=pl?.status;
+      const bColor=st==='bestaetigt'?'#16A34A':(st==='angepasst'?'#D97706':'var(--border)');
+      const bBg=st==='bestaetigt'?'#F0FDF4':(st==='angepasst'?'#FFFBEB':'#fff');
+      html+=`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;">
+        <span style="font-size:11px;color:var(--sub);min-width:74px;">${dl}</span>
+        <input type="number" step="0.25" value="${pl?formatQty(pl.qty).replace(',','.'):''}" placeholder="–"
+          data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${fd}" data-sugg=""
+          oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
+          style="width:52px;text-align:center;border:1.5px solid ${bColor};border-radius:6px;font-size:13px;padding:5px 2px;background:${bBg};">
+      </div>`;
+    });
+    html+=`</div></div></div>`;
+  });
+
+  target.innerHTML=html;
+  translateEl(target);
+}
+window.renderOrgPlanTab=renderOrgPlanTab;
 
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
-  const orgMengenTabBar=tabBarHtml([{key:'forecast',label:'📅 Forecast'},{key:'disposal',label:'🗑️ Entsorgung'}], orgMengenTab, 'switchOrgMengenTab', '#2B3A67');
+  const orgMengenTabBar=tabBarHtml([{key:'forecast',label:'📅 Forecast'},{key:'plan',label:'🗓️ Planen'},{key:'disposal',label:'🗑️ Entsorgung'}], orgMengenTab, 'switchOrgMengenTab', '#2B3A67');
   el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen anpassen','Für alle Filialen direkt überschreiben.','#2B3A67')+orgMengenTabBar+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
 
   if(orgMengenTab==='disposal'){
     document.getElementById('orgfc-content').innerHTML=await renderDisposalOverviewHtml();
     translateEl(document.getElementById('orgfc-content'));
+    return;
+  }
+  if(orgMengenTab==='plan'){
+    await renderOrgPlanTab();
     return;
   }
 
