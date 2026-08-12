@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.34.0';
+const APP_VERSION = '6.35.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5911,7 +5911,7 @@ window.editOrgRoleName=editOrgRoleName;
 // kommende. Die laufende Woche bleibt über "← Vorherige" jederzeit erreichbar.
 let orgForecastWeekOffset = 1;
 
-let orgMengenTab='simple';
+let orgMengenTab='forecast';
 let orgPlanStore=null; // gewählte Filiale in der Planen-Ansicht
 function switchOrgMengenTab(t){ orgMengenTab=t; renderOrgForecast(); }
 function setOrgPlanStore(id){ orgPlanStore=id; renderOrgForecast(); }
@@ -6218,15 +6218,18 @@ async function renderOrgStoreForecast(){
   const histFrom=dateMinusDays(fromDate, 140);
 
   const [fcRows, dispRows]=await Promise.all([
-    api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,groesse,status&limit=8000`).catch(()=>[]),
+    api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,groesse,status,source,changed_by&limit=8000`).catch(()=>[]),
     api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[])
   ]);
   // Mengen pro Gericht (Größen summiert) — NICHT über verschiedene Gerichte derselben Kategorie
-  const qtyByDish={}, qtyBySize={};
+  const qtyByDish={}, qtyBySize={}, srcByDish={};
   (fcRows||[]).forEach(f=>{
     const k=f.forecast_date+'|'+f.dish_name;
     qtyByDish[k]=(qtyByDish[k]||0)+(Number(f.qty)||0);
     qtyBySize[k+'|'+(f.groesse||'gross')]={qty:Number(f.qty)||0, status:f.status};
+    // Quelle merken — 'store' (die Filiale hat es selbst eingetragen) hat Vorrang in der Anzeige,
+    // damit auf einen Blick sichtbar ist, wo die Filiale schon selbst geplant hat.
+    if(f.source==='store' || !srcByDish[k]) srcByDish[k]={source:f.source, by:f.changed_by};
   });
   const catIndex={};
   Object.entries(qtyByDish).forEach(([k,q])=>{
@@ -6295,12 +6298,21 @@ async function renderOrgStoreForecast(){
       let dispLine='';
       if(disp?.soldOutTime) dispLine=`<div style="font-size:9px;color:#DC2626;">🔥 ${disp.soldOutTime}</div>`;
       else if(disp) dispLine=`<div style="font-size:9px;color:${disp.leftover>4?'#C2410C':'#16A34A'};">🗑 ${formatQty(disp.leftover)}</div>`;
+      // Wer hat den Wert gesetzt? Filial-Eingaben deutlich hervorheben (blau), damit sichtbar ist,
+      // wo die Filiale schon selbst geplant hat und wo noch nichts/nur Übernommenes steht.
+      const src=srcByDish[key]?.source;
+      const isStore=src==='store'||src==='manual';
+      const isOrgSet=src==='org';
+      const bCol=isStore?'#0369A1':(isOrgSet?'#2B3A67':'var(--border)');
+      const bBg=isStore?'#EFF6FF':'#fff';
+      const srcLbl=isStore?`<div style="font-size:8px;color:#0369A1;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:''));
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         <div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>
         <input type="number" step="0.25" value="${cur!=null?cur:''}" placeholder="–"
           data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg=""
           oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
-          style="width:52px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13.5px;padding:5px 2px;">
+          style="width:52px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:13.5px;font-weight:${isStore?'700':'400'};padding:5px 2px;background:${bBg};">
+        ${srcLbl}
         ${dispLine}
       </td>`;
     });
@@ -6308,7 +6320,10 @@ async function renderOrgStoreForecast(){
   }
   html+='</tbody></table></div></div>';
   html+=`<div id="orgfc-detail" style="display:none;margin-top:10px;"></div>`;
-  html+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:8px;">🗑 = Entsorgung an diesem Tag · Gerichtsnamen antippen für frühere Termine</div>`;
+  html+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">
+    <span style="color:#0369A1;font-weight:600;">Blau = Filiale hat selbst eingetragen</span> · 🗑 Entsorgung dieses Tages<br>
+    Gerichtsnamen antippen für frühere Termine
+  </div>`;
 
   target.innerHTML=html;
   translateEl(target);
@@ -6345,7 +6360,7 @@ window.toggleOrgDetail=toggleOrgDetail;
 
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
-  const orgMengenTabBar=tabBarHtml([{key:'simple',label:'✅ Zu tun'},{key:'forecast',label:'📅 Alle Mengen'},{key:'plan',label:'🗓️ Planen'},{key:'disposal',label:'🗑️ Entsorgung'}], orgMengenTab, 'switchOrgMengenTab', '#2B3A67');
+  const orgMengenTabBar=tabBarHtml([{key:'forecast',label:'📅 Mengen'},{key:'disposal',label:'🗑️ Entsorgung'}], orgMengenTab, 'switchOrgMengenTab', '#2B3A67');
   el.innerHTML=backToHomeHtml()+pageHeaderHtml('🧭','Operations — Mengen','Nächste Woche planen','#2B3A67')+orgMengenTabBar+`<div id="orgfc-content"><div style="text-align:center;color:var(--muted);padding:1rem;">Wird geladen…</div></div>`;
   translateEl(el);
 
