@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.35.0';
+const APP_VERSION = '6.35.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6306,8 +6306,30 @@ async function renderOrgStoreForecast(){
       const bCol=isStore?'#0369A1':(isOrgSet?'#2B3A67':'var(--border)');
       const bBg=isStore?'#EFF6FF':'#fff';
       const srcLbl=isStore?`<div style="font-size:8px;color:#0369A1;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:''));
+      const dishLabelHtml=`<div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>`;
+
+      // LASAGNE: drei Größenfelder (Groß 18 / Mittel 12 / Klein 8) statt eines einzelnen Feldes —
+      // beim Umbau der Operations-Ansicht war das zunächst verlorengegangen.
+      if(mapDishNameToCategory(dish)==='Lasagne'){
+        const LBL={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
+        let lh=`<td style="padding:5px 3px;vertical-align:top;min-width:112px;">${dishLabelHtml}
+          <div style="display:grid;grid-template-columns:52px 44px;gap:3px 4px;align-items:center;">`;
+        LASAGNE_SIZES.forEach(sz=>{
+          const rec=qtyBySize[key+'|'+sz.k];
+          const v=rec?rec.qty:'';
+          lh+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBL[sz.k]}</span>
+            <input type="number" step="1" value="${v}" placeholder="–"
+              data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
+              oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
+              style="width:44px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:12px;font-weight:${isStore?'700':'400'};padding:4px 1px;background:${bBg};">`;
+        });
+        lh+=`</div>${srcLbl}${dispLine}</td>`;
+        html+=lh;
+        return;
+      }
+
       html+=`<td style="padding:5px 3px;vertical-align:top;">
-        <div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>
+        ${dishLabelHtml}
         <input type="number" step="0.25" value="${cur!=null?cur:''}" placeholder="–"
           data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg=""
           oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
