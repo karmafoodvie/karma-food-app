@@ -387,7 +387,17 @@ function findZutatMasterMatch(name){
   const n=(name||'').toUpperCase();
   const master=_zutatenMasterCache;
   if(!master) return null;
-  return master.find(m=>{ const mn=m.name.toUpperCase(); return mn===n || n.includes(mn) || mn.includes(n); })||null;
+  // Exakter Treffer hat immer Vorrang. Sonst NICHT einfach den ersten Teilstring-Treffer nehmen
+  // (.find() bricht beim ersten passenden Eintrag ab) — sondern unter allen passenden Einträgen
+  // den LÄNGSTEN (spezifischsten) wählen. Sonst matcht "Paprika pulver" fälschlich auf "PAPRIKA"
+  // (Gemüse), weil das ein Teilstring von "PAPRIKA PULVER" ist und zufällig zuerst in der Liste
+  // steht — es sollte aber auf "PAPRIKA PULVER" (Gewürz) matchen, das genauer passt.
+  const exact=master.find(m=>m.name.toUpperCase()===n);
+  if(exact) return exact;
+  const candidates=master.filter(m=>{ const mn=m.name.toUpperCase(); return n.includes(mn) || mn.includes(n); });
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=>b.name.length-a.name.length);
+  return candidates[0];
 }
 function getEffectiveKat(name){
   const hit=findZutatMasterMatch(name);
@@ -973,7 +983,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.36.4';
+const APP_VERSION = '6.36.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
