@@ -983,7 +983,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.37.0';
+const APP_VERSION = '6.37.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3220,6 +3220,19 @@ function renderOrderSection(cats, label, color, icon){
 // tatsächlicher Sorte in orderQtys/orders) — es ändert sich nur die Eingabe-Darstellung für die Filiale.
 function renderVariantGroupRow(groupKey, groupItems){
   const g=VARIANT_GROUPS[groupKey];
+  // Kann vorkommen, wenn zufällig ALLE Sorten gerade gleichzeitig als "nicht lieferbar" markiert
+  // sind (z.B. mehrere echte, temporäre Ausverkauft-Meldungen zusammen — kein Fehler, passiert im
+  // normalen Betrieb). Ohne diese Absicherung stürzte die Seite komplett ab (Fall Stadtplatz,
+  // 13.08.26: "Cannot read properties of undefined (reading 'image_url')"), weil der Code weiter
+  // unten unbedingt von mindestens einem Eintrag ausging.
+  if(!groupItems.length){
+    return `<div class="item-row" style="flex-direction:column;align-items:stretch;gap:0;opacity:0.5;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="item-name">${g.label}</div>
+      </div>
+      <div style="font-size:11.5px;color:#DC2626;margin-top:2px;">❌ Aktuell keine Sorte lieferbar</div>
+    </div>`;
+  }
   if(!variantRows[groupKey]){
     const preset=groupItems.filter(a=>(orderQtys[a.id]||0)>0);
     variantRows[groupKey]=preset.length?preset.map(a=>({articleId:a.id})):[{articleId:null}];
