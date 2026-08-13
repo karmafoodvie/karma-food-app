@@ -983,7 +983,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.37.1';
+const APP_VERSION = '6.38.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6288,9 +6288,10 @@ async function renderOrgStoreForecast(){
   const kw=getIsoWeekNumber(fromDate);
   const histFrom=dateMinusDays(fromDate, 140);
 
-  const [fcRows, dispRows]=await Promise.all([
+  const [fcRows, dispRows, weatherHistMap]=await Promise.all([
     api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,groesse,status,source,changed_by&limit=8000`).catch(()=>[]),
-    api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[])
+    api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[]),
+    fetchHistoricalWeather(orgPlanStore, histFrom, toDate).catch(()=>({}))
   ]);
   // Mengen pro Gericht (Größen summiert) — NICHT über verschiedene Gerichte derselben Kategorie
   const qtyByDish={}, qtyBySize={}, srcByDish={};
@@ -6362,7 +6363,7 @@ async function renderOrgStoreForecast(){
         const list=catIndex[td+'|'+cat];
         const exact=list?.find(x=>x.dish===dish);
         const q=exact?exact.qty:(list?.length?Math.max(...list.map(x=>x.qty)):null);
-        if(dp||q!=null) hist.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null});
+        if(dp||q!=null) hist.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
       }
       const detailId=`ordet-${dateStr}-${ci}`;
       window._orgDetailData[detailId]={dish, hist};
@@ -6374,9 +6375,9 @@ async function renderOrgStoreForecast(){
       const src=srcByDish[key]?.source;
       const isStore=src==='store'||src==='manual';
       const isOrgSet=src==='org';
-      const bCol=isStore?'#0369A1':(isOrgSet?'#2B3A67':'var(--border)');
-      const bBg=isStore?'#EFF6FF':'#fff';
-      const srcLbl=isStore?`<div style="font-size:8px;color:#0369A1;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:''));
+      const bCol=isStore?'#F97316':(isOrgSet?'#2B3A67':'var(--border)');
+      const bBg=isStore?'#FFF7ED':'#fff';
+      const srcLbl=isStore?`<div style="font-size:8px;color:#F97316;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:''));
       const dishLabelHtml=`<div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>`;
 
       // LASAGNE: drei Größenfelder (Groß 18 / Mittel 12 / Klein 8) statt eines einzelnen Feldes —
@@ -6391,6 +6392,7 @@ async function renderOrgStoreForecast(){
           lh+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBL[sz.k]}</span>
             <input type="number" step="1" value="${v}" placeholder="–"
               data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
+              data-orig-source="${src||''}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
               style="width:44px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:12px;font-weight:${isStore?'700':'400'};padding:4px 1px;background:${bBg};">`;
         });
@@ -6403,6 +6405,7 @@ async function renderOrgStoreForecast(){
         ${dishLabelHtml}
         <input type="number" step="0.25" value="${cur!=null?cur:''}" placeholder="–"
           data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg=""
+          data-orig-source="${src||''}"
           oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
           style="width:52px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:13.5px;font-weight:${isStore?'700':'400'};padding:5px 2px;background:${bBg};">
         ${srcLbl}
@@ -6414,7 +6417,7 @@ async function renderOrgStoreForecast(){
   html+='</tbody></table></div></div>';
   html+=`<div id="orgfc-detail" style="display:none;margin-top:10px;"></div>`;
   html+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">
-    <span style="color:#0369A1;font-weight:600;">Blau = Filiale hat selbst eingetragen</span> · 🗑 Entsorgung dieses Tages<br>
+    <span style="color:#F97316;font-weight:600;">Orange = Filiale hat selbst eingetragen</span> · 🗑 Entsorgung dieses Tages<br>
     Gerichtsnamen antippen für frühere Termine
   </div>`;
 
@@ -6437,8 +6440,15 @@ function toggleOrgDetail(id){
     d.hist.forEach(o=>{
       const dl=new Date(o.date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
       const res=o.soldOutTime?`<span style="color:#DC2626;font-weight:600;">🔥 ausverkauft ${o.soldOutTime}</span>`:(o.leftover!=null?`<span style="color:${o.leftover>4?'#C2410C':'#16A34A'};font-weight:600;">${formatQty(o.leftover)} entsorgt</span>`:'<span style="color:var(--muted);">keine Entsorgungsdaten</span>');
-      h+=`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--border);">
-        <span>${dl}</span><span>${o.qty!=null?formatQty(o.qty)+' Bhlt':'–'}</span><span>${res}</span>
+      // Wetter von damals — hilft einzuordnen, ob ein Ausreißer (z.B. viel entsorgt) am Wetter lag.
+      let wBadge='';
+      if(o.weather && o.weather.tempMax!=null){
+        const t=Math.round(o.weather.tempMax), p=o.weather.precipSum??0;
+        const icon=(t>=22&&p<1)?'☀️':(p>=5?'🌧️':'⛅');
+        wBadge=`<span style="color:var(--muted);font-size:11px;white-space:nowrap;">${icon} ${t}°C</span>`;
+      }
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--border);">
+        <span>${dl}</span><span>${o.qty!=null?formatQty(o.qty)+' Bhlt':'–'}</span>${wBadge}<span>${res}</span>
       </div>`;
     });
   } else {
@@ -7035,6 +7045,11 @@ async function updateForecastQtyOrg(inputEl){
   const dish=inputEl.dataset.dish;
   const dateStr=inputEl.dataset.date;
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
+  // War der Wert schon von der Filiale gesetzt (orange)? Dann bleibt er beim Anpassen durch
+  // Operations weiterhin als "Filiale" markiert (source='store') — sonst geht beim Speichern
+  // verloren, dass der Wert ursprünglich von der Filiale kam, und das Feld würde fälschlich navy.
+  const wasStoreSet=inputEl.dataset.origSource==='store'||inputEl.dataset.origSource==='manual';
+  const saveSource=wasStoreSet?'store':'org';
   // Vorschlagswert, der beim Rendern im Feld stand — Grundlage für "bestätigt" vs. "angepasst".
   const suggested=inputEl.dataset.sugg!==undefined&&inputEl.dataset.sugg!==''?parseFloat(inputEl.dataset.sugg):null;
   const isConfirm=suggested!=null && qty!=null && Math.abs(qty-suggested)<0.01;
@@ -7049,12 +7064,13 @@ async function updateForecastQtyOrg(inputEl){
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{
-        store_id:storeId, dish_name:dish, forecast_date:dateStr, qty, groesse:'gross', source:'org',
+        store_id:storeId, dish_name:dish, forecast_date:dateStr, qty, groesse:'gross', source:saveSource,
         status, suggested_qty:suggested, change_reason:reason,
         confirmed_by:(currentStore?.name||'Operations'), confirmed_at:new Date().toISOString()
       }])});
     }
     inputEl.dataset.copied='0';
+    inputEl.dataset.origSource=saveSource;
     inputEl.dataset.status=status||'';
     // Grün = Vorschlag bestätigt · Gelb = manuell angepasst (Farblogik aus dem Konzept)
     inputEl.style.fontStyle='normal';
@@ -7250,16 +7266,21 @@ async function updateForecastQtyOrgGroesse(inputEl){
 async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr){
   const groesse=inputEl.dataset.groesse||'gross';
   const qty=inputEl.value===''?null:Math.round(parseFloat(inputEl.value));
+  // Gleiche Logik wie bei updateForecastQtyOrg: schon von der Filiale gesetzte Werte bleiben
+  // beim Anpassen orange (source='store'), statt zwangsweise auf navy/Operations zu springen.
+  const wasStoreSet=inputEl.dataset.origSource==='store'||inputEl.dataset.origSource==='manual';
+  const saveSource=wasStoreSet?'store':'org';
   try{
     // Nur diese Größe löschen — andere Größen bleiben erhalten
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null && qty>=0){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:saveSource}])});
     }
     inputEl.dataset.copied='0';
-    inputEl.style.borderColor='#2B3A67';
-    inputEl.style.background='#EEF1F8';
+    inputEl.dataset.origSource=saveSource;
+    inputEl.style.borderColor=wasStoreSet?'#F97316':'#2B3A67';
+    inputEl.style.background=wasStoreSet?'#FFF7ED':'#EEF1F8';
     showToast('✔ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
@@ -11482,7 +11503,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
       const changed=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
       const changedByOrg=recs.some(r=>r.source==='org');
-      const changedColor=changedByOrg?'#2B3A67':'#0369A1';
+      const changedColor=changedByOrg?'#2B3A67':'#F97316';
       const activeRecs=recs.filter(r=>r.qty>0);
       const useShort=activeRecs.length>1; // mehrere Größen gleichzeitig -> abkürzen, sonst ausschreiben
       const sizeLabel=(isLasagne&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:${useShort?'8px':'8.5px'};font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)}× ${useShort?(SIZE_SHORT_MK[r.groesse]||'G')+' ('+(SIZE_PORTIONS_MK[r.groesse]||18)+')':(SIZE_FULL_MK[r.groesse]||'Groß')}</span>`).join('')}</div>`:'';
