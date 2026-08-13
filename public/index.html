@@ -983,7 +983,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.38.0';
+const APP_VERSION = '6.38.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6287,12 +6287,21 @@ async function renderOrgStoreForecast(){
   const fromDate=wd[1], toDate=wd[5];
   const kw=getIsoWeekNumber(fromDate);
   const histFrom=dateMinusDays(fromDate, 140);
+  const todayStr=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
+  // Das Wetter-Archiv liefert nur Tage, die ein paar Tage in der Vergangenheit liegen — ein
+  // end_date in der Zukunft lässt den ganzen Aufruf leer zurückkommen (auch für längst
+  // vergangene Termine!). Daher hier hart deckeln, unabhängig vom angezeigten Wochenende.
+  const histWeatherTo=(toDate<dateMinusDays(todayStr,2))?toDate:dateMinusDays(todayStr,2);
 
-  const [fcRows, dispRows, weatherHistMap]=await Promise.all([
+  const [fcRows, dispRows, weatherHistMap, weatherFutureMap]=await Promise.all([
     api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,groesse,status,source,changed_by&limit=8000`).catch(()=>[]),
     api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[]),
-    fetchHistoricalWeather(orgPlanStore, histFrom, toDate).catch(()=>({}))
+    (histFrom<=histWeatherTo?fetchHistoricalWeather(orgPlanStore, histFrom, histWeatherTo):Promise.resolve({})).catch(()=>({})),
+    (toDate>=todayStr?fetchWeatherForStore(orgPlanStore, todayStr, toDate):Promise.resolve({})).catch(()=>({}))
   ]);
+  // Wetter für die angezeigte Woche: Vergangenheit aus dem Archiv, heute/Zukunft aus der Vorhersage —
+  // damit in der Wochentabelle selbst (nicht nur im "Frühere Termine"-Fenster) das Wetter sichtbar ist.
+  const weekWeatherMap={...weatherHistMap, ...weatherFutureMap};
   // Mengen pro Gericht (Größen summiert) — NICHT über verschiedene Gerichte derselben Kategorie
   const qtyByDish={}, qtyBySize={}, srcByDish={};
   (fcRows||[]).forEach(f=>{
@@ -6337,7 +6346,6 @@ async function renderOrgStoreForecast(){
   html+=`<div class="card" style="overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
     <thead><tr><th style="text-align:left;font-size:10.5px;">Tag</th><th style="font-size:10.5px;">Salat</th><th style="font-size:10.5px;">Gericht 1</th><th style="font-size:10.5px;">Gericht 2</th><th style="font-size:10.5px;">Reis</th></tr></thead><tbody>`;
 
-  const todayStr=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
   window._orgDetailData={};
   for(let d=1; d<=5; d++){
     const dateStr=wd[d];
@@ -6347,8 +6355,18 @@ async function renderOrgStoreForecast(){
     const cols=[salat, dishes[0], dishes[1], REIS_DISH_NAME];
     const isToday=dateStr===todayStr;
     const dl=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+    // Wetter direkt in der Tabelle sichtbar (nicht erst im "Frühere Termine"-Fenster) — genau
+    // hier stand es auch in der alten Version.
+    const dw=weekWeatherMap[dateStr];
+    let dwBadge='';
+    if(dw && dw.tempMax!=null){
+      const t=Math.round(dw.tempMax);
+      const precip=dw.precipSum??dw.precipProb;
+      const icon=(t>=22&&(precip??0)<(dw.precipSum!=null?1:30))?'☀️':((precip??0)>=(dw.precipSum!=null?5:60)?'🌧️':'⛅');
+      dwBadge=`<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px;white-space:nowrap;">${icon} ${t}°C</div>`;
+    }
     html+=`<tr style="${isToday?'background:#EFF6FF;':''}">
-      <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}</td>`;
+      <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}${dwBadge}</td>`;
     cols.forEach((dish,ci)=>{
       if(!dish){ html+='<td style="color:var(--border);">·</td>'; return; }
       const cat=mapDishNameToCategory(dish);
