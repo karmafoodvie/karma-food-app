@@ -324,6 +324,10 @@ const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'kle
 // Kräftige, markante Farben speziell für die Login-Auswahl (eigene Palette, unabhängig von STORE_COLORS)
 const STORE_LOGIN_COLORS = {'lb':'#00A878','boerse':'#00B4CC','1020':'#F0806B','3400':'#E0521F','kitchen':'#F0A500','zentrale':'#2B3A67'};
 const TRANSPORTER_CATS = ['Verpackungen','Alltag','Food & Drinks','Reinigung'];
+// Kategorien für "Fast aus → nachbestellen" (INVOLO-Sammelbestellung an Simone, täglich 15:00
+// gebündelt). Bewusst getrennt von ✅/❌ "Lieferbar" — das bleibt Info für die Stores, DAS hier ist
+// der proaktive Nachbestell-Hinweis für Simone, bevor es wirklich leer ist.
+const NACHSCHUB_CATS = ['Verpackungen','Alltag','Reinigung'];
 const KC_CATS = ['Webshop-Produkte'];
 const SWEETS_CATS = ['Sweets'];
 const CATS = [...TRANSPORTER_CATS, ...KC_CATS, ...SWEETS_CATS];
@@ -983,7 +987,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.38.1';
+const APP_VERSION = '6.39.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9593,6 +9597,81 @@ async function markAllPackedAndReset(orderDateStr){
 }
 window.markAllPackedAndReset=markAllPackedAndReset;
 
+// ==== FAST AUS → NACHBESTELLEN (INVOLO-Sammelbestellung) ====
+// Michi meldet "fast aus" (optional mit Restmenge). Sammelt sich still; ein Server-Job bündelt
+// täglich 15:00 alle offenen Meldungen zu EINER Asana-Bestellung an Simone.
+// Bewusst eigene Funktionsnamen (meldeNachschub statt submitNachschub) — es gibt bereits ein
+// unabhängiges "Nachschub"-Feature beim Sweets-Team (E-Mail-Anfrage), das nicht angerührt wird.
+let nachschubOffen = {};
+async function ladeNachschubOffen(){
+  try{
+    const rows=await api('nachschub_meldungen?status=eq.offen&select=article_id,restmenge,gemeldet_von,created_at');
+    nachschubOffen={};
+    (rows||[]).forEach(r=>{ nachschubOffen[r.article_id]=r; });
+  }catch(e){ console.error('Nachschub laden fehlgeschlagen:',e); nachschubOffen={}; }
+}
+
+function showNachschubModal(articleId){
+  const a=articles.find(x=>x.id===articleId);
+  if(!a) return;
+  const einheit=a.unit||'';
+  const schon=nachschubOffen[articleId];
+  const ov=document.createElement('div');
+  ov.id='nachschub-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:340px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">🛒 Fast aus — nachbestellen?</div>
+    <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">${a.name}</div>
+    ${schon?`<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#92400E;margin-bottom:12px;">Bereits gemeldet${schon.restmenge!=null?` (noch ca. ${formatQty(schon.restmenge)} ${einheit})`:''} — erneutes Melden aktualisiert die Menge.</div>`:''}
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Noch ca. <span style="color:var(--sub);">(optional)</span></label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <input id="nachschub-menge" type="number" inputmode="decimal" min="0" step="any" value="${schon?.restmenge!=null?schon.restmenge:''}" placeholder="—" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;">
+      <span style="font-size:13px;color:var(--muted);min-width:40px;">${einheit}</span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="closeNachschubModal()" style="flex:1;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:13px;font-weight:500;cursor:pointer;">Abbrechen</button>
+      <button onclick="meldeNachschub(${articleId})" style="flex:2;background:#F97316;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">🛒 Nachbestellen</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) closeNachschubModal(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const inp=document.getElementById('nachschub-menge'); if(inp) inp.focus(); },50);
+}
+function closeNachschubModal(){ const m=document.getElementById('nachschub-modal'); if(m) m.remove(); }
+window.closeNachschubModal=closeNachschubModal;
+window.showNachschubModal=showNachschubModal;
+
+async function meldeNachschub(articleId){
+  const inp=document.getElementById('nachschub-menge');
+  const raw=inp?inp.value.trim():'';
+  const restmenge = raw==='' ? null : Number(raw.replace(',','.'));
+  if(restmenge!=null && (isNaN(restmenge)||restmenge<0)){ showToast('Bitte eine gültige Menge eingeben',true); return; }
+  const gemeldetVon = (currentStore?.name || currentStore?.id || 'Transporter');
+  try{
+    // Erst evtl. vorhandene offene Meldung löschen, dann neu anlegen (DELETE-then-POST-Muster) —
+    // so bleibt es bei genau EINER offenen Meldung pro Artikel, Restmenge wird aktualisiert.
+    await api(`nachschub_meldungen?article_id=eq.${articleId}&status=eq.offen`,{method:'DELETE'});
+    await api('nachschub_meldungen',{method:'POST',body:JSON.stringify([{
+      article_id: articleId, restmenge: restmenge, gemeldet_von: gemeldetVon, status: 'offen'
+    }])});
+    closeNachschubModal();
+    await ladeNachschubOffen();
+    renderPack();
+    showToast('🛒 Für Nachbestellung vermerkt');
+  }catch(e){ console.error(e); showToast('Fehler beim Melden: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.meldeNachschub=meldeNachschub;
+
+async function nimmNachschubZurueck(articleId){
+  try{
+    await api(`nachschub_meldungen?article_id=eq.${articleId}&status=eq.offen`,{method:'DELETE'});
+    await ladeNachschubOffen();
+    renderPack();
+    showToast('Meldung zurückgenommen');
+  }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.nimmNachschubZurueck=nimmNachschubZurueck;
+
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -9609,7 +9688,8 @@ async function renderPack(){
   const today=new Date().toISOString().split('T')[0];
   const [openTasksRaw, transporterBcRaw]=await Promise.all([
     api(`transporter_tasks?done=eq.false&select=id`).catch(()=>[]),
-    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[])
+    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[]),
+    ladeNachschubOffen()  // offene "fast aus"-Meldungen laden, damit die Bestellliste den Status zeigen kann
   ]);
   const _tbDismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
   const unreadBcCount=(transporterBcRaw||[]).filter(b=>!_tbDismissed.includes(b.id) && (!b.show_until || b.show_until>=today)).length;
@@ -9710,8 +9790,11 @@ async function renderPack(){
     items.forEach(a=>{
       const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
+      const istNachschub=NACHSCHUB_CATS.includes(a.category);
+      const nachschubGemeldet=istNachschub && !!nachschubOffen[a.id];
       html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:4px;">
         <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
+        ${istNachschub?`<button onclick="showNachschubModal(${a.id})" title="${nachschubGemeldet?'Für Nachbestellung vermerkt — tippen zum Ändern':'Fast aus? Nachbestellen'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;${nachschubGemeldet?'':'opacity:0.4;'}">🛒</button>`:''}
         <span style="font-size:11.5px;line-height:1.2;word-break:break-word;">${a.name}</span>
       </div></td>`;
       storeList.forEach(s=>{
@@ -9795,15 +9878,25 @@ async function renderPack(){
       <div class="card" style="margin-top:6px;">`;
     notOrderedToday.forEach(a=>{
       const verfuegbar=a.verfuegbar!==false;
+      const istNachschub=NACHSCHUB_CATS.includes(a.category);
+      const meldung=istNachschub?nachschubOffen[a.id]:null;
+      const einheit=a.unit||'';
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
           ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
+            ${meldung?`<div style="font-size:11px;color:#EA580C;font-weight:600;">🛒 Nachbestellung vermerkt${meldung.restmenge!=null?` · noch ca. ${formatQty(meldung.restmenge)} ${einheit}`:''}</div>`:''}
           </div>
         </div>
-        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+          ${istNachschub?(meldung
+            ? `<button onclick="nimmNachschubZurueck(${a.id})" style="background:#FEF3C7;color:#B45309;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;">🛒 vermerkt ✓ (zurücknehmen)</button>`
+            : `<button onclick="showNachschubModal(${a.id})" style="background:#FFF7ED;color:#EA580C;border:1px solid #FDBA74;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;">🛒 Fast aus — nachbestellen</button>`
+          ):''}
+          <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+        </div>
       </div>`;
     });
     html+='</div></details>';
