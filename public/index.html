@@ -983,7 +983,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.36.5';
+const APP_VERSION = '6.37.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1348,15 +1348,33 @@ async function loginAs(store){
   if(store.id==='1020'){
     document.getElementById('nav-messen').style.display='flex';
   }
-  await loadAll();
-  checkForBroadcasts();
-  const savedView=localStorage.getItem('kf_view')||'home';
-  // Only restore views that make sense for this role
-  const orgViews=['management','maengel'];
-  const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
-  const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
-  const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
-  goTo(allowedViews.includes(savedView)?savedView:'home');
+  // Sicherheitsnetz: schlägt hier irgendwas fehl (z.B. eine einzelne API-Abfrage), blieb die App
+  // bisher STUMM bei "Lädt…" hängen, ohne dass irgendwer den Grund sehen konnte (Fall Stadtplatz,
+  // 13.08.26 — "Bestellung aufgeben" öffnete sich nie). Jetzt wird der echte Fehler sichtbar
+  // gemacht und man kann es erneut versuchen, statt komplett auszusperren.
+  try{
+    await loadAll();
+    checkForBroadcasts();
+    const savedView=localStorage.getItem('kf_view')||'home';
+    // Only restore views that make sense for this role
+    const orgViews=['management','maengel'];
+    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
+    const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
+    const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
+    goTo(allowedViews.includes(savedView)?savedView:'home');
+  }catch(e){
+    console.error('Login-Ablauf fehlgeschlagen:', e);
+    const el=document.getElementById('v-home')||document.querySelector('.view');
+    if(el){
+      el.classList.add('show');
+      el.innerHTML=`<div style="padding:20px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:10px;">⚠️</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px;">Beim Laden ist etwas schiefgelaufen</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;word-break:break-word;">${escAttr((e?.message||String(e)).slice(0,200))}</div>
+        <button onclick="location.reload()" style="background:var(--green);color:#fff;border:none;border-radius:9px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;">🔄 Nochmal versuchen</button>
+      </div>`;
+    }
+  }
 }
 function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store'); location.reload(); } }
 
@@ -1439,7 +1457,31 @@ function goTo(v, noPush=false){
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
   const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
-  if(renders[v]) renders[v]();
+  // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
+  // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
+  // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
+  try{
+    const result = renders[v] ? renders[v]() : null;
+    if(result && typeof result.catch === 'function'){
+      result.catch(e=>{
+        console.error(`Render-Fehler bei "${v}":`, e);
+        if(targetEl) targetEl.innerHTML=`<div style="padding:40px 20px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:8px;">⚠️</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:5px;">Seite konnte nicht geladen werden</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;word-break:break-word;">${escAttr((e?.message||String(e)).slice(0,200))}</div>
+          <button onclick="goTo('${v}')" style="background:var(--green);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">🔄 Nochmal versuchen</button>
+        </div>`;
+      });
+    }
+  }catch(e){
+    console.error(`Render-Fehler bei "${v}":`, e);
+    if(targetEl) targetEl.innerHTML=`<div style="padding:40px 20px;text-align:center;">
+      <div style="font-size:28px;margin-bottom:8px;">⚠️</div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:5px;">Seite konnte nicht geladen werden</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;word-break:break-word;">${escAttr((e?.message||String(e)).slice(0,200))}</div>
+      <button onclick="goTo('${v}')" style="background:var(--green);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:600;cursor:pointer;">🔄 Nochmal versuchen</button>
+    </div>`;
+  }
 }
 // Der normale "Bestellen"-Nav-Button soll IMMER auf die übliche Tab-Ansicht (Transporter/Shop
 // Produkte/Sweets/Küche) führen — nicht auf Forecast steckenbleiben, falls man dort zuletzt war.
