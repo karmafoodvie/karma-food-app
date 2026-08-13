@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.35.1';
+const APP_VERSION = '6.36.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5779,7 +5779,7 @@ async function loadOrgDashboard(){
       api('stores?select=id,name&order=id').catch(()=>[]),
       api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`).catch(()=>[]),
       api(`kc_submissions?order_date=eq.${today}&select=store_id`).catch(()=>[]),
-      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=in.(store,org)&select=store_id`).catch(()=>[]),
+      api(`forecast_qty?forecast_date=eq.${tomorrowStr}&source=in.(store,org)&select=store_id,source`).catch(()=>[]),
       api(`disposal?disposal_date=eq.${today}&select=store_id,leftover_qty`).catch(()=>[]),
       api(`order_submissions?order_date=eq.${today}&select=store_id,tab`).catch(()=>[])
     ]);
@@ -5789,6 +5789,9 @@ async function loadOrgDashboard(){
     // fälschlich als "erledigt" zeigten, auch wenn heute gar nichts eingetragen wurde.
     const kcSet=new Set((kcPending||[]).map(k=>k.store_id));
     const forecastSet=new Set((forecastTomorrow||[]).map(f=>f.store_id));
+    // Filialen, die den Forecast für morgen SELBST angepasst haben — die sollen anders (orange)
+    // angezeigt werden, damit sichtbar ist, wo jemand eingegriffen hat und ein Blick lohnt.
+    const forecastStoreAdjusted=new Set((forecastTomorrow||[]).filter(f=>f.source==='store').map(f=>f.store_id));
     const disposalSet=new Set((disposalToday||[]).filter(d=>d.leftover_qty!=null).map(d=>d.store_id));
 
     // Reminder: Wochen-Forecast für die KOMMENDE Woche muss spätestens Freitag stehen — Dringlichkeit
@@ -5844,13 +5847,16 @@ async function loadOrgDashboard(){
       html+=`<tr>
         <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:${col};flex-shrink:0;"></span><span data-no-translate style="font-size:12.5px;font-weight:500;">${s.name.split(' ')[0]}</span></span></td>
         <td>${isKCDayDash?dot(kcSet.has(s.id)):dotNeutral}</td>
-        <td>${dot(forecastSet.has(s.id))}</td>
+        <td>${forecastStoreAdjusted.has(s.id)?`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#F97316;" title="Filiale hat selbst angepasst — Blick lohnt"></span>`:dot(forecastSet.has(s.id))}</td>
         <td>${dot(transporterOk)}</td>
         <td>${dot(sweetsOk)}</td>
         <td>${dot(disposalSet.has(s.id))}</td>
       </tr>`;
     });
     html+='</tbody></table></div>';
+    html+=`<div style="font-size:10px;color:var(--muted);margin:4px 2px 0;">
+      <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:#F97316;vertical-align:middle;"></span> Forecast: Filiale hat selbst angepasst
+    </div>`;
     wrap.innerHTML=html;
     translateEl(wrap);
   }catch(e){console.error(e);}
