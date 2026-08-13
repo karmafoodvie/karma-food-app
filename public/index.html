@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.36.0';
+const APP_VERSION = '6.36.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10478,15 +10478,23 @@ async function saveTransporterTaskInline(){
 window.saveTransporterTaskInline=saveTransporterTaskInline;
 
 async function renderTransporterBeilagenHtml(){
-  // Bild 3 Struktur: Artikel als Zeilen, Stores als Spalten, Foto vorne, abhakbar
+  // WICHTIG: zeigt bewusst MORGEN (Vorbereitungstag), nicht heute — Kitchen braucht diese Ansicht
+  // zum Planen, was für morgen vorzubereiten ist. Vorher zeigte diese Funktion versehentlich HEUTE,
+  // während die identische Tabelle in der Transporter-Packliste ("Beilagen vorbereiten") korrekt
+  // MORGEN zeigte — dadurch sahen Küche und Transporter unterschiedliche Zahlen für denselben Zweck.
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
-  const today=new Date().toISOString().split('T')[0];
-  const todayWd=new Date().getDay(); // 0=So..6=Sa
-  const weekdayNum=todayWd===0?7:todayWd; // 1=Mo..7=So
+  const tomorrowDate=new Date(); tomorrowDate.setDate(tomorrowDate.getDate()+1);
+  while([0,6].includes(tomorrowDate.getDay())){ tomorrowDate.setDate(tomorrowDate.getDate()+1); } // Wochenende überspringen
+  const today=tomorrowDate.toISOString().split('T')[0]; // Name "today" beibehalten, um den Rest der Funktion unverändert zu lassen
+  const todayWd=tomorrowDate.getDay();
+  const weekdayNum=todayWd===0?7:todayWd;
 
   const baseline=await api(`kitchen_supply_baseline?weekday=eq.${weekdayNum}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
-  const weekDates=getWeekdayDates();
+  // Offset bestimmen, falls "morgen" in die nächste Kalenderwoche fällt (z.B. an einem Freitag) —
+  // sonst deckt der geladene Datumsbereich "morgen" gar nicht ab.
+  const weekOffsetForTomorrow=(new Date().getDay()===5)?1:0;
+  const weekDates=getWeekdayDates(weekOffsetForTomorrow);
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
   const valMap={};
@@ -10502,24 +10510,30 @@ async function renderTransporterBeilagenHtml(){
   const dishNamesToday=[...new Set((fcToday||[]).filter(f=>f.qty>0).map(f=>f.dish_name))];
   let dishHtml='';
   if(dishNamesToday.length){
-    dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte</div>
+    dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte für morgen</div>
       <div style="overflow-x:auto;margin-bottom:16px;"><table style="width:100%;border-collapse:collapse;">
       <thead><tr style="border-bottom:1.5px solid var(--border);">
         <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Gericht</th>
         ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
       </tr></thead><tbody>`;
     dishNamesToday.forEach(name=>{
+      const isLasagneRow=name.toLowerCase().includes('lasagne');
+      const SIZE_FULL_KUE={mittel:'Mittel (12)',klein:'Klein (8)',gross:'Groß (18)'};
       const cells=storeList.map(st=>{
         const recs=(fcToday||[]).filter(f=>f.store_id===st.id && f.dish_name===name);
         if(!recs.length) return `<td style="text-align:center;color:var(--border);padding:8px 4px;">–</td>`;
         const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
         const packed=recs.every(r=>r.eingepackt);
-        return `<td style="text-align:center;padding:6px 4px;">
+        // Bei Lasagne die Größen einzeln zeigen (Groß/Mittel/Klein) — vorher stand hier nur die
+        // Gesamtsumme, ohne die für die Küche entscheidende Blech-Aufteilung.
+        const sizeBadges=(isLasagneRow&&recs.length)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 5px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL_KUE[r.groesse]||'Groß (18)'}</span>`).join('')}</div>`:'';
+        return `<td style="text-align:center;padding:6px 4px;vertical-align:top;">
           <div onclick="toggleForecastEingepackt('${st.id}','${escAttr(name)}','${today}',${packed})"
             style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
             <span style="font-size:13px;font-weight:600;color:${packed?'var(--green)':'#1a1a18'};">${formatQty(qty)}</span>
             <span style="font-size:10px;color:${packed?'var(--green)':'var(--muted)'};">${packed?'✓ ok':'○'}</span>
           </div>
+          ${sizeBadges}
         </td>`;
       }).join('');
       dishHtml+=`<tr style="border-bottom:0.5px solid var(--border);">
@@ -10543,7 +10557,7 @@ async function renderTransporterBeilagenHtml(){
   if(!allArticles.length) return dishHtml;
 
   // Tabelle: Beilage | Store1 | Store2 | Store3 | Store4
-  let html=dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+  let html=dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen für morgen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
     <thead><tr style="border-bottom:1.5px solid var(--border);">
       <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Beilage</th>
       ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
