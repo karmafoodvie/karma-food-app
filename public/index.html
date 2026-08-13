@@ -973,7 +973,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.36.3';
+const APP_VERSION = '6.36.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10478,23 +10478,17 @@ async function saveTransporterTaskInline(){
 window.saveTransporterTaskInline=saveTransporterTaskInline;
 
 async function renderTransporterBeilagenHtml(){
-  // WICHTIG: zeigt bewusst MORGEN (Vorbereitungstag), nicht heute — Kitchen braucht diese Ansicht
-  // zum Planen, was für morgen vorzubereiten ist. Vorher zeigte diese Funktion versehentlich HEUTE,
-  // während die identische Tabelle in der Transporter-Packliste ("Beilagen vorbereiten") korrekt
-  // MORGEN zeigte — dadurch sahen Küche und Transporter unterschiedliche Zahlen für denselben Zweck.
+  // Zeigt HEUTE — das ist Michis eigene Ansicht: er packt heute früh für die heutige Auslieferung,
+  // braucht also die heutigen Mengen, nicht morgen. (Kurzzeitig auf "morgen" umgestellt gewesen,
+  // das war ein Missverständnis — zurückgesetzt auf "heute", 13.08.26.)
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
-  const tomorrowDate=new Date(); tomorrowDate.setDate(tomorrowDate.getDate()+1);
-  while([0,6].includes(tomorrowDate.getDay())){ tomorrowDate.setDate(tomorrowDate.getDate()+1); } // Wochenende überspringen
-  const today=tomorrowDate.toISOString().split('T')[0]; // Name "today" beibehalten, um den Rest der Funktion unverändert zu lassen
-  const todayWd=tomorrowDate.getDay();
-  const weekdayNum=todayWd===0?7:todayWd;
+  const today=new Date().toISOString().split('T')[0];
+  const todayWd=new Date().getDay(); // 0=So..6=Sa
+  const weekdayNum=todayWd===0?7:todayWd; // 1=Mo..7=So
 
   const baseline=await api(`kitchen_supply_baseline?weekday=eq.${weekdayNum}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
-  // Offset bestimmen, falls "morgen" in die nächste Kalenderwoche fällt (z.B. an einem Freitag) —
-  // sonst deckt der geladene Datumsbereich "morgen" gar nicht ab.
-  const weekOffsetForTomorrow=(new Date().getDay()===5)?1:0;
-  const weekDates=getWeekdayDates(weekOffsetForTomorrow);
+  const weekDates=getWeekdayDates();
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
   const valMap={};
@@ -10510,7 +10504,7 @@ async function renderTransporterBeilagenHtml(){
   const dishNamesToday=[...new Set((fcToday||[]).filter(f=>f.qty>0).map(f=>f.dish_name))];
   let dishHtml='';
   if(dishNamesToday.length){
-    dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte für morgen</div>
+    dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte</div>
       <div style="overflow-x:auto;margin-bottom:16px;"><table style="width:100%;border-collapse:collapse;">
       <thead><tr style="border-bottom:1.5px solid var(--border);">
         <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Gericht</th>
@@ -10557,7 +10551,7 @@ async function renderTransporterBeilagenHtml(){
   if(!allArticles.length) return dishHtml;
 
   // Tabelle: Beilage | Store1 | Store2 | Store3 | Store4
-  let html=dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen für morgen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+  let html=dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
     <thead><tr style="border-bottom:1.5px solid var(--border);">
       <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Beilage</th>
       ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
