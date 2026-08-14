@@ -324,6 +324,10 @@ const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'kle
 // Kräftige, markante Farben speziell für die Login-Auswahl (eigene Palette, unabhängig von STORE_COLORS)
 const STORE_LOGIN_COLORS = {'lb':'#00A878','boerse':'#00B4CC','1020':'#F0806B','3400':'#E0521F','kitchen':'#F0A500','zentrale':'#2B3A67'};
 const TRANSPORTER_CATS = ['Verpackungen','Alltag','Food & Drinks','Reinigung'];
+// Kategorien für "Fast aus → nachbestellen" (INVOLO-Sammelbestellung an Simone, täglich 15:00
+// gebündelt). Bewusst getrennt von ✅/❌ "Lieferbar" — das bleibt Info für die Stores, DAS hier ist
+// der proaktive Nachbestell-Hinweis für Simone, bevor es wirklich leer ist.
+const NACHSCHUB_CATS = ['Verpackungen','Alltag','Reinigung'];
 const KC_CATS = ['Webshop-Produkte'];
 const SWEETS_CATS = ['Sweets'];
 const CATS = [...TRANSPORTER_CATS, ...KC_CATS, ...SWEETS_CATS];
@@ -983,7 +987,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.37.0';
+const APP_VERSION = '6.41.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2387,6 +2391,9 @@ async function computeAndSaveScore(storeId){
     ]);
     const haccp_done=(wek||[]).length>0 && (rein||[])[0]?.reinigung_erledigt && (rein||[])[0]?.desinfektion_erledigt && (kuehl||[]).length>0;
     const waste_total=(disposal||[]).reduce((s,d)=>s+(d.leftover_qty||0),0);
+    // Bestellte Menge des Tages — Basis, um Reste als % statt als nackte Zahl zu zeigen
+    // (eine kleine Filiale hat naturgemäß weniger Reste absolut, das ist sonst unfair verglichen).
+    const bestellt_total=(forecast||[]).reduce((s,f)=>s+(f.qty||0),0);
 
     // Streak: Vortag prüfen
     const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
@@ -2396,7 +2403,7 @@ async function computeAndSaveScore(storeId){
     const streak_haccp=haccp_done?(prevStreak+1):0;
 
     await api(`store_scores?store_id=eq.${storeId}&datum=eq.${today}`,{method:'DELETE'});
-    await api('store_scores',{method:'POST',body:JSON.stringify([{store_id:storeId,datum:today,streak_haccp,waste_total,schrittende_done:false}])});
+    await api('store_scores',{method:'POST',body:JSON.stringify([{store_id:storeId,datum:today,streak_haccp,waste_total,bestellt_total,schrittende_done:false}])});
   }catch(e){console.error('score error',e);}
 }
 
@@ -2408,19 +2415,30 @@ async function loadGamificationWidget(storeId){
     const [myScores, allStores, allScoresWeek] = await Promise.all([
       api(`store_scores?store_id=eq.${storeId}&datum=gte.${mondayStr}&order=datum.desc&select=*`).catch(()=>[]),
       api('stores?select=id,name&order=id').catch(()=>[]),
-      api(`store_scores?datum=gte.${mondayStr}&select=store_id,waste_total,streak_haccp`).catch(()=>[])
+      api(`store_scores?datum=gte.${mondayStr}&select=store_id,waste_total,bestellt_total,streak_haccp`).catch(()=>[])
     ]);
     const todayScore=(myScores||[]).find(s=>s.datum===today);
     const streak=todayScore?.streak_haccp||0;
     const storeList=(allStores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
 
-    // Waste-Rangliste diese Woche
-    const wasteByStore={};
+    // Waste-Rangliste diese Woche — als % der bestellten Menge, nicht als nackte Zahl. Sonst wirkt
+    // eine kleine Filiale (wenig Reste, aber auch wenig bestellt) unfair besser als sie eigentlich ist.
+    const wasteByStore={}, bestelltByStore={};
     (allScoresWeek||[]).forEach(s=>{
-      if(!wasteByStore[s.store_id]) wasteByStore[s.store_id]=0;
-      wasteByStore[s.store_id]+=(s.waste_total||0);
+      wasteByStore[s.store_id]=(wasteByStore[s.store_id]||0)+(s.waste_total||0);
+      bestelltByStore[s.store_id]=(bestelltByStore[s.store_id]||0)+(s.bestellt_total||0);
     });
-    const wasteSorted=storeList.map(s=>({...s,waste:wasteByStore[s.id]||0})).sort((a,b)=>a.waste-b.waste);
+    const wasteSorted=storeList.map(s=>{
+      const waste=wasteByStore[s.id]||0;
+      const bestellt=bestelltByStore[s.id]||0;
+      const pct = bestellt>0 ? (waste/bestellt*100) : null; // null = noch keine Basis (z.B. neue Filiale)
+      return {...s, waste, bestellt, pct};
+    }).sort((a,b)=>{
+      if(a.pct==null && b.pct==null) return 0;
+      if(a.pct==null) return 1;   // ohne Basis ans Ende, nicht fälschlich auf Platz 1
+      if(b.pct==null) return -1;
+      return a.pct-b.pct;
+    });
     const myRank=wasteSorted.findIndex(s=>s.id===storeId)+1;
 
     let html=`<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:12px;margin-top:10px;">`;
@@ -2445,11 +2463,12 @@ async function loadGamificationWidget(storeId){
     wasteSorted.slice(0,4).forEach((s,i)=>{
       const isMe=s.id===storeId;
       const col=STORE_COLORS[s.id]||'#888';
+      const pctLabel = s.pct!=null ? `${s.pct.toFixed(1)}%` : '–';
       html+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;${i<wasteSorted.length-1?'border-bottom:0.5px solid var(--color-border-tertiary);':''}">
         <span style="font-size:12px;font-weight:500;color:var(--color-text-secondary);min-width:16px;">${i+1}</span>
         <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
         <span style="font-size:12px;flex:1;font-weight:${isMe?'500':'400'};color:${isMe?'var(--color-text-primary)':'var(--color-text-secondary)'};" data-no-translate>${s.name.split(' ')[0]}</span>
-        <span style="font-size:12px;color:var(--color-text-secondary);">${s.waste.toFixed(1)}</span>
+        <span style="font-size:12px;color:var(--color-text-secondary);">${pctLabel}</span>
       </div>`;
     });
     html+=`</div>`;
@@ -3220,6 +3239,19 @@ function renderOrderSection(cats, label, color, icon){
 // tatsächlicher Sorte in orderQtys/orders) — es ändert sich nur die Eingabe-Darstellung für die Filiale.
 function renderVariantGroupRow(groupKey, groupItems){
   const g=VARIANT_GROUPS[groupKey];
+  // Kann vorkommen, wenn zufällig ALLE Sorten gerade gleichzeitig als "nicht lieferbar" markiert
+  // sind (z.B. mehrere echte, temporäre Ausverkauft-Meldungen zusammen — kein Fehler, passiert im
+  // normalen Betrieb). Ohne diese Absicherung stürzte die Seite komplett ab (Fall Stadtplatz,
+  // 13.08.26: "Cannot read properties of undefined (reading 'image_url')"), weil der Code weiter
+  // unten unbedingt von mindestens einem Eintrag ausging.
+  if(!groupItems.length){
+    return `<div class="item-row" style="flex-direction:column;align-items:stretch;gap:0;opacity:0.5;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="item-name">${g.label}</div>
+      </div>
+      <div style="font-size:11.5px;color:#DC2626;margin-top:2px;">❌ Aktuell keine Sorte lieferbar</div>
+    </div>`;
+  }
   if(!variantRows[groupKey]){
     const preset=groupItems.filter(a=>(orderQtys[a.id]||0)>0);
     variantRows[groupKey]=preset.length?preset.map(a=>({articleId:a.id})):[{articleId:null}];
@@ -3871,6 +3903,36 @@ function fetchWithTimeout(url, options={}, ms=8000){
 function cacheGet(key){ try{ const v=sessionStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; } }
 function cacheSet(key, val){ try{ sessionStorage.setItem(key, JSON.stringify(val)); }catch(e){ /* z.B. Speicher voll — kein Problem, nur kein Caching */ } }
 
+// Mittelt Temperatur und aggregiert Niederschlag über das Mittags-Fenster 11–15 Uhr pro Tag,
+// statt den Tages-Höchstwert zu nehmen — fürs Mittagsgeschäft zählt nur diese Zeitspanne (Peak).
+// precipAgg='max' → höchste Regenwahrscheinlichkeit im Fenster (Vorhersage); 'sum' → tatsächlich
+// gefallener Niederschlag im Fenster in mm (Archiv). Feldnamen bewusst wie vorher (tempMax/
+// precipProb/precipSum), damit alle bestehenden Anzeige-Stellen unverändert weiterlaufen.
+function aggregateLunchWindow(hourly, precipKey, precipAgg){
+  const map = {};
+  if(!hourly?.time) return map;
+  const byDate = {};
+  hourly.time.forEach((t,i)=>{
+    const [d, hm] = t.split('T');
+    const h = parseInt((hm||'').slice(0,2),10);
+    if(isNaN(h) || h<11 || h>15) return;
+    if(!byDate[d]) byDate[d]={temps:[],precips:[]};
+    const temp = hourly.temperature_2m?.[i];
+    const precip = hourly[precipKey]?.[i];
+    if(temp!=null) byDate[d].temps.push(temp);
+    if(precip!=null) byDate[d].precips.push(precip);
+  });
+  Object.entries(byDate).forEach(([d,v])=>{
+    const tempAvg = v.temps.length ? v.temps.reduce((a,b)=>a+b,0)/v.temps.length : null;
+    let precipVal = null;
+    if(v.precips.length){
+      precipVal = precipAgg==='max' ? Math.max(...v.precips) : v.precips.reduce((a,b)=>a+b,0);
+    }
+    map[d] = precipAgg==='max' ? {tempMax:tempAvg, precipProb:precipVal} : {tempMax:tempAvg, precipSum:precipVal};
+  });
+  return map;
+}
+
 async function fetchWeatherForStore(storeId, fromDate, toDate){
   const cacheKey = `wx_${storeId}_${fromDate}_${toDate}`;
   if(_weatherCache[cacheKey]) return _weatherCache[cacheKey];
@@ -3879,16 +3941,11 @@ async function fetchWeatherForStore(storeId, fromDate, toDate){
   const coords = STORE_COORDS[storeId];
   if(!coords) return {};
   try{
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_probability_max&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
+    // Stundenwerte statt Tages-Höchstwert — nur das Mittags-Fenster (11–15 Uhr) ist relevant.
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&hourly=temperature_2m,precipitation_probability&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
     const res = await fetchWithTimeout(url, {}, 5000);
     const data = await res.json();
-    const map = {};
-    (data?.daily?.time||[]).forEach((d,i)=>{
-      map[d] = {
-        tempMax: data.daily.temperature_2m_max?.[i],
-        precipProb: data.daily.precipitation_probability_max?.[i]
-      };
-    });
+    const map = aggregateLunchWindow(data?.hourly, 'precipitation_probability', 'max');
     _weatherCache[cacheKey] = map;
     cacheSet(cacheKey, map);
     return map;
@@ -4079,13 +4136,11 @@ async function fetchHistoricalWeather(storeId, fromDate, toDate){
   const coords = STORE_COORDS[storeId];
   if(!coords) return {};
   try{
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_sum&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
+    // Stundenwerte statt Tages-Höchstwert — nur das Mittags-Fenster (11–15 Uhr) ist relevant.
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${coords.lat}&longitude=${coords.lon}&hourly=temperature_2m,precipitation&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
     const res = await fetchWithTimeout(url, {}, 8000);
     const data = await res.json();
-    const map = {};
-    (data?.daily?.time||[]).forEach((d,i)=>{
-      map[d] = { tempMax: data.daily.temperature_2m_max?.[i], precipSum: data.daily.precipitation_sum?.[i] };
-    });
+    const map = aggregateLunchWindow(data?.hourly, 'precipitation', 'sum');
     _weatherCache[cacheKey] = map;
     cacheSet(cacheKey, map);
     return map;
@@ -6274,11 +6329,21 @@ async function renderOrgStoreForecast(){
   const fromDate=wd[1], toDate=wd[5];
   const kw=getIsoWeekNumber(fromDate);
   const histFrom=dateMinusDays(fromDate, 140);
+  const todayStr=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
+  // Das Wetter-Archiv liefert nur Tage, die ein paar Tage in der Vergangenheit liegen — ein
+  // end_date in der Zukunft lässt den ganzen Aufruf leer zurückkommen (auch für längst
+  // vergangene Termine!). Daher hier hart deckeln, unabhängig vom angezeigten Wochenende.
+  const histWeatherTo=(toDate<dateMinusDays(todayStr,2))?toDate:dateMinusDays(todayStr,2);
 
-  const [fcRows, dispRows]=await Promise.all([
+  const [fcRows, dispRows, weatherHistMap, weatherFutureMap]=await Promise.all([
     api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,groesse,status,source,changed_by&limit=8000`).catch(()=>[]),
-    api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[])
+    api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[]),
+    (histFrom<=histWeatherTo?fetchHistoricalWeather(orgPlanStore, histFrom, histWeatherTo):Promise.resolve({})).catch(()=>({})),
+    (toDate>=todayStr?fetchWeatherForStore(orgPlanStore, todayStr, toDate):Promise.resolve({})).catch(()=>({}))
   ]);
+  // Wetter für die angezeigte Woche: Vergangenheit aus dem Archiv, heute/Zukunft aus der Vorhersage —
+  // damit in der Wochentabelle selbst (nicht nur im "Frühere Termine"-Fenster) das Wetter sichtbar ist.
+  const weekWeatherMap={...weatherHistMap, ...weatherFutureMap};
   // Mengen pro Gericht (Größen summiert) — NICHT über verschiedene Gerichte derselben Kategorie
   const qtyByDish={}, qtyBySize={}, srcByDish={};
   (fcRows||[]).forEach(f=>{
@@ -6323,7 +6388,6 @@ async function renderOrgStoreForecast(){
   html+=`<div class="card" style="overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
     <thead><tr><th style="text-align:left;font-size:10.5px;">Tag</th><th style="font-size:10.5px;">Salat</th><th style="font-size:10.5px;">Gericht 1</th><th style="font-size:10.5px;">Gericht 2</th><th style="font-size:10.5px;">Reis</th></tr></thead><tbody>`;
 
-  const todayStr=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');
   window._orgDetailData={};
   for(let d=1; d<=5; d++){
     const dateStr=wd[d];
@@ -6333,15 +6397,26 @@ async function renderOrgStoreForecast(){
     const cols=[salat, dishes[0], dishes[1], REIS_DISH_NAME];
     const isToday=dateStr===todayStr;
     const dl=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+    // Wetter direkt in der Tabelle sichtbar (nicht erst im "Frühere Termine"-Fenster) — genau
+    // hier stand es auch in der alten Version.
+    const dw=weekWeatherMap[dateStr];
+    let dwBadge='';
+    if(dw && dw.tempMax!=null){
+      const t=Math.round(dw.tempMax);
+      const precip=dw.precipSum??dw.precipProb;
+      const icon=(t>=22&&(precip??0)<(dw.precipSum!=null?1:30))?'☀️':((precip??0)>=(dw.precipSum!=null?5:60)?'🌧️':'⛅');
+      dwBadge=`<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px;white-space:nowrap;">${icon} ${t}°C</div>`;
+    }
     html+=`<tr style="${isToday?'background:#EFF6FF;':''}">
-      <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}</td>`;
+      <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}${dwBadge}</td>`;
     cols.forEach((dish,ci)=>{
       if(!dish){ html+='<td style="color:var(--border);">·</td>'; return; }
       const cat=mapDishNameToCategory(dish);
       const key=dateStr+'|'+dish;
       const cur=qtyByDish[key];
       const disp=dispByDateCat[dateStr+'|'+cat];
-      // Historie für die Detail-Aufstellung sammeln
+      // Historie für die Detail-Aufstellung sammeln — Tab 1: DIESES Gericht (4-Wochen-Menüzyklus,
+      // exakter Namens-Match). Bleibt exakt wie gehabt, unverändert.
       const hist=[];
       for(const wBack of [4,8,12,16,20]){
         const td=dateMinusDays(dateStr, wBack*7);
@@ -6349,10 +6424,22 @@ async function renderOrgStoreForecast(){
         const list=catIndex[td+'|'+cat];
         const exact=list?.find(x=>x.dish===dish);
         const q=exact?exact.qty:(list?.length?Math.max(...list.map(x=>x.qty)):null);
-        if(dp||q!=null) hist.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null});
+        if(dp||q!=null) hist.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
+      }
+      // Tab 2: ALLE [Wochentag]e in dieser Kategorie, unabhängig vom konkreten Gericht — jede Woche
+      // rückwirkend (nicht nur die 4-Wochen-Menüzyklus-Punkte), Menge = Summe aller Gerichte der
+      // Kategorie an dem Tag. Nutzt dieselben, ohnehin kategorie-basierten Entsorgungsdaten.
+      const histWeekday=[];
+      for(let wBack=1; wBack<=12; wBack++){
+        const td=dateMinusDays(dateStr, wBack*7);
+        const dp=dispByDateCat[td+'|'+cat];
+        const list=catIndex[td+'|'+cat];
+        const q=list?.length?list.reduce((sum,x)=>sum+x.qty,0):null;
+        if(dp||q!=null) histWeekday.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
       }
       const detailId=`ordet-${dateStr}-${ci}`;
-      window._orgDetailData[detailId]={dish, hist};
+      const weekdayLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long'});
+      window._orgDetailData[detailId]={dish, hist, histWeekday, weekdayLabel, cat};
       let dispLine='';
       if(disp?.soldOutTime) dispLine=`<div style="font-size:9px;color:#DC2626;">🔥 ${disp.soldOutTime}</div>`;
       else if(disp) dispLine=`<div style="font-size:9px;color:${disp.leftover>4?'#C2410C':'#16A34A'};">🗑 ${formatQty(disp.leftover)}</div>`;
@@ -6361,9 +6448,9 @@ async function renderOrgStoreForecast(){
       const src=srcByDish[key]?.source;
       const isStore=src==='store'||src==='manual';
       const isOrgSet=src==='org';
-      const bCol=isStore?'#0369A1':(isOrgSet?'#2B3A67':'var(--border)');
-      const bBg=isStore?'#EFF6FF':'#fff';
-      const srcLbl=isStore?`<div style="font-size:8px;color:#0369A1;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:''));
+      const bCol=isStore?'#F97316':(isOrgSet?'#2B3A67':'var(--border)');
+      const bBg=isStore?'#FFF7ED':'#fff';
+      const srcLbl=isStore?`<div style="font-size:8px;color:#F97316;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:''));
       const dishLabelHtml=`<div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>`;
 
       // LASAGNE: drei Größenfelder (Groß 18 / Mittel 12 / Klein 8) statt eines einzelnen Feldes —
@@ -6378,6 +6465,7 @@ async function renderOrgStoreForecast(){
           lh+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBL[sz.k]}</span>
             <input type="number" step="1" value="${v}" placeholder="–"
               data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
+              data-orig-source="${src||''}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
               style="width:44px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:12px;font-weight:${isStore?'700':'400'};padding:4px 1px;background:${bBg};">`;
         });
@@ -6390,6 +6478,7 @@ async function renderOrgStoreForecast(){
         ${dishLabelHtml}
         <input type="number" step="0.25" value="${cur!=null?cur:''}" placeholder="–"
           data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg=""
+          data-orig-source="${src||''}"
           oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
           style="width:52px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:13.5px;font-weight:${isStore?'700':'400'};padding:5px 2px;background:${bBg};">
         ${srcLbl}
@@ -6401,7 +6490,7 @@ async function renderOrgStoreForecast(){
   html+='</tbody></table></div></div>';
   html+=`<div id="orgfc-detail" style="display:none;margin-top:10px;"></div>`;
   html+=`<div style="font-size:10.5px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5;">
-    <span style="color:#0369A1;font-weight:600;">Blau = Filiale hat selbst eingetragen</span> · 🗑 Entsorgung dieses Tages<br>
+    <span style="color:#F97316;font-weight:600;">Orange = Filiale hat selbst eingetragen</span> · 🗑 Entsorgung dieses Tages<br>
     Gerichtsnamen antippen für frühere Termine
   </div>`;
 
@@ -6417,26 +6506,65 @@ function toggleOrgDetail(id){
   if(box.dataset.open===id){ box.style.display='none'; box.dataset.open=''; return; }
   box.dataset.open=id;
   box.style.display='block';
+  box.dataset.tab='dish'; // Default-Tab: "Dieses Gericht" — unverändert, wie bisher
+  renderOrgDetailBox(id);
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+window.toggleOrgDetail=toggleOrgDetail;
+
+// Baut eine der beiden Listen (Termine für DIESES Gericht, oder für ALLE Gerichte an diesem
+// Wochentag) — beide nutzen dieselbe Zeilendarstellung, nur die Datenquelle unterscheidet sich.
+function renderOrgDetailList(rows, emptyLabel){
+  if(!rows.length) return `<div style="font-size:12px;color:var(--muted);">${emptyLabel}</div>`;
+  let h='';
+  rows.forEach(o=>{
+    const dl=new Date(o.date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
+    const res=o.soldOutTime?`<span style="color:#DC2626;font-weight:600;">🔥 ausverkauft ${o.soldOutTime}</span>`:(o.leftover!=null?`<span style="color:${o.leftover>4?'#C2410C':'#16A34A'};font-weight:600;">${formatQty(o.leftover)} entsorgt</span>`:'<span style="color:var(--muted);">keine Entsorgungsdaten</span>');
+    // Wetter von damals — hilft einzuordnen, ob ein Ausreißer (z.B. viel entsorgt) am Wetter lag.
+    let wBadge='';
+    if(o.weather && o.weather.tempMax!=null){
+      const t=Math.round(o.weather.tempMax), p=o.weather.precipSum??0;
+      const icon=(t>=22&&p<1)?'☀️':(p>=5?'🌧️':'⛅');
+      wBadge=`<span style="color:var(--muted);font-size:11px;white-space:nowrap;">${icon} ${t}°C</span>`;
+    }
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--border);">
+      <span>${dl}</span><span>${o.qty!=null?formatQty(o.qty)+' Bhlt':'–'}</span>${wBadge}<span>${res}</span>
+    </div>`;
+  });
+  return h;
+}
+
+function renderOrgDetailBox(id){
+  const box=document.getElementById('orgfc-detail');
+  const d=window._orgDetailData?.[id];
+  if(!box||!d) return;
+  const tab=box.dataset.tab||'dish';
+  const tabBtn=(key,label,active)=>`<button onclick="switchOrgDetailTab('${id}','${key}')" style="flex:1;padding:7px;border:1px solid ${active?'#2B3A67':'var(--border)'};border-radius:8px;background:${active?'#2B3A67':'#fff'};color:${active?'#fff':'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${label}</button>`;
   let h=`<div class="card" style="padding:12px 14px;">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px;" data-no-translate>${d.dish}</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      ${tabBtn('dish','Dieses Gericht',tab==='dish')}
+      ${tabBtn('weekday','Alle '+d.weekdayLabel+'e',tab==='weekday')}
+    </div>
     <div style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Frühere Termine</div>`;
-  if(d.hist.length){
-    d.hist.forEach(o=>{
-      const dl=new Date(o.date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
-      const res=o.soldOutTime?`<span style="color:#DC2626;font-weight:600;">🔥 ausverkauft ${o.soldOutTime}</span>`:(o.leftover!=null?`<span style="color:${o.leftover>4?'#C2410C':'#16A34A'};font-weight:600;">${formatQty(o.leftover)} entsorgt</span>`:'<span style="color:var(--muted);">keine Entsorgungsdaten</span>');
-      h+=`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--border);">
-        <span>${dl}</span><span>${o.qty!=null?formatQty(o.qty)+' Bhlt':'–'}</span><span>${res}</span>
-      </div>`;
-    });
+  if(tab==='dish'){
+    h+=renderOrgDetailList(d.hist, 'Noch keine früheren Termine mit diesem Gericht.');
   } else {
-    h+=`<div style="font-size:12px;color:var(--muted);">Noch keine früheren Termine mit diesem Gericht.</div>`;
+    h+=`<div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">Menge = Summe aller Gerichte der Kategorie „${d.cat}" an dem Tag, unabhängig davon welches Gericht genau lief.</div>`;
+    h+=renderOrgDetailList(d.histWeekday, `Noch keine früheren ${d.weekdayLabel}e erfasst.`);
   }
   h+=`<button onclick="document.getElementById('orgfc-detail').style.display='none';document.getElementById('orgfc-detail').dataset.open='';" style="width:100%;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:none;font-size:12px;color:var(--muted);cursor:pointer;">Schließen</button></div>`;
   box.innerHTML=h;
   translateEl(box);
-  box.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
-window.toggleOrgDetail=toggleOrgDetail;
+
+function switchOrgDetailTab(id, tab){
+  const box=document.getElementById('orgfc-detail');
+  if(!box) return;
+  box.dataset.tab=tab;
+  renderOrgDetailBox(id);
+}
+window.switchOrgDetailTab=switchOrgDetailTab;
 
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
@@ -7022,6 +7150,11 @@ async function updateForecastQtyOrg(inputEl){
   const dish=inputEl.dataset.dish;
   const dateStr=inputEl.dataset.date;
   const qty=inputEl.value===''?null:parseFloat(inputEl.value);
+  // War der Wert schon von der Filiale gesetzt (orange)? Dann bleibt er beim Anpassen durch
+  // Operations weiterhin als "Filiale" markiert (source='store') — sonst geht beim Speichern
+  // verloren, dass der Wert ursprünglich von der Filiale kam, und das Feld würde fälschlich navy.
+  const wasStoreSet=inputEl.dataset.origSource==='store'||inputEl.dataset.origSource==='manual';
+  const saveSource=wasStoreSet?'store':'org';
   // Vorschlagswert, der beim Rendern im Feld stand — Grundlage für "bestätigt" vs. "angepasst".
   const suggested=inputEl.dataset.sugg!==undefined&&inputEl.dataset.sugg!==''?parseFloat(inputEl.dataset.sugg):null;
   const isConfirm=suggested!=null && qty!=null && Math.abs(qty-suggested)<0.01;
@@ -7036,12 +7169,13 @@ async function updateForecastQtyOrg(inputEl){
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null){
       await api('forecast_qty',{method:'POST',body:JSON.stringify([{
-        store_id:storeId, dish_name:dish, forecast_date:dateStr, qty, groesse:'gross', source:'org',
+        store_id:storeId, dish_name:dish, forecast_date:dateStr, qty, groesse:'gross', source:saveSource,
         status, suggested_qty:suggested, change_reason:reason,
         confirmed_by:(currentStore?.name||'Operations'), confirmed_at:new Date().toISOString()
       }])});
     }
     inputEl.dataset.copied='0';
+    inputEl.dataset.origSource=saveSource;
     inputEl.dataset.status=status||'';
     // Grün = Vorschlag bestätigt · Gelb = manuell angepasst (Farblogik aus dem Konzept)
     inputEl.style.fontStyle='normal';
@@ -7237,16 +7371,21 @@ async function updateForecastQtyOrgGroesse(inputEl){
 async function _updateForecastQtyOrgGroesseInner(inputEl, storeId, dish, dateStr){
   const groesse=inputEl.dataset.groesse||'gross';
   const qty=inputEl.value===''?null:Math.round(parseFloat(inputEl.value));
+  // Gleiche Logik wie bei updateForecastQtyOrg: schon von der Filiale gesetzte Werte bleiben
+  // beim Anpassen orange (source='store'), statt zwangsweise auf navy/Operations zu springen.
+  const wasStoreSet=inputEl.dataset.origSource==='store'||inputEl.dataset.origSource==='manual';
+  const saveSource=wasStoreSet?'store':'org';
   try{
     // Nur diese Größe löschen — andere Größen bleiben erhalten
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=eq.${groesse}`,{method:'DELETE'}).catch(()=>{});
     await api(`forecast_qty?store_id=eq.${storeId}&dish_name=eq.${encodeURIComponent(dish)}&forecast_date=eq.${dateStr}&groesse=is.null`,{method:'DELETE'}).catch(()=>{});
     if(qty!=null && qty>=0){
-      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:'org'}])});
+      await api('forecast_qty',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dish,forecast_date:dateStr,qty,groesse,source:saveSource}])});
     }
     inputEl.dataset.copied='0';
-    inputEl.style.borderColor='#2B3A67';
-    inputEl.style.background='#EEF1F8';
+    inputEl.dataset.origSource=saveSource;
+    inputEl.style.borderColor=wasStoreSet?'#F97316':'#2B3A67';
+    inputEl.style.background=wasStoreSet?'#FFF7ED':'#EEF1F8';
     showToast('✔ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
@@ -7676,10 +7815,14 @@ function renderZutatenForGericht(zutatenText, rezeptZutatenArr){
 }
 window.renderZutatenForGericht=renderZutatenForGericht;
 
-// Guess category of an ingredient from its name
+// Guess category of an ingredient from its name.
+// Gewürze-Check bewusst VOR Gemüse — sonst matcht "Paprikapulver" zuerst auf "paprika" (Gemüse)
+// und die genauere Gewürze-Regel kommt nie mehr zum Zug. Zusätzlich negative lookahead als
+// zweite Absicherung: "paprika" matcht NICHT, wenn direkt "pulver" folgt.
 function guessZutatKategorie(name){
   const n = name.toLowerCase();
-  if(/spinat|tomate|zwiebel|knoblauch|paprika|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|erbsen|mais|sellerie|karfiol/.test(n)) return 'Gemüse';
+  if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
+  if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|erbsen|mais|sellerie|karfiol/.test(n)) return 'Gemüse';
   if(/limett|zitronen|orange|mango|kokos|ananas|apfel/.test(n)) return 'Obst';
   if(/linsen|kichererbsen|bohnen|erbsen|tofu|tempeh/.test(n)) return 'Hülsenfrüchte';
   if(/petersilie|koriander|minze|basilikum|thymian|rosmarin|dill/.test(n)) return 'Kräuter';
@@ -9541,6 +9684,81 @@ async function markAllPackedAndReset(orderDateStr){
 }
 window.markAllPackedAndReset=markAllPackedAndReset;
 
+// ==== FAST AUS → NACHBESTELLEN (INVOLO-Sammelbestellung) ====
+// Michi meldet "fast aus" (optional mit Restmenge). Sammelt sich still; ein Server-Job bündelt
+// täglich 15:00 alle offenen Meldungen zu EINER Asana-Bestellung an Simone.
+// Bewusst eigene Funktionsnamen (meldeNachschub statt submitNachschub) — es gibt bereits ein
+// unabhängiges "Nachschub"-Feature beim Sweets-Team (E-Mail-Anfrage), das nicht angerührt wird.
+let nachschubOffen = {};
+async function ladeNachschubOffen(){
+  try{
+    const rows=await api('nachschub_meldungen?status=eq.offen&select=article_id,restmenge,gemeldet_von,created_at');
+    nachschubOffen={};
+    (rows||[]).forEach(r=>{ nachschubOffen[r.article_id]=r; });
+  }catch(e){ console.error('Nachschub laden fehlgeschlagen:',e); nachschubOffen={}; }
+}
+
+function showNachschubModal(articleId){
+  const a=articles.find(x=>x.id===articleId);
+  if(!a) return;
+  const einheit=a.unit||'';
+  const schon=nachschubOffen[articleId];
+  const ov=document.createElement('div');
+  ov.id='nachschub-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:340px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">🛒 Fast aus — nachbestellen?</div>
+    <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">${a.name}</div>
+    ${schon?`<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#92400E;margin-bottom:12px;">Bereits gemeldet${schon.restmenge!=null?` (noch ca. ${formatQty(schon.restmenge)} ${einheit})`:''} — erneutes Melden aktualisiert die Menge.</div>`:''}
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Noch ca. <span style="color:var(--sub);">(optional)</span></label>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+      <input id="nachschub-menge" type="number" inputmode="decimal" min="0" step="any" value="${schon?.restmenge!=null?schon.restmenge:''}" placeholder="—" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:15px;">
+      <span style="font-size:13px;color:var(--muted);min-width:40px;">${einheit}</span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="closeNachschubModal()" style="flex:1;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:13px;font-weight:500;cursor:pointer;">Abbrechen</button>
+      <button onclick="meldeNachschub(${articleId})" style="flex:2;background:#F97316;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">🛒 Nachbestellen</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) closeNachschubModal(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const inp=document.getElementById('nachschub-menge'); if(inp) inp.focus(); },50);
+}
+function closeNachschubModal(){ const m=document.getElementById('nachschub-modal'); if(m) m.remove(); }
+window.closeNachschubModal=closeNachschubModal;
+window.showNachschubModal=showNachschubModal;
+
+async function meldeNachschub(articleId){
+  const inp=document.getElementById('nachschub-menge');
+  const raw=inp?inp.value.trim():'';
+  const restmenge = raw==='' ? null : Number(raw.replace(',','.'));
+  if(restmenge!=null && (isNaN(restmenge)||restmenge<0)){ showToast('Bitte eine gültige Menge eingeben',true); return; }
+  const gemeldetVon = (currentStore?.name || currentStore?.id || 'Transporter');
+  try{
+    // Erst evtl. vorhandene offene Meldung löschen, dann neu anlegen (DELETE-then-POST-Muster) —
+    // so bleibt es bei genau EINER offenen Meldung pro Artikel, Restmenge wird aktualisiert.
+    await api(`nachschub_meldungen?article_id=eq.${articleId}&status=eq.offen`,{method:'DELETE'});
+    await api('nachschub_meldungen',{method:'POST',body:JSON.stringify([{
+      article_id: articleId, restmenge: restmenge, gemeldet_von: gemeldetVon, status: 'offen'
+    }])});
+    closeNachschubModal();
+    await ladeNachschubOffen();
+    renderPack();
+    showToast('🛒 Für Nachbestellung vermerkt');
+  }catch(e){ console.error(e); showToast('Fehler beim Melden: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.meldeNachschub=meldeNachschub;
+
+async function nimmNachschubZurueck(articleId){
+  try{
+    await api(`nachschub_meldungen?article_id=eq.${articleId}&status=eq.offen`,{method:'DELETE'});
+    await ladeNachschubOffen();
+    renderPack();
+    showToast('Meldung zurückgenommen');
+  }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.nimmNachschubZurueck=nimmNachschubZurueck;
+
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -9557,7 +9775,8 @@ async function renderPack(){
   const today=new Date().toISOString().split('T')[0];
   const [openTasksRaw, transporterBcRaw]=await Promise.all([
     api(`transporter_tasks?done=eq.false&select=id`).catch(()=>[]),
-    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[])
+    api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[]),
+    ladeNachschubOffen()  // offene "fast aus"-Meldungen laden, damit die Bestellliste den Status zeigen kann
   ]);
   const _tbDismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
   const unreadBcCount=(transporterBcRaw||[]).filter(b=>!_tbDismissed.includes(b.id) && (!b.show_until || b.show_until>=today)).length;
@@ -9658,8 +9877,11 @@ async function renderPack(){
     items.forEach(a=>{
       const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
+      const istNachschub=NACHSCHUB_CATS.includes(a.category);
+      const nachschubGemeldet=istNachschub && !!nachschubOffen[a.id];
       html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:4px;">
         <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
+        ${istNachschub?`<button onclick="showNachschubModal(${a.id})" title="${nachschubGemeldet?'Für Nachbestellung vermerkt — tippen zum Ändern':'Fast aus? Nachbestellen'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;${nachschubGemeldet?'':'opacity:0.4;'}">🛒</button>`:''}
         <span style="font-size:11.5px;line-height:1.2;word-break:break-word;">${a.name}</span>
       </div></td>`;
       storeList.forEach(s=>{
@@ -9743,15 +9965,25 @@ async function renderPack(){
       <div class="card" style="margin-top:6px;">`;
     notOrderedToday.forEach(a=>{
       const verfuegbar=a.verfuegbar!==false;
-      html+=`<div class="item-row">
-        <div style="display:flex;align-items:center;gap:10px;flex:1;">
+      const istNachschub=NACHSCHUB_CATS.includes(a.category);
+      const meldung=istNachschub?nachschubOffen[a.id]:null;
+      const einheit=a.unit||'';
+      html+=`<div class="item-row" style="flex-wrap:wrap;align-items:flex-start;row-gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:160px;">
           ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
+            ${meldung?`<div style="font-size:11px;color:#EA580C;font-weight:600;">🛒 Nachbestellung vermerkt${meldung.restmenge!=null?` · noch ca. ${formatQty(meldung.restmenge)} ${einheit}`:''}</div>`:''}
           </div>
         </div>
-        <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-left:auto;">
+          ${istNachschub?(meldung
+            ? `<button onclick="nimmNachschubZurueck(${a.id})" title="Zurücknehmen" style="background:#FEF3C7;color:#B45309;border:1px solid #FCD34D;border-radius:7px;padding:5px 8px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap;">🛒 vermerkt ✓</button>`
+            : `<button onclick="showNachschubModal(${a.id})" title="Fast aus — nachbestellen" style="background:#FFF7ED;color:#EA580C;border:1px solid #FDBA74;border-radius:7px;padding:5px 8px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap;">🛒 Fast aus</button>`
+          ):''}
+          <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:7px;padding:5px 9px;font-size:10.5px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+        </div>
       </div>`;
     });
     html+='</div></details>';
@@ -11469,7 +11701,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const qty=recs.reduce((a,r)=>a+(r.qty||0),0);
       const changed=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
       const changedByOrg=recs.some(r=>r.source==='org');
-      const changedColor=changedByOrg?'#2B3A67':'#0369A1';
+      const changedColor=changedByOrg?'#2B3A67':'#F97316';
       const activeRecs=recs.filter(r=>r.qty>0);
       const useShort=activeRecs.length>1; // mehrere Größen gleichzeitig -> abkürzen, sonst ausschreiben
       const sizeLabel=(isLasagne&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:${useShort?'8px':'8.5px'};font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)}× ${useShort?(SIZE_SHORT_MK[r.groesse]||'G')+' ('+(SIZE_PORTIONS_MK[r.groesse]||18)+')':(SIZE_FULL_MK[r.groesse]||'Groß')}</span>`).join('')}</div>`:'';
