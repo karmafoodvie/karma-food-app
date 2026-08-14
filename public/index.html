@@ -987,7 +987,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.39.1';
+const APP_VERSION = '6.40.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3888,6 +3888,36 @@ function fetchWithTimeout(url, options={}, ms=8000){
 function cacheGet(key){ try{ const v=sessionStorage.getItem(key); return v?JSON.parse(v):null; }catch(e){ return null; } }
 function cacheSet(key, val){ try{ sessionStorage.setItem(key, JSON.stringify(val)); }catch(e){ /* z.B. Speicher voll — kein Problem, nur kein Caching */ } }
 
+// Mittelt Temperatur und aggregiert Niederschlag über das Mittags-Fenster 11–15 Uhr pro Tag,
+// statt den Tages-Höchstwert zu nehmen — fürs Mittagsgeschäft zählt nur diese Zeitspanne (Peak).
+// precipAgg='max' → höchste Regenwahrscheinlichkeit im Fenster (Vorhersage); 'sum' → tatsächlich
+// gefallener Niederschlag im Fenster in mm (Archiv). Feldnamen bewusst wie vorher (tempMax/
+// precipProb/precipSum), damit alle bestehenden Anzeige-Stellen unverändert weiterlaufen.
+function aggregateLunchWindow(hourly, precipKey, precipAgg){
+  const map = {};
+  if(!hourly?.time) return map;
+  const byDate = {};
+  hourly.time.forEach((t,i)=>{
+    const [d, hm] = t.split('T');
+    const h = parseInt((hm||'').slice(0,2),10);
+    if(isNaN(h) || h<11 || h>15) return;
+    if(!byDate[d]) byDate[d]={temps:[],precips:[]};
+    const temp = hourly.temperature_2m?.[i];
+    const precip = hourly[precipKey]?.[i];
+    if(temp!=null) byDate[d].temps.push(temp);
+    if(precip!=null) byDate[d].precips.push(precip);
+  });
+  Object.entries(byDate).forEach(([d,v])=>{
+    const tempAvg = v.temps.length ? v.temps.reduce((a,b)=>a+b,0)/v.temps.length : null;
+    let precipVal = null;
+    if(v.precips.length){
+      precipVal = precipAgg==='max' ? Math.max(...v.precips) : v.precips.reduce((a,b)=>a+b,0);
+    }
+    map[d] = precipAgg==='max' ? {tempMax:tempAvg, precipProb:precipVal} : {tempMax:tempAvg, precipSum:precipVal};
+  });
+  return map;
+}
+
 async function fetchWeatherForStore(storeId, fromDate, toDate){
   const cacheKey = `wx_${storeId}_${fromDate}_${toDate}`;
   if(_weatherCache[cacheKey]) return _weatherCache[cacheKey];
@@ -3896,16 +3926,11 @@ async function fetchWeatherForStore(storeId, fromDate, toDate){
   const coords = STORE_COORDS[storeId];
   if(!coords) return {};
   try{
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_probability_max&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
+    // Stundenwerte statt Tages-Höchstwert — nur das Mittags-Fenster (11–15 Uhr) ist relevant.
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&hourly=temperature_2m,precipitation_probability&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
     const res = await fetchWithTimeout(url, {}, 5000);
     const data = await res.json();
-    const map = {};
-    (data?.daily?.time||[]).forEach((d,i)=>{
-      map[d] = {
-        tempMax: data.daily.temperature_2m_max?.[i],
-        precipProb: data.daily.precipitation_probability_max?.[i]
-      };
-    });
+    const map = aggregateLunchWindow(data?.hourly, 'precipitation_probability', 'max');
     _weatherCache[cacheKey] = map;
     cacheSet(cacheKey, map);
     return map;
@@ -4096,13 +4121,11 @@ async function fetchHistoricalWeather(storeId, fromDate, toDate){
   const coords = STORE_COORDS[storeId];
   if(!coords) return {};
   try{
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${coords.lat}&longitude=${coords.lon}&daily=temperature_2m_max,precipitation_sum&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
+    // Stundenwerte statt Tages-Höchstwert — nur das Mittags-Fenster (11–15 Uhr) ist relevant.
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${coords.lat}&longitude=${coords.lon}&hourly=temperature_2m,precipitation&timezone=Europe%2FVienna&start_date=${fromDate}&end_date=${toDate}`;
     const res = await fetchWithTimeout(url, {}, 8000);
     const data = await res.json();
-    const map = {};
-    (data?.daily?.time||[]).forEach((d,i)=>{
-      map[d] = { tempMax: data.daily.temperature_2m_max?.[i], precipSum: data.daily.precipitation_sum?.[i] };
-    });
+    const map = aggregateLunchWindow(data?.hourly, 'precipitation', 'sum');
     _weatherCache[cacheKey] = map;
     cacheSet(cacheKey, map);
     return map;
@@ -6377,7 +6400,8 @@ async function renderOrgStoreForecast(){
       const key=dateStr+'|'+dish;
       const cur=qtyByDish[key];
       const disp=dispByDateCat[dateStr+'|'+cat];
-      // Historie für die Detail-Aufstellung sammeln
+      // Historie für die Detail-Aufstellung sammeln — Tab 1: DIESES Gericht (4-Wochen-Menüzyklus,
+      // exakter Namens-Match). Bleibt exakt wie gehabt, unverändert.
       const hist=[];
       for(const wBack of [4,8,12,16,20]){
         const td=dateMinusDays(dateStr, wBack*7);
@@ -6387,8 +6411,20 @@ async function renderOrgStoreForecast(){
         const q=exact?exact.qty:(list?.length?Math.max(...list.map(x=>x.qty)):null);
         if(dp||q!=null) hist.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
       }
+      // Tab 2: ALLE [Wochentag]e in dieser Kategorie, unabhängig vom konkreten Gericht — jede Woche
+      // rückwirkend (nicht nur die 4-Wochen-Menüzyklus-Punkte), Menge = Summe aller Gerichte der
+      // Kategorie an dem Tag. Nutzt dieselben, ohnehin kategorie-basierten Entsorgungsdaten.
+      const histWeekday=[];
+      for(let wBack=1; wBack<=12; wBack++){
+        const td=dateMinusDays(dateStr, wBack*7);
+        const dp=dispByDateCat[td+'|'+cat];
+        const list=catIndex[td+'|'+cat];
+        const q=list?.length?list.reduce((sum,x)=>sum+x.qty,0):null;
+        if(dp||q!=null) histWeekday.push({date:td, qty:q, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
+      }
       const detailId=`ordet-${dateStr}-${ci}`;
-      window._orgDetailData[detailId]={dish, hist};
+      const weekdayLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long'});
+      window._orgDetailData[detailId]={dish, hist, histWeekday, weekdayLabel, cat};
       let dispLine='';
       if(disp?.soldOutTime) dispLine=`<div style="font-size:9px;color:#DC2626;">🔥 ${disp.soldOutTime}</div>`;
       else if(disp) dispLine=`<div style="font-size:9px;color:${disp.leftover>4?'#C2410C':'#16A34A'};">🗑 ${formatQty(disp.leftover)}</div>`;
@@ -6455,33 +6491,65 @@ function toggleOrgDetail(id){
   if(box.dataset.open===id){ box.style.display='none'; box.dataset.open=''; return; }
   box.dataset.open=id;
   box.style.display='block';
+  box.dataset.tab='dish'; // Default-Tab: "Dieses Gericht" — unverändert, wie bisher
+  renderOrgDetailBox(id);
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+window.toggleOrgDetail=toggleOrgDetail;
+
+// Baut eine der beiden Listen (Termine für DIESES Gericht, oder für ALLE Gerichte an diesem
+// Wochentag) — beide nutzen dieselbe Zeilendarstellung, nur die Datenquelle unterscheidet sich.
+function renderOrgDetailList(rows, emptyLabel){
+  if(!rows.length) return `<div style="font-size:12px;color:var(--muted);">${emptyLabel}</div>`;
+  let h='';
+  rows.forEach(o=>{
+    const dl=new Date(o.date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
+    const res=o.soldOutTime?`<span style="color:#DC2626;font-weight:600;">🔥 ausverkauft ${o.soldOutTime}</span>`:(o.leftover!=null?`<span style="color:${o.leftover>4?'#C2410C':'#16A34A'};font-weight:600;">${formatQty(o.leftover)} entsorgt</span>`:'<span style="color:var(--muted);">keine Entsorgungsdaten</span>');
+    // Wetter von damals — hilft einzuordnen, ob ein Ausreißer (z.B. viel entsorgt) am Wetter lag.
+    let wBadge='';
+    if(o.weather && o.weather.tempMax!=null){
+      const t=Math.round(o.weather.tempMax), p=o.weather.precipSum??0;
+      const icon=(t>=22&&p<1)?'☀️':(p>=5?'🌧️':'⛅');
+      wBadge=`<span style="color:var(--muted);font-size:11px;white-space:nowrap;">${icon} ${t}°C</span>`;
+    }
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--border);">
+      <span>${dl}</span><span>${o.qty!=null?formatQty(o.qty)+' Bhlt':'–'}</span>${wBadge}<span>${res}</span>
+    </div>`;
+  });
+  return h;
+}
+
+function renderOrgDetailBox(id){
+  const box=document.getElementById('orgfc-detail');
+  const d=window._orgDetailData?.[id];
+  if(!box||!d) return;
+  const tab=box.dataset.tab||'dish';
+  const tabBtn=(key,label,active)=>`<button onclick="switchOrgDetailTab('${id}','${key}')" style="flex:1;padding:7px;border:1px solid ${active?'#2B3A67':'var(--border)'};border-radius:8px;background:${active?'#2B3A67':'#fff'};color:${active?'#fff':'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${label}</button>`;
   let h=`<div class="card" style="padding:12px 14px;">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px;" data-no-translate>${d.dish}</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      ${tabBtn('dish','Dieses Gericht',tab==='dish')}
+      ${tabBtn('weekday','Alle '+d.weekdayLabel+'e',tab==='weekday')}
+    </div>
     <div style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Frühere Termine</div>`;
-  if(d.hist.length){
-    d.hist.forEach(o=>{
-      const dl=new Date(o.date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
-      const res=o.soldOutTime?`<span style="color:#DC2626;font-weight:600;">🔥 ausverkauft ${o.soldOutTime}</span>`:(o.leftover!=null?`<span style="color:${o.leftover>4?'#C2410C':'#16A34A'};font-weight:600;">${formatQty(o.leftover)} entsorgt</span>`:'<span style="color:var(--muted);">keine Entsorgungsdaten</span>');
-      // Wetter von damals — hilft einzuordnen, ob ein Ausreißer (z.B. viel entsorgt) am Wetter lag.
-      let wBadge='';
-      if(o.weather && o.weather.tempMax!=null){
-        const t=Math.round(o.weather.tempMax), p=o.weather.precipSum??0;
-        const icon=(t>=22&&p<1)?'☀️':(p>=5?'🌧️':'⛅');
-        wBadge=`<span style="color:var(--muted);font-size:11px;white-space:nowrap;">${icon} ${t}°C</span>`;
-      }
-      h+=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-bottom:0.5px solid var(--border);">
-        <span>${dl}</span><span>${o.qty!=null?formatQty(o.qty)+' Bhlt':'–'}</span>${wBadge}<span>${res}</span>
-      </div>`;
-    });
+  if(tab==='dish'){
+    h+=renderOrgDetailList(d.hist, 'Noch keine früheren Termine mit diesem Gericht.');
   } else {
-    h+=`<div style="font-size:12px;color:var(--muted);">Noch keine früheren Termine mit diesem Gericht.</div>`;
+    h+=`<div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">Menge = Summe aller Gerichte der Kategorie „${d.cat}" an dem Tag, unabhängig davon welches Gericht genau lief.</div>`;
+    h+=renderOrgDetailList(d.histWeekday, `Noch keine früheren ${d.weekdayLabel}e erfasst.`);
   }
   h+=`<button onclick="document.getElementById('orgfc-detail').style.display='none';document.getElementById('orgfc-detail').dataset.open='';" style="width:100%;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:none;font-size:12px;color:var(--muted);cursor:pointer;">Schließen</button></div>`;
   box.innerHTML=h;
   translateEl(box);
-  box.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
-window.toggleOrgDetail=toggleOrgDetail;
+
+function switchOrgDetailTab(id, tab){
+  const box=document.getElementById('orgfc-detail');
+  if(!box) return;
+  box.dataset.tab=tab;
+  renderOrgDetailBox(id);
+}
+window.switchOrgDetailTab=switchOrgDetailTab;
 
 async function renderOrgForecast(){
   const el=document.getElementById('v-orgForecast');
