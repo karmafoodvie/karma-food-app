@@ -988,7 +988,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.50.0';
+const APP_VERSION = '6.51.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8476,13 +8476,17 @@ let hsOrgData = {byName:{}, storeMap:{}}; // Cache für die Client-seitige Filte
 async function loadHygieneOrgList(storeList, defaultStoreFilter){
   const wrap=document.getElementById('hs-org-list');
   if(!wrap) return;
-  const entries=await api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]);
+  const [entries, ausgeschiedeneRaw]=await Promise.all([
+    api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]),
+    api('hygiene_ausgeschieden?select=name,ausgeschieden_am').catch(()=>[])
+  ]);
   const storeMap=Object.fromEntries((storeList||[]).map(s=>[s.id,s.name]));
   const byName={};
   (entries||[]).forEach(e=>{
     if(!byName[e.name] || new Date(e.datum)>new Date(byName[e.name].datum)) byName[e.name]=e;
   });
-  hsOrgData={byName, storeMap};
+  const ausgeschiedenMap=Object.fromEntries((ausgeschiedeneRaw||[]).map(a=>[a.name,a.ausgeschieden_am]));
+  hsOrgData={byName, storeMap, ausgeschiedenMap};
   const names=Object.keys(byName).sort();
 
   let html=`<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
@@ -8497,18 +8501,20 @@ async function loadHygieneOrgList(storeList, defaultStoreFilter){
     <select id="hs-filter-status" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">
       <option value="">Alle Status</option>
       <option value="ausstaendig">Nur ausständige</option>
+      <option value="ausgeschieden">Nur ausgeschiedene</option>
     </select>
   </div>
   <div id="hs-table-body"></div>
-  <div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">Eine Schulung gilt genau 1 Jahr — danach automatisch "ausständig".</div>`;
+  <div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">Eine Schulung gilt genau 1 Jahr — danach automatisch "ausständig". Ausgeschiedene Mitarbeitende bekommen keine Erinnerungs-Mails mehr.</div>`;
 
   wrap.innerHTML=html;
   renderHsFilteredTable();
-  checkAndNotifyOverdueHygiene(byName).catch(e=>console.error(e));
+  checkAndNotifyOverdueHygiene(byName, ausgeschiedenMap).catch(e=>console.error(e));
 }
 
 function renderHsFilteredTable(){
-  const {byName, storeMap}=hsOrgData;
+  const {byName, storeMap, ausgeschiedenMap}=hsOrgData;
+  const isOrg=currentStore?.id==='zentrale';
   const storeFilter=document.getElementById('hs-filter-store')?.value||'';
   const personFilter=document.getElementById('hs-filter-person')?.value||'';
   const statusFilter=document.getElementById('hs-filter-status')?.value||'';
@@ -8517,7 +8523,9 @@ function renderHsFilteredTable(){
   let names=Object.keys(byName).sort();
   if(personFilter) names=names.filter(n=>n===personFilter);
   if(storeFilter) names=names.filter(n=>(byName[n].stores||'').split(',').map(x=>x.trim()).includes(storeFilter));
-  if(statusFilter==='ausstaendig') names=names.filter(n=>new Date(byName[n].datum)<cutoff);
+  if(statusFilter==='ausstaendig') names=names.filter(n=>new Date(byName[n].datum)<cutoff && !ausgeschiedenMap[n]);
+  if(statusFilter==='ausgeschieden') names=names.filter(n=>ausgeschiedenMap[n]);
+  else if(!statusFilter) { /* Alle Status: ausgeschiedene bleiben sichtbar, nur anders markiert — Historie soll nicht verschwinden */ }
 
   const wrap=document.getElementById('hs-table-body');
   if(!wrap) return;
@@ -8526,21 +8534,44 @@ function renderHsFilteredTable(){
     return;
   }
   let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
-    <thead><tr><th style="text-align:left;">Person</th><th style="text-align:left;">Filiale(n)</th><th>Zuletzt</th><th>Von</th><th>Status</th></tr></thead><tbody>`;
+    <thead><tr><th style="text-align:left;">Person</th><th style="text-align:left;">Filiale(n)</th><th>Zuletzt</th><th>Von</th><th>Status</th>${isOrg?'<th></th>':''}</tr></thead><tbody>`;
   names.forEach(n=>{
     const e=byName[n];
     const overdue=new Date(e.datum)<cutoff;
+    const ausgeschieden=!!ausgeschiedenMap[n];
     const storeNames=(e.stores||'').split(',').filter(Boolean).map(id=>storeMap[id.trim()]||id.trim()).join(', ');
-    html+=`<tr><td style="text-align:left;font-weight:500;font-size:12px;" data-no-translate>${n}</td><td style="text-align:left;font-size:11px;" data-no-translate>${storeNames}</td><td style="font-size:12px;">${new Date(e.datum).toLocaleDateString('de-AT')}</td><td style="font-size:11px;" data-no-translate>${e.durchgefuehrt_von}</td><td>${overdue?'<span class="badge badge-warn">ausständig</span>':'<span class="badge badge-ok">aktuell</span>'}</td></tr>`;
+    let statusBadge;
+    if(ausgeschieden) statusBadge=`<span class="badge" style="background:#F5F5F4;color:var(--muted);">🚪 nicht mehr tätig</span>`;
+    else statusBadge=overdue?'<span class="badge badge-warn">ausständig</span>':'<span class="badge badge-ok">aktuell</span>';
+    html+=`<tr style="${ausgeschieden?'opacity:0.6;':''}"><td style="text-align:left;font-weight:500;font-size:12px;${ausgeschieden?'text-decoration:line-through;':''}" data-no-translate>${n}</td><td style="text-align:left;font-size:11px;" data-no-translate>${storeNames}</td><td style="font-size:12px;">${new Date(e.datum).toLocaleDateString('de-AT')}</td><td style="font-size:11px;" data-no-translate>${e.durchgefuehrt_von}</td><td>${statusBadge}</td>${isOrg?`<td><button onclick="toggleHygieneAusgeschieden('${n.replace(/'/g,"\\'")}',${ausgeschieden})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;color:${ausgeschieden?'var(--green)':'#DC2626'};">${ausgeschieden?'↩️':'🚪'}</button></td>`:''}</tr>`;
   });
   html+='</tbody></table></div></div>';
   wrap.innerHTML=html;
 }
 window.renderHsFilteredTable=renderHsFilteredTable;
 
-async function checkAndNotifyOverdueHygiene(byName){
+async function toggleHygieneAusgeschieden(name, currentlyAusgeschieden){
+  try{
+    if(currentlyAusgeschieden){
+      await api(`hygiene_ausgeschieden?name=eq.${encodeURIComponent(name)}`,{method:'DELETE'});
+      showToast('↩️ Wieder aktiv');
+    } else {
+      await api(`hygiene_ausgeschieden?name=eq.${encodeURIComponent(name)}`,{method:'DELETE'}); // evtl. Altlast weg, dann sauber neu
+      await api('hygiene_ausgeschieden',{method:'POST',body:JSON.stringify([{name, markiert_von:(currentStore?.name||'Organisation')}])});
+      showToast('🚪 Als ausgeschieden markiert');
+    }
+    if(hsOrgData?.ausgeschiedenMap){
+      if(currentlyAusgeschieden) delete hsOrgData.ausgeschiedenMap[name];
+      else hsOrgData.ausgeschiedenMap[name]=new Date().toISOString().split('T')[0];
+    }
+    renderHsFilteredTable();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.toggleHygieneAusgeschieden=toggleHygieneAusgeschieden;
+
+async function checkAndNotifyOverdueHygiene(byName, ausgeschiedenMap){
   const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
-  const overdueNames=Object.keys(byName).filter(n=>new Date(byName[n].datum)<cutoff);
+  const overdueNames=Object.keys(byName).filter(n=>new Date(byName[n].datum)<cutoff && !ausgeschiedenMap?.[n]);
   if(!overdueNames.length) return;
   // Nicht jedes Mal beim Öffnen der Seite erneut mailen — nur wenn seit der letzten Erinnerung
   // für diese Person mind. 30 Tage vergangen sind (oder noch nie erinnert wurde).
