@@ -987,7 +987,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.44.1';
+const APP_VERSION = '6.46.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1363,7 +1363,7 @@ async function loginAs(store){
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
     const orgViews=['management','maengel'];
-    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend'];
+    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
     goTo(allowedViews.includes(savedView)?savedView:'home');
@@ -3355,7 +3355,7 @@ function renderOrder(){
   const el=document.getElementById('v-order');
   // Forecast NICHT mehr als Tab hier — nur noch über die Leiste unten erreichbar, damit's dort
   // wirklich nur den Forecast gibt und sonst nichts (keine Verwechslung mit den anderen Bestell-Tabs).
-  const tabHtml=Object.entries(ORDER_TABS).filter(([k])=>k!=='forecast').map(([k,t])=>
+  const tabHtml=Object.entries(ORDER_TABS).filter(([k])=>k!=='forecast' && !(k==='transporter' && currentStore?.id==='kitchen')).map(([k,t])=>
     `<button onclick="switchOrderTab('${k}')" style="flex:1;padding:9px 4px;border:${activeOrderTab===k?`2px solid ${t.color}`:'1.5px solid var(--border)'};border-radius:10px;background:${activeOrderTab===k?t.color+'15':'var(--card)'};color:${activeOrderTab===k?t.color:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;line-height:1.3;cursor:pointer;">${t.label}</button>`
   ).join('');
 
@@ -11173,6 +11173,23 @@ async function renderKitchenDaily(){
   });
   html+='</div>';
 
+  // Shop Produkte — eigene IST-Bestand-Eingabe wie bei einer normalen Filiale (Laurenzerberg etc.),
+  // NICHT die Admin-Übersicht (die gibt's schon separat über "Ines"). Verpackungen/Transporterliste
+  // bewusst NICHT dabei — das regelt Kitchen selbst vor Ort.
+  html+=`<div onclick="goToReminder('order','kc')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🛍️</span>
+    <div><div style="font-size:13px;font-weight:600;">Shop Produkte bestellen</div><div style="font-size:11px;color:var(--muted);">IST-Bestand eintragen, wie bei den Filialen</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
+  // Forecast — derselbe echte Store-Forecast-Screen wie bei Laurenzerberg & Co. (Wochenmengen +
+  // Rückblick, was tatsächlich verwendet wurde). Keine eigene Logik, nur verlinkt.
+  html+=`<div onclick="goToReminder('order','forecast')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">📅</span>
+    <div><div style="font-size:13px;font-weight:600;">Forecast</div><div style="font-size:11px;color:var(--muted);">Wochenmengen & was verwendet wurde</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
   // Entsorgung shortcut
   html+=`<div onclick="goTo('disposal')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
     <span style="font-size:20px;">🗑️</span>
@@ -12253,6 +12270,29 @@ window.closeZutatenManager=closeZutatenManager;
 // ---- SWEETS LISTE KÜCHE ----
 let teamTab='sweets';
 function switchTeamTab(t){ teamTab=t; renderSweets(); }
+
+async function addStadtgemeindeZahlung(){
+  const datum=document.getElementById('sg-datum')?.value;
+  const sodexo=parseFloat(document.getElementById('sg-sodexo')?.value||'0')||0;
+  const cash=parseFloat(document.getElementById('sg-cash')?.value||'0')||0;
+  if(!datum){ showToast('Bitte ein Datum wählen',true); return; }
+  if(sodexo===0 && cash===0){ showToast('Bitte einen Betrag eintragen',true); return; }
+  try{
+    await api('stadtgemeinde_zahlungen',{method:'POST',body:JSON.stringify([{datum,sodexo_pluxee:sodexo,cash}])});
+    showToast('✓ Gespeichert');
+    renderSweets();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.addStadtgemeindeZahlung=addStadtgemeindeZahlung;
+
+async function deleteStadtgemeindeZahlung(id){
+  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  try{
+    await api(`stadtgemeinde_zahlungen?id=eq.${id}`,{method:'DELETE'});
+    renderSweets();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.deleteStadtgemeindeZahlung=deleteStadtgemeindeZahlung;
 window.switchTeamTab=switchTeamTab;
 
 async function showTeamRezeptForm(id){
@@ -12342,13 +12382,13 @@ window.submitNachschub=submitNachschub;
 
 async function renderSweets(){
   const el=document.getElementById('v-sweets');
-  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C'};
+  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C', stadtgemeinde:'#059669'};
   const ttab=(key,label)=>{
     const active=teamTab===key;
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Produktion')}${ttab('bestellen','📦 Bestellen')}${ttab('nachschub','⚠️ Nachschub')}</div>`;
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('stadtgemeinde','🏛️ Stadtgemeinde')}${ttab('produktion','🫖 Produktion')}${ttab('bestellen','📦 Bestellen')}${ttab('nachschub','⚠️ Nachschub')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   // WICHTIG (korrigiert): Anders als beim Transporter packt das Sweets-Team AM SELBEN TAG ein
@@ -12369,6 +12409,67 @@ async function renderSweets(){
   const sweetsDateLabel=sweetsViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
 
   let html=tabsHtml;
+
+  if(teamTab==='stadtgemeinde'){
+    const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
+    html+=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
+    // Neuer Eintrag
+    const heute=new Date().toISOString().split('T')[0];
+    html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neue Zahlung</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:110px;">
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Datum</label>
+          <input type="date" id="sg-datum" value="${heute}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+        </div>
+        <div style="flex:1;min-width:90px;">
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Sodexo/Pluxee €</label>
+          <input type="number" step="0.5" id="sg-sodexo" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+        </div>
+        <div style="flex:1;min-width:90px;">
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Cash €</label>
+          <input type="number" step="0.5" id="sg-cash" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+        </div>
+      </div>
+      <button onclick="addStadtgemeindeZahlung()" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern ✓</button>
+    </div>`;
+
+    // Nach Monat gruppieren, wie im Sheet — neuester Monat zuerst
+    const byMonat={};
+    (rows||[]).forEach(r=>{
+      const m=r.datum.slice(0,7); // YYYY-MM
+      if(!byMonat[m]) byMonat[m]=[];
+      byMonat[m].push(r);
+    });
+    const monate=Object.keys(byMonat).sort().reverse();
+    if(!monate.length){
+      html+=`<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Noch keine Einträge.</div>`;
+    }
+    monate.forEach(m=>{
+      const einträge=byMonat[m].sort((a,b)=>b.datum.localeCompare(a.datum));
+      const monatLabel=new Date(m+'-01').toLocaleDateString('de-AT',{month:'long',year:'numeric'});
+      const monatSumme=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
+      html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;">${monatLabel} — Σ €${monatSumme.toFixed(2)}</div>`;
+      html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+        <th style="text-align:left;">Datum</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
+      </tr></thead><tbody>`;
+      einträge.forEach(r=>{
+        const total=(r.sodexo_pluxee||0)+(r.cash||0);
+        const dl=new Date(r.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        html+=`<tr>
+          <td style="font-size:12px;">${dl}</td>
+          <td style="text-align:center;font-size:12px;">€${(r.sodexo_pluxee||0).toFixed(2)}</td>
+          <td style="text-align:center;font-size:12px;">€${(r.cash||0).toFixed(2)}</td>
+          <td style="text-align:center;font-size:12px;font-weight:700;color:#059669;">€${total.toFixed(2)}</td>
+          <td style="text-align:center;"><button onclick="deleteStadtgemeindeZahlung(${r.id})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:13px;">🗑</button></td>
+        </tr>`;
+      });
+      html+='</tbody></table></div></div>';
+    });
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   // Eigenproduktion (Mango Lassi, Masala Chai, Chili Crisp) — eigener Reiter neben Sweets, mit
   // hinterlegten Rezepten. Team-editierbar über die Bearbeiten-Buttons.
