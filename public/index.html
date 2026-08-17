@@ -988,7 +988,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.49.0';
+const APP_VERSION = '6.50.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8196,6 +8196,129 @@ async function deleteSchulungThema(id){
   fillSchulungDropdowns();
 }
 
+async function refreshMitarbeitendeStoreDropdown(){
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const sel=document.getElementById('mit-store-select');
+  if(!sel) return;
+  const liste=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070');
+  sel.innerHTML=liste.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+async function refreshMitarbeitendeListe(){
+  const storeId=document.getElementById('mit-store-select')?.value;
+  const wrap=document.getElementById('mitarbeitendeListe');
+  if(!wrap || !storeId) return;
+  const liste=await api(`mitarbeitende?store_id=eq.${storeId}&select=*&order=ausgeschieden.asc,name.asc`).catch(()=>[]);
+  if(!liste.length){ wrap.innerHTML='<div style="font-size:12.5px;color:var(--muted);padding:6px 2px;">Noch keine Mitarbeitenden für diese Filiale erfasst.</div>'; return; }
+  wrap.innerHTML=liste.map(m=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:0.5px solid var(--border);${m.ausgeschieden?'opacity:0.55;':''}">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:${m.ausgeschieden?'400':'500'};text-decoration:${m.ausgeschieden?'line-through':'none'};">${m.name}</div>
+        <div style="font-size:10.5px;color:var(--muted);">${m.eintritt_datum?'seit '+new Date(m.eintritt_datum).toLocaleDateString('de-AT'):''}${m.ausgeschieden?` · nicht mehr tätig${m.ausgeschieden_am?' (seit '+new Date(m.ausgeschieden_am).toLocaleDateString('de-AT')+')':''}`:''}</div>
+      </div>
+      <button onclick="toggleMitarbeiterAusgeschieden(${m.id},${m.ausgeschieden})" style="background:${m.ausgeschieden?'var(--green-light)':'#FEE2E2'};color:${m.ausgeschieden?'var(--green)':'#DC2626'};border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;">${m.ausgeschieden?'↩️ Wieder aktiv':'🚪 Ausgeschieden'}</button>
+      <button onclick="deleteMitarbeiter(${m.id})" title="Ganz löschen" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function addMitarbeiter(){
+  const storeId=document.getElementById('mit-store-select')?.value;
+  const name=document.getElementById('mit-name')?.value?.trim();
+  const eintritt=document.getElementById('mit-eintritt')?.value||null;
+  if(!storeId || !name){ showToast('Bitte Name angeben',true); return; }
+  try{
+    await api('mitarbeitende',{method:'POST',body:JSON.stringify([{store_id:storeId,name,eintritt_datum:eintritt}])});
+    document.getElementById('mit-name').value='';
+    document.getElementById('mit-eintritt').value='';
+    showToast('✓ Hinzugefügt');
+    await refreshMitarbeitendeListe();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.addMitarbeiter=addMitarbeiter;
+
+// Das ist der eigentlich angefragte Punkt: Mitarbeitende, die nicht mehr da sind, bleiben in der
+// Historie sichtbar (Schulungsnachweise gehen nicht verloren), tauchen aber NICHT mehr bei "wer muss
+// noch geschult werden" oder in der Teilnehmer-Auswahl für neue Schulungen auf.
+async function toggleMitarbeiterAusgeschieden(id, currentlyAusgeschieden){
+  try{
+    const patch=currentlyAusgeschieden
+      ? {ausgeschieden:false, ausgeschieden_am:null}
+      : {ausgeschieden:true, ausgeschieden_am:new Date().toISOString().split('T')[0]};
+    await api(`mitarbeitende?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
+    showToast(currentlyAusgeschieden?'↩️ Wieder aktiv':'🚪 Als ausgeschieden markiert');
+    await refreshMitarbeitendeListe();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.toggleMitarbeiterAusgeschieden=toggleMitarbeiterAusgeschieden;
+
+async function deleteMitarbeiter(id){
+  if(!confirm('Diese Person komplett aus der Liste löschen? (Für "nicht mehr tätig" reicht der Button daneben — hier wird der Eintrag unwiderruflich entfernt.)')) return;
+  try{
+    await api(`mitarbeitende?id=eq.${id}`,{method:'DELETE'});
+    await refreshMitarbeitendeListe();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.deleteMitarbeiter=deleteMitarbeiter;
+
+async function refreshSchTeilnehmerCheckboxes(){
+  const storeId=document.getElementById('sch-store-select')?.value;
+  const wrap=document.getElementById('sch-teilnehmer-checkboxes');
+  if(!wrap || !storeId) return;
+  const liste=await api(`mitarbeitende?store_id=eq.${storeId}&ausgeschieden=eq.false&select=id,name&order=name.asc`).catch(()=>[]);
+  if(!liste.length){ wrap.innerHTML='<div style="font-size:12px;color:var(--muted);">Keine aktiven Mitarbeitenden für diese Filiale erfasst — erst oben unter "Mitarbeitende verwalten" hinzufügen.</div>'; return; }
+  wrap.innerHTML=liste.map(m=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" class="sch-teilnehmer-cb" value="${m.name.replace(/"/g,'&quot;')}" style="width:18px;height:18px;">
+      <span data-no-translate>${m.name}</span>
+    </label>
+  `).join('');
+}
+window.refreshSchTeilnehmerCheckboxes=refreshSchTeilnehmerCheckboxes;
+
+async function fillStatusDropdowns(){
+  const [themen, stores] = await Promise.all([
+    api('schulungsthemen?select=id,titel&order=titel.asc').catch(()=>[]),
+    api('stores?select=id,name&order=id').catch(()=>[])
+  ]);
+  const themaSel=document.getElementById('status-thema-select');
+  const storeSel=document.getElementById('status-store-select');
+  if(themaSel) themaSel.innerHTML=(themen||[]).length?themen.map(t=>`<option value="${t.id}">${t.titel}</option>`).join(''):'<option value="">— erst ein Thema anlegen —</option>';
+  if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+async function refreshMitarbeiterStatus(){
+  const themaId=document.getElementById('status-thema-select')?.value;
+  const storeId=document.getElementById('status-store-select')?.value;
+  const wrap=document.getElementById('mitarbeiterStatusListe');
+  if(!wrap || !themaId || !storeId) return;
+  const [thema, aktiveMitarbeitende, entries] = await Promise.all([
+    api(`schulungsthemen?id=eq.${themaId}&select=intervall_monate`).catch(()=>[]),
+    api(`mitarbeitende?store_id=eq.${storeId}&ausgeschieden=eq.false&select=id,name&order=name.asc`).catch(()=>[]),
+    api(`schulungen?thema_id=eq.${themaId}&store_id=eq.${storeId}&select=datum,teilnehmer&order=datum.desc`).catch(()=>[])
+  ]);
+  const intervallMonate=thema?.[0]?.intervall_monate||12;
+  const heute=new Date();
+  wrap.innerHTML=`<div class="section-lbl" style="margin-top:10px;">Status je Person</div><div class="card">`+
+    (aktiveMitarbeitende||[]).map(m=>{
+      // Letzte Schulung dieser Person zu diesem Thema finden — Name muss im Teilnehmer-Text vorkommen
+      const letzte=(entries||[]).find(e=>(e.teilnehmer||'').includes(m.name));
+      let statusHtml;
+      if(!letzte){
+        statusHtml='<span class="badge badge-warn" style="font-size:10px;">noch nie geschult</span>';
+      } else {
+        const monateSeit=(heute-new Date(letzte.datum))/(1000*60*60*24*30.44);
+        const abgelaufen=monateSeit>intervallMonate;
+        statusHtml=`<span class="badge ${abgelaufen?'badge-warn':'badge-ok'}" style="font-size:10px;">${abgelaufen?'⚠️ fällig — ':'✓ '}zuletzt ${new Date(letzte.datum).toLocaleDateString('de-AT')}</span>`;
+      }
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:0.5px solid var(--border);gap:8px;">
+        <span style="font-size:13px;" data-no-translate>${m.name}</span>${statusHtml}
+      </div>`;
+    }).join('') + (aktiveMitarbeitende?.length?'':'<div style="font-size:12px;color:var(--muted);padding:10px;">Keine aktiven Mitarbeitenden für diese Filiale erfasst.</div>')
+    + '</div>';
+}
+window.refreshMitarbeiterStatus=refreshMitarbeiterStatus;
+
 async function fillSchulungDropdowns(){
   const themen=await api('schulungsthemen?select=id,titel&order=titel.asc').catch(()=>[]);
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
@@ -8467,14 +8590,16 @@ async function saveSchulungEntry(){
   const store_id=document.getElementById('sch-store-select').value;
   const datum=document.getElementById('sch-datum').value;
   const durchgefuehrt_von=document.getElementById('sch-durchgefuehrt').value.trim();
-  const teilnehmer=document.getElementById('sch-teilnehmer').value.trim();
+  // Teilnehmer kommen aus den Checkboxen (nur aktive Mitarbeitende dieser Filiale werden angezeigt —
+  // ausgeschiedene tauchen dort gar nicht erst auf), zu einem Text zusammengefügt für die DB-Spalte.
+  const teilnehmer=[...document.querySelectorAll('.sch-teilnehmer-cb:checked')].map(cb=>cb.value).join(', ');
   const unterschrieben=document.getElementById('sch-unterschrieben-box')?.dataset.value==='1';
   if(!thema_id||!store_id||!datum){ alert('Bitte Thema, Filiale und Datum ausfüllen.'); return; }
   try{
     await api('schulungen',{method:'POST',body:JSON.stringify([{thema_id:parseInt(thema_id),store_id,datum,durchgefuehrt_von,teilnehmer,unterschrieben}])});
   }catch(e){ console.error(e); alert('Fehler beim Speichern.'); return; }
   document.getElementById('sch-durchgefuehrt').value='';
-  document.getElementById('sch-teilnehmer').value='';
+  document.querySelectorAll('.sch-teilnehmer-cb:checked').forEach(cb=>cb.checked=false);
   const box=document.getElementById('sch-unterschrieben-box');
   if(box){ box.dataset.value='0'; box.classList.remove('done'); box.innerHTML=''; }
   refreshSchulungHistorie();
