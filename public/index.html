@@ -223,6 +223,7 @@ summary::marker{content:'';}
     <div id="v-disposal" class="view"></div>
     <div id="v-kitchenDaily" class="view"></div>
     <div id="v-kuechenlager" class="view"></div>
+    <div id="v-grundreinigung" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
@@ -988,7 +989,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.51.0';
+const APP_VERSION = '6.52.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1363,8 +1364,8 @@ async function loginAs(store){
     checkForBroadcasts();
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
-    const orgViews=['management','maengel'];
-    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager'];
+    const orgViews=['management','maengel','grundreinigung','kuechenlager'];
+    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager','grundreinigung'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
     goTo(allowedViews.includes(savedView)?savedView:'home');
@@ -1453,7 +1454,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1462,7 +1463,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -6010,6 +6011,16 @@ async function loadOrgRolesRow(){
       </button>
     </div>`+rolesHtml;
   }
+  // Organisation bekommt hier direkt einen Sprung zur Grundreinigungs-Übersicht (nur Lesen —
+  // eintragen kann nur Kitchen/Everton, siehe renderGrundreinigung).
+  if(currentStore?.id==='zentrale'){
+    rolesHtml+=`<div>
+      <button class="role-btn-color" onclick="goTo('grundreinigung')" style="background:#0F766E;">
+        <span class="role-btn-role">🧹 Grundreinigung</span>
+        <span class="role-btn-name">Übersicht — alle Filialen</span>
+      </button>
+    </div>`;
+  }
   wrap.innerHTML=rolesHtml;
 }
 
@@ -10071,6 +10082,176 @@ async function renderInventurTab(storeList){
 // gepflegt — deshalb ein einziger geteilter Bestand, keine Rollen-Unterscheidung nötig.
 const LIEFERANT_ORDER=['FOODPACK','INVOLO','LASSI','BIKAPACK','PACKARI','TRANSGOURMET','BIPA','Sonstiges'];
 
+// ==== GRUNDREINIGUNG (Tiefenreinigung Stores, Everton via Kitchen) ====
+// Bewusst NICHT ortsgebunden bei Kitchen verankert, sondern der Datensatz gehört der jeweiligen
+// Filiale — Kitchen ist nur der Ausgangspunkt (wo Everton eingeloggt ist), nicht der Ort des
+// Geschehens. Nur Kitchen darf eintragen (Anfrage vom 17.08.), Filialen sehen/bearbeiten das nicht.
+// Fälligkeit: alle 21 Tage (strenger als die "monatlich/quartalsweise"-Empfehlung am Papier-Zettel).
+const GRUNDREINIGUNG_TAGE_FAELLIG = 21;
+const GRUNDREINIGUNG_ITEMS = {
+  'Küchengeräte': [
+    'Geschirrspüler: Innenraum, Ränder, Oberflächen (Sprüharme & Sieb entnehmen, entkalken)',
+    'Herd/Kochplatten: unter und hinter dem Gerät reinigen',
+    'Backofen: Innenraum inkl. Bleche und Roste grundreinigen',
+    'Fritteuse: Öl wechseln, Wanne komplett entfetten',
+    'Grillplatte: entfetten und entkalken',
+    'Dunstabzugshaube: Fettfilter ausbauen und entfetten',
+  ],
+  'Bain Marie / Warmhaltevitrine': [
+    'Bain Marie vollständig entleeren',
+    'Becken und Einsätze reinigen und entkalken',
+    'Dichtungen und Ablaufhahn reinigen',
+    'Wasser neu befüllen und Temperatur kontrollieren',
+  ],
+  'Kühlung': [
+    'Kühlschränke/Kühltruhen komplett ausräumen',
+    'Innenflächen, Roste und Schubladen reinigen und desinfizieren',
+    'Dichtungen reinigen, auf Beschädigung prüfen',
+    'Lüftungsgitter/Kondensator von Staub befreien',
+    'Vor Wiederbefüllung: Ablaufdaten der Produkte kontrollieren',
+  ],
+  'Oberflächen & Theke': [
+    'Alle Arbeitsflächen und Theke gesamt reinigen und desinfizieren',
+    'Wände und Fliesenspiegel hinter Geräten reinigen',
+    'Fugen im Küchen- und Thekenbereich schrubben',
+    'Regale und Ablagen abwischen',
+    'Spinnweben entfernen an Lampen und überall sonst',
+  ],
+  'Boden & Abflüsse': [
+    'Boden in Küche und Verkaufsbereich grundreinigen/schrubben',
+    'Abflüsse und Bodenroste reinigen',
+    'Sockelleisten abwischen',
+  ],
+  'Sanitär & Lager': [
+    'Personal-WC komplett grundreinigen',
+    'Mülltonnen (innen & außen) reinigen und desinfizieren',
+    'Lagerregale ausräumen, reinigen, neu einräumen',
+    'Schädlingskontrolle im Lagerbereich',
+  ],
+};
+let grundreinigungChecked=new Set();
+
+async function renderGrundreinigung(){
+  const el=document.getElementById('v-grundreinigung');
+  const isOrg=currentStore?.id==='zentrale';
+  const isKitchen=currentStore?.id==='kitchen';
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=stores.filter(s=>!['zentrale','kitchen','1070'].includes(s.id));
+  const alleEintraege=await api('grundreinigung_eintraege?select=*&order=datum.desc').catch(()=>[]);
+
+  const letzteJeFiliale={}, anzahlJeFiliale={};
+  (alleEintraege||[]).forEach(e=>{
+    if(!letzteJeFiliale[e.store_id]) letzteJeFiliale[e.store_id]=e;
+    anzahlJeFiliale[e.store_id]=(anzahlJeFiliale[e.store_id]||0)+1;
+  });
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🧹','Grundreinigung','Tiefenreinigung Stores — Fälligkeit alle 21 Tage','#0F766E');
+  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Filiale</th><th>Zuletzt</th><th>Tage her</th><th>Anzahl gesamt</th>${isKitchen?'<th></th>':''}
+  </tr></thead><tbody>`;
+  // Nach Dringlichkeit sortiert — am längsten überfällige zuerst, das IST der Putzplan-Hinweis:
+  // Everton sieht auf einen Blick, wo er als nächstes hin muss.
+  const sortiert=[...storeList].sort((a,b)=>{
+    const da=letzteJeFiliale[a.id]?.datum, db=letzteJeFiliale[b.id]?.datum;
+    if(!da && !db) return 0;
+    if(!da) return -1; // noch nie gereinigt = dringendste Priorität
+    if(!db) return 1;
+    return new Date(da)-new Date(db);
+  });
+  sortiert.forEach(s=>{
+    const letzte=letzteJeFiliale[s.id];
+    const tageHer=letzte?Math.floor((Date.now()-new Date(letzte.datum).getTime())/86400000):null;
+    const ueberfaellig=tageHer===null||tageHer>GRUNDREINIGUNG_TAGE_FAELLIG;
+    const col=tageHer===null?'#DC2626':ueberfaellig?'#EA580C':'#16A34A';
+    html+=`<tr>
+      <td style="font-size:12.5px;font-weight:500;" data-no-translate>${s.name}</td>
+      <td style="text-align:center;font-size:12px;">${letzte?new Date(letzte.datum).toLocaleDateString('de-AT'):'—'}</td>
+      <td style="text-align:center;font-size:12px;font-weight:700;color:${col};">${tageHer===null?'nie':tageHer+' Tg'}${ueberfaellig?' ⚠️':''}</td>
+      <td style="text-align:center;font-size:12px;color:var(--muted);">${anzahlJeFiliale[s.id]||0}</td>
+      ${isKitchen?`<td><button onclick="showGrundreinigungForm('${s.id}')" style="background:#0F766E;color:#fff;border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Checkliste →</button></td>`:''}
+    </tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">⚠️ = über ${GRUNDREINIGUNG_TAGE_FAELLIG} Tage seit letzter Grundreinigung. Am längsten überfällige Filiale steht oben.</div>`;
+
+  html+=`<div id="grundreinigung-form-wrap" style="margin-top:14px;"></div>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderGrundreinigung=renderGrundreinigung;
+
+function showGrundreinigungForm(storeId){
+  grundreinigungChecked=new Set();
+  const wrap=document.getElementById('grundreinigung-form-wrap');
+  if(!wrap) return;
+  const heute=new Date().toISOString().split('T')[0];
+  let totalItems=0;
+  Object.values(GRUNDREINIGUNG_ITEMS).forEach(list=>totalItems+=list.length);
+  let html=`<div class="card" style="padding:14px;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:2px;">🧹 Grundreinigung eintragen</div>
+    <div id="gr-progress" style="font-size:11px;color:var(--muted);margin-bottom:10px;">0 / ${totalItems} erledigt</div>`;
+  Object.entries(GRUNDREINIGUNG_ITEMS).forEach(([kat,items])=>{
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px;">${kat}</div>`;
+    items.forEach((txt,i)=>{
+      const key=`${kat}|${i}`;
+      html+=`<div class="cl-item" onclick="toggleGrundreinigungItem('${key.replace(/'/g,"\\'")}',this)">
+        <div class="check-box"></div>
+        <span class="cl-text" style="font-size:12.5px;">${txt}</span>
+      </div>`;
+    });
+  });
+  html+=`
+    <div style="margin-top:14px;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);">Datum</label>
+      <input id="gr-datum" type="date" value="${heute}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);">Durchgeführt von</label>
+      <input id="gr-von" type="text" placeholder="z.B. Everton" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
+    </div>
+    <button id="gr-submit-btn" onclick="submitGrundreinigung('${storeId}')" disabled style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:var(--border);color:#fff;font-size:14px;font-weight:600;cursor:not-allowed;">Erst alle Punkte abhaken</button>
+    <button onclick="document.getElementById('grundreinigung-form-wrap').innerHTML='';" style="width:100%;margin-top:8px;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:12px;color:var(--muted);cursor:pointer;">Abbrechen</button>
+  </div>`;
+  wrap.innerHTML=html;
+  wrap.scrollIntoView({behavior:'smooth', block:'start'});
+}
+window.showGrundreinigungForm=showGrundreinigungForm;
+
+function toggleGrundreinigungItem(key, el){
+  if(grundreinigungChecked.has(key)){ grundreinigungChecked.delete(key); el.classList.remove('done'); el.querySelector('.check-box').classList.remove('done'); el.querySelector('.check-box').innerHTML=''; }
+  else { grundreinigungChecked.add(key); el.querySelector('.check-box').classList.add('done'); el.querySelector('.check-box').innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>'; }
+  let total=0; Object.values(GRUNDREINIGUNG_ITEMS).forEach(l=>total+=l.length);
+  const done=grundreinigungChecked.size;
+  const prog=document.getElementById('gr-progress');
+  if(prog) prog.textContent=`${done} / ${total} erledigt`;
+  const btn=document.getElementById('gr-submit-btn');
+  if(btn){
+    const fertig=done===total;
+    btn.disabled=!fertig;
+    btn.style.background=fertig?'#0F766E':'var(--border)';
+    btn.style.cursor=fertig?'pointer':'not-allowed';
+    btn.textContent=fertig?'✓ Grundreinigung abschließen':`Erst alle Punkte abhaken (${done}/${total})`;
+  }
+}
+window.toggleGrundreinigungItem=toggleGrundreinigungItem;
+
+async function submitGrundreinigung(storeId){
+  const datum=document.getElementById('gr-datum')?.value;
+  const von=document.getElementById('gr-von')?.value?.trim();
+  if(!datum){ showToast('Bitte ein Datum angeben',true); return; }
+  try{
+    await api('grundreinigung_eintraege',{method:'POST',body:JSON.stringify([{
+      store_id:storeId, datum, durchgefuehrt_von:von||null, items_erledigt:[...grundreinigungChecked]
+    }])});
+    showToast('✓ Grundreinigung eingetragen');
+    document.getElementById('grundreinigung-form-wrap').innerHTML='';
+    renderGrundreinigung();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.submitGrundreinigung=submitGrundreinigung;
+
 async function renderKuechenlager(){
   const el=document.getElementById('v-kuechenlager');
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
@@ -11367,6 +11548,14 @@ async function renderKitchenDaily(){
     </div>`;
   });
   html+='</div>';
+
+  // Grundreinigung — Everton reinigt die Stores, nicht Kitchen selbst. Datensatz gehört der
+  // jeweiligen Filiale, Kitchen ist nur der Ausgangspunkt zum Eintragen.
+  html+=`<div onclick="goTo('grundreinigung')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🧹</span>
+    <div><div style="font-size:13px;font-weight:600;">Grundreinigung</div><div style="font-size:11px;color:var(--muted);">Fällige Stores & Checkliste eintragen</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
 
   // Küchenlager — zentraler Bestand (FOODPACK/INVOLO/etc.), von Michi & Nooru gemeinsam gepflegt.
   html+=`<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
