@@ -988,7 +988,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.48.0';
+const APP_VERSION = '6.49.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -12436,6 +12436,20 @@ async function submitNachschub(){
 }
 window.submitNachschub=submitNachschub;
 
+async function toggleArtikelFreigabe(articleId, storeId, currentlyFreigegeben){
+  try{
+    if(currentlyFreigegeben){
+      await api(`artikel_freigaben?article_id=eq.${articleId}&store_id=eq.${storeId}`,{method:'DELETE'});
+      showToast('🔒 Gesperrt');
+    } else {
+      await api('artikel_freigaben',{method:'POST',body:JSON.stringify([{article_id:articleId,store_id:storeId}])});
+      showToast('✓ Freigegeben');
+    }
+    renderSweets();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.toggleArtikelFreigabe=toggleArtikelFreigabe;
+
 async function renderSweets(){
   const el=document.getElementById('v-sweets');
   const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C', stadtgemeinde:'#059669'};
@@ -12650,16 +12664,57 @@ async function renderSweets(){
     html+=`<th style="color:${col};" data-no-translate>${s.name.split(' ')[0]}${hasOrder?' ✓':''}</th>`;
   });
   html+=`</tr></thead><tbody>`;
+  // Freigaben laden — Artikel OHNE Einträge sind für alle verfügbar (Standard), Artikel MIT
+  // Einträgen sind eingeschränkt: nur die gelisteten Filialen dürfen ihn bekommen.
+  const freigabenRaw=await api('artikel_freigaben?select=article_id,store_id').catch(()=>[]);
+  const restrictedArticles=new Set((freigabenRaw||[]).map(f=>f.article_id));
+  const freigegebenSet=new Set((freigabenRaw||[]).map(f=>`${f.article_id}|${f.store_id}`));
+  let hatEingeschraenkte=false;
   sweetsItems.forEach(a=>{
-    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>`;
+    const eingeschraenkt=restrictedArticles.has(a.id);
+    if(eingeschraenkt) hatEingeschraenkte=true;
+    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span>${eingeschraenkt?' 🔒':''}</div></td>`;
     storeList.forEach(s=>{
       const v=(allOrd[a.id]||{})[s.id]||0;
       const hasOrder=sweetsItems.some(x=>(allOrd[x.id]||{})[s.id]>0);
-      html+=`<td style="font-weight:${v?'600':'400'};color:${v?'#1a1a18':'var(--border)'};background:${hasOrder?'#F0FDF4':'transparent'};">${v||'·'}</td>`;
+      const freigegeben=!eingeschraenkt || freigegebenSet.has(`${a.id}|${s.id}`);
+      let cellStyle, cellContent;
+      if(!freigegeben && v>0){
+        // Gefährlicher Fall: wurde bestellt, obwohl die Filiale nicht freigegeben ist — genau das
+        // Problem, das Michi/Nooru sehen müssen, BEVOR sie ausliefern.
+        cellStyle='background:#FEE2E2;color:#DC2626;font-weight:700;border:1.5px solid #DC2626;';
+        cellContent=`⚠️${v}`;
+      } else if(!freigegeben){
+        cellStyle='background:#F5F5F4;color:var(--border);';
+        cellContent='🔒';
+      } else {
+        cellStyle=`font-weight:${v?'600':'400'};color:${v?'#1a1a18':'var(--border)'};background:${hasOrder?'#F0FDF4':'transparent'};`;
+        cellContent=v||'·';
+      }
+      html+=`<td style="${cellStyle}" title="${!freigegeben?'Noch nicht freigegeben — kann schmelzen, bitte nicht ausliefern':''}">${cellContent}</td>`;
     });
     html+=`</tr>`;
   });
   html+='</tbody></table></div></div>';
+  if(hatEingeschraenkte){
+    html+=`<div style="font-size:10.5px;color:#DC2626;padding:6px 2px 2px;">🔒 = für diese Filiale noch nicht freigegeben (z.B. Raw Cakes schmelzen ohne passende Kühlung). ⚠️ = wurde trotzdem bestellt — bitte NICHT ausliefern, erst bei Organisation nachfragen.</div>`;
+  }
+
+  // Freigabe-Verwaltung — NUR Organisation darf hier Filialen freischalten/sperren.
+  if(hatEingeschraenkte && currentStore?.id==='zentrale'){
+    html+=`<div class="section-lbl" style="margin-top:14px;">🔓 Freigabe verwalten</div><div class="card" style="padding:12px;">`;
+    sweetsItems.filter(a=>restrictedArticles.has(a.id)).forEach(a=>{
+      html+=`<div style="margin-bottom:12px;">
+        <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">${a.name}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">`;
+      storeList.forEach(s=>{
+        const freigegeben=freigegebenSet.has(`${a.id}|${s.id}`);
+        html+=`<button onclick="toggleArtikelFreigabe(${a.id},'${s.id}',${freigegeben})" data-no-translate style="padding:6px 10px;border-radius:8px;border:1px solid ${freigegeben?'#16A34A':'#DC2626'};background:${freigegeben?'#F0FDF4':'#FEE2E2'};color:${freigegeben?'#15803D':'#DC2626'};font-size:11px;font-weight:600;cursor:pointer;">${freigegeben?'✓ ':'🔒 '}${s.name.split(' ')[0]}</button>`;
+      });
+      html+=`</div></div>`;
+    });
+    html+='</div>';
+  }
 
   html+=`<div class="section-lbl">Bestellstatus</div><div class="card">`;
   storeList.forEach(s=>{
