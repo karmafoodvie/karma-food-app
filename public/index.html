@@ -987,7 +987,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.42.0';
+const APP_VERSION = '6.43.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2502,14 +2502,17 @@ window.addEventListener('resize', ()=>{
   if(document.getElementById('v-home')?.classList.contains('show')) applyHomeGrid();
 });
 
-function dismissUebergabeNotiz(){
-  const key=window._uebergabeDismissKey;
-  if(!key) return;
-  const dismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
-  dismissed[key]=true;
-  localStorage.setItem('kf_uebergabe_dismissed', JSON.stringify(dismissed));
+async function dismissUebergabeNotiz(){
+  const id=window._uebergabeDismissId;
+  if(!id) return;
   const banner=document.getElementById('uebergabe-banner');
-  if(banner) banner.remove();
+  if(banner) banner.remove(); // sofortiges Feedback, nicht auf die Antwort warten
+  try{
+    await api(`schicht_uebergabe?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({gelesen_am:new Date().toISOString()})});
+  }catch(e){
+    console.error('Übergabe-Notiz konnte nicht als erledigt markiert werden:',e);
+    showToast('Fehler beim Abhaken — bitte nochmal versuchen',true);
+  }
 }
 window.dismissUebergabeNotiz=dismissUebergabeNotiz;
 
@@ -2720,13 +2723,11 @@ async function renderHome(){
         quickSoldOutDishes=daySlotsQ.filter(s=>s.name && !erledigteSlots.has(s.k));
       }catch(e){console.error(e);}
     }
-    // Übergabe-Notiz von gestern laden
-    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
-    const ydStr=yesterday.toISOString().split('T')[0];
-    const uebergabeGestern=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${ydStr}&select=notiz`).catch(()=>[]);
-    const uebergabeDismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
-    uebergabeNotiz=(uebergabeDismissed[`${currentStore.id}_${ydStr}`])?null:(uebergabeGestern?.[0]?.notiz||null);
-    window._uebergabeDismissKey=`${currentStore.id}_${ydStr}`;
+    // Übergabe-Notiz: die neueste noch NICHT erledigte — bleibt sichtbar bis jemand sie aktiv
+    // abhakt, egal ob das heute oder erst in ein paar Tagen passiert (nicht mehr an "gestern" gebunden).
+    const uebergabeOffen=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&gelesen_am=is.null&order=datum.desc&limit=1&select=id,notiz,datum`).catch(()=>[]);
+    uebergabeNotiz=uebergabeOffen?.[0]?.notiz||null;
+    window._uebergabeDismissId=uebergabeOffen?.[0]?.id||null;
     }catch(e){console.error(e);}
 
     if(isWeekday) gamificationHtml=await loadGamificationWidget(currentStore.id).catch(()=>'');
@@ -2886,8 +2887,8 @@ async function renderHome(){
       </div>`;
     })()}
     ${uebergabeNotiz?`<div id="uebergabe-banner" style="background:#FFF7ED;border:1px solid #F97316;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11px;display:flex;align-items:flex-start;gap:8px;">
-      <div style="flex:1;"><strong style="color:#E0521F;">📋 Übergabe gestern:</strong> ${uebergabeNotiz}</div>
-      <button onclick="dismissUebergabeNotiz()" style="background:none;border:none;color:#B45309;font-size:14px;cursor:pointer;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
+      <div style="flex:1;"><strong style="color:#E0521F;">📋 Übergabe-Notiz:</strong> ${uebergabeNotiz}</div>
+      <button onclick="dismissUebergabeNotiz()" title="Als erledigt markieren" style="background:none;border:none;color:#B45309;font-size:14px;cursor:pointer;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
     </div>`:''}
     ${(()=>{
       const todayMenu=getTodayMenu()||[];
