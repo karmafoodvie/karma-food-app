@@ -90,8 +90,8 @@ summary::marker{content:'';}
 .section-banner{border-left:3px solid;border-radius:0 8px 8px 0;padding:8px 12px;margin:14px 0 6px;display:flex;align-items:center;gap:8px;}
 
 /* CHECKLIST */
-.cl-tabs{display:flex;gap:6px;margin-bottom:12px;}
-.cl-tab{flex:1;padding:9px 4px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:13px;font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.3;color:var(--sub);cursor:pointer;text-align:center;}
+.cl-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.cl-tab{flex:1 1 auto;min-width:72px;padding:7px 6px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:11.5px;font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.2px;line-height:1.25;color:var(--sub);cursor:pointer;text-align:center;}
 .cl-tab.active{background:var(--green);border:2px solid var(--green);color:#fff;}
 .cl-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;}
 .cl-item:last-child{border-bottom:none;}
@@ -222,6 +222,8 @@ summary::marker{content:'';}
     <div id="v-kitchen" class="view"></div>
     <div id="v-disposal" class="view"></div>
     <div id="v-kitchenDaily" class="view"></div>
+    <div id="v-kuechenlager" class="view"></div>
+    <div id="v-grundreinigung" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
@@ -987,7 +989,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.41.0';
+const APP_VERSION = '6.53.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1024,7 +1026,7 @@ window.goToGuideEntry=goToGuideEntry;
 let clDone = {};
 let stockData = {};
 let activePackTab = 'transporter';
-let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen' | 'info' | 'endkontrolle'
+let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'inventur' | 'samosas' | 'beilagen' | 'info' | 'endkontrolle'
 let transporterInfoAutoShown = false; // einmal pro Sitzung automatisch auf Info springen, wenn was offen ist
 let transporterBestellDateOffset = 0; // 0=heute, -1=gestern, ... für Bestellliste-Verlauf
 function navBestellDate(delta){
@@ -1347,6 +1349,7 @@ async function loginAs(store){
     document.getElementById('nav-org-kueche').style.display='flex';
     document.getElementById('nav-org-transporter').style.display='flex';
     document.getElementById('nav-org-kc').style.display='flex';
+    document.getElementById('nav-kitchen-daily').style.display='flex';
     loadOrgRolesRow();
   }
   if(store.id==='1020'){
@@ -1361,8 +1364,8 @@ async function loginAs(store){
     checkForBroadcasts();
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
-    const orgViews=['management','maengel'];
-    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
+    const orgViews=['management','maengel','grundreinigung','kuechenlager'];
+    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager','grundreinigung'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
     goTo(allowedViews.includes(savedView)?savedView:'home');
@@ -1451,7 +1454,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1460,7 +1463,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -2502,14 +2505,17 @@ window.addEventListener('resize', ()=>{
   if(document.getElementById('v-home')?.classList.contains('show')) applyHomeGrid();
 });
 
-function dismissUebergabeNotiz(){
-  const key=window._uebergabeDismissKey;
-  if(!key) return;
-  const dismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
-  dismissed[key]=true;
-  localStorage.setItem('kf_uebergabe_dismissed', JSON.stringify(dismissed));
+async function dismissUebergabeNotiz(){
+  const id=window._uebergabeDismissId;
+  if(!id) return;
   const banner=document.getElementById('uebergabe-banner');
-  if(banner) banner.remove();
+  if(banner) banner.remove(); // sofortiges Feedback, nicht auf die Antwort warten
+  try{
+    await api(`schicht_uebergabe?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({gelesen_am:new Date().toISOString()})});
+  }catch(e){
+    console.error('Übergabe-Notiz konnte nicht als erledigt markiert werden:',e);
+    showToast('Fehler beim Abhaken — bitte nochmal versuchen',true);
+  }
 }
 window.dismissUebergabeNotiz=dismissUebergabeNotiz;
 
@@ -2720,13 +2726,11 @@ async function renderHome(){
         quickSoldOutDishes=daySlotsQ.filter(s=>s.name && !erledigteSlots.has(s.k));
       }catch(e){console.error(e);}
     }
-    // Übergabe-Notiz von gestern laden
-    const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
-    const ydStr=yesterday.toISOString().split('T')[0];
-    const uebergabeGestern=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${ydStr}&select=notiz`).catch(()=>[]);
-    const uebergabeDismissed=JSON.parse(localStorage.getItem('kf_uebergabe_dismissed')||'{}');
-    uebergabeNotiz=(uebergabeDismissed[`${currentStore.id}_${ydStr}`])?null:(uebergabeGestern?.[0]?.notiz||null);
-    window._uebergabeDismissKey=`${currentStore.id}_${ydStr}`;
+    // Übergabe-Notiz: die neueste noch NICHT erledigte — bleibt sichtbar bis jemand sie aktiv
+    // abhakt, egal ob das heute oder erst in ein paar Tagen passiert (nicht mehr an "gestern" gebunden).
+    const uebergabeOffen=await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&gelesen_am=is.null&order=datum.desc&limit=1&select=id,notiz,datum`).catch(()=>[]);
+    uebergabeNotiz=uebergabeOffen?.[0]?.notiz||null;
+    window._uebergabeDismissId=uebergabeOffen?.[0]?.id||null;
     }catch(e){console.error(e);}
 
     if(isWeekday) gamificationHtml=await loadGamificationWidget(currentStore.id).catch(()=>'');
@@ -2886,8 +2890,8 @@ async function renderHome(){
       </div>`;
     })()}
     ${uebergabeNotiz?`<div id="uebergabe-banner" style="background:#FFF7ED;border:1px solid #F97316;border-radius:8px;padding:7px 10px;margin-bottom:6px;font-size:11px;display:flex;align-items:flex-start;gap:8px;">
-      <div style="flex:1;"><strong style="color:#E0521F;">📋 Übergabe gestern:</strong> ${uebergabeNotiz}</div>
-      <button onclick="dismissUebergabeNotiz()" style="background:none;border:none;color:#B45309;font-size:14px;cursor:pointer;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
+      <div style="flex:1;"><strong style="color:#E0521F;">📋 Übergabe-Notiz:</strong> ${uebergabeNotiz}</div>
+      <button onclick="dismissUebergabeNotiz()" title="Als erledigt markieren" style="background:none;border:none;color:#B45309;font-size:14px;cursor:pointer;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
     </div>`:''}
     ${(()=>{
       const todayMenu=getTodayMenu()||[];
@@ -3353,7 +3357,7 @@ function renderOrder(){
   const el=document.getElementById('v-order');
   // Forecast NICHT mehr als Tab hier — nur noch über die Leiste unten erreichbar, damit's dort
   // wirklich nur den Forecast gibt und sonst nichts (keine Verwechslung mit den anderen Bestell-Tabs).
-  const tabHtml=Object.entries(ORDER_TABS).filter(([k])=>k!=='forecast').map(([k,t])=>
+  const tabHtml=Object.entries(ORDER_TABS).filter(([k])=>k!=='forecast' && !(['transporter','kueche'].includes(k) && currentStore?.id==='kitchen')).map(([k,t])=>
     `<button onclick="switchOrderTab('${k}')" style="flex:1;padding:9px 4px;border:${activeOrderTab===k?`2px solid ${t.color}`:'1.5px solid var(--border)'};border-radius:10px;background:${activeOrderTab===k?t.color+'15':'var(--card)'};color:${activeOrderTab===k?t.color:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;line-height:1.3;cursor:pointer;">${t.label}</button>`
   ).join('');
 
@@ -5987,7 +5991,7 @@ async function loadOrgRolesRow(){
   const wrap=document.getElementById('org-roles-row');
   if(!wrap) return;
   const order=(currentStore?.id==='kitchen'?['kueche','kc','transporter','sweets']:['kueche','operations','kc','transporter','sweets']);
-  wrap.innerHTML=order.filter(k=>byKey[k]).map(k=>{
+  let rolesHtml=order.filter(k=>byKey[k]).map(k=>{
     const r=byKey[k];
     return `<div style="position:relative;">
       <button class="role-btn-color" onclick="orgRoleNav('${k}')" data-no-translate style="background:${r.color};">
@@ -5997,6 +6001,27 @@ async function loadOrgRolesRow(){
       <button onclick="editOrgRoleName(event,'${k}','${r.person_name.replace(/'/g,"\\'")}')" title="Namen ändern" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.25);border:none;border-radius:50%;width:26px;height:26px;color:#fff;cursor:pointer;font-size:12px;">✏️</button>
     </div>`;
   }).join('');
+  // "Daily" hat keine zugeordnete Person, deshalb als eigene Kachel direkt hier angehängt statt
+  // über org_roles — gleicher Stil, nur ohne Namens-Bearbeitung (nichts zum Umbenennen da).
+  if(currentStore?.id==='kitchen'){
+    rolesHtml=`<div>
+      <button class="role-btn-color" onclick="goTo('kitchenDaily')" style="background:#334155;">
+        <span class="role-btn-role">📅 Daily</span>
+        <span class="role-btn-name">Business</span>
+      </button>
+    </div>`+rolesHtml;
+  }
+  // Organisation bekommt hier direkt einen Sprung zur Grundreinigungs-Übersicht (nur Lesen —
+  // eintragen kann nur Kitchen/Everton, siehe renderGrundreinigung).
+  if(currentStore?.id==='zentrale'){
+    rolesHtml+=`<div>
+      <button class="role-btn-color" onclick="goTo('grundreinigung')" style="background:#0F766E;">
+        <span class="role-btn-role">🧹 Grundreinigung</span>
+        <span class="role-btn-name">Übersicht — alle Filialen</span>
+      </button>
+    </div>`;
+  }
+  wrap.innerHTML=rolesHtml;
 }
 
 function orgRoleNav(key){
@@ -8182,6 +8207,129 @@ async function deleteSchulungThema(id){
   fillSchulungDropdowns();
 }
 
+async function refreshMitarbeitendeStoreDropdown(){
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const sel=document.getElementById('mit-store-select');
+  if(!sel) return;
+  const liste=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070');
+  sel.innerHTML=liste.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+async function refreshMitarbeitendeListe(){
+  const storeId=document.getElementById('mit-store-select')?.value;
+  const wrap=document.getElementById('mitarbeitendeListe');
+  if(!wrap || !storeId) return;
+  const liste=await api(`mitarbeitende?store_id=eq.${storeId}&select=*&order=ausgeschieden.asc,name.asc`).catch(()=>[]);
+  if(!liste.length){ wrap.innerHTML='<div style="font-size:12.5px;color:var(--muted);padding:6px 2px;">Noch keine Mitarbeitenden für diese Filiale erfasst.</div>'; return; }
+  wrap.innerHTML=liste.map(m=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:0.5px solid var(--border);${m.ausgeschieden?'opacity:0.55;':''}">
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:${m.ausgeschieden?'400':'500'};text-decoration:${m.ausgeschieden?'line-through':'none'};">${m.name}</div>
+        <div style="font-size:10.5px;color:var(--muted);">${m.eintritt_datum?'seit '+new Date(m.eintritt_datum).toLocaleDateString('de-AT'):''}${m.ausgeschieden?` · nicht mehr tätig${m.ausgeschieden_am?' (seit '+new Date(m.ausgeschieden_am).toLocaleDateString('de-AT')+')':''}`:''}</div>
+      </div>
+      <button onclick="toggleMitarbeiterAusgeschieden(${m.id},${m.ausgeschieden})" style="background:${m.ausgeschieden?'var(--green-light)':'#FEE2E2'};color:${m.ausgeschieden?'var(--green)':'#DC2626'};border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;">${m.ausgeschieden?'↩️ Wieder aktiv':'🚪 Ausgeschieden'}</button>
+      <button onclick="deleteMitarbeiter(${m.id})" title="Ganz löschen" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;">🗑</button>
+    </div>
+  `).join('');
+}
+
+async function addMitarbeiter(){
+  const storeId=document.getElementById('mit-store-select')?.value;
+  const name=document.getElementById('mit-name')?.value?.trim();
+  const eintritt=document.getElementById('mit-eintritt')?.value||null;
+  if(!storeId || !name){ showToast('Bitte Name angeben',true); return; }
+  try{
+    await api('mitarbeitende',{method:'POST',body:JSON.stringify([{store_id:storeId,name,eintritt_datum:eintritt}])});
+    document.getElementById('mit-name').value='';
+    document.getElementById('mit-eintritt').value='';
+    showToast('✓ Hinzugefügt');
+    await refreshMitarbeitendeListe();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.addMitarbeiter=addMitarbeiter;
+
+// Das ist der eigentlich angefragte Punkt: Mitarbeitende, die nicht mehr da sind, bleiben in der
+// Historie sichtbar (Schulungsnachweise gehen nicht verloren), tauchen aber NICHT mehr bei "wer muss
+// noch geschult werden" oder in der Teilnehmer-Auswahl für neue Schulungen auf.
+async function toggleMitarbeiterAusgeschieden(id, currentlyAusgeschieden){
+  try{
+    const patch=currentlyAusgeschieden
+      ? {ausgeschieden:false, ausgeschieden_am:null}
+      : {ausgeschieden:true, ausgeschieden_am:new Date().toISOString().split('T')[0]};
+    await api(`mitarbeitende?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
+    showToast(currentlyAusgeschieden?'↩️ Wieder aktiv':'🚪 Als ausgeschieden markiert');
+    await refreshMitarbeitendeListe();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.toggleMitarbeiterAusgeschieden=toggleMitarbeiterAusgeschieden;
+
+async function deleteMitarbeiter(id){
+  if(!confirm('Diese Person komplett aus der Liste löschen? (Für "nicht mehr tätig" reicht der Button daneben — hier wird der Eintrag unwiderruflich entfernt.)')) return;
+  try{
+    await api(`mitarbeitende?id=eq.${id}`,{method:'DELETE'});
+    await refreshMitarbeitendeListe();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.deleteMitarbeiter=deleteMitarbeiter;
+
+async function refreshSchTeilnehmerCheckboxes(){
+  const storeId=document.getElementById('sch-store-select')?.value;
+  const wrap=document.getElementById('sch-teilnehmer-checkboxes');
+  if(!wrap || !storeId) return;
+  const liste=await api(`mitarbeitende?store_id=eq.${storeId}&ausgeschieden=eq.false&select=id,name&order=name.asc`).catch(()=>[]);
+  if(!liste.length){ wrap.innerHTML='<div style="font-size:12px;color:var(--muted);">Keine aktiven Mitarbeitenden für diese Filiale erfasst — erst oben unter "Mitarbeitende verwalten" hinzufügen.</div>'; return; }
+  wrap.innerHTML=liste.map(m=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px;cursor:pointer;">
+      <input type="checkbox" class="sch-teilnehmer-cb" value="${m.name.replace(/"/g,'&quot;')}" style="width:18px;height:18px;">
+      <span data-no-translate>${m.name}</span>
+    </label>
+  `).join('');
+}
+window.refreshSchTeilnehmerCheckboxes=refreshSchTeilnehmerCheckboxes;
+
+async function fillStatusDropdowns(){
+  const [themen, stores] = await Promise.all([
+    api('schulungsthemen?select=id,titel&order=titel.asc').catch(()=>[]),
+    api('stores?select=id,name&order=id').catch(()=>[])
+  ]);
+  const themaSel=document.getElementById('status-thema-select');
+  const storeSel=document.getElementById('status-store-select');
+  if(themaSel) themaSel.innerHTML=(themen||[]).length?themen.map(t=>`<option value="${t.id}">${t.titel}</option>`).join(''):'<option value="">— erst ein Thema anlegen —</option>';
+  if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+async function refreshMitarbeiterStatus(){
+  const themaId=document.getElementById('status-thema-select')?.value;
+  const storeId=document.getElementById('status-store-select')?.value;
+  const wrap=document.getElementById('mitarbeiterStatusListe');
+  if(!wrap || !themaId || !storeId) return;
+  const [thema, aktiveMitarbeitende, entries] = await Promise.all([
+    api(`schulungsthemen?id=eq.${themaId}&select=intervall_monate`).catch(()=>[]),
+    api(`mitarbeitende?store_id=eq.${storeId}&ausgeschieden=eq.false&select=id,name&order=name.asc`).catch(()=>[]),
+    api(`schulungen?thema_id=eq.${themaId}&store_id=eq.${storeId}&select=datum,teilnehmer&order=datum.desc`).catch(()=>[])
+  ]);
+  const intervallMonate=thema?.[0]?.intervall_monate||12;
+  const heute=new Date();
+  wrap.innerHTML=`<div class="section-lbl" style="margin-top:10px;">Status je Person</div><div class="card">`+
+    (aktiveMitarbeitende||[]).map(m=>{
+      // Letzte Schulung dieser Person zu diesem Thema finden — Name muss im Teilnehmer-Text vorkommen
+      const letzte=(entries||[]).find(e=>(e.teilnehmer||'').includes(m.name));
+      let statusHtml;
+      if(!letzte){
+        statusHtml='<span class="badge badge-warn" style="font-size:10px;">noch nie geschult</span>';
+      } else {
+        const monateSeit=(heute-new Date(letzte.datum))/(1000*60*60*24*30.44);
+        const abgelaufen=monateSeit>intervallMonate;
+        statusHtml=`<span class="badge ${abgelaufen?'badge-warn':'badge-ok'}" style="font-size:10px;">${abgelaufen?'⚠️ fällig — ':'✓ '}zuletzt ${new Date(letzte.datum).toLocaleDateString('de-AT')}</span>`;
+      }
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:0.5px solid var(--border);gap:8px;">
+        <span style="font-size:13px;" data-no-translate>${m.name}</span>${statusHtml}
+      </div>`;
+    }).join('') + (aktiveMitarbeitende?.length?'':'<div style="font-size:12px;color:var(--muted);padding:10px;">Keine aktiven Mitarbeitenden für diese Filiale erfasst.</div>')
+    + '</div>';
+}
+window.refreshMitarbeiterStatus=refreshMitarbeiterStatus;
+
 async function fillSchulungDropdowns(){
   const themen=await api('schulungsthemen?select=id,titel&order=titel.asc').catch(()=>[]);
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
@@ -8339,14 +8487,20 @@ let hsOrgData = {byName:{}, storeMap:{}}; // Cache für die Client-seitige Filte
 async function loadHygieneOrgList(storeList, defaultStoreFilter){
   const wrap=document.getElementById('hs-org-list');
   if(!wrap) return;
-  const entries=await api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]);
+  const [entries, ausgeschiedeneRaw]=await Promise.all([
+    api('hygiene_schulungen?select=*&order=datum.desc').catch(()=>[]),
+    api('hygiene_ausgeschieden?select=name,ausgeschieden_am').catch(()=>[])
+  ]);
   const storeMap=Object.fromEntries((storeList||[]).map(s=>[s.id,s.name]));
   const byName={};
   (entries||[]).forEach(e=>{
     if(!byName[e.name] || new Date(e.datum)>new Date(byName[e.name].datum)) byName[e.name]=e;
   });
-  hsOrgData={byName, storeMap};
-  const names=Object.keys(byName).sort();
+  const ausgeschiedenMap=Object.fromEntries((ausgeschiedeneRaw||[]).map(a=>[a.name,a.ausgeschieden_am]));
+  hsOrgData={byName, storeMap, ausgeschiedenMap};
+  // Nur aktive in der Auswahlliste — konsistent mit dem "nur aktive relevant"-Standard. Wer eine
+  // ausgeschiedene Person gezielt nachschlagen will, nutzt den Status-Filter "Alle" bzw. "Nur ausgeschiedene".
+  const names=Object.keys(byName).filter(n=>!ausgeschiedenMap[n]).sort();
 
   let html=`<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
     <select id="hs-filter-store" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;" data-no-translate>
@@ -8358,29 +8512,36 @@ async function loadHygieneOrgList(storeList, defaultStoreFilter){
       ${names.map(n=>`<option value="${n}">${n}</option>`).join('')}
     </select>
     <select id="hs-filter-status" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">
-      <option value="">Alle Status</option>
+      <option value="aktiv">Nur aktive Mitarbeitende</option>
+      <option value="">Alle (inkl. ausgeschiedene)</option>
       <option value="ausstaendig">Nur ausständige</option>
+      <option value="ausgeschieden">Nur ausgeschiedene</option>
     </select>
   </div>
   <div id="hs-table-body"></div>
-  <div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">Eine Schulung gilt genau 1 Jahr — danach automatisch "ausständig".</div>`;
+  <div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">Eine Schulung gilt genau 1 Jahr — danach automatisch "ausständig". Ausgeschiedene Mitarbeitende bekommen keine Erinnerungs-Mails mehr und sind standardmäßig ausgeblendet.</div>`;
 
   wrap.innerHTML=html;
   renderHsFilteredTable();
-  checkAndNotifyOverdueHygiene(byName).catch(e=>console.error(e));
+  checkAndNotifyOverdueHygiene(byName, ausgeschiedenMap).catch(e=>console.error(e));
 }
 
 function renderHsFilteredTable(){
-  const {byName, storeMap}=hsOrgData;
+  const {byName, storeMap, ausgeschiedenMap}=hsOrgData;
+  const isOrg=currentStore?.id==='zentrale';
   const storeFilter=document.getElementById('hs-filter-store')?.value||'';
   const personFilter=document.getElementById('hs-filter-person')?.value||'';
-  const statusFilter=document.getElementById('hs-filter-status')?.value||'';
+  // Default beim ersten Laden ist "aktiv" (siehe <select> oben) — Ausgeschiedene sind erst sichtbar,
+  // wenn bewusst "Alle" oder "Nur ausgeschiedene" gewählt wird. Nur aktive sind für den Alltag relevant.
+  const statusFilter=document.getElementById('hs-filter-status')?.value??'aktiv';
   const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12); // Schulung ist genau 1 Jahr gültig
 
   let names=Object.keys(byName).sort();
   if(personFilter) names=names.filter(n=>n===personFilter);
   if(storeFilter) names=names.filter(n=>(byName[n].stores||'').split(',').map(x=>x.trim()).includes(storeFilter));
-  if(statusFilter==='ausstaendig') names=names.filter(n=>new Date(byName[n].datum)<cutoff);
+  if(statusFilter==='aktiv') names=names.filter(n=>!ausgeschiedenMap[n]);
+  if(statusFilter==='ausstaendig') names=names.filter(n=>new Date(byName[n].datum)<cutoff && !ausgeschiedenMap[n]);
+  if(statusFilter==='ausgeschieden') names=names.filter(n=>ausgeschiedenMap[n]);
 
   const wrap=document.getElementById('hs-table-body');
   if(!wrap) return;
@@ -8389,21 +8550,44 @@ function renderHsFilteredTable(){
     return;
   }
   let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
-    <thead><tr><th style="text-align:left;">Person</th><th style="text-align:left;">Filiale(n)</th><th>Zuletzt</th><th>Von</th><th>Status</th></tr></thead><tbody>`;
+    <thead><tr><th style="text-align:left;">Person</th><th style="text-align:left;">Filiale(n)</th><th>Zuletzt</th><th>Von</th><th>Status</th>${isOrg?'<th></th>':''}</tr></thead><tbody>`;
   names.forEach(n=>{
     const e=byName[n];
     const overdue=new Date(e.datum)<cutoff;
+    const ausgeschieden=!!ausgeschiedenMap[n];
     const storeNames=(e.stores||'').split(',').filter(Boolean).map(id=>storeMap[id.trim()]||id.trim()).join(', ');
-    html+=`<tr><td style="text-align:left;font-weight:500;font-size:12px;" data-no-translate>${n}</td><td style="text-align:left;font-size:11px;" data-no-translate>${storeNames}</td><td style="font-size:12px;">${new Date(e.datum).toLocaleDateString('de-AT')}</td><td style="font-size:11px;" data-no-translate>${e.durchgefuehrt_von}</td><td>${overdue?'<span class="badge badge-warn">ausständig</span>':'<span class="badge badge-ok">aktuell</span>'}</td></tr>`;
+    let statusBadge;
+    if(ausgeschieden) statusBadge=`<span class="badge" style="background:#F5F5F4;color:var(--muted);">🚪 nicht mehr tätig</span>`;
+    else statusBadge=overdue?'<span class="badge badge-warn">ausständig</span>':'<span class="badge badge-ok">aktuell</span>';
+    html+=`<tr style="${ausgeschieden?'opacity:0.6;':''}"><td style="text-align:left;font-weight:500;font-size:12px;${ausgeschieden?'text-decoration:line-through;':''}" data-no-translate>${n}</td><td style="text-align:left;font-size:11px;" data-no-translate>${storeNames}</td><td style="font-size:12px;">${new Date(e.datum).toLocaleDateString('de-AT')}</td><td style="font-size:11px;" data-no-translate>${e.durchgefuehrt_von}</td><td>${statusBadge}</td>${isOrg?`<td><button onclick="toggleHygieneAusgeschieden('${n.replace(/'/g,"\\'")}',${ausgeschieden})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;color:${ausgeschieden?'var(--green)':'#DC2626'};">${ausgeschieden?'↩️':'🚪'}</button></td>`:''}</tr>`;
   });
   html+='</tbody></table></div></div>';
   wrap.innerHTML=html;
 }
 window.renderHsFilteredTable=renderHsFilteredTable;
 
-async function checkAndNotifyOverdueHygiene(byName){
+async function toggleHygieneAusgeschieden(name, currentlyAusgeschieden){
+  try{
+    if(currentlyAusgeschieden){
+      await api(`hygiene_ausgeschieden?name=eq.${encodeURIComponent(name)}`,{method:'DELETE'});
+      showToast('↩️ Wieder aktiv');
+    } else {
+      await api(`hygiene_ausgeschieden?name=eq.${encodeURIComponent(name)}`,{method:'DELETE'}); // evtl. Altlast weg, dann sauber neu
+      await api('hygiene_ausgeschieden',{method:'POST',body:JSON.stringify([{name, markiert_von:(currentStore?.name||'Organisation')}])});
+      showToast('🚪 Als ausgeschieden markiert');
+    }
+    if(hsOrgData?.ausgeschiedenMap){
+      if(currentlyAusgeschieden) delete hsOrgData.ausgeschiedenMap[name];
+      else hsOrgData.ausgeschiedenMap[name]=new Date().toISOString().split('T')[0];
+    }
+    renderHsFilteredTable();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.toggleHygieneAusgeschieden=toggleHygieneAusgeschieden;
+
+async function checkAndNotifyOverdueHygiene(byName, ausgeschiedenMap){
   const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12);
-  const overdueNames=Object.keys(byName).filter(n=>new Date(byName[n].datum)<cutoff);
+  const overdueNames=Object.keys(byName).filter(n=>new Date(byName[n].datum)<cutoff && !ausgeschiedenMap?.[n]);
   if(!overdueNames.length) return;
   // Nicht jedes Mal beim Öffnen der Seite erneut mailen — nur wenn seit der letzten Erinnerung
   // für diese Person mind. 30 Tage vergangen sind (oder noch nie erinnert wurde).
@@ -8453,14 +8637,16 @@ async function saveSchulungEntry(){
   const store_id=document.getElementById('sch-store-select').value;
   const datum=document.getElementById('sch-datum').value;
   const durchgefuehrt_von=document.getElementById('sch-durchgefuehrt').value.trim();
-  const teilnehmer=document.getElementById('sch-teilnehmer').value.trim();
+  // Teilnehmer kommen aus den Checkboxen (nur aktive Mitarbeitende dieser Filiale werden angezeigt —
+  // ausgeschiedene tauchen dort gar nicht erst auf), zu einem Text zusammengefügt für die DB-Spalte.
+  const teilnehmer=[...document.querySelectorAll('.sch-teilnehmer-cb:checked')].map(cb=>cb.value).join(', ');
   const unterschrieben=document.getElementById('sch-unterschrieben-box')?.dataset.value==='1';
   if(!thema_id||!store_id||!datum){ alert('Bitte Thema, Filiale und Datum ausfüllen.'); return; }
   try{
     await api('schulungen',{method:'POST',body:JSON.stringify([{thema_id:parseInt(thema_id),store_id,datum,durchgefuehrt_von,teilnehmer,unterschrieben}])});
   }catch(e){ console.error(e); alert('Fehler beim Speichern.'); return; }
   document.getElementById('sch-durchgefuehrt').value='';
-  document.getElementById('sch-teilnehmer').value='';
+  document.querySelectorAll('.sch-teilnehmer-cb:checked').forEach(cb=>cb.checked=false);
   const box=document.getElementById('sch-unterschrieben-box');
   if(box){ box.dataset.value='0'; box.classList.remove('done'); box.innerHTML=''; }
   refreshSchulungHistorie();
@@ -9759,6 +9945,361 @@ async function nimmNachschubZurueck(articleId){
 }
 window.nimmNachschubZurueck=nimmNachschubZurueck;
 
+// ==== INVENTUR (wöchentliche Vollzählung Verbrauchsmaterial, Anfrage Simone 17.08.) ====
+// Anders als "Fast aus" (spontane Einzelmeldung) hier: einmal wöchentlich (Dienstag) der KOMPLETTE
+// IST-Bestand pro Filiale, damit Simone alles auf einen Blick sieht und sammelbestellen kann —
+// genau wie am Papier-Zettel. Nutzt bewusst dieselbe kc_stock-Tabelle wie Ines' Shop-Produkte
+// (Ressourcen nutzen), aber eine EIGENE Submission-Tabelle (inventur_submissions), damit sich das
+// nicht mit Ines' täglicher kc_submissions-Abgabe beißt.
+let inventurStoreTab = null;
+
+function istHeuteDienstag(){ return new Date().getDay()===2; }
+
+async function renderInventurBlock(storeList){
+  const isOrg = currentStore?.id==='zentrale';
+  const heute = new Date().toISOString().split('T')[0];
+  // Letzte Inventur je Filiale — für den Banner-Text und um zu wissen, ob diese Woche schon gezählt wurde
+  const subs = await api('inventur_submissions?select=store_id,submitted_date&order=submitted_date.desc').catch(()=>[]);
+  const letzteJeFiliale = {};
+  (subs||[]).forEach(s=>{ if(!letzteJeFiliale[s.store_id]) letzteJeFiliale[s.store_id]=s.submitted_date; });
+  const montagDieserWoche = (()=>{ const d=new Date(); const diff=(d.getDay()+6)%7; d.setDate(d.getDate()-diff); return d.toISOString().split('T')[0]; })();
+  const nochOffen = storeList.filter(s=>!letzteJeFiliale[s.id] || letzteJeFiliale[s.id] < montagDieserWoche);
+
+  const dienstag = istHeuteDienstag();
+  if(!dienstag && !nochOffen.length) return ''; // nichts Dringendes zu zeigen, Bestellliste bleibt aufgeräumt
+
+  const farbe = dienstag ? '#EA580C' : '#94A3B8';
+  const bg = dienstag ? '#FFF7ED' : '#F8FAFC';
+  const titel = dienstag ? '📋 Heute ist Dienstag — Inventur fällig' : '📋 Inventur diese Woche noch offen';
+  const unterzeile = nochOffen.length
+    ? `Noch offen: ${nochOffen.map(s=>s.name.split(' ')[0]).join(', ')}`
+    : '✓ Alle Filialen diese Woche schon gezählt';
+  return `<div style="background:${bg};border:1px solid ${farbe}40;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <div><div style="font-size:12.5px;font-weight:700;color:${farbe};">${titel}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px;">${unterzeile}</div></div>
+    <button onclick="switchTransporterSubTab('inventur')" style="background:${farbe};color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Zählen →</button>
+  </div>`;
+}
+
+async function updateIstBestandFuerFiliale(storeId, articleId, value){
+  const today=new Date().toISOString().split('T')[0];
+  const v=value===''?null:parseFloat(value);
+  try{
+    await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
+    if(v!==null){
+      await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:storeId,article_id:articleId,ist_bestand:v,updated_date:today}])});
+    }
+    showToast('✓ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.updateIstBestandFuerFiliale=updateIstBestandFuerFiliale;
+
+async function submitInventur(storeId){
+  const heute=new Date().toISOString().split('T')[0];
+  try{
+    await api('inventur_submissions',{method:'POST',body:JSON.stringify([{store_id:storeId, submitted_date:heute, submitted_by:(currentStore?.name||currentStore?.id||'Transporter')}])});
+    showToast('✓ Inventur für '+storeId+' gespeichert');
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.submitInventur=submitInventur;
+
+async function renderInventurTab(storeList){
+  const isOrg = currentStore?.id==='zentrale';
+  const items = articles.filter(a=>NACHSCHUB_CATS.includes(a.category));
+  const allIst = await api('kc_stock?select=store_id,article_id,ist_bestand,updated_date').catch(()=>[]);
+  const istMap={};
+  (allIst||[]).forEach(d=>{ if(!istMap[d.article_id]) istMap[d.article_id]={}; istMap[d.article_id][d.store_id]=d; });
+
+  if(isOrg){
+    // Simone-Ansicht: alle Filialen nebeneinander, SOLL−IST wie bei Shop Produkte — genau ihre Anfrage.
+    const subs = await api('inventur_submissions?select=store_id,submitted_date&order=submitted_date.desc').catch(()=>[]);
+    const letzteJeFiliale={};
+    (subs||[]).forEach(s=>{ if(!letzteJeFiliale[s.store_id]) letzteJeFiliale[s.store_id]=s.submitted_date; });
+    let html=`<div class="card" style="padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--muted);">Grüne Zahl antippen-Info entfällt hier — reine Übersicht. Negative Bestellung = Überbestand.</div>`;
+    html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">`;
+    storeList.forEach(s=>{
+      const datum=letzteJeFiliale[s.id];
+      const aktuell = datum && datum >= (()=>{ const d=new Date(); const diff=(d.getDay()+6)%7; d.setDate(d.getDate()-diff); return d.toISOString().split('T')[0]; })();
+      html+=`<div style="font-size:11px;padding:5px 9px;border-radius:7px;background:${aktuell?'#F0FDF4':'#FEE2E2'};color:${aktuell?'#15803D':'#B91C1C'};font-weight:600;" data-no-translate>${s.name.split(' ')[0]}: ${datum?new Date(datum).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'nie'}</div>`;
+    });
+    html+=`</div>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Artikel</th>${storeList.map(s=>`<th data-no-translate>${s.name.split(' ')[0]}</th>`).join('')}</tr></thead><tbody>`;
+    NACHSCHUB_CATS.forEach(cat=>{
+      const catItems=items.filter(a=>a.category===cat);
+      if(!catItems.length) return;
+      html+=`<tr><td colspan="${storeList.length+1}" style="background:var(--surface-1);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:5px 8px;">${cat}</td></tr>`;
+      catItems.forEach(a=>{
+        const soll=a.min_stock||0;
+        html+=`<tr><td style="font-size:12px;">${a.name}</td>`;
+        storeList.forEach(s=>{
+          const rec=(istMap[a.id]||{})[s.id];
+          const ist=rec?.ist_bestand;
+          const bedarf=(ist!=null)?(soll-ist):null;
+          const col=bedarf===null?'var(--muted)':bedarf>0?'#A32D2D':bedarf<0?'var(--muted)':'#3B6D11';
+          html+=`<td style="text-align:center;font-size:12px;font-weight:600;color:${col};">${bedarf===null?'·':(bedarf>0?'+':'')+bedarf}</td>`;
+        });
+        html+='</tr>';
+      });
+    });
+    html+='</tbody></table></div></div>';
+    return html;
+  }
+
+  // Transporter-Ansicht (Michi/Nooru): Filiale wählen, dann IST für diese Filiale komplett durchzählen.
+  if(!inventurStoreTab) inventurStoreTab=storeList[0]?.id;
+  let html=`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;">`;
+  storeList.forEach(s=>{
+    const active=s.id===inventurStoreTab;
+    html+=`<button onclick="inventurStoreTab='${s.id}';renderPack();" style="flex-shrink:0;padding:8px 12px;border-radius:9px;border:1.5px solid ${active?'#EA580C':'var(--border)'};background:${active?'#EA580C':'#fff'};color:${active?'#fff':'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;" data-no-translate>${s.name.split(' ')[0]}</button>`;
+  });
+  html+=`</div>`;
+
+  const storeId=inventurStoreTab;
+  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Artikel</th><th>IST</th><th>SOLL</th><th>Bedarf</th></tr></thead><tbody>`;
+  NACHSCHUB_CATS.forEach(cat=>{
+    const catItems=items.filter(a=>a.category===cat);
+    if(!catItems.length) return;
+    html+=`<tr><td colspan="4" style="background:var(--surface-1);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:5px 8px;">${cat}</td></tr>`;
+    catItems.forEach(a=>{
+      const rec=(istMap[a.id]||{})[storeId];
+      const ist=rec?.ist_bestand ?? '';
+      const soll=a.min_stock||0;
+      const bedarf=(ist!=='' && ist!=null)?(soll-ist):null;
+      html+=`<tr>
+        <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
+        <td><input type="number" value="${ist}" oninput="debounceFieldSave(this,()=>updateIstBestandFuerFiliale('${storeId}',${a.id},this.value))" onchange="updateIstBestandFuerFiliale('${storeId}',${a.id},this.value)" style="width:48px;text-align:center;border:1.5px solid var(--border);border-radius:5px;font-size:12px;padding:5px;"></td>
+        <td style="color:var(--muted);text-align:center;">${soll}</td>
+        <td style="font-weight:600;text-align:center;color:${bedarf===null?'var(--muted)':bedarf>0?'#A32D2D':'#3B6D11'};">${bedarf===null?'·':bedarf}</td>
+      </tr>`;
+    });
+  });
+  html+='</tbody></table></div></div>';
+  const storeName=storeList.find(s=>s.id===storeId)?.name||storeId;
+  html+=`<button onclick="submitInventur('${storeId}')" style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:#EA580C;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">✓ Inventur für ${storeName.split(' ')[0]} abschließen</button>`;
+  return html;
+}
+
+// ==== KÜCHENLAGER (zentrales Produktionslager, KEIN Filial-Split) ====
+// Anders als die Transporter-Bestellliste (pro Filiale) ist das hier EIN zentraler Bestand fürs
+// Küchenlager — 1:1 wie am Papier-Zettel, gruppiert nach Lieferant (FOODPACK/INVOLO/LASSI/BIKAPACK/
+// PACKARI/TRANSGOURMET/BIPA). Von Michi (Organisation-Login) und Nooru (Kitchen-Login) gemeinsam
+// gepflegt — deshalb ein einziger geteilter Bestand, keine Rollen-Unterscheidung nötig.
+const LIEFERANT_ORDER=['FOODPACK','INVOLO','LASSI','BIKAPACK','PACKARI','TRANSGOURMET','BIPA','Sonstiges'];
+
+// ==== GRUNDREINIGUNG (Tiefenreinigung Stores, Everton via Kitchen) ====
+// Bewusst NICHT ortsgebunden bei Kitchen verankert, sondern der Datensatz gehört der jeweiligen
+// Filiale — Kitchen ist nur der Ausgangspunkt (wo Everton eingeloggt ist), nicht der Ort des
+// Geschehens. Nur Kitchen darf eintragen (Anfrage vom 17.08.), Filialen sehen/bearbeiten das nicht.
+// Fälligkeit: alle 21 Tage (strenger als die "monatlich/quartalsweise"-Empfehlung am Papier-Zettel).
+const GRUNDREINIGUNG_TAGE_FAELLIG = 21;
+const GRUNDREINIGUNG_ITEMS = {
+  'Küchengeräte': [
+    'Geschirrspüler: Innenraum, Ränder, Oberflächen (Sprüharme & Sieb entnehmen, entkalken)',
+    'Herd/Kochplatten: unter und hinter dem Gerät reinigen',
+    'Backofen: Innenraum inkl. Bleche und Roste grundreinigen',
+    'Fritteuse: Öl wechseln, Wanne komplett entfetten',
+    'Grillplatte: entfetten und entkalken',
+    'Dunstabzugshaube: Fettfilter ausbauen und entfetten',
+  ],
+  'Bain Marie / Warmhaltevitrine': [
+    'Bain Marie vollständig entleeren',
+    'Becken und Einsätze reinigen und entkalken',
+    'Dichtungen und Ablaufhahn reinigen',
+    'Wasser neu befüllen und Temperatur kontrollieren',
+  ],
+  'Kühlung': [
+    'Kühlschränke/Kühltruhen komplett ausräumen',
+    'Innenflächen, Roste und Schubladen reinigen und desinfizieren',
+    'Dichtungen reinigen, auf Beschädigung prüfen',
+    'Lüftungsgitter/Kondensator von Staub befreien',
+    'Vor Wiederbefüllung: Ablaufdaten der Produkte kontrollieren',
+  ],
+  'Oberflächen & Theke': [
+    'Alle Arbeitsflächen und Theke gesamt reinigen und desinfizieren',
+    'Wände und Fliesenspiegel hinter Geräten reinigen',
+    'Fugen im Küchen- und Thekenbereich schrubben',
+    'Regale und Ablagen abwischen',
+    'Spinnweben entfernen an Lampen und überall sonst',
+  ],
+  'Boden & Abflüsse': [
+    'Boden in Küche und Verkaufsbereich grundreinigen/schrubben',
+    'Abflüsse und Bodenroste reinigen',
+    'Sockelleisten abwischen',
+  ],
+  'Sanitär & Lager': [
+    'Personal-WC komplett grundreinigen',
+    'Mülltonnen (innen & außen) reinigen und desinfizieren',
+    'Lagerregale ausräumen, reinigen, neu einräumen',
+    'Schädlingskontrolle im Lagerbereich',
+  ],
+};
+let grundreinigungChecked=new Set();
+
+async function renderGrundreinigung(){
+  const el=document.getElementById('v-grundreinigung');
+  const isOrg=currentStore?.id==='zentrale';
+  const isKitchen=currentStore?.id==='kitchen';
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeList=stores.filter(s=>!['zentrale','kitchen','1070'].includes(s.id));
+  const alleEintraege=await api('grundreinigung_eintraege?select=*&order=datum.desc').catch(()=>[]);
+
+  const letzteJeFiliale={}, anzahlJeFiliale={};
+  (alleEintraege||[]).forEach(e=>{
+    if(!letzteJeFiliale[e.store_id]) letzteJeFiliale[e.store_id]=e;
+    anzahlJeFiliale[e.store_id]=(anzahlJeFiliale[e.store_id]||0)+1;
+  });
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🧹','Grundreinigung','Tiefenreinigung Stores — Fälligkeit alle 21 Tage','#0F766E');
+  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Filiale</th><th>Zuletzt</th><th>Tage her</th><th>Anzahl gesamt</th>${isKitchen?'<th></th>':''}
+  </tr></thead><tbody>`;
+  // Nach Dringlichkeit sortiert — am längsten überfällige zuerst, das IST der Putzplan-Hinweis:
+  // Everton sieht auf einen Blick, wo er als nächstes hin muss.
+  const sortiert=[...storeList].sort((a,b)=>{
+    const da=letzteJeFiliale[a.id]?.datum, db=letzteJeFiliale[b.id]?.datum;
+    if(!da && !db) return 0;
+    if(!da) return -1; // noch nie gereinigt = dringendste Priorität
+    if(!db) return 1;
+    return new Date(da)-new Date(db);
+  });
+  sortiert.forEach(s=>{
+    const letzte=letzteJeFiliale[s.id];
+    const tageHer=letzte?Math.floor((Date.now()-new Date(letzte.datum).getTime())/86400000):null;
+    const ueberfaellig=tageHer===null||tageHer>GRUNDREINIGUNG_TAGE_FAELLIG;
+    const col=tageHer===null?'#DC2626':ueberfaellig?'#EA580C':'#16A34A';
+    html+=`<tr>
+      <td style="font-size:12.5px;font-weight:500;" data-no-translate>${s.name}</td>
+      <td style="text-align:center;font-size:12px;">${letzte?new Date(letzte.datum).toLocaleDateString('de-AT'):'—'}</td>
+      <td style="text-align:center;font-size:12px;font-weight:700;color:${col};">${tageHer===null?'nie':tageHer+' Tg'}${ueberfaellig?' ⚠️':''}</td>
+      <td style="text-align:center;font-size:12px;color:var(--muted);">${anzahlJeFiliale[s.id]||0}</td>
+      ${isKitchen?`<td><button onclick="showGrundreinigungForm('${s.id}')" style="background:#0F766E;color:#fff;border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Checkliste →</button></td>`:''}
+    </tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">⚠️ = über ${GRUNDREINIGUNG_TAGE_FAELLIG} Tage seit letzter Grundreinigung. Am längsten überfällige Filiale steht oben.</div>`;
+
+  html+=`<div id="grundreinigung-form-wrap" style="margin-top:14px;"></div>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderGrundreinigung=renderGrundreinigung;
+
+function showGrundreinigungForm(storeId){
+  grundreinigungChecked=new Set();
+  const wrap=document.getElementById('grundreinigung-form-wrap');
+  if(!wrap) return;
+  const heute=new Date().toISOString().split('T')[0];
+  let totalItems=0;
+  Object.values(GRUNDREINIGUNG_ITEMS).forEach(list=>totalItems+=list.length);
+  let html=`<div class="card" style="padding:14px;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:2px;">🧹 Grundreinigung eintragen</div>
+    <div id="gr-progress" style="font-size:11px;color:var(--muted);margin-bottom:10px;">0 / ${totalItems} erledigt</div>`;
+  Object.entries(GRUNDREINIGUNG_ITEMS).forEach(([kat,items])=>{
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px;">${kat}</div>`;
+    items.forEach((txt,i)=>{
+      const key=`${kat}|${i}`;
+      html+=`<div class="cl-item" onclick="toggleGrundreinigungItem('${key.replace(/'/g,"\\'")}',this)">
+        <div class="check-box"></div>
+        <span class="cl-text" style="font-size:12.5px;">${txt}</span>
+      </div>`;
+    });
+  });
+  html+=`
+    <div style="margin-top:14px;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);">Datum</label>
+      <input id="gr-datum" type="date" value="${heute}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;">
+      <label style="font-size:11px;font-weight:600;color:var(--muted);">Durchgeführt von</label>
+      <input id="gr-von" type="text" placeholder="z.B. Everton" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
+    </div>
+    <button id="gr-submit-btn" onclick="submitGrundreinigung('${storeId}')" disabled style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:var(--border);color:#fff;font-size:14px;font-weight:600;cursor:not-allowed;">Erst alle Punkte abhaken</button>
+    <button onclick="document.getElementById('grundreinigung-form-wrap').innerHTML='';" style="width:100%;margin-top:8px;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:12px;color:var(--muted);cursor:pointer;">Abbrechen</button>
+  </div>`;
+  wrap.innerHTML=html;
+  wrap.scrollIntoView({behavior:'smooth', block:'start'});
+}
+window.showGrundreinigungForm=showGrundreinigungForm;
+
+function toggleGrundreinigungItem(key, el){
+  if(grundreinigungChecked.has(key)){ grundreinigungChecked.delete(key); el.classList.remove('done'); el.querySelector('.check-box').classList.remove('done'); el.querySelector('.check-box').innerHTML=''; }
+  else { grundreinigungChecked.add(key); el.querySelector('.check-box').classList.add('done'); el.querySelector('.check-box').innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>'; }
+  let total=0; Object.values(GRUNDREINIGUNG_ITEMS).forEach(l=>total+=l.length);
+  const done=grundreinigungChecked.size;
+  const prog=document.getElementById('gr-progress');
+  if(prog) prog.textContent=`${done} / ${total} erledigt`;
+  const btn=document.getElementById('gr-submit-btn');
+  if(btn){
+    const fertig=done===total;
+    btn.disabled=!fertig;
+    btn.style.background=fertig?'#0F766E':'var(--border)';
+    btn.style.cursor=fertig?'pointer':'not-allowed';
+    btn.textContent=fertig?'✓ Grundreinigung abschließen':`Erst alle Punkte abhaken (${done}/${total})`;
+  }
+}
+window.toggleGrundreinigungItem=toggleGrundreinigungItem;
+
+async function submitGrundreinigung(storeId){
+  const datum=document.getElementById('gr-datum')?.value;
+  const von=document.getElementById('gr-von')?.value?.trim();
+  if(!datum){ showToast('Bitte ein Datum angeben',true); return; }
+  try{
+    await api('grundreinigung_eintraege',{method:'POST',body:JSON.stringify([{
+      store_id:storeId, datum, durchgefuehrt_von:von||null, items_erledigt:[...grundreinigungChecked]
+    }])});
+    showToast('✓ Grundreinigung eingetragen');
+    document.getElementById('grundreinigung-form-wrap').innerHTML='';
+    renderGrundreinigung();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.submitGrundreinigung=submitGrundreinigung;
+
+async function renderKuechenlager(){
+  const el=document.getElementById('v-kuechenlager');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  const items=articles.filter(a=>a.category==='Kuechenlager');
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🏭','Küchenlager','Zentraler Bestand — kein Filial-Split, wie am Zettel','#0F766E');
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird um 15:00 automatisch an Simone gesammelt.</div>`;
+
+  LIEFERANT_ORDER.forEach(lief=>{
+    const liefItems=items.filter(a=>(a.lieferant||'Sonstiges')===lief).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    if(!liefItems.length) return;
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">${lief}</div>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th><th>Meldestand</th></tr></thead><tbody>`;
+    liefItems.forEach(a=>{
+      const bestand=a.kuechenlager_bestand;
+      const meldestand=a.min_stock||0;
+      const niedrig=(bestand!=null && bestand<=meldestand);
+      html+=`<tr style="${niedrig?'background:#FEF2F2;':''}">
+        <td style="font-size:12px;">${a.name} <span style="color:var(--muted);">(${a.unit||''})</span></td>
+        <td><input type="number" step="1" value="${bestand??''}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:56px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};"></td>
+        <td style="text-align:center;color:var(--muted);font-size:12px;">${meldestand}</td>
+      </tr>`;
+    });
+    html+='</tbody></table></div></div>';
+  });
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderKuechenlager=renderKuechenlager;
+
+async function updateKuechenlagerBestand(articleId, value){
+  const v=value===''?null:parseFloat(value);
+  try{
+    await api(`articles?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:v})});
+    const a=articles.find(x=>x.id===articleId);
+    if(a) a.kuechenlager_bestand=v; // lokal auch aktualisieren, für sofortiges rot/normal ohne Reload
+    showToast('✓ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.updateKuechenlagerBestand=updateKuechenlagerBestand;
+
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -9786,10 +10327,27 @@ async function renderPack(){
   // Vier Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
+    {key:'inventur',     label:'📋 Inventur'},
     {key:'samosas',      label:'🥟 Samosas'},
     {key:'beilagen',     label:'🥗 Beilagen & Essen'},
     {key:'info',         label:`📋 Info${openTasksCount?` (${openTasksCount})`:''}`}
   ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
+
+  if(transporterSubTab==='bestellliste'){
+    html += await renderInventurBlock(storeList);
+    html += `<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 12px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:18px;">🏭</span>
+      <div><div style="font-size:12.5px;font-weight:700;color:#0F766E;">Küchenlager</div><div style="font-size:11px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
+      <span style="margin-left:auto;color:var(--muted);">→</span>
+    </div>`;
+  }
+
+  if(transporterSubTab==='inventur'){
+    html+=await renderInventurTab(storeList);
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   if(transporterSubTab==='info'){
     html+=await renderTransporterInfoTabHtml();
@@ -9923,34 +10481,6 @@ async function renderPack(){
     html+='</div>';
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
-
-  // Zum Vergleich/Nachvollziehen: Bestellungen vom Tag DAVOR (also einen Tag vor bestellDateStr) —
-  // rein informativ, grau hinterlegt, nicht interaktiv. Aufgeklappt, wenn der aktuelle Tag leer ist
-  // (dann ist der Vergleich am wichtigsten), sonst eingeklappt, um nicht zu überladen. Hilft bei
-  // Nachfragen wie "wurde X wirklich bestellt?", ohne erst mehrfach "Vorheriger" klicken zu müssen.
-  const compareDate=new Date(orderEntryDate); compareDate.setDate(compareDate.getDate()-1);
-  const compareDateStr=compareDate.toISOString().split('T')[0];
-  const compareOrdRaw=await api(`orders?order_date=eq.${compareDateStr}&select=store_id,article_id,quantity`).catch(()=>[]);
-  const compareByStore={};
-  (compareOrdRaw||[]).filter(o=>o.quantity>0).forEach(o=>{
-    const artName=articles.find(a=>a.id===o.article_id)?.name;
-    if(!artName) return;
-    (compareByStore[o.store_id]=compareByStore[o.store_id]||[]).push({name:artName, qty:o.quantity});
-  });
-  const compareLabel=compareDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
-  const hasCompareData=Object.keys(compareByStore).length>0;
-  html+=`<details style="margin-top:14px;" ${!hasAny?'open':''}>
-    <summary style="font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;padding:8px 10px;background:#F5F5F4;border-radius:8px;">📅 Zum Vergleich: Bestellungen vom ${compareLabel}</summary>
-    <div style="background:#FAFAF9;border-radius:0 0 10px 10px;margin-top:-4px;padding:10px 12px;">
-      ${hasCompareData
-        ? storeList.filter(s=>compareByStore[s.id]?.length).map(s=>`
-          <div style="margin-bottom:8px;">
-            <div style="font-size:11px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};margin-bottom:2px;" data-no-translate>${s.name.split(' ')[0]}</div>
-            ${compareByStore[s.id].map(it=>`<div style="font-size:12px;color:var(--muted);padding-left:8px;">${it.name}: <strong style="color:var(--sub);">${it.qty}</strong></div>`).join('')}
-          </div>`).join('')
-        : `<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0;">Keine Bestellungen an diesem Tag.</div>`}
-    </div>
-  </details>`;
 
   // Alle Transporter-Artikel — auch ohne heutige Bestellung, damit Lieferbarkeit VORAB gemeldet werden
   // kann (z.B. wenn Servietten leer sind, bevor überhaupt eine Filiale sie nachbestellt hat).
@@ -10982,6 +11512,20 @@ async function renderKitchenDaily(){
     <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${woche}</span>
   </div>`;
   html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
+
+  // Start-/Ende-Schicht — bewusst KEINE eigene Kitchen-Logik gebaut, sondern die exakt gleichen
+  // generischen Store-Screens verlinkt, die auch Ausstellungsstraße & Co. nutzen (Wareneingang,
+  // Reinigung, Kühlung, HACCP, Übergabe-Notiz). Läuft automatisch korrekt für store_id='kitchen'.
+  html+=`<div style="display:flex;gap:8px;margin-bottom:14px;">
+    <div onclick="goTo('dailycheck')" style="flex:1;background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:center;">
+      <div style="font-size:20px;">🌅</div>
+      <div style="font-size:12px;font-weight:600;margin-top:2px;">Schicht starten</div>
+    </div>
+    <div onclick="goTo('schichtende')" style="flex:1;background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:center;">
+      <div style="font-size:20px;">🌙</div>
+      <div style="font-size:12px;font-weight:600;margin-top:2px;">Schicht beenden</div>
+    </div>
+  </div>`;
   html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ GERICHTE HEUTE</div>`;
 
   // Dish cards — klickbar mit Allergenen (gleich wie Store-Startseite)
@@ -11009,6 +11553,38 @@ async function renderKitchenDaily(){
     </div>`;
   });
   html+='</div>';
+
+  // Grundreinigung — Everton reinigt die Stores, nicht Kitchen selbst. Datensatz gehört der
+  // jeweiligen Filiale, Kitchen ist nur der Ausgangspunkt zum Eintragen.
+  html+=`<div onclick="goTo('grundreinigung')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🧹</span>
+    <div><div style="font-size:13px;font-weight:600;">Grundreinigung</div><div style="font-size:11px;color:var(--muted);">Fällige Stores & Checkliste eintragen</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
+  // Küchenlager — zentraler Bestand (FOODPACK/INVOLO/etc.), von Michi & Nooru gemeinsam gepflegt.
+  html+=`<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🏭</span>
+    <div><div style="font-size:13px;font-weight:600;">Küchenlager</div><div style="font-size:11px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
+  // Shop Produkte — eigene IST-Bestand-Eingabe wie bei einer normalen Filiale (Laurenzerberg etc.),
+  // NICHT die Admin-Übersicht (die gibt's schon separat über "Ines"). Verpackungen/Transporterliste
+  // bewusst NICHT dabei — das regelt Kitchen selbst vor Ort.
+  html+=`<div onclick="goToReminder('order','kc')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🛍️</span>
+    <div><div style="font-size:13px;font-weight:600;">Shop Produkte bestellen</div><div style="font-size:11px;color:var(--muted);">IST-Bestand eintragen, wie bei den Filialen</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
+  // Forecast — derselbe echte Store-Forecast-Screen wie bei Laurenzerberg & Co. (Wochenmengen +
+  // Rückblick, was tatsächlich verwendet wurde). Keine eigene Logik, nur verlinkt.
+  html+=`<div onclick="goToReminder('order','forecast')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">📅</span>
+    <div><div style="font-size:13px;font-weight:600;">Forecast</div><div style="font-size:11px;color:var(--muted);">Wochenmengen & was verwendet wurde</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
 
   // Entsorgung shortcut
   html+=`<div onclick="goTo('disposal')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
@@ -12090,6 +12666,29 @@ window.closeZutatenManager=closeZutatenManager;
 // ---- SWEETS LISTE KÜCHE ----
 let teamTab='sweets';
 function switchTeamTab(t){ teamTab=t; renderSweets(); }
+
+async function addStadtgemeindeZahlung(){
+  const datum=document.getElementById('sg-datum')?.value;
+  const sodexo=parseFloat(document.getElementById('sg-sodexo')?.value||'0')||0;
+  const cash=parseFloat(document.getElementById('sg-cash')?.value||'0')||0;
+  if(!datum){ showToast('Bitte ein Datum wählen',true); return; }
+  if(sodexo===0 && cash===0){ showToast('Bitte einen Betrag eintragen',true); return; }
+  try{
+    await api('stadtgemeinde_zahlungen',{method:'POST',body:JSON.stringify([{datum,sodexo_pluxee:sodexo,cash}])});
+    showToast('✓ Gespeichert');
+    renderSweets();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.addStadtgemeindeZahlung=addStadtgemeindeZahlung;
+
+async function deleteStadtgemeindeZahlung(id){
+  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  try{
+    await api(`stadtgemeinde_zahlungen?id=eq.${id}`,{method:'DELETE'});
+    renderSweets();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.deleteStadtgemeindeZahlung=deleteStadtgemeindeZahlung;
 window.switchTeamTab=switchTeamTab;
 
 async function showTeamRezeptForm(id){
@@ -12171,21 +12770,45 @@ async function submitNachschub(){
       message:`Nachschub-Anfrage aus der Küche:\n\nProdukt: ${produkt}\nFür Filialen: ${filialen||'—'}\nAnmerkung: ${notiz||'—'}\n\n`+new Date().toLocaleString('de-AT'),
       to_email:empfaenger
     });
+    // Zusätzlich zu Simone in Asana — läuft parallel, nicht als Ersatz für die E-Mail.
+    // Bewusst kein "await" vorm Fehler-Handling der E-Mail blockieren: eigener try/catch,
+    // damit ein Asana-Problem die (schon erfolgreich gesendete) E-Mail nicht als Fehler zeigt.
+    try{
+      await fetch(`${SUPABASE_URL}/functions/v1/asana-nachschub-anfrage`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({produkt, filialen, notiz})
+      });
+    }catch(asanaErr){ console.error('Asana-Nachschub-Task fehlgeschlagen (E-Mail wurde trotzdem versendet):', asanaErr); }
     showToast('✓ Nachschub-Anfrage gesendet!');
     ['nachschub-produkt','nachschub-filialen','nachschub-notiz'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen',true);}
 }
 window.submitNachschub=submitNachschub;
 
+async function toggleArtikelFreigabe(articleId, storeId, currentlyFreigegeben){
+  try{
+    if(currentlyFreigegeben){
+      await api(`artikel_freigaben?article_id=eq.${articleId}&store_id=eq.${storeId}`,{method:'DELETE'});
+      showToast('🔒 Gesperrt');
+    } else {
+      await api('artikel_freigaben',{method:'POST',body:JSON.stringify([{article_id:articleId,store_id:storeId}])});
+      showToast('✓ Freigegeben');
+    }
+    renderSweets();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.toggleArtikelFreigabe=toggleArtikelFreigabe;
+
 async function renderSweets(){
   const el=document.getElementById('v-sweets');
-  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C'};
+  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C', stadtgemeinde:'#059669'};
   const ttab=(key,label)=>{
     const active=teamTab===key;
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Produktion')}${ttab('bestellen','📦 Bestellen')}${ttab('nachschub','⚠️ Nachschub')}</div>`;
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('stadtgemeinde','🏛️ Stadtgemeinde')}${ttab('produktion','🫖 Produktion')}${ttab('bestellen','📦 Bestellen')}${ttab('nachschub','⚠️ Nachschub')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   // WICHTIG (korrigiert): Anders als beim Transporter packt das Sweets-Team AM SELBEN TAG ein
@@ -12206,6 +12829,67 @@ async function renderSweets(){
   const sweetsDateLabel=sweetsViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
 
   let html=tabsHtml;
+
+  if(teamTab==='stadtgemeinde'){
+    const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
+    html+=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
+    // Neuer Eintrag
+    const heute=new Date().toISOString().split('T')[0];
+    html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neue Zahlung</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:110px;">
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Datum</label>
+          <input type="date" id="sg-datum" value="${heute}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+        </div>
+        <div style="flex:1;min-width:90px;">
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Sodexo/Pluxee €</label>
+          <input type="number" step="0.5" id="sg-sodexo" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+        </div>
+        <div style="flex:1;min-width:90px;">
+          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Cash €</label>
+          <input type="number" step="0.5" id="sg-cash" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+        </div>
+      </div>
+      <button onclick="addStadtgemeindeZahlung()" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern ✓</button>
+    </div>`;
+
+    // Nach Monat gruppieren, wie im Sheet — neuester Monat zuerst
+    const byMonat={};
+    (rows||[]).forEach(r=>{
+      const m=r.datum.slice(0,7); // YYYY-MM
+      if(!byMonat[m]) byMonat[m]=[];
+      byMonat[m].push(r);
+    });
+    const monate=Object.keys(byMonat).sort().reverse();
+    if(!monate.length){
+      html+=`<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Noch keine Einträge.</div>`;
+    }
+    monate.forEach(m=>{
+      const einträge=byMonat[m].sort((a,b)=>b.datum.localeCompare(a.datum));
+      const monatLabel=new Date(m+'-01').toLocaleDateString('de-AT',{month:'long',year:'numeric'});
+      const monatSumme=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
+      html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;">${monatLabel} — Σ €${monatSumme.toFixed(2)}</div>`;
+      html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+        <th style="text-align:left;">Datum</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
+      </tr></thead><tbody>`;
+      einträge.forEach(r=>{
+        const total=(r.sodexo_pluxee||0)+(r.cash||0);
+        const dl=new Date(r.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+        html+=`<tr>
+          <td style="font-size:12px;">${dl}</td>
+          <td style="text-align:center;font-size:12px;">€${(r.sodexo_pluxee||0).toFixed(2)}</td>
+          <td style="text-align:center;font-size:12px;">€${(r.cash||0).toFixed(2)}</td>
+          <td style="text-align:center;font-size:12px;font-weight:700;color:#059669;">€${total.toFixed(2)}</td>
+          <td style="text-align:center;"><button onclick="deleteStadtgemeindeZahlung(${r.id})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:13px;">🗑</button></td>
+        </tr>`;
+      });
+      html+='</tbody></table></div></div>';
+    });
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   // Eigenproduktion (Mango Lassi, Masala Chai, Chili Crisp) — eigener Reiter neben Sweets, mit
   // hinterlegten Rezepten. Team-editierbar über die Bearbeiten-Buttons.
@@ -12330,16 +13014,57 @@ async function renderSweets(){
     html+=`<th style="color:${col};" data-no-translate>${s.name.split(' ')[0]}${hasOrder?' ✓':''}</th>`;
   });
   html+=`</tr></thead><tbody>`;
+  // Freigaben laden — Artikel OHNE Einträge sind für alle verfügbar (Standard), Artikel MIT
+  // Einträgen sind eingeschränkt: nur die gelisteten Filialen dürfen ihn bekommen.
+  const freigabenRaw=await api('artikel_freigaben?select=article_id,store_id').catch(()=>[]);
+  const restrictedArticles=new Set((freigabenRaw||[]).map(f=>f.article_id));
+  const freigegebenSet=new Set((freigabenRaw||[]).map(f=>`${f.article_id}|${f.store_id}`));
+  let hatEingeschraenkte=false;
   sweetsItems.forEach(a=>{
-    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>`;
+    const eingeschraenkt=restrictedArticles.has(a.id);
+    if(eingeschraenkt) hatEingeschraenkte=true;
+    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span>${eingeschraenkt?' 🔒':''}</div></td>`;
     storeList.forEach(s=>{
       const v=(allOrd[a.id]||{})[s.id]||0;
       const hasOrder=sweetsItems.some(x=>(allOrd[x.id]||{})[s.id]>0);
-      html+=`<td style="font-weight:${v?'600':'400'};color:${v?'#1a1a18':'var(--border)'};background:${hasOrder?'#F0FDF4':'transparent'};">${v||'·'}</td>`;
+      const freigegeben=!eingeschraenkt || freigegebenSet.has(`${a.id}|${s.id}`);
+      let cellStyle, cellContent;
+      if(!freigegeben && v>0){
+        // Gefährlicher Fall: wurde bestellt, obwohl die Filiale nicht freigegeben ist — genau das
+        // Problem, das Michi/Nooru sehen müssen, BEVOR sie ausliefern.
+        cellStyle='background:#FEE2E2;color:#DC2626;font-weight:700;border:1.5px solid #DC2626;';
+        cellContent=`⚠️${v}`;
+      } else if(!freigegeben){
+        cellStyle='background:#F5F5F4;color:var(--border);';
+        cellContent='🔒';
+      } else {
+        cellStyle=`font-weight:${v?'600':'400'};color:${v?'#1a1a18':'var(--border)'};background:${hasOrder?'#F0FDF4':'transparent'};`;
+        cellContent=v||'·';
+      }
+      html+=`<td style="${cellStyle}" title="${!freigegeben?'Noch nicht freigegeben — kann schmelzen, bitte nicht ausliefern':''}">${cellContent}</td>`;
     });
     html+=`</tr>`;
   });
   html+='</tbody></table></div></div>';
+  if(hatEingeschraenkte){
+    html+=`<div style="font-size:10.5px;color:#DC2626;padding:6px 2px 2px;">🔒 = für diese Filiale noch nicht freigegeben (z.B. Raw Cakes schmelzen ohne passende Kühlung). ⚠️ = wurde trotzdem bestellt — bitte NICHT ausliefern, erst bei Organisation nachfragen.</div>`;
+  }
+
+  // Freigabe-Verwaltung — NUR Organisation darf hier Filialen freischalten/sperren.
+  if(hatEingeschraenkte && currentStore?.id==='zentrale'){
+    html+=`<div class="section-lbl" style="margin-top:14px;">🔓 Freigabe verwalten</div><div class="card" style="padding:12px;">`;
+    sweetsItems.filter(a=>restrictedArticles.has(a.id)).forEach(a=>{
+      html+=`<div style="margin-bottom:12px;">
+        <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">${a.name}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">`;
+      storeList.forEach(s=>{
+        const freigegeben=freigegebenSet.has(`${a.id}|${s.id}`);
+        html+=`<button onclick="toggleArtikelFreigabe(${a.id},'${s.id}',${freigegeben})" data-no-translate style="padding:6px 10px;border-radius:8px;border:1px solid ${freigegeben?'#16A34A':'#DC2626'};background:${freigegeben?'#F0FDF4':'#FEE2E2'};color:${freigegeben?'#15803D':'#DC2626'};font-size:11px;font-weight:600;cursor:pointer;">${freigegeben?'✓ ':'🔒 '}${s.name.split(' ')[0]}</button>`;
+      });
+      html+=`</div></div>`;
+    });
+    html+='</div>';
+  }
 
   html+=`<div class="section-lbl">Bestellstatus</div><div class="card">`;
   storeList.forEach(s=>{
