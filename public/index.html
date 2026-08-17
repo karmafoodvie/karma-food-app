@@ -989,7 +989,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.52.0';
+const APP_VERSION = '6.53.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8498,7 +8498,9 @@ async function loadHygieneOrgList(storeList, defaultStoreFilter){
   });
   const ausgeschiedenMap=Object.fromEntries((ausgeschiedeneRaw||[]).map(a=>[a.name,a.ausgeschieden_am]));
   hsOrgData={byName, storeMap, ausgeschiedenMap};
-  const names=Object.keys(byName).sort();
+  // Nur aktive in der Auswahlliste — konsistent mit dem "nur aktive relevant"-Standard. Wer eine
+  // ausgeschiedene Person gezielt nachschlagen will, nutzt den Status-Filter "Alle" bzw. "Nur ausgeschiedene".
+  const names=Object.keys(byName).filter(n=>!ausgeschiedenMap[n]).sort();
 
   let html=`<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
     <select id="hs-filter-store" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;" data-no-translate>
@@ -8510,13 +8512,14 @@ async function loadHygieneOrgList(storeList, defaultStoreFilter){
       ${names.map(n=>`<option value="${n}">${n}</option>`).join('')}
     </select>
     <select id="hs-filter-status" onchange="renderHsFilteredTable()" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;box-sizing:border-box;">
-      <option value="">Alle Status</option>
+      <option value="aktiv">Nur aktive Mitarbeitende</option>
+      <option value="">Alle (inkl. ausgeschiedene)</option>
       <option value="ausstaendig">Nur ausständige</option>
       <option value="ausgeschieden">Nur ausgeschiedene</option>
     </select>
   </div>
   <div id="hs-table-body"></div>
-  <div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">Eine Schulung gilt genau 1 Jahr — danach automatisch "ausständig". Ausgeschiedene Mitarbeitende bekommen keine Erinnerungs-Mails mehr.</div>`;
+  <div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">Eine Schulung gilt genau 1 Jahr — danach automatisch "ausständig". Ausgeschiedene Mitarbeitende bekommen keine Erinnerungs-Mails mehr und sind standardmäßig ausgeblendet.</div>`;
 
   wrap.innerHTML=html;
   renderHsFilteredTable();
@@ -8528,15 +8531,17 @@ function renderHsFilteredTable(){
   const isOrg=currentStore?.id==='zentrale';
   const storeFilter=document.getElementById('hs-filter-store')?.value||'';
   const personFilter=document.getElementById('hs-filter-person')?.value||'';
-  const statusFilter=document.getElementById('hs-filter-status')?.value||'';
+  // Default beim ersten Laden ist "aktiv" (siehe <select> oben) — Ausgeschiedene sind erst sichtbar,
+  // wenn bewusst "Alle" oder "Nur ausgeschiedene" gewählt wird. Nur aktive sind für den Alltag relevant.
+  const statusFilter=document.getElementById('hs-filter-status')?.value??'aktiv';
   const cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-12); // Schulung ist genau 1 Jahr gültig
 
   let names=Object.keys(byName).sort();
   if(personFilter) names=names.filter(n=>n===personFilter);
   if(storeFilter) names=names.filter(n=>(byName[n].stores||'').split(',').map(x=>x.trim()).includes(storeFilter));
+  if(statusFilter==='aktiv') names=names.filter(n=>!ausgeschiedenMap[n]);
   if(statusFilter==='ausstaendig') names=names.filter(n=>new Date(byName[n].datum)<cutoff && !ausgeschiedenMap[n]);
   if(statusFilter==='ausgeschieden') names=names.filter(n=>ausgeschiedenMap[n]);
-  else if(!statusFilter) { /* Alle Status: ausgeschiedene bleiben sichtbar, nur anders markiert — Historie soll nicht verschwinden */ }
 
   const wrap=document.getElementById('hs-table-body');
   if(!wrap) return;
