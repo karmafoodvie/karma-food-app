@@ -987,7 +987,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.43.0';
+const APP_VERSION = '6.44.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1362,7 +1362,7 @@ async function loginAs(store){
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
     const orgViews=['management','maengel'];
-    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview'];
+    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
     goTo(allowedViews.includes(savedView)?savedView:'home');
@@ -11130,6 +11130,20 @@ async function renderKitchenDaily(){
     <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${woche}</span>
   </div>`;
   html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
+
+  // Start-/Ende-Schicht — bewusst KEINE eigene Kitchen-Logik gebaut, sondern die exakt gleichen
+  // generischen Store-Screens verlinkt, die auch Ausstellungsstraße & Co. nutzen (Wareneingang,
+  // Reinigung, Kühlung, HACCP, Übergabe-Notiz). Läuft automatisch korrekt für store_id='kitchen'.
+  html+=`<div style="display:flex;gap:8px;margin-bottom:14px;">
+    <div onclick="goTo('dailycheck')" style="flex:1;background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:center;">
+      <div style="font-size:20px;">🌅</div>
+      <div style="font-size:12px;font-weight:600;margin-top:2px;">Schicht starten</div>
+    </div>
+    <div onclick="goTo('schichtende')" style="flex:1;background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:center;">
+      <div style="font-size:20px;">🌙</div>
+      <div style="font-size:12px;font-weight:600;margin-top:2px;">Schicht beenden</div>
+    </div>
+  </div>`;
   html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ GERICHTE HEUTE</div>`;
 
   // Dish cards — klickbar mit Allergenen (gleich wie Store-Startseite)
