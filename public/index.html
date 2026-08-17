@@ -987,7 +987,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.40.0';
+const APP_VERSION = '6.42.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1024,7 +1024,7 @@ window.goToGuideEntry=goToGuideEntry;
 let clDone = {};
 let stockData = {};
 let activePackTab = 'transporter';
-let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'samosas' | 'beilagen' | 'info' | 'endkontrolle'
+let transporterSubTab = 'bestellliste'; // 'bestellliste' | 'inventur' | 'samosas' | 'beilagen' | 'info' | 'endkontrolle'
 let transporterInfoAutoShown = false; // einmal pro Sitzung automatisch auf Info springen, wenn was offen ist
 let transporterBestellDateOffset = 0; // 0=heute, -1=gestern, ... für Bestellliste-Verlauf
 function navBestellDate(delta){
@@ -2391,6 +2391,9 @@ async function computeAndSaveScore(storeId){
     ]);
     const haccp_done=(wek||[]).length>0 && (rein||[])[0]?.reinigung_erledigt && (rein||[])[0]?.desinfektion_erledigt && (kuehl||[]).length>0;
     const waste_total=(disposal||[]).reduce((s,d)=>s+(d.leftover_qty||0),0);
+    // Bestellte Menge des Tages — Basis, um Reste als % statt als nackte Zahl zu zeigen
+    // (eine kleine Filiale hat naturgemäß weniger Reste absolut, das ist sonst unfair verglichen).
+    const bestellt_total=(forecast||[]).reduce((s,f)=>s+(f.qty||0),0);
 
     // Streak: Vortag prüfen
     const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
@@ -2400,7 +2403,7 @@ async function computeAndSaveScore(storeId){
     const streak_haccp=haccp_done?(prevStreak+1):0;
 
     await api(`store_scores?store_id=eq.${storeId}&datum=eq.${today}`,{method:'DELETE'});
-    await api('store_scores',{method:'POST',body:JSON.stringify([{store_id:storeId,datum:today,streak_haccp,waste_total,schrittende_done:false}])});
+    await api('store_scores',{method:'POST',body:JSON.stringify([{store_id:storeId,datum:today,streak_haccp,waste_total,bestellt_total,schrittende_done:false}])});
   }catch(e){console.error('score error',e);}
 }
 
@@ -2412,19 +2415,30 @@ async function loadGamificationWidget(storeId){
     const [myScores, allStores, allScoresWeek] = await Promise.all([
       api(`store_scores?store_id=eq.${storeId}&datum=gte.${mondayStr}&order=datum.desc&select=*`).catch(()=>[]),
       api('stores?select=id,name&order=id').catch(()=>[]),
-      api(`store_scores?datum=gte.${mondayStr}&select=store_id,waste_total,streak_haccp`).catch(()=>[])
+      api(`store_scores?datum=gte.${mondayStr}&select=store_id,waste_total,bestellt_total,streak_haccp`).catch(()=>[])
     ]);
     const todayScore=(myScores||[]).find(s=>s.datum===today);
     const streak=todayScore?.streak_haccp||0;
     const storeList=(allStores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
 
-    // Waste-Rangliste diese Woche
-    const wasteByStore={};
+    // Waste-Rangliste diese Woche — als % der bestellten Menge, nicht als nackte Zahl. Sonst wirkt
+    // eine kleine Filiale (wenig Reste, aber auch wenig bestellt) unfair besser als sie eigentlich ist.
+    const wasteByStore={}, bestelltByStore={};
     (allScoresWeek||[]).forEach(s=>{
-      if(!wasteByStore[s.store_id]) wasteByStore[s.store_id]=0;
-      wasteByStore[s.store_id]+=(s.waste_total||0);
+      wasteByStore[s.store_id]=(wasteByStore[s.store_id]||0)+(s.waste_total||0);
+      bestelltByStore[s.store_id]=(bestelltByStore[s.store_id]||0)+(s.bestellt_total||0);
     });
-    const wasteSorted=storeList.map(s=>({...s,waste:wasteByStore[s.id]||0})).sort((a,b)=>a.waste-b.waste);
+    const wasteSorted=storeList.map(s=>{
+      const waste=wasteByStore[s.id]||0;
+      const bestellt=bestelltByStore[s.id]||0;
+      const pct = bestellt>0 ? (waste/bestellt*100) : null; // null = noch keine Basis (z.B. neue Filiale)
+      return {...s, waste, bestellt, pct};
+    }).sort((a,b)=>{
+      if(a.pct==null && b.pct==null) return 0;
+      if(a.pct==null) return 1;   // ohne Basis ans Ende, nicht fälschlich auf Platz 1
+      if(b.pct==null) return -1;
+      return a.pct-b.pct;
+    });
     const myRank=wasteSorted.findIndex(s=>s.id===storeId)+1;
 
     let html=`<div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:12px;padding:12px;margin-top:10px;">`;
@@ -2449,11 +2463,12 @@ async function loadGamificationWidget(storeId){
     wasteSorted.slice(0,4).forEach((s,i)=>{
       const isMe=s.id===storeId;
       const col=STORE_COLORS[s.id]||'#888';
+      const pctLabel = s.pct!=null ? `${s.pct.toFixed(1)}%` : '–';
       html+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;${i<wasteSorted.length-1?'border-bottom:0.5px solid var(--color-border-tertiary);':''}">
         <span style="font-size:12px;font-weight:500;color:var(--color-text-secondary);min-width:16px;">${i+1}</span>
         <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
         <span style="font-size:12px;flex:1;font-weight:${isMe?'500':'400'};color:${isMe?'var(--color-text-primary)':'var(--color-text-secondary)'};" data-no-translate>${s.name.split(' ')[0]}</span>
-        <span style="font-size:12px;color:var(--color-text-secondary);">${s.waste.toFixed(1)}</span>
+        <span style="font-size:12px;color:var(--color-text-secondary);">${pctLabel}</span>
       </div>`;
     });
     html+=`</div>`;
@@ -7800,10 +7815,14 @@ function renderZutatenForGericht(zutatenText, rezeptZutatenArr){
 }
 window.renderZutatenForGericht=renderZutatenForGericht;
 
-// Guess category of an ingredient from its name
+// Guess category of an ingredient from its name.
+// Gewürze-Check bewusst VOR Gemüse — sonst matcht "Paprikapulver" zuerst auf "paprika" (Gemüse)
+// und die genauere Gewürze-Regel kommt nie mehr zum Zug. Zusätzlich negative lookahead als
+// zweite Absicherung: "paprika" matcht NICHT, wenn direkt "pulver" folgt.
 function guessZutatKategorie(name){
   const n = name.toLowerCase();
-  if(/spinat|tomate|zwiebel|knoblauch|paprika|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|erbsen|mais|sellerie|karfiol/.test(n)) return 'Gemüse';
+  if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
+  if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|erbsen|mais|sellerie|karfiol/.test(n)) return 'Gemüse';
   if(/limett|zitronen|orange|mango|kokos|ananas|apfel/.test(n)) return 'Obst';
   if(/linsen|kichererbsen|bohnen|erbsen|tofu|tempeh/.test(n)) return 'Hülsenfrüchte';
   if(/petersilie|koriander|minze|basilikum|thymian|rosmarin|dill/.test(n)) return 'Kräuter';
@@ -9740,6 +9759,141 @@ async function nimmNachschubZurueck(articleId){
 }
 window.nimmNachschubZurueck=nimmNachschubZurueck;
 
+// ==== INVENTUR (wöchentliche Vollzählung Verbrauchsmaterial, Anfrage Simone 17.08.) ====
+// Anders als "Fast aus" (spontane Einzelmeldung) hier: einmal wöchentlich (Dienstag) der KOMPLETTE
+// IST-Bestand pro Filiale, damit Simone alles auf einen Blick sieht und sammelbestellen kann —
+// genau wie am Papier-Zettel. Nutzt bewusst dieselbe kc_stock-Tabelle wie Ines' Shop-Produkte
+// (Ressourcen nutzen), aber eine EIGENE Submission-Tabelle (inventur_submissions), damit sich das
+// nicht mit Ines' täglicher kc_submissions-Abgabe beißt.
+let inventurStoreTab = null;
+
+function istHeuteDienstag(){ return new Date().getDay()===2; }
+
+async function renderInventurBlock(storeList){
+  const isOrg = currentStore?.id==='zentrale';
+  const heute = new Date().toISOString().split('T')[0];
+  // Letzte Inventur je Filiale — für den Banner-Text und um zu wissen, ob diese Woche schon gezählt wurde
+  const subs = await api('inventur_submissions?select=store_id,submitted_date&order=submitted_date.desc').catch(()=>[]);
+  const letzteJeFiliale = {};
+  (subs||[]).forEach(s=>{ if(!letzteJeFiliale[s.store_id]) letzteJeFiliale[s.store_id]=s.submitted_date; });
+  const montagDieserWoche = (()=>{ const d=new Date(); const diff=(d.getDay()+6)%7; d.setDate(d.getDate()-diff); return d.toISOString().split('T')[0]; })();
+  const nochOffen = storeList.filter(s=>!letzteJeFiliale[s.id] || letzteJeFiliale[s.id] < montagDieserWoche);
+
+  const dienstag = istHeuteDienstag();
+  if(!dienstag && !nochOffen.length) return ''; // nichts Dringendes zu zeigen, Bestellliste bleibt aufgeräumt
+
+  const farbe = dienstag ? '#EA580C' : '#94A3B8';
+  const bg = dienstag ? '#FFF7ED' : '#F8FAFC';
+  const titel = dienstag ? '📋 Heute ist Dienstag — Inventur fällig' : '📋 Inventur diese Woche noch offen';
+  const unterzeile = nochOffen.length
+    ? `Noch offen: ${nochOffen.map(s=>s.name.split(' ')[0]).join(', ')}`
+    : '✓ Alle Filialen diese Woche schon gezählt';
+  return `<div style="background:${bg};border:1px solid ${farbe}40;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+    <div><div style="font-size:12.5px;font-weight:700;color:${farbe};">${titel}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px;">${unterzeile}</div></div>
+    <button onclick="switchTransporterSubTab('inventur')" style="background:${farbe};color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Zählen →</button>
+  </div>`;
+}
+
+async function updateIstBestandFuerFiliale(storeId, articleId, value){
+  const today=new Date().toISOString().split('T')[0];
+  const v=value===''?null:parseFloat(value);
+  try{
+    await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
+    if(v!==null){
+      await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:storeId,article_id:articleId,ist_bestand:v,updated_date:today}])});
+    }
+    showToast('✓ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.updateIstBestandFuerFiliale=updateIstBestandFuerFiliale;
+
+async function submitInventur(storeId){
+  const heute=new Date().toISOString().split('T')[0];
+  try{
+    await api('inventur_submissions',{method:'POST',body:JSON.stringify([{store_id:storeId, submitted_date:heute, submitted_by:(currentStore?.name||currentStore?.id||'Transporter')}])});
+    showToast('✓ Inventur für '+storeId+' gespeichert');
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.submitInventur=submitInventur;
+
+async function renderInventurTab(storeList){
+  const isOrg = currentStore?.id==='zentrale';
+  const items = articles.filter(a=>NACHSCHUB_CATS.includes(a.category));
+  const allIst = await api('kc_stock?select=store_id,article_id,ist_bestand,updated_date').catch(()=>[]);
+  const istMap={};
+  (allIst||[]).forEach(d=>{ if(!istMap[d.article_id]) istMap[d.article_id]={}; istMap[d.article_id][d.store_id]=d; });
+
+  if(isOrg){
+    // Simone-Ansicht: alle Filialen nebeneinander, SOLL−IST wie bei Shop Produkte — genau ihre Anfrage.
+    const subs = await api('inventur_submissions?select=store_id,submitted_date&order=submitted_date.desc').catch(()=>[]);
+    const letzteJeFiliale={};
+    (subs||[]).forEach(s=>{ if(!letzteJeFiliale[s.store_id]) letzteJeFiliale[s.store_id]=s.submitted_date; });
+    let html=`<div class="card" style="padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--muted);">Grüne Zahl antippen-Info entfällt hier — reine Übersicht. Negative Bestellung = Überbestand.</div>`;
+    html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">`;
+    storeList.forEach(s=>{
+      const datum=letzteJeFiliale[s.id];
+      const aktuell = datum && datum >= (()=>{ const d=new Date(); const diff=(d.getDay()+6)%7; d.setDate(d.getDate()-diff); return d.toISOString().split('T')[0]; })();
+      html+=`<div style="font-size:11px;padding:5px 9px;border-radius:7px;background:${aktuell?'#F0FDF4':'#FEE2E2'};color:${aktuell?'#15803D':'#B91C1C'};font-weight:600;" data-no-translate>${s.name.split(' ')[0]}: ${datum?new Date(datum).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'nie'}</div>`;
+    });
+    html+=`</div>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Artikel</th>${storeList.map(s=>`<th data-no-translate>${s.name.split(' ')[0]}</th>`).join('')}</tr></thead><tbody>`;
+    NACHSCHUB_CATS.forEach(cat=>{
+      const catItems=items.filter(a=>a.category===cat);
+      if(!catItems.length) return;
+      html+=`<tr><td colspan="${storeList.length+1}" style="background:var(--surface-1);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:5px 8px;">${cat}</td></tr>`;
+      catItems.forEach(a=>{
+        const soll=a.min_stock||0;
+        html+=`<tr><td style="font-size:12px;">${a.name}</td>`;
+        storeList.forEach(s=>{
+          const rec=(istMap[a.id]||{})[s.id];
+          const ist=rec?.ist_bestand;
+          const bedarf=(ist!=null)?(soll-ist):null;
+          const col=bedarf===null?'var(--muted)':bedarf>0?'#A32D2D':bedarf<0?'var(--muted)':'#3B6D11';
+          html+=`<td style="text-align:center;font-size:12px;font-weight:600;color:${col};">${bedarf===null?'·':(bedarf>0?'+':'')+bedarf}</td>`;
+        });
+        html+='</tr>';
+      });
+    });
+    html+='</tbody></table></div></div>';
+    return html;
+  }
+
+  // Transporter-Ansicht (Michi/Nooru): Filiale wählen, dann IST für diese Filiale komplett durchzählen.
+  if(!inventurStoreTab) inventurStoreTab=storeList[0]?.id;
+  let html=`<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;">`;
+  storeList.forEach(s=>{
+    const active=s.id===inventurStoreTab;
+    html+=`<button onclick="inventurStoreTab='${s.id}';renderPack();" style="flex-shrink:0;padding:8px 12px;border-radius:9px;border:1.5px solid ${active?'#EA580C':'var(--border)'};background:${active?'#EA580C':'#fff'};color:${active?'#fff':'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;" data-no-translate>${s.name.split(' ')[0]}</button>`;
+  });
+  html+=`</div>`;
+
+  const storeId=inventurStoreTab;
+  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Artikel</th><th>IST</th><th>SOLL</th><th>Bedarf</th></tr></thead><tbody>`;
+  NACHSCHUB_CATS.forEach(cat=>{
+    const catItems=items.filter(a=>a.category===cat);
+    if(!catItems.length) return;
+    html+=`<tr><td colspan="4" style="background:var(--surface-1);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:5px 8px;">${cat}</td></tr>`;
+    catItems.forEach(a=>{
+      const rec=(istMap[a.id]||{})[storeId];
+      const ist=rec?.ist_bestand ?? '';
+      const soll=a.min_stock||0;
+      const bedarf=(ist!=='' && ist!=null)?(soll-ist):null;
+      html+=`<tr>
+        <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
+        <td><input type="number" value="${ist}" oninput="debounceFieldSave(this,()=>updateIstBestandFuerFiliale('${storeId}',${a.id},this.value))" onchange="updateIstBestandFuerFiliale('${storeId}',${a.id},this.value)" style="width:48px;text-align:center;border:1.5px solid var(--border);border-radius:5px;font-size:12px;padding:5px;"></td>
+        <td style="color:var(--muted);text-align:center;">${soll}</td>
+        <td style="font-weight:600;text-align:center;color:${bedarf===null?'var(--muted)':bedarf>0?'#A32D2D':'#3B6D11'};">${bedarf===null?'·':bedarf}</td>
+      </tr>`;
+    });
+  });
+  html+='</tbody></table></div></div>';
+  const storeName=storeList.find(s=>s.id===storeId)?.name||storeId;
+  html+=`<button onclick="submitInventur('${storeId}')" style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:#EA580C;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">✓ Inventur für ${storeName.split(' ')[0]} abschließen</button>`;
+  return html;
+}
+
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -9767,10 +9921,22 @@ async function renderPack(){
   // Vier Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
+    {key:'inventur',     label:'📋 Inventur'},
     {key:'samosas',      label:'🥟 Samosas'},
     {key:'beilagen',     label:'🥗 Beilagen & Essen'},
     {key:'info',         label:`📋 Info${openTasksCount?` (${openTasksCount})`:''}`}
   ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
+
+  if(transporterSubTab==='bestellliste'){
+    html += await renderInventurBlock(storeList);
+  }
+
+  if(transporterSubTab==='inventur'){
+    html+=await renderInventurTab(storeList);
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   if(transporterSubTab==='info'){
     html+=await renderTransporterInfoTabHtml();
