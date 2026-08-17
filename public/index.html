@@ -90,8 +90,8 @@ summary::marker{content:'';}
 .section-banner{border-left:3px solid;border-radius:0 8px 8px 0;padding:8px 12px;margin:14px 0 6px;display:flex;align-items:center;gap:8px;}
 
 /* CHECKLIST */
-.cl-tabs{display:flex;gap:6px;margin-bottom:12px;}
-.cl-tab{flex:1;padding:9px 4px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:13px;font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.3;color:var(--sub);cursor:pointer;text-align:center;}
+.cl-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.cl-tab{flex:1 1 auto;min-width:72px;padding:7px 6px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-size:11.5px;font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.2px;line-height:1.25;color:var(--sub);cursor:pointer;text-align:center;}
 .cl-tab.active{background:var(--green);border:2px solid var(--green);color:#fff;}
 .cl-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;}
 .cl-item:last-child{border-bottom:none;}
@@ -222,6 +222,7 @@ summary::marker{content:'';}
     <div id="v-kitchen" class="view"></div>
     <div id="v-disposal" class="view"></div>
     <div id="v-kitchenDaily" class="view"></div>
+    <div id="v-kuechenlager" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
@@ -987,7 +988,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.46.0';
+const APP_VERSION = '6.48.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1363,7 +1364,7 @@ async function loginAs(store){
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
     const orgViews=['management','maengel'];
-    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order'];
+    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
     goTo(allowedViews.includes(savedView)?savedView:'home');
@@ -1452,7 +1453,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1461,7 +1462,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -3355,7 +3356,7 @@ function renderOrder(){
   const el=document.getElementById('v-order');
   // Forecast NICHT mehr als Tab hier — nur noch über die Leiste unten erreichbar, damit's dort
   // wirklich nur den Forecast gibt und sonst nichts (keine Verwechslung mit den anderen Bestell-Tabs).
-  const tabHtml=Object.entries(ORDER_TABS).filter(([k])=>k!=='forecast' && !(k==='transporter' && currentStore?.id==='kitchen')).map(([k,t])=>
+  const tabHtml=Object.entries(ORDER_TABS).filter(([k])=>k!=='forecast' && !(['transporter','kueche'].includes(k) && currentStore?.id==='kitchen')).map(([k,t])=>
     `<button onclick="switchOrderTab('${k}')" style="flex:1;padding:9px 4px;border:${activeOrderTab===k?`2px solid ${t.color}`:'1.5px solid var(--border)'};border-radius:10px;background:${activeOrderTab===k?t.color+'15':'var(--card)'};color:${activeOrderTab===k?t.color:'var(--sub)'};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:13px;line-height:1.3;cursor:pointer;">${t.label}</button>`
   ).join('');
 
@@ -5989,7 +5990,7 @@ async function loadOrgRolesRow(){
   const wrap=document.getElementById('org-roles-row');
   if(!wrap) return;
   const order=(currentStore?.id==='kitchen'?['kueche','kc','transporter','sweets']:['kueche','operations','kc','transporter','sweets']);
-  wrap.innerHTML=order.filter(k=>byKey[k]).map(k=>{
+  let rolesHtml=order.filter(k=>byKey[k]).map(k=>{
     const r=byKey[k];
     return `<div style="position:relative;">
       <button class="role-btn-color" onclick="orgRoleNav('${k}')" data-no-translate style="background:${r.color};">
@@ -5999,6 +6000,17 @@ async function loadOrgRolesRow(){
       <button onclick="editOrgRoleName(event,'${k}','${r.person_name.replace(/'/g,"\\'")}')" title="Namen ändern" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.25);border:none;border-radius:50%;width:26px;height:26px;color:#fff;cursor:pointer;font-size:12px;">✏️</button>
     </div>`;
   }).join('');
+  // "Daily" hat keine zugeordnete Person, deshalb als eigene Kachel direkt hier angehängt statt
+  // über org_roles — gleicher Stil, nur ohne Namens-Bearbeitung (nichts zum Umbenennen da).
+  if(currentStore?.id==='kitchen'){
+    rolesHtml=`<div>
+      <button class="role-btn-color" onclick="goTo('kitchenDaily')" style="background:#334155;">
+        <span class="role-btn-role">📅 Daily</span>
+        <span class="role-btn-name">Business</span>
+      </button>
+    </div>`+rolesHtml;
+  }
+  wrap.innerHTML=rolesHtml;
 }
 
 function orgRoleNav(key){
@@ -9896,6 +9908,56 @@ async function renderInventurTab(storeList){
   return html;
 }
 
+// ==== KÜCHENLAGER (zentrales Produktionslager, KEIN Filial-Split) ====
+// Anders als die Transporter-Bestellliste (pro Filiale) ist das hier EIN zentraler Bestand fürs
+// Küchenlager — 1:1 wie am Papier-Zettel, gruppiert nach Lieferant (FOODPACK/INVOLO/LASSI/BIKAPACK/
+// PACKARI/TRANSGOURMET/BIPA). Von Michi (Organisation-Login) und Nooru (Kitchen-Login) gemeinsam
+// gepflegt — deshalb ein einziger geteilter Bestand, keine Rollen-Unterscheidung nötig.
+const LIEFERANT_ORDER=['FOODPACK','INVOLO','LASSI','BIKAPACK','PACKARI','TRANSGOURMET','BIPA','Sonstiges'];
+
+async function renderKuechenlager(){
+  const el=document.getElementById('v-kuechenlager');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  const items=articles.filter(a=>a.category==='Kuechenlager');
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🏭','Küchenlager','Zentraler Bestand — kein Filial-Split, wie am Zettel','#0F766E');
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird um 15:00 automatisch an Simone gesammelt.</div>`;
+
+  LIEFERANT_ORDER.forEach(lief=>{
+    const liefItems=items.filter(a=>(a.lieferant||'Sonstiges')===lief).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    if(!liefItems.length) return;
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">${lief}</div>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th><th>Meldestand</th></tr></thead><tbody>`;
+    liefItems.forEach(a=>{
+      const bestand=a.kuechenlager_bestand;
+      const meldestand=a.min_stock||0;
+      const niedrig=(bestand!=null && bestand<=meldestand);
+      html+=`<tr style="${niedrig?'background:#FEF2F2;':''}">
+        <td style="font-size:12px;">${a.name} <span style="color:var(--muted);">(${a.unit||''})</span></td>
+        <td><input type="number" step="1" value="${bestand??''}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:56px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};"></td>
+        <td style="text-align:center;color:var(--muted);font-size:12px;">${meldestand}</td>
+      </tr>`;
+    });
+    html+='</tbody></table></div></div>';
+  });
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderKuechenlager=renderKuechenlager;
+
+async function updateKuechenlagerBestand(articleId, value){
+  const v=value===''?null:parseFloat(value);
+  try{
+    await api(`articles?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:v})});
+    const a=articles.find(x=>x.id===articleId);
+    if(a) a.kuechenlager_bestand=v; // lokal auch aktualisieren, für sofortiges rot/normal ohne Reload
+    showToast('✓ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.updateKuechenlagerBestand=updateKuechenlagerBestand;
+
 async function renderPack(){
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
@@ -9931,6 +9993,11 @@ async function renderPack(){
 
   if(transporterSubTab==='bestellliste'){
     html += await renderInventurBlock(storeList);
+    html += `<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 12px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:18px;">🏭</span>
+      <div><div style="font-size:12.5px;font-weight:700;color:#0F766E;">Küchenlager</div><div style="font-size:11px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
+      <span style="margin-left:auto;color:var(--muted);">→</span>
+    </div>`;
   }
 
   if(transporterSubTab==='inventur'){
@@ -10072,34 +10139,6 @@ async function renderPack(){
     html+='</div>';
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
-
-  // Zum Vergleich/Nachvollziehen: Bestellungen vom Tag DAVOR (also einen Tag vor bestellDateStr) —
-  // rein informativ, grau hinterlegt, nicht interaktiv. Aufgeklappt, wenn der aktuelle Tag leer ist
-  // (dann ist der Vergleich am wichtigsten), sonst eingeklappt, um nicht zu überladen. Hilft bei
-  // Nachfragen wie "wurde X wirklich bestellt?", ohne erst mehrfach "Vorheriger" klicken zu müssen.
-  const compareDate=new Date(orderEntryDate); compareDate.setDate(compareDate.getDate()-1);
-  const compareDateStr=compareDate.toISOString().split('T')[0];
-  const compareOrdRaw=await api(`orders?order_date=eq.${compareDateStr}&select=store_id,article_id,quantity`).catch(()=>[]);
-  const compareByStore={};
-  (compareOrdRaw||[]).filter(o=>o.quantity>0).forEach(o=>{
-    const artName=articles.find(a=>a.id===o.article_id)?.name;
-    if(!artName) return;
-    (compareByStore[o.store_id]=compareByStore[o.store_id]||[]).push({name:artName, qty:o.quantity});
-  });
-  const compareLabel=compareDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
-  const hasCompareData=Object.keys(compareByStore).length>0;
-  html+=`<details style="margin-top:14px;" ${!hasAny?'open':''}>
-    <summary style="font-size:12px;color:var(--muted);font-weight:600;cursor:pointer;padding:8px 10px;background:#F5F5F4;border-radius:8px;">📅 Zum Vergleich: Bestellungen vom ${compareLabel}</summary>
-    <div style="background:#FAFAF9;border-radius:0 0 10px 10px;margin-top:-4px;padding:10px 12px;">
-      ${hasCompareData
-        ? storeList.filter(s=>compareByStore[s.id]?.length).map(s=>`
-          <div style="margin-bottom:8px;">
-            <div style="font-size:11px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};margin-bottom:2px;" data-no-translate>${s.name.split(' ')[0]}</div>
-            ${compareByStore[s.id].map(it=>`<div style="font-size:12px;color:var(--muted);padding-left:8px;">${it.name}: <strong style="color:var(--sub);">${it.qty}</strong></div>`).join('')}
-          </div>`).join('')
-        : `<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0;">Keine Bestellungen an diesem Tag.</div>`}
-    </div>
-  </details>`;
 
   // Alle Transporter-Artikel — auch ohne heutige Bestellung, damit Lieferbarkeit VORAB gemeldet werden
   // kann (z.B. wenn Servietten leer sind, bevor überhaupt eine Filiale sie nachbestellt hat).
@@ -11172,6 +11211,13 @@ async function renderKitchenDaily(){
     </div>`;
   });
   html+='</div>';
+
+  // Küchenlager — zentraler Bestand (FOODPACK/INVOLO/etc.), von Michi & Nooru gemeinsam gepflegt.
+  html+=`<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🏭</span>
+    <div><div style="font-size:13px;font-weight:600;">Küchenlager</div><div style="font-size:11px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
 
   // Shop Produkte — eigene IST-Bestand-Eingabe wie bei einer normalen Filiale (Laurenzerberg etc.),
   // NICHT die Admin-Übersicht (die gibt's schon separat über "Ines"). Verpackungen/Transporterliste
@@ -12374,6 +12420,16 @@ async function submitNachschub(){
       message:`Nachschub-Anfrage aus der Küche:\n\nProdukt: ${produkt}\nFür Filialen: ${filialen||'—'}\nAnmerkung: ${notiz||'—'}\n\n`+new Date().toLocaleString('de-AT'),
       to_email:empfaenger
     });
+    // Zusätzlich zu Simone in Asana — läuft parallel, nicht als Ersatz für die E-Mail.
+    // Bewusst kein "await" vorm Fehler-Handling der E-Mail blockieren: eigener try/catch,
+    // damit ein Asana-Problem die (schon erfolgreich gesendete) E-Mail nicht als Fehler zeigt.
+    try{
+      await fetch(`${SUPABASE_URL}/functions/v1/asana-nachschub-anfrage`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({produkt, filialen, notiz})
+      });
+    }catch(asanaErr){ console.error('Asana-Nachschub-Task fehlgeschlagen (E-Mail wurde trotzdem versendet):', asanaErr); }
     showToast('✓ Nachschub-Anfrage gesendet!');
     ['nachschub-produkt','nachschub-filialen','nachschub-notiz'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen',true);}
