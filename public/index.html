@@ -990,7 +990,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.59.1';
+const APP_VERSION = '6.61.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9406,26 +9406,15 @@ async function sendMangelMeldung(){
     const newRows=await api('maengel',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf,faelligkeit_am:faelligkeitAm}])});
     const newMangelId=newRows?.[0]?.id||null;
     sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm, newMangelId); // nicht blockierend — Meldung ist bereits gespeichert
-    // Ab hier ist die Meldung sicher gespeichert — Formular leeren & Liste aktualisieren passiert
-    // JETZT, unabhängig davon ob der E-Mail-Versand gleich klappt oder nicht.
+    // Ab hier ist die Meldung sicher gespeichert — Formular leeren & Liste aktualisieren.
+    // Kein E-Mail-Versand mehr (18.08.26 auf Wunsch Tini entfernt) — Adi bekommt die Meldung
+    // ausschließlich per Asana-Push (siehe sendToAsana oben), das lief eh schon parallel zur Mail.
     document.getElementById('mangel-betreff').value='';
     document.getElementById('mangel-text').value='';
     if(storeSelect) storeSelect.value='';
     clearMangelFoto();
     renderMaengel();
-    try{
-      await emailjs.send('service_xla195w','template_9uiq1wf',{
-        name: targetStoreName+' — Schadensmeldung: '+betreff,
-        time: now,
-        message: text,
-        title: 'Karma Food Schadensmeldung',
-        to_email: 'tini@karmafood.at'
-      });
-      showToast('✓ Gemeldet & E-Mail verschickt!');
-    }catch(emailErr){
-      console.error('E-Mail-Versand fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', emailErr);
-      showToast('✓ Gemeldet — E-Mail-Versand hat aber nicht geklappt', true);
-    }
+    showToast('✓ Gemeldet');
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
   finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } hideSubmitOverlay(); }
 }
@@ -11559,51 +11548,28 @@ async function renderKitchenDaily(){
   });
   html+='</div>';
 
-  // Grundreinigung — Everton reinigt die Stores, nicht Kitchen selbst. Datensatz gehört der
-  // jeweiligen Filiale, Kitchen ist nur der Ausgangspunkt zum Eintragen.
-  html+=`<div onclick="goTo('grundreinigung')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">🧹</span>
-    <div><div style="font-size:13px;font-weight:600;">Grundreinigung</div><div style="font-size:11px;color:var(--muted);">Fällige Stores & Checkliste eintragen</div></div>
-    <span style="margin-left:auto;color:var(--muted);">→</span>
-  </div>`;
-
-  // Stadtgemeinde-Zahlungen (18.08.26 von der Everton-Kachel hierher verschoben, macht dort thematisch mehr Sinn).
-  html+=`<div onclick="goTo('stadtgemeinde')" style="background:#ECFDF5;border:0.5px solid #05966940;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">🏛️</span>
-    <div><div style="font-size:13px;font-weight:600;">Stadtgemeinde</div><div style="font-size:11px;color:var(--muted);">Zahlungen erfassen & Übersicht</div></div>
-    <span style="margin-left:auto;color:var(--muted);">→</span>
-  </div>`;
-
-  // Küchenlager — zentraler Bestand (FOODPACK/INVOLO/etc.), von Michi & Nooru gemeinsam gepflegt.
-  html+=`<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">🏭</span>
-    <div><div style="font-size:13px;font-weight:600;">Küchenlager</div><div style="font-size:11px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
-    <span style="margin-left:auto;color:var(--muted);">→</span>
-  </div>`;
-
-  // Shop Produkte — eigene IST-Bestand-Eingabe wie bei einer normalen Filiale (Laurenzerberg etc.),
-  // NICHT die Admin-Übersicht (die gibt's schon separat über "Ines"). Verpackungen/Transporterliste
-  // bewusst NICHT dabei — das regelt Kitchen selbst vor Ort.
-  html+=`<div onclick="goToReminder('order','kc')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">🛍️</span>
-    <div><div style="font-size:13px;font-weight:600;">Shop Produkte bestellen</div><div style="font-size:11px;color:var(--muted);">IST-Bestand eintragen, wie bei den Filialen</div></div>
-    <span style="margin-left:auto;color:var(--muted);">→</span>
-  </div>`;
-
-  // Forecast — derselbe echte Store-Forecast-Screen wie bei Laurenzerberg & Co. (Wochenmengen +
-  // Rückblick, was tatsächlich verwendet wurde). Keine eigene Logik, nur verlinkt.
-  html+=`<div onclick="goToReminder('order','forecast')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">📅</span>
-    <div><div style="font-size:13px;font-weight:600;">Forecast</div><div style="font-size:11px;color:var(--muted);">Wochenmengen & was verwendet wurde</div></div>
-    <span style="margin-left:auto;color:var(--muted);">→</span>
-  </div>`;
-
-  // Entsorgung shortcut
-  html+=`<div onclick="goTo('disposal')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-    <span style="font-size:20px;">🗑️</span>
-    <div><div style="font-size:13px;font-weight:600;">Entsorgung / Food Waste</div><div style="font-size:11px;color:var(--muted);">Restmengen eintragen</div></div>
-    <span style="margin-left:auto;color:var(--muted);">→</span>
-  </div>`;
+  // Bereiche — als eine gemeinsame Liste statt sechs einzeln eingefärbter Boxen (18.08.26: an das
+  // UX-Muster der normalen Store-Startseite angeglichen, siehe dort der "Guide"-Button bzw. die
+  // Links-Liste im Onboarding — neutrale item-rows in einer Karte statt bunter Einzelkacheln).
+  html+=`<div class="section-lbl" style="margin-top:4px;">🔗 Bereiche</div><div class="card">`;
+  const kdLinks=[
+    {icon:'🧹', label:'Grundreinigung', sub:'Fällige Stores & Checkliste eintragen', action:"goTo('grundreinigung')"},
+    {icon:'🏛️', label:'Stadtgemeinde', sub:'Zahlungen erfassen & Übersicht', action:"goTo('stadtgemeinde')"},
+    {icon:'🏭', label:'Küchenlager', sub:'Zentraler Bestand — FOODPACK, INVOLO & Co.', action:"goTo('kuechenlager')"},
+    {icon:'🛍️', label:'Shop Produkte bestellen', sub:'IST-Bestand eintragen, wie bei den Filialen', action:"goToReminder('order','kc')"},
+    {icon:'📅', label:'Forecast', sub:'Wochenmengen & was verwendet wurde', action:"goToReminder('order','forecast')"},
+    {icon:'🗑️', label:'Entsorgung / Food Waste', sub:'Restmengen eintragen', action:"goTo('disposal')"},
+  ];
+  kdLinks.forEach(l=>{
+    html+=`<div class="item-row" onclick="${l.action}" style="cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:17px;">${l.icon}</span>
+        <div><div class="item-name" style="font-weight:500;">${l.label}</div><div class="item-unit">${l.sub}</div></div>
+      </div>
+      <span style="color:var(--muted);">→</span>
+    </div>`;
+  });
+  html+='</div>';
 
   // Mengen heute pro Store
   const todayFc=await api(`forecast_qty?forecast_date=eq.${todayDate}&select=store_id,dish_name,qty,groesse`).catch(()=>[]);
