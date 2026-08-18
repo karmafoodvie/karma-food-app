@@ -224,6 +224,7 @@ summary::marker{content:'';}
     <div id="v-kitchenDaily" class="view"></div>
     <div id="v-kuechenlager" class="view"></div>
     <div id="v-grundreinigung" class="view"></div>
+    <div id="v-stadtgemeinde" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
@@ -989,7 +990,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.53.0';
+const APP_VERSION = '6.59.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1463,7 +1464,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -2466,12 +2467,14 @@ async function loadGamificationWidget(storeId){
     wasteSorted.slice(0,4).forEach((s,i)=>{
       const isMe=s.id===storeId;
       const col=STORE_COLORS[s.id]||'#888';
-      const pctLabel = s.pct!=null ? `${s.pct.toFixed(1)}%` : '–';
+      // Absolute Portionen als Hauptwert (das versteht jede Filiale sofort), % nur als
+      // kleiner Zusatz, damit der Vergleich zwischen groß/klein trotzdem fair bleibt.
+      const pctLabel = s.pct!=null ? `${s.pct.toFixed(1)}%` : '';
       html+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;${i<wasteSorted.length-1?'border-bottom:0.5px solid var(--color-border-tertiary);':''}">
         <span style="font-size:12px;font-weight:500;color:var(--color-text-secondary);min-width:16px;">${i+1}</span>
         <span style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></span>
         <span style="font-size:12px;flex:1;font-weight:${isMe?'500':'400'};color:${isMe?'var(--color-text-primary)':'var(--color-text-secondary)'};" data-no-translate>${s.name.split(' ')[0]}</span>
-        <span style="font-size:12px;color:var(--color-text-secondary);">${pctLabel}</span>
+        <span style="font-size:12px;color:var(--color-text-primary);font-weight:500;white-space:nowrap;">${s.waste} Port.${pctLabel?`<span style="font-size:10.5px;color:var(--color-text-secondary);font-weight:400;margin-left:4px;">${pctLabel}</span>`:''}</span>
       </div>`;
     });
     html+=`</div>`;
@@ -6011,16 +6014,9 @@ async function loadOrgRolesRow(){
       </button>
     </div>`+rolesHtml;
   }
-  // Organisation bekommt hier direkt einen Sprung zur Grundreinigungs-Übersicht (nur Lesen —
-  // eintragen kann nur Kitchen/Everton, siehe renderGrundreinigung).
-  if(currentStore?.id==='zentrale'){
-    rolesHtml+=`<div>
-      <button class="role-btn-color" onclick="goTo('grundreinigung')" style="background:#0F766E;">
-        <span class="role-btn-role">🧹 Grundreinigung</span>
-        <span class="role-btn-name">Übersicht — alle Filialen</span>
-      </button>
-    </div>`;
-  }
+  // Grundreinigung (18.08.26): kein eigener Button mehr hier — läuft jetzt als Tab innerhalb
+  // der "Everton"-Kachel (vormals Sweets/Team), da Organisation dieselbe Kachel ebenfalls sieht
+  // und darüber weiterhin read-only Zugriff hat.
   wrap.innerHTML=rolesHtml;
 }
 
@@ -10082,10 +10078,11 @@ async function renderInventurTab(storeList){
 
 // ==== KÜCHENLAGER (zentrales Produktionslager, KEIN Filial-Split) ====
 // Anders als die Transporter-Bestellliste (pro Filiale) ist das hier EIN zentraler Bestand fürs
-// Küchenlager — 1:1 wie am Papier-Zettel, gruppiert nach Lieferant (FOODPACK/INVOLO/LASSI/BIKAPACK/
-// PACKARI/TRANSGOURMET/BIPA). Von Michi (Organisation-Login) und Nooru (Kitchen-Login) gemeinsam
+// Küchenlager — 1:1 wie am Papier-Zettel, gruppiert nach Lieferant (FOODPACK/INVOLO/Reinigung/
+// SCHRANKERL/BIPA/Sonstiges — Reinigung & SCHRANKERL 18.08.26 als eigene Gruppen ausgegliedert).
+// Von Michi (Organisation-Login) und Nooru (Kitchen-Login) gemeinsam
 // gepflegt — deshalb ein einziger geteilter Bestand, keine Rollen-Unterscheidung nötig.
-const LIEFERANT_ORDER=['FOODPACK','INVOLO','LASSI','BIKAPACK','PACKARI','TRANSGOURMET','BIPA','Sonstiges'];
+const LIEFERANT_ORDER=['FOODPACK','INVOLO','Reinigung','SCHRANKERL','BIPA','Sonstiges'];
 
 // ==== GRUNDREINIGUNG (Tiefenreinigung Stores, Everton via Kitchen) ====
 // Bewusst NICHT ortsgebunden bei Kitchen verankert, sondern der Datensatz gehört der jeweiligen
@@ -10136,12 +10133,8 @@ const GRUNDREINIGUNG_ITEMS = {
 };
 let grundreinigungChecked=new Set();
 
-async function renderGrundreinigung(){
-  const el=document.getElementById('v-grundreinigung');
-  const isOrg=currentStore?.id==='zentrale';
+async function grundreinigungBodyHtml(){
   const isKitchen=currentStore?.id==='kitchen';
-  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
-
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=stores.filter(s=>!['zentrale','kitchen','1070'].includes(s.id));
   const alleEintraege=await api('grundreinigung_eintraege?select=*&order=datum.desc').catch(()=>[]);
@@ -10152,9 +10145,7 @@ async function renderGrundreinigung(){
     anzahlJeFiliale[e.store_id]=(anzahlJeFiliale[e.store_id]||0)+1;
   });
 
-  let html=backToHomeHtml();
-  html+=pageHeaderHtml('🧹','Grundreinigung','Tiefenreinigung Stores — Fälligkeit alle 21 Tage','#0F766E');
-  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+  let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Filiale</th><th>Zuletzt</th><th>Tage her</th><th>Anzahl gesamt</th>${isKitchen?'<th></th>':''}
   </tr></thead><tbody>`;
   // Nach Dringlichkeit sortiert — am längsten überfällige zuerst, das IST der Putzplan-Hinweis:
@@ -10183,6 +10174,16 @@ async function renderGrundreinigung(){
   html+=`<div style="font-size:10.5px;color:var(--muted);padding:6px 2px;">⚠️ = über ${GRUNDREINIGUNG_TAGE_FAELLIG} Tage seit letzter Grundreinigung. Am längsten überfällige Filiale steht oben.</div>`;
 
   html+=`<div id="grundreinigung-form-wrap" style="margin-top:14px;"></div>`;
+  return html;
+}
+
+async function renderGrundreinigung(){
+  const el=document.getElementById('v-grundreinigung');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🧹','Grundreinigung','Tiefenreinigung Stores — Fälligkeit alle 21 Tage','#0F766E');
+  html+=await grundreinigungBodyHtml();
 
   el.innerHTML=html;
   translateEl(el);
@@ -10252,19 +10253,22 @@ async function submitGrundreinigung(storeId){
     }])});
     showToast('✓ Grundreinigung eingetragen');
     document.getElementById('grundreinigung-form-wrap').innerHTML='';
-    renderGrundreinigung();
+    // Je nachdem ob über die Standalone-Seite oder den Grundreinigung-Tab in Sweets eingetragen
+    // wurde, muss die jeweils sichtbare Ansicht neu gerendert werden (18.08.26: vorher rief das
+    // immer renderGrundreinigung() auf, das lief bei Aufruf aus dem Sweets-Tab ins Leere, weil
+    // #v-grundreinigung dort gar nicht sichtbar ist).
+    if(currentView==='sweets') renderSweets(); else renderGrundreinigung();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.submitGrundreinigung=submitGrundreinigung;
 
-async function renderKuechenlager(){
-  const el=document.getElementById('v-kuechenlager');
-  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+// Gemeinsame Körper-HTML für den zentralen Küchenlager-Bestand — wird sowohl von der eigenständigen
+// Küchenlager-Seite als auch direkt im "Küchenlager"-Reiter des Transporters verwendet (18.08.26:
+// vorher zwei getrennte Zugänge — Reiter hieß "Inventur" und zeigte eine nie genutzte
+// Filial-Zähl-Funktion; das gibt es laut Tini gar nicht, daher hier zusammengelegt).
+async function kuechenlagerBodyHtml(){
   const items=articles.filter(a=>a.category==='Kuechenlager');
-
-  let html=backToHomeHtml();
-  html+=pageHeaderHtml('🏭','Küchenlager','Zentraler Bestand — kein Filial-Split, wie am Zettel','#0F766E');
-  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird um 15:00 automatisch an Simone gesammelt.</div>`;
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird um 15:00 automatisch an Simone gesammelt.</div>`;
 
   LIEFERANT_ORDER.forEach(lief=>{
     const liefItems=items.filter(a=>(a.lieferant||'Sonstiges')===lief).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
@@ -10283,6 +10287,16 @@ async function renderKuechenlager(){
     });
     html+='</tbody></table></div></div>';
   });
+  return html;
+}
+
+async function renderKuechenlager(){
+  const el=document.getElementById('v-kuechenlager');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🏭','Küchenlager','Zentraler Bestand — kein Filial-Split, wie am Zettel','#0F766E');
+  html+=await kuechenlagerBodyHtml();
 
   el.innerHTML=html;
   translateEl(el);
@@ -10327,23 +10341,14 @@ async function renderPack(){
   // Vier Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
-    {key:'inventur',     label:'📋 Inventur'},
+    {key:'inventur',     label:'📋 Inventur Kitchen'},
     {key:'samosas',      label:'🥟 Samosas'},
     {key:'beilagen',     label:'🥗 Beilagen & Essen'},
     {key:'info',         label:`📋 Info${openTasksCount?` (${openTasksCount})`:''}`}
   ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
 
-  if(transporterSubTab==='bestellliste'){
-    html += await renderInventurBlock(storeList);
-    html += `<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 12px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:18px;">🏭</span>
-      <div><div style="font-size:12.5px;font-weight:700;color:#0F766E;">Küchenlager</div><div style="font-size:11px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
-      <span style="margin-left:auto;color:var(--muted);">→</span>
-    </div>`;
-  }
-
   if(transporterSubTab==='inventur'){
-    html+=await renderInventurTab(storeList);
+    html+=await kuechenlagerBodyHtml();
     el.innerHTML=html;
     translateEl(el);
     return;
@@ -11562,6 +11567,13 @@ async function renderKitchenDaily(){
     <span style="margin-left:auto;color:var(--muted);">→</span>
   </div>`;
 
+  // Stadtgemeinde-Zahlungen (18.08.26 von der Everton-Kachel hierher verschoben, macht dort thematisch mehr Sinn).
+  html+=`<div onclick="goTo('stadtgemeinde')" style="background:#ECFDF5;border:0.5px solid #05966940;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:20px;">🏛️</span>
+    <div><div style="font-size:13px;font-weight:600;">Stadtgemeinde</div><div style="font-size:11px;color:var(--muted);">Zahlungen erfassen & Übersicht</div></div>
+    <span style="margin-left:auto;color:var(--muted);">→</span>
+  </div>`;
+
   // Küchenlager — zentraler Bestand (FOODPACK/INVOLO/etc.), von Michi & Nooru gemeinsam gepflegt.
   html+=`<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
     <span style="font-size:20px;">🏭</span>
@@ -12676,7 +12688,7 @@ async function addStadtgemeindeZahlung(){
   try{
     await api('stadtgemeinde_zahlungen',{method:'POST',body:JSON.stringify([{datum,sodexo_pluxee:sodexo,cash}])});
     showToast('✓ Gespeichert');
-    renderSweets();
+    renderStadtgemeinde();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.addStadtgemeindeZahlung=addStadtgemeindeZahlung;
@@ -12685,7 +12697,7 @@ async function deleteStadtgemeindeZahlung(id){
   if(!confirm('Diesen Eintrag wirklich löschen?')) return;
   try{
     await api(`stadtgemeinde_zahlungen?id=eq.${id}`,{method:'DELETE'});
-    renderSweets();
+    renderStadtgemeinde();
   }catch(e){console.error(e);showToast('Fehler beim Löschen: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.deleteStadtgemeindeZahlung=deleteStadtgemeindeZahlung;
@@ -12800,15 +12812,85 @@ async function toggleArtikelFreigabe(articleId, storeId, currentlyFreigegeben){
 }
 window.toggleArtikelFreigabe=toggleArtikelFreigabe;
 
+async function stadtgemeindeBodyHtml(){
+  const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
+  let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
+  // Neuer Eintrag
+  const heute=new Date().toISOString().split('T')[0];
+  html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neue Zahlung</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:110px;">
+        <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Datum</label>
+        <input type="date" id="sg-datum" value="${heute}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+      </div>
+      <div style="flex:1;min-width:90px;">
+        <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Sodexo/Pluxee €</label>
+        <input type="number" step="0.5" id="sg-sodexo" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+      </div>
+      <div style="flex:1;min-width:90px;">
+        <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Cash €</label>
+        <input type="number" step="0.5" id="sg-cash" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+      </div>
+    </div>
+    <button onclick="addStadtgemeindeZahlung()" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern ✓</button>
+  </div>`;
+
+  // Nach Monat gruppieren, wie im Sheet — neuester Monat zuerst
+  const byMonat={};
+  (rows||[]).forEach(r=>{
+    const m=r.datum.slice(0,7); // YYYY-MM
+    if(!byMonat[m]) byMonat[m]=[];
+    byMonat[m].push(r);
+  });
+  const monate=Object.keys(byMonat).sort().reverse();
+  if(!monate.length){
+    html+=`<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Noch keine Einträge.</div>`;
+  }
+  monate.forEach(m=>{
+    const einträge=byMonat[m].sort((a,b)=>b.datum.localeCompare(a.datum));
+    const monatLabel=new Date(m+'-01').toLocaleDateString('de-AT',{month:'long',year:'numeric'});
+    const monatSumme=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;">${monatLabel} — Σ €${monatSumme.toFixed(2)}</div>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Datum</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
+    </tr></thead><tbody>`;
+    einträge.forEach(r=>{
+      const total=(r.sodexo_pluxee||0)+(r.cash||0);
+      const dl=new Date(r.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      html+=`<tr>
+        <td style="font-size:12px;">${dl}</td>
+        <td style="text-align:center;font-size:12px;">€${(r.sodexo_pluxee||0).toFixed(2)}</td>
+        <td style="text-align:center;font-size:12px;">€${(r.cash||0).toFixed(2)}</td>
+        <td style="text-align:center;font-size:12px;font-weight:700;color:#059669;">€${total.toFixed(2)}</td>
+        <td style="text-align:center;"><button onclick="deleteStadtgemeindeZahlung(${r.id})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:13px;">🗑</button></td>
+      </tr>`;
+    });
+    html+='</tbody></table></div></div>';
+  });
+  return html;
+}
+
+async function renderStadtgemeinde(){
+  const el=document.getElementById('v-stadtgemeinde');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🏛️','Stadtgemeinde','Zahlungen — ersetzt die Google-Tabelle','#059669');
+  html+=await stadtgemeindeBodyHtml();
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderStadtgemeinde=renderStadtgemeinde;
+
 async function renderSweets(){
   const el=document.getElementById('v-sweets');
-  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C', stadtgemeinde:'#059669'};
+  const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C', stadtgemeinde:'#059669', grundreinigung:'#0F766E'};
   const ttab=(key,label)=>{
     const active=teamTab===key;
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('stadtgemeinde','🏛️ Stadtgemeinde')}${ttab('produktion','🫖 Produktion')}${ttab('bestellen','📦 Bestellen')}${ttab('nachschub','⚠️ Nachschub')}</div>`;
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Rezepte')}${ttab('grundreinigung','🧹 Grundreinigung')}${ttab('bestellen','📦 Bestellen')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   // WICHTIG (korrigiert): Anders als beim Transporter packt das Sweets-Team AM SELBEN TAG ein
@@ -12830,62 +12912,9 @@ async function renderSweets(){
 
   let html=tabsHtml;
 
-  if(teamTab==='stadtgemeinde'){
-    const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
-    html+=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
-    // Neuer Eintrag
-    const heute=new Date().toISOString().split('T')[0];
-    html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neue Zahlung</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:110px;">
-          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Datum</label>
-          <input type="date" id="sg-datum" value="${heute}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
-        </div>
-        <div style="flex:1;min-width:90px;">
-          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Sodexo/Pluxee €</label>
-          <input type="number" step="0.5" id="sg-sodexo" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
-        </div>
-        <div style="flex:1;min-width:90px;">
-          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Cash €</label>
-          <input type="number" step="0.5" id="sg-cash" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
-        </div>
-      </div>
-      <button onclick="addStadtgemeindeZahlung()" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern ✓</button>
-    </div>`;
-
-    // Nach Monat gruppieren, wie im Sheet — neuester Monat zuerst
-    const byMonat={};
-    (rows||[]).forEach(r=>{
-      const m=r.datum.slice(0,7); // YYYY-MM
-      if(!byMonat[m]) byMonat[m]=[];
-      byMonat[m].push(r);
-    });
-    const monate=Object.keys(byMonat).sort().reverse();
-    if(!monate.length){
-      html+=`<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Noch keine Einträge.</div>`;
-    }
-    monate.forEach(m=>{
-      const einträge=byMonat[m].sort((a,b)=>b.datum.localeCompare(a.datum));
-      const monatLabel=new Date(m+'-01').toLocaleDateString('de-AT',{month:'long',year:'numeric'});
-      const monatSumme=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
-      html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;">${monatLabel} — Σ €${monatSumme.toFixed(2)}</div>`;
-      html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
-        <th style="text-align:left;">Datum</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
-      </tr></thead><tbody>`;
-      einträge.forEach(r=>{
-        const total=(r.sodexo_pluxee||0)+(r.cash||0);
-        const dl=new Date(r.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-        html+=`<tr>
-          <td style="font-size:12px;">${dl}</td>
-          <td style="text-align:center;font-size:12px;">€${(r.sodexo_pluxee||0).toFixed(2)}</td>
-          <td style="text-align:center;font-size:12px;">€${(r.cash||0).toFixed(2)}</td>
-          <td style="text-align:center;font-size:12px;font-weight:700;color:#059669;">€${total.toFixed(2)}</td>
-          <td style="text-align:center;"><button onclick="deleteStadtgemeindeZahlung(${r.id})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:13px;">🗑</button></td>
-        </tr>`;
-      });
-      html+='</tbody></table></div></div>';
-    });
+  if(teamTab==='grundreinigung'){
+    html+=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Tiefenreinigung Stores — Fälligkeit alle ${GRUNDREINIGUNG_TAGE_FAELLIG} Tage.</div>`;
+    html+=await grundreinigungBodyHtml();
     el.innerHTML=html;
     translateEl(el);
     return;
@@ -12950,15 +12979,10 @@ async function renderSweets(){
         </div>
         <button class="submit-btn" style="background:#A855F7;" onclick="submitKitchenKC()">Shop Produkte abschicken ✓</button>`;
     }
-    el.innerHTML=html;
-    translateEl(el);
-    return;
-  }
 
-  // ── NACHSCHUB — Engpassmeldung: ein Produkt ist für die Shops ausgegangen (z.B. Kuchen) und muss
-  // gesamt nachbestellt werden. Löst eine Mail an die Bestellperson aus (Empfänger noch offen).
-  if(teamTab==='nachschub'){
-    html+=`<div class="section-banner" style="background:#EA580C12;border-left-color:#EA580C;margin-top:10px;">
+    // ── NACHSCHUB — jetzt gebündelt im selben Tab (18.08.26), da beides "etwas bestellen"
+    // ist: Engpassmeldung, wenn ein Produkt für die Shops komplett ausgegangen ist.
+    html+=`<div class="section-banner" style="background:#EA580C12;border-left-color:#EA580C;margin-top:20px;">
       <span style="font-size:18px;">⚠️</span>
       <div><div style="font-size:12px;font-weight:600;color:#EA580C;">Nachschub anfordern</div>
       <div style="font-size:10px;color:var(--muted);">Wenn ein Produkt für die Shops ausgegangen ist</div></div>
@@ -12973,11 +12997,11 @@ async function renderSweets(){
       <button onclick="submitNachschub()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#EA580C;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">⚠️ Nachschub-Anfrage senden</button>
       <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:8px;">Geht per Mail an die zuständige Bestellperson.</div>
     </div>`;
+
     el.innerHTML=html;
     translateEl(el);
     return;
   }
-
 
   if(currentStore?.id==='zentrale'){
     html+=`<div class="section-lbl" style="margin-top:10px;">🚫 Verfügbarkeit</div>
