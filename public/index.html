@@ -989,7 +989,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.56.0';
+const APP_VERSION = '6.57.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10260,14 +10260,13 @@ async function submitGrundreinigung(storeId){
 }
 window.submitGrundreinigung=submitGrundreinigung;
 
-async function renderKuechenlager(){
-  const el=document.getElementById('v-kuechenlager');
-  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+// Gemeinsame Körper-HTML für den zentralen Küchenlager-Bestand — wird sowohl von der eigenständigen
+// Küchenlager-Seite als auch direkt im "Küchenlager"-Reiter des Transporters verwendet (18.08.26:
+// vorher zwei getrennte Zugänge — Reiter hieß "Inventur" und zeigte eine nie genutzte
+// Filial-Zähl-Funktion; das gibt es laut Tini gar nicht, daher hier zusammengelegt).
+async function kuechenlagerBodyHtml(){
   const items=articles.filter(a=>a.category==='Kuechenlager');
-
-  let html=backToHomeHtml();
-  html+=pageHeaderHtml('🏭','Küchenlager','Zentraler Bestand — kein Filial-Split, wie am Zettel','#0F766E');
-  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird um 15:00 automatisch an Simone gesammelt.</div>`;
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird um 15:00 automatisch an Simone gesammelt.</div>`;
 
   LIEFERANT_ORDER.forEach(lief=>{
     const liefItems=items.filter(a=>(a.lieferant||'Sonstiges')===lief).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
@@ -10286,6 +10285,16 @@ async function renderKuechenlager(){
     });
     html+='</tbody></table></div></div>';
   });
+  return html;
+}
+
+async function renderKuechenlager(){
+  const el=document.getElementById('v-kuechenlager');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🏭','Küchenlager','Zentraler Bestand — kein Filial-Split, wie am Zettel','#0F766E');
+  html+=await kuechenlagerBodyHtml();
 
   el.innerHTML=html;
   translateEl(el);
@@ -10330,23 +10339,14 @@ async function renderPack(){
   // Vier Tabs — Boldonse via tabBarHtml helper
   html+=tabBarHtml([
     {key:'bestellliste', label:'📦 Bestellliste'},
-    {key:'inventur',     label:'📋 Inventur'},
+    {key:'inventur',     label:'📋 Inventur Kitchen'},
     {key:'samosas',      label:'🥟 Samosas'},
     {key:'beilagen',     label:'🥗 Beilagen & Essen'},
     {key:'info',         label:`📋 Info${openTasksCount?` (${openTasksCount})`:''}`}
   ], transporterSubTab, 'switchTransporterSubTab', '#F97316');
 
-  if(transporterSubTab==='bestellliste'){
-    html += await renderInventurBlock(storeList);
-    html += `<div onclick="goTo('kuechenlager')" style="background:#F0FDFA;border:0.5px solid #0F766E40;border-radius:10px;padding:10px 12px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:10px;">
-      <span style="font-size:18px;">🏭</span>
-      <div><div style="font-size:12.5px;font-weight:700;color:#0F766E;">Küchenlager</div><div style="font-size:11px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
-      <span style="margin-left:auto;color:var(--muted);">→</span>
-    </div>`;
-  }
-
   if(transporterSubTab==='inventur'){
-    html+=await renderInventurTab(storeList);
+    html+=await kuechenlagerBodyHtml();
     el.innerHTML=html;
     translateEl(el);
     return;
