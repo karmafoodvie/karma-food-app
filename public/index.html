@@ -990,7 +990,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.61.0';
+const APP_VERSION = '6.62.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9356,10 +9356,13 @@ async function sendToAsana(betreff, beschreibung, storeName, gemeldetVon, fotoUr
     const json=await res.json().catch(()=>null);
     // Asana-Task-ID am Meldungs-Eintrag hinterlegen — Grundlage für den späteren "Asana-Updates
     // holen"-Knopf (Kommentare & Erledigt-Status zurückholen).
-    if(json?.task_gid && mangelId){
+    if(res.ok && json?.task_gid && mangelId){
       await api(`maengel?id=eq.${mangelId}`,{method:'PATCH',body:JSON.stringify({asana_task_gid:json.task_gid})}).catch(e=>console.error('Asana-Task-ID speichern fehlgeschlagen:',e));
+      return true;
     }
-  }catch(e){ console.error('Asana-Weiterleitung fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', e); }
+    console.error('Asana-Push ohne gültige task_gid zurückbekommen:', json);
+    return false;
+  }catch(e){ console.error('Asana-Weiterleitung fehlgeschlagen (Meldung selbst ist trotzdem gespeichert):', e); return false; }
 }
 
 async function sendMangelMeldung(){
@@ -9405,16 +9408,18 @@ async function sendMangelMeldung(){
     // Ergebnis: Doppel-Meldungen, weil Leute (verständlicherweise) nochmal draufgetippt haben.
     const newRows=await api('maengel',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify([{store_id:targetStoreId,betreff,beschreibung:text,gemeldet_von:gemeldetVon,status:'offen',foto_url:fotoUrl,verlauf,faelligkeit_am:faelligkeitAm}])});
     const newMangelId=newRows?.[0]?.id||null;
-    sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm, newMangelId); // nicht blockierend — Meldung ist bereits gespeichert
+    // Bewusst AWAITED (18.08.26, vorher fire-and-forget): schlägt der Asana-Push fehl, muss das
+    // sichtbar sein — sonst merkt es niemand, und Adi bekommt nie einen Task (siehe Fall Tini
+    // 19.08.26: "Lampe flackert"-Meldung hatte nie eine asana_task_gid bekommen, unbemerkt).
+    const asanaOk=await sendToAsana(betreff, text, targetStoreName, gemeldetVon, fotoUrl, faelligkeitAm, newMangelId);
     // Ab hier ist die Meldung sicher gespeichert — Formular leeren & Liste aktualisieren.
-    // Kein E-Mail-Versand mehr (18.08.26 auf Wunsch Tini entfernt) — Adi bekommt die Meldung
-    // ausschließlich per Asana-Push (siehe sendToAsana oben), das lief eh schon parallel zur Mail.
     document.getElementById('mangel-betreff').value='';
     document.getElementById('mangel-text').value='';
     if(storeSelect) storeSelect.value='';
     clearMangelFoto();
     renderMaengel();
-    showToast('✓ Gemeldet');
+    if(asanaOk){ showToast('✓ Gemeldet & an Adi weitergeleitet'); }
+    else { showToast('✓ Gemeldet — Asana-Weiterleitung an Adi fehlgeschlagen, bitte in der Detailansicht nachsenden', true); }
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
   finally{ if(btn){ btn.disabled=false; btn.textContent='Schaden melden ✓'; } hideSubmitOverlay(); }
 }
@@ -9467,6 +9472,34 @@ async function syncMangelFromAsana(id){
 }
 window.syncMangelFromAsana=syncMangelFromAsana;
 
+// Nachträglicher manueller Versand für Meldungen, bei denen der automatische Asana-Push beim
+// Erstellen fehlgeschlagen ist (asana_task_gid ist dann null) — ohne das gäbe es keinen Weg,
+// so eine Meldung nachträglich mit Asana zu verknüpfen, außer über die Datenbank.
+async function resendToAsana(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent='Wird gesendet…'; }
+  try{
+    const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
+    const m=(rows||[])[0];
+    if(!m){ showToast('Meldung nicht gefunden', true); return; }
+    let storeName=currentStore?.name;
+    if(currentStore?.id==='zentrale'){
+      const s=await api(`stores?id=eq.${m.store_id}&select=name`).catch(()=>[]);
+      storeName=(s||[])[0]?.name||m.store_id;
+    }
+    const ok=await sendToAsana(m.betreff, m.beschreibung, storeName, m.gemeldet_von, m.foto_url, m.faelligkeit_am, id);
+    if(ok){
+      showToast('✓ An Asana gesendet');
+      closeMangelDetail();
+      openMangelDetail(id);
+      renderMaengel();
+    }else{
+      showToast('Asana-Versand erneut fehlgeschlagen — bitte später nochmal versuchen', true);
+    }
+  }catch(e){ console.error(e); showToast('Fehler beim Senden', true); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='📤 An Asana senden (fehlt noch)'; } }
+}
+window.resendToAsana=resendToAsana;
+
 async function openMangelDetail(id){
   const rows=await api(`maengel?id=eq.${id}&select=*`).catch(()=>[]);
   const m=(rows||[])[0];
@@ -9506,7 +9539,8 @@ async function openMangelDetail(id){
           `:''}
           <button onclick="toggleMangelEdit(true)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--sub);cursor:pointer;">✏️ Bearbeiten</button>
           ${m.asana_task_gid?`<a href="https://app.asana.com/0/1206467470914728/${m.asana_task_gid}" target="_blank" rel="noopener" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#7B3FE4;text-decoration:none;">🔗 In Asana öffnen</a>
-          <button id="mangel-asana-sync-btn" onclick="syncMangelFromAsana(${m.id})" style="background:var(--green-light);border:1px solid var(--green);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">🔄 Asana-Updates holen</button>`:''}
+          <button id="mangel-asana-sync-btn" onclick="syncMangelFromAsana(${m.id})" style="background:var(--green-light);border:1px solid var(--green);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--green);cursor:pointer;">🔄 Asana-Updates holen</button>`:`
+          <button onclick="resendToAsana(${m.id},this)" style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:6px 12px;font-size:12px;color:#B45309;cursor:pointer;">📤 An Asana senden (fehlt noch)</button>`}
         </div>
       </div>
 
