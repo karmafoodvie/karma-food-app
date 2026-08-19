@@ -990,7 +990,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.62.0';
+const APP_VERSION = '6.63.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2391,13 +2391,21 @@ async function computeAndSaveScore(storeId){
       api(`reinigungsprotokoll?store_id=eq.${storeId}&datum=eq.${today}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]),
       api(`kuehleinrichtungen?store_id=eq.${storeId}&datum=eq.${today}&select=id`).catch(()=>[]),
       api(`disposal?store_id=eq.${storeId}&disposal_date=eq.${today}&select=leftover_qty`).catch(()=>[]),
-      api(`forecast_qty?store_id=eq.${storeId}&forecast_date=eq.${today}&select=qty,dish_name`).catch(()=>[])
+      api(`forecast_qty?store_id=eq.${storeId}&forecast_date=eq.${today}&select=qty,dish_name,groesse`).catch(()=>[])
     ]);
     const haccp_done=(wek||[]).length>0 && (rein||[])[0]?.reinigung_erledigt && (rein||[])[0]?.desinfektion_erledigt && (kuehl||[]).length>0;
     const waste_total=(disposal||[]).reduce((s,d)=>s+(d.leftover_qty||0),0);
     // Bestellte Menge des Tages — Basis, um Reste als % statt als nackte Zahl zu zeigen
     // (eine kleine Filiale hat naturgemäß weniger Reste absolut, das ist sonst unfair verglichen).
-    const bestellt_total=(forecast||[]).reduce((s,f)=>s+(f.qty||0),0);
+    // WICHTIG (Fix 19.08.26): forecast_qty.qty ist bei Gerichten mit 'groesse' (Lasagne, Biryani &
+    // Co.) die Anzahl BESTELLTER GEBINDE, nicht Portionen (1× Groß = 18 Portionen) — leftover_qty
+    // in "disposal" wird dagegen IMMER in echten Portionen erfasst. Ohne Umrechnung wurde hier
+    // Gebinde direkt mit Portionen verglichen → absurde Reste-Prozente (teils >300%) in der
+    // Waste-Rangliste, seit die App das erste Mal berechnet hat.
+    const bestellt_total=(forecast||[]).reduce((s,f)=>{
+      const portionenProGebinde=f.groesse ? (LASAGNE_SIZE_YIELD[f.groesse]||1) : 1;
+      return s+((f.qty||0)*portionenProGebinde);
+    },0);
 
     // Streak: Vortag prüfen
     const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
