@@ -997,7 +997,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.70.1';
+const APP_VERSION = '6.71.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1270,6 +1270,18 @@ document.addEventListener('visibilitychange', async ()=>{
   }catch(e){ console.error('Stammdaten-Aktualisierung fehlgeschlagen:', e); }
 });
 
+// Menü-Einträge für ein beliebiges (auch vergangenes) Datum — Basis für die Datum-zuerst-Auswahl
+// im Kundenfeedback-Formular (20.08.26, Wunsch Simone: Gäste kennen eher den Tag als das Gericht).
+function getMenuForDate(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  const wd=d.getDay(); // 0=So...6=Sa
+  const wdStr=WEEKDAY_MENU_KEY[wd];
+  if(!wdStr) return []; // Wochenende — kein Menü
+  const woche=getMenuWocheForDate(dateStr);
+  const entries=(typeof MENU_DATA!=='undefined' && MENU_DATA[`w${woche}_${wdStr}`])||[];
+  return entries.filter(e=>e.name && !e.name.startsWith('ÖL') && !e.name.startsWith('ZUTATEN'));
+}
+
 // ==== ÖFFENTLICHES KUNDENFEEDBACK (20.08.26) ====
 // Kein Login, keine Personendaten. Erreichbar über ?feedback=1, z.B. von Shopify aus verlinkt.
 const KF_TAGS = [
@@ -1307,24 +1319,25 @@ async function renderKfForm(){
   const wrap=document.getElementById('kf-form-wrap');
   const stores=await api('stores?select=id,name&order=name').catch(()=>[]);
   const storeList=(stores||[]).filter(s=>!['zentrale','kitchen','1070'].includes(s.id));
-  const todayMenu=(getTodayMenu()||[]).filter(d=>d.name && !d.name.startsWith('ÖL') && !d.name.startsWith('ZUTATEN'));
+  const today=new Date().toISOString().split('T')[0];
+  const minDate=new Date(Date.now()-30*86400000).toISOString().split('T')[0]; // 30 Tage zurück reicht
 
   let html=`<div style="background:#fff;border-radius:18px;padding:20px 18px;">
+    <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Welcher Tag war's? <span style="font-weight:400;color:#999;">(damit wir das richtige Gericht finden)</span></div>
+    <input id="kf-date" type="date" value="${today}" max="${today}" min="${minDate}" onchange="onKfDateChange()" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:16px;box-sizing:border-box;background:#fff;">
+
+    <div id="kf-dish-wrap">
+      <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Welches Gericht?</div>
+      <select id="kf-dish" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:18px;box-sizing:border-box;background:#fff;"></select>
+    </div>
+
     <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Wo warst du? <span style="font-weight:400;color:#999;">(optional)</span></div>
     <select id="kf-store" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:16px;box-sizing:border-box;background:#fff;">
       <option value="">– nicht angeben –</option>
       ${storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
-    </select>`;
+    </select>
 
-  if(todayMenu.length){
-    html+=`<div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Welches Gericht? <span style="font-weight:400;color:#999;">(optional)</span></div>
-    <select id="kf-dish" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:18px;box-sizing:border-box;background:#fff;">
-      <option value="">– nicht angeben –</option>
-      ${todayMenu.map(d=>`<option value="${escAttr(d.name)}">${d.name}</option>`).join('')}
-    </select>`;
-  }
-
-  html+=`<div style="font-size:13px;font-weight:700;color:#1a1a18;margin-bottom:8px;">Wie hat's geschmeckt?</div>
+    <div style="font-size:13px;font-weight:700;color:#1a1a18;margin-bottom:8px;">Wie hat's geschmeckt?</div>
     <div id="kf-rating-row" style="display:flex;gap:6px;justify-content:space-between;margin-bottom:18px;">
       ${FEEDBACK_SCALE.map(s=>`<button type="button" data-val="${s.v}" onclick="setKfRating(this)" style="flex:1;padding:10px 2px;border:2px solid #eee;border-radius:12px;background:#fff;font-size:24px;cursor:pointer;">${s.emoji}</button>`).join('')}
     </div>
@@ -1340,7 +1353,31 @@ async function renderKfForm(){
     <div style="font-size:10.5px;color:#999;text-align:center;margin-top:10px;line-height:1.5;">Anonym — wir erheben keine persönlichen Daten, nur dein Feedback.</div>
   </div>`;
   wrap.innerHTML=html;
+  populateKfDishSelect(today);
 }
+
+// Gericht-Dropdown befüllen: Kategorie vorangestellt (z.B. "Curry (Mango Goa Curry)"), damit
+// Gäste, die eher den Gerichtstyp als den genauen Namen kennen, sich leichter zurechtfinden.
+function populateKfDishSelect(dateStr){
+  const menu=getMenuForDate(dateStr);
+  const sel=document.getElementById('kf-dish');
+  if(!sel) return;
+  if(!menu.length){
+    sel.innerHTML=`<option value="">Kein Menü an diesem Tag (Wochenende?)</option>`;
+    return;
+  }
+  sel.innerHTML=`<option value="">– nicht angeben –</option>` +
+    menu.map(d=>{
+      const cat=mapDishNameToCategory(d.name, d.slot);
+      const label=cat==='Special'?d.name:`${cat} (${d.name})`;
+      return `<option value="${escAttr(d.name)}">${label}</option>`;
+    }).join('');
+}
+function onKfDateChange(){
+  const dateStr=document.getElementById('kf-date')?.value;
+  if(dateStr) populateKfDishSelect(dateStr);
+}
+window.onKfDateChange=onKfDateChange;
 
 function setKfRating(btn){
   _kfRating=parseInt(btn.dataset.val);
