@@ -997,7 +997,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.69.0';
+const APP_VERSION = '6.70.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9130,7 +9130,7 @@ async function renderWaehrend(){
 
   if(todayMenu.length){
     html+=`<div class="section-lbl">🍽️ Heutiges Menü</div>`;
-    todayMenu.forEach(d=>{
+    todayMenu.forEach((d,dIdxW)=>{
       const mainCodes=d.allergene?.main||[];
       const dressingCodes=d.allergene?.dressing||[];
       const badges=[
@@ -9147,8 +9147,17 @@ async function renderWaehrend(){
           ${badges || '<span style="font-size:11px;color:var(--muted);">keine Allergene angegeben</span>'}
         </div>
         ${isDish?`<div style="margin-top:8px;margin-left:32px;display:flex;gap:4px;flex-wrap:wrap;">
-          ${FEEDBACK_SCALE.map(s=>`<button type="button" data-dish="${escAttr(d.name)}" data-val="${s.v}" onclick="setFeedbackRating(this)" title="${s.label}" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:15px;cursor:pointer;">${s.emoji}</button>`).join('')}
-          <button type="button" data-dish="${escAttr(d.name)}" data-val="" onclick="setFeedbackRating(this)" title="Nicht probiert" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:9.5px;color:var(--muted);cursor:pointer;white-space:nowrap;">nicht probiert</button>
+          ${FEEDBACK_SCALE.map(s=>`<button type="button" data-dish="${escAttr(d.name)}" data-val="${s.v}" onclick="setFeedbackRating(this,${dIdxW})" title="${s.label}" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:15px;cursor:pointer;">${s.emoji}</button>`).join('')}
+          <button type="button" data-dish="${escAttr(d.name)}" data-val="" onclick="setFeedbackRating(this,${dIdxW})" title="Nicht probiert" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:9.5px;color:var(--muted);cursor:pointer;white-space:nowrap;">nicht probiert</button>
+        </div>
+        <div id="feedback-reason-link-${dIdxW}" style="display:none;margin-left:32px;margin-top:5px;">
+          <a href="#" onclick="event.preventDefault();toggleFeedbackReasonPanel(${dIdxW})" style="font-size:10.5px;color:#EC4899;text-decoration:underline;cursor:pointer;">+ Grund hinzufügen</a>
+        </div>
+        <div id="feedback-reason-panel-${dIdxW}" style="display:none;margin-left:32px;margin-top:6px;">
+          <div style="font-size:9.5px;color:var(--muted);margin-bottom:4px;">Grund (optional, Mehrfachauswahl):</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            ${KF_TAGS.map(t=>`<button type="button" data-dish="${escAttr(d.name)}" data-tag="${t.k}" onclick="toggleFeedbackTag(this)" style="padding:5px 9px;border:1.5px solid ${t.neg?'#FCA5A5':'#86EFAC'};border-radius:16px;background:#fff;color:#444;font-size:11px;cursor:pointer;">${t.label}</button>`).join('')}
+          </div>
         </div>`:''}
       </div>`;
     });
@@ -9862,11 +9871,18 @@ function renderFeedbackExistingList(existing, todayMenu){
   }
   wrap.innerHTML=existing.map(e=>{
     const rows=todayMenu.map(d=>{
-      const r=e.ratings?.[d.name];
-      const scale=FEEDBACK_SCALE.find(s=>s.v===r);
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px;">
-        <span style="color:var(--sub);">${d.name}</span>
-        <span>${scale?`${scale.emoji} ${scale.label}`:'<span style="color:var(--muted);">– nicht probiert</span>'}</span>
+      const rec=e.ratings?.[d.name];
+      // Rückwärtskompatibel: ältere Einträge (vor 20.08.26) haben hier eine reine Zahl statt {v,tags}.
+      const val=(rec && typeof rec==='object')?rec.v:rec;
+      const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
+      const scale=FEEDBACK_SCALE.find(s=>s.v===val);
+      const tagsHtml=tags.map(k=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin-left:4px;">${t?t.label:k}</span>`;}).join('');
+      return `<div style="padding:4px 0;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--sub);">${d.name}</span>
+          <span>${scale?`${scale.emoji} ${scale.label}`:'<span style="color:var(--muted);">– nicht probiert</span>'}</span>
+        </div>
+        ${tagsHtml?`<div style="margin-top:2px;">${tagsHtml}</div>`:''}
       </div>`;
     }).join('');
     return `<div class="card" style="padding:12px 14px;margin-bottom:8px;">
@@ -9917,16 +9933,51 @@ function cancelFeedbackForm(){
 }
 window.cancelFeedbackForm=cancelFeedbackForm;
 
-function setFeedbackRating(btn){
+function setFeedbackRating(btn, dIdxW){
   const dish=btn.dataset.dish;
   const val=btn.dataset.val;
-  _feedbackDraft[dish]=val===''?null:parseInt(val);
+  const prevTags=(_feedbackDraft[dish] && _feedbackDraft[dish].tags) || [];
+  _feedbackDraft[dish]=val===''?null:{v:parseInt(val), tags:prevTags};
   // Alle Buttons dieser Zeile zurücksetzen, den geklickten hervorheben
   const row=btn.parentElement;
   row.querySelectorAll('button').forEach(b=>{ b.style.background='#fff'; b.style.borderColor='var(--border)'; });
   btn.style.background='#FDF2F8'; btn.style.borderColor='#EC4899';
+  // "+ Grund hinzufügen"-Link erst zeigen, sobald überhaupt bewertet wurde (20.08.26) — bei "nicht
+  // probiert" gibt's nichts zu begründen, Link bleibt dann versteckt.
+  if(dIdxW!=null){
+    const link=document.getElementById(`feedback-reason-link-${dIdxW}`);
+    if(link) link.style.display=(val!=='')?'block':'none';
+    if(val===''){
+      const panel=document.getElementById(`feedback-reason-panel-${dIdxW}`);
+      if(panel) panel.style.display='none';
+    }
+  }
 }
 window.setFeedbackRating=setFeedbackRating;
+
+function toggleFeedbackReasonPanel(dIdxW){
+  const panel=document.getElementById(`feedback-reason-panel-${dIdxW}`);
+  if(panel) panel.style.display=(panel.style.display==='none')?'block':'none';
+}
+window.toggleFeedbackReasonPanel=toggleFeedbackReasonPanel;
+
+function toggleFeedbackTag(btn){
+  const dish=btn.dataset.dish;
+  const tag=btn.dataset.tag;
+  const t=KF_TAGS.find(x=>x.k===tag);
+  if(!_feedbackDraft[dish]) _feedbackDraft[dish]={v:null, tags:[]};
+  const tags=_feedbackDraft[dish].tags||[];
+  const idx=tags.indexOf(tag);
+  if(idx>-1){
+    tags.splice(idx,1);
+    btn.style.background='#fff'; btn.style.color='#444';
+  }else{
+    tags.push(tag);
+    btn.style.background=t.neg?'#FEE2E2':'#DCFCE7'; btn.style.color=t.neg?'#B91C1C':'#166534';
+  }
+  _feedbackDraft[dish].tags=tags;
+}
+window.toggleFeedbackTag=toggleFeedbackTag;
 
 async function submitFeedback(){
   const name=document.getElementById('feedback-name')?.value?.trim();
@@ -12440,10 +12491,14 @@ async function getDishFeedbackSummary(dishName){
     if(r.ratings && r.ratings[dishName]!=null){ teamLastDate=r.datum; break; }
   }
   let teamAvg=null, teamCount=0;
+  const teamTagCounts={};
   if(teamLastDate){
     const sameDay=(teamRows||[]).filter(r=>r.datum===teamLastDate && r.ratings && r.ratings[dishName]!=null);
     teamCount=sameDay.length;
-    if(teamCount) teamAvg=(sameDay.reduce((s,r)=>s+Number(r.ratings[dishName]),0)/teamCount);
+    // Rückwärtskompatibel: alte Einträge haben hier eine reine Zahl statt {v,tags}.
+    const vals=sameDay.map(r=>{ const rec=r.ratings[dishName]; return (rec && typeof rec==='object')?rec.v:rec; }).filter(v=>v!=null);
+    if(vals.length) teamAvg=vals.reduce((s,v)=>s+Number(v),0)/vals.length;
+    sameDay.forEach(r=>{ const rec=r.ratings[dishName]; const tags=(rec && typeof rec==='object')?(rec.tags||[]):[]; tags.forEach(t=>teamTagCounts[t]=(teamTagCounts[t]||0)+1); });
   }
 
   let kundenLastDate=null;
@@ -12457,6 +12512,8 @@ async function getDishFeedbackSummary(dishName){
     if(rated.length) kundenAvg=(rated.reduce((s,r)=>s+Number(r.rating),0)/rated.length);
     sameDay.forEach(r=>(r.quick_tags||[]).forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1));
   }
+  // Team- und Kund:innen-Tags gemeinsam zählen — beide Quellen nutzen dieselbe Tag-Liste (KF_TAGS).
+  Object.entries(teamTagCounts).forEach(([k,c])=>tagCounts[k]=(tagCounts[k]||0)+c);
   const topTags=Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
   return {teamAvg, teamCount, teamLastDate, kundenAvg, kundenCount, kundenLastDate, topTags};
