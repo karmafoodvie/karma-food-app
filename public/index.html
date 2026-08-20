@@ -997,7 +997,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.76.0';
+const APP_VERSION = '6.78.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -12521,8 +12521,11 @@ let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 // Feedback-Zusammenfassung fürs "letzte Mal", als ein Gericht serviert wurde (20.08.26).
 // Zwei Quellen: essen_feedback (Team, ratings ist JSON {gericht:wert}) + kunden_feedback
 // (Besucher:innen, dish_name direkt). Gibt Team-Ø, Kund:innen-Ø und Top-Tags zurück.
-async function getDishFeedbackSummary(dishName){
-  const heute=new Date().toISOString().split('T')[0];
+async function getDishFeedbackSummary(dishName, refDateStr){
+  // Bezugsdatum: standardmäßig echtes "heute", aber beim Anschauen von z.B. morgen soll bereits
+  // heutiges Feedback als "letztes Mal" zählen — sonst wird es fälschlich als "noch keins" gezeigt,
+  // nur weil es zufällig am selben Kalendertag abgegeben wurde (Bug gefunden 20.08.26).
+  const heute=refDateStr || new Date().toISOString().split('T')[0];
   const [teamRows, kundenRows] = await Promise.all([
     api(`essen_feedback?datum=lt.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
     api(`kunden_feedback?dish_name=eq.${encodeURIComponent(dishName)}&submitted_at=lt.${heute}T00:00:00&select=rating,quick_tags,submitted_at&order=submitted_at.desc&limit=400`).catch(()=>[])
@@ -12583,11 +12586,11 @@ function feedbackSummaryHtml(sum){
   return html;
 }
 
-async function loadDishFeedbackInto(elemId, dishName){
+async function loadDishFeedbackInto(elemId, dishName, refDateStr){
   const target=document.getElementById(elemId);
   if(!target) return;
   try{
-    const sum=await getDishFeedbackSummary(dishName);
+    const sum=await getDishFeedbackSummary(dishName, refDateStr);
     target.innerHTML=feedbackSummaryHtml(sum);
   }catch(e){ console.error(e); target.innerHTML='<div style="font-size:11px;color:var(--muted);">Feedback konnte nicht geladen werden.</div>'; }
 }
@@ -12820,7 +12823,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const qtyBlock=(!isLasagne && qty)?`<div>${formatQty(qty)}</div>`:(!isLasagne?'–':'');
       return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}${isNewSinceLastSeen?'background:#FEF2F2;':''}">${qtyBlock}${sizeLabel}${ampelBadge}${neuBadge}</td>`;
     }).join('');
-    html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});loadDishFeedbackInto('morgen_fb_${dIdx}',this.dataset.dishname);}" data-dishname="${escAttr(dish)}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
+    html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});loadDishFeedbackInto('morgen_fb_${dIdx}',this.dataset.dishname,'${tomorrowStr}');}" data-dishname="${escAttr(dish)}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
       <td style="text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);word-break:break-word;"><span style="display:flex;align-items:center;gap:4px;"><span style="flex-shrink:0;">${dishImgHtml(dish, 16)}</span><span style="font-weight:600;font-size:11px;line-height:1.25;">${dish}</span></span></td>
       ${cells}
       <td style="font-weight:700;font-size:12px;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${total>0?formatQty(total):'–'}</td>
@@ -13425,19 +13428,48 @@ async function renderKundenfeedback(){
   }
 
   const avg=(rows.reduce((s,r)=>s+(r.rating||0),0)/rows.length).toFixed(1);
-  const tagCounts={};
-  rows.forEach(r=>(r.quick_tags||[]).forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1));
-  const topTags=Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
 
   html+=`<div class="card" style="padding:14px;margin-bottom:14px;display:flex;gap:16px;align-items:center;">
     <div style="text-align:center;">
       <div style="font-size:26px;font-weight:800;font-family:'Boldonse',sans-serif;">${avg}</div>
       <div style="font-size:10px;color:var(--muted);">⌀ von ${rows.length}</div>
     </div>
-    <div style="flex:1;font-size:11px;color:var(--sub);">
-      ${topTags.length?`<div style="font-weight:600;margin-bottom:4px;">Häufigste Themen:</div>${topTags.map(([k,c])=>{const t=KF_TAGS.find(x=>x.k===k);return `${t?t.label:k} (${c})`;}).join(' · ')}`:'Noch keine Tags vergeben.'}
-    </div>
+    <div style="flex:1;font-size:11.5px;color:var(--sub);line-height:1.4;">Gesamt-Durchschnitt über alle Gerichte & Filialen.</div>
   </div>`;
+
+  // Nach Gericht gruppiert, schlechtester Schnitt zuerst — das ist die eigentlich actionable
+  // Ansicht: "wo brennt's" statt chronologisch durchscrollen (20.08.26, Wunsch Tini).
+  const byDish={};
+  rows.forEach(r=>{
+    const key=r.dish_name||'– Ohne Gericht angegeben –';
+    if(!byDish[key]) byDish[key]=[];
+    byDish[key].push(r);
+  });
+  const dishStats=Object.entries(byDish).map(([name,entries])=>{
+    const a=entries.reduce((s,r)=>s+(r.rating||0),0)/entries.length;
+    const tc={}; entries.forEach(r=>(r.quick_tags||[]).forEach(t=>tc[t]=(tc[t]||0)+1));
+    const top=Object.entries(tc).sort((x,y)=>y[1]-x[1]).slice(0,3);
+    return {name, count:entries.length, avg:a, topTags:top, entries};
+  }).sort((a,b)=>a.avg-b.avg); // schlechtester Schnitt oben
+
+  html+=`<div class="section-lbl">📊 Nach Gericht (schlechtester Schnitt zuerst)</div>`;
+  dishStats.forEach(d=>{
+    const scale=FEEDBACK_SCALE.find(s=>s.v===Math.round(d.avg));
+    const barColor=d.avg<3?'#DC2626':d.avg<4?'#EA580C':'#16A34A';
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:13px;font-weight:600;flex:1;">${d.name}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <span style="font-size:18px;">${scale?scale.emoji:'–'}</span>
+          <span style="font-size:15px;font-weight:800;color:${barColor};">${d.avg.toFixed(1)}</span>
+        </div>
+      </div>
+      <div style="height:4px;background:#F3F4F6;border-radius:2px;margin-top:6px;overflow:hidden;">
+        <div style="height:100%;width:${(d.avg/5*100).toFixed(0)}%;background:${barColor};"></div>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:5px;">${d.count}× bewertet${d.topTags.length?' · '+d.topTags.map(([k,c])=>{const t=KF_TAGS.find(x=>x.k===k);return `${t?t.label:k} (${c})`;}).join(', '):''}</div>
+    </div>`;
+  });
 
   // Häufige Begriffe aus Freitexten — KEIN KI-Erkennen, sondern simple Wortzählung über alle
   // Kommentare (Kund:innen + Team-Gründe). Zeigt, was oft vorkommt, damit man's manuell zu einem
@@ -13455,14 +13487,17 @@ async function renderKundenfeedback(){
   });
   const topWords=Object.entries(wordCounts).filter(([,c])=>c>=2).sort((a,b)=>b[1]-a[1]).slice(0,10);
   if(topWords.length){
-    html+=`<div class="card" style="padding:12px 14px;margin-bottom:14px;background:#FFFBEB;border-color:#FDE68A;">
+    html+=`<div class="card" style="padding:12px 14px;margin:14px 0;background:#FFFBEB;border-color:#FDE68A;">
       <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;">💡 Häufige Begriffe in Kommentaren</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px;">${topWords.map(([w,c])=>`<span class="badge" style="background:#FEF3C7;color:#92400E;">${w} (${c}×)</span>`).join('')}</div>
       <div style="font-size:10px;color:#B45309;margin-top:6px;">Taucht was oft auf und sollte ein eigener Schnellauswahl-Tag werden? Einfach sagen.</div>
     </div>`;
   }
 
-  html+=`<div class="section-lbl">Letzte Einträge</div>`;
+  html+=`<div onclick="document.getElementById('kf-org-alle').style.display=document.getElementById('kf-org-alle').style.display==='none'?'block':'none';this.querySelector('span').textContent=this.querySelector('span').textContent.includes('▾')?'Alle ${rows.length} Einträge einzeln anzeigen ▸':'Einzeln einklappen ▾';" style="text-align:center;padding:10px;cursor:pointer;color:var(--muted);font-size:12px;text-decoration:underline;">
+    <span>Alle ${rows.length} Einträge einzeln anzeigen ▸</span>
+  </div>
+  <div id="kf-org-alle" style="display:none;">`;
   rows.slice(0,60).forEach(r=>{
     const scale=FEEDBACK_SCALE.find(s=>s.v===r.rating);
     const tagsHtml=(r.quick_tags||[]).map(k=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin-right:3px;">${t?t.label:k}</span>`;}).join('');
@@ -13476,6 +13511,7 @@ async function renderKundenfeedback(){
       ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${r.kommentar}"</div>`:''}
     </div>`;
   });
+  html+='</div>';
 
   el.innerHTML=html;
   translateEl(el);
