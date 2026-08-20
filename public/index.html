@@ -997,7 +997,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.75.1';
+const APP_VERSION = '6.76.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1316,7 +1316,7 @@ window.renderPublicFeedback=renderPublicFeedback;
 async function renderKfForm(){
   const wrap=document.getElementById('kf-form-wrap');
   const stores=await api('stores?select=id,name&order=name').catch(()=>[]);
-  const storeList=(stores||[]).filter(s=>!['zentrale','kitchen','1070'].includes(s.id));
+  const storeList=(stores||[]).filter(s=>!['zentrale','1070'].includes(s.id));
   const today=new Date().toISOString().split('T')[0];
   const minDate=new Date(Date.now()-30*86400000).toISOString().split('T')[0]; // 30 Tage zurück reicht
 
@@ -13413,7 +13413,7 @@ async function renderKundenfeedback(){
   html+=pageHeaderHtml('🗣️','Kundenfeedback','Anonym, über den Shopify-Link','#E0521F');
 
   const [rows, stores, teamRowsForWords] = await Promise.all([
-    api('kunden_feedback?select=*&order=submitted_at.desc&limit=200').catch(()=>[]),
+    fetch(`${SUPABASE_URL}/functions/v1/kunden-feedback-read?limit=200`, {headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}}).then(r=>r.json()).catch(()=>[]),
     api('stores?select=id,name').catch(()=>[]),
     api('essen_feedback?select=ratings&order=submitted_at.desc&limit=200').catch(()=>[])
   ]);
