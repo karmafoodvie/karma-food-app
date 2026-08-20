@@ -997,7 +997,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.73.0';
+const APP_VERSION = '6.73.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3109,7 +3109,7 @@ async function renderHome(){
     <div style="display:flex;gap:6px;margin-bottom:6px;">
       ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="flex:1;padding:9px 8px;text-align:center;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':'background:#FDF2F8;border-color:#F9A8D4;'}">
         <div style="font-size:20px;line-height:1;">😋</div>
-        <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Team-Feedback</div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Food-Feedback</div>
         <div style="font-size:9.5px;color:${feedbackDoneHome?'var(--green)':'#DB2777'};font-weight:${feedbackDoneHome?400:600};margin-top:1px;">${feedbackDoneHome?'✓ abgegeben':'Wie war\'s?'}</div>
       </div>`:''}
       <div class="home-card kf-disposal" onclick="goTo('disposal')" style="flex:1;padding:9px 8px;text-align:center;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
@@ -9207,7 +9207,7 @@ async function renderWaehrend(){
     // Team-Feedback direkt hier statt separat bei Schicht beenden (20.08.26, Wunsch Simone —
     // Schichtende ist ohnehin oft stressig genug). Name + optional Kommentare, Bewertungen oben
     // pro Gericht per Emoji-Reihe direkt in der Karte.
-    html+=`<div class="section-lbl" style="margin-top:14px;">😋 Team-Feedback zum Essen</div>`;
+    html+=`<div class="section-lbl" style="margin-top:14px;">😋 Food-Feedback</div>`;
     html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier Namen eintragen & abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
     html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
       <input id="feedback-name" type="text" placeholder="Dein Name" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-size:13.5px;">
@@ -9880,7 +9880,7 @@ async function renderEssenFeedback(){
   _feedbackDraft={};
 
   let html=backToHomeHtml();
-  html+=pageHeaderHtml('😋','Team-Feedback','Wie hat\'s heute geschmeckt?','#EC4899');
+  html+=pageHeaderHtml('😋','Food-Feedback','Wie hat\'s heute geschmeckt?','#EC4899');
   html+=`<div style="font-size:12px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
 
   const todayMenu=(getTodayMenu()||[]).filter(d=>d.name && !d.name.startsWith('ÖL') && !d.name.startsWith('ZUTATEN'));
@@ -10083,7 +10083,7 @@ async function renderSchichtende(){
   const schritte=[
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
-    {id:'feedback', label:'Team-Feedback zum Essen', sub:'Wie hat\'s geschmeckt? Kurz eintragen', done:(feedbackToday||[]).length>0, link:'waehrend', group:'kueche'},
+    {id:'feedback', label:'Food-Feedback', sub:'Wie hat\'s geschmeckt? Kurz eintragen', done:(feedbackToday||[]).length>0, link:'waehrend', group:'kueche'},
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
     {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
@@ -10098,7 +10098,7 @@ async function renderSchichtende(){
   const SCHRITT_META={
     abschluss: {emoji:'💡', label:'Abschluss-Checkliste (optionale Hilfe)', sub:`${clDoneCount} von ${clTotal} Punkten — kein Pflichtschritt`, link:'check'},
     entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
-    feedback: {emoji:'😋', label:'Team-Feedback zum Essen', sub:'Wie hat\'s geschmeckt?', link:'waehrend'},
+    feedback: {emoji:'😋', label:'Food-Feedback', sub:'Wie hat\'s geschmeckt?', link:'waehrend'},
     forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', link:'order', orderTab:'forecast'},
     beilagen_anpassen: {emoji:'🍳', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen', link:'order', orderTab:'kueche'},
     dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
