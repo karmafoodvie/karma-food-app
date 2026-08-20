@@ -997,7 +997,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.71.0';
+const APP_VERSION = '6.72.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9192,9 +9192,10 @@ async function renderWaehrend(){
         </div>
         <div id="feedback-reason-panel-${dIdxW}" style="display:none;margin-left:32px;margin-top:6px;">
           <div style="font-size:9.5px;color:var(--muted);margin-bottom:4px;">Grund (optional, Mehrfachauswahl):</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
             ${KF_TAGS.map(t=>`<button type="button" data-dish="${escAttr(d.name)}" data-tag="${t.k}" onclick="toggleFeedbackTag(this)" style="padding:5px 9px;border:1.5px solid ${t.neg?'#FCA5A5':'#86EFAC'};border-radius:16px;background:#fff;color:#444;font-size:11px;cursor:pointer;">${t.label}</button>`).join('')}
           </div>
+          <input type="text" data-dish="${escAttr(d.name)}" placeholder="Passt nichts davon? Kurz reinschreiben…" oninput="setFeedbackNote(this)" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:11.5px;box-sizing:border-box;">
         </div>`:''}
       </div>`;
     });
@@ -9206,7 +9207,6 @@ async function renderWaehrend(){
     html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier Namen eintragen & abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
     html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
       <input id="feedback-name" type="text" placeholder="Dein Name" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-size:13.5px;">
-      <textarea id="feedback-kommentar" placeholder="Kommentar zum Essen (optional)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;min-height:44px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;"></textarea>
       <div style="font-size:11px;font-weight:600;color:#7B3FE4;margin-bottom:4px;">💬 Feedback an uns — egal worum's geht, wenn Lust und Laune (optional)</div>
       <textarea id="feedback-frei" placeholder="Ideen, Anliegen, was auch immer…" style="width:100%;padding:9px;border:1px solid #DDD6FE;border-radius:8px;min-height:50px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;background:#FAF5FF;"></textarea>
       <button onclick="submitFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">Feedback abschicken ✓</button>
@@ -9909,9 +9909,10 @@ function renderFeedbackExistingList(existing, todayMenu){
   wrap.innerHTML=existing.map(e=>{
     const rows=todayMenu.map(d=>{
       const rec=e.ratings?.[d.name];
-      // Rückwärtskompatibel: ältere Einträge (vor 20.08.26) haben hier eine reine Zahl statt {v,tags}.
+      // Rückwärtskompatibel: ältere Einträge (vor 20.08.26) haben hier eine reine Zahl statt {v,tags,note}.
       const val=(rec && typeof rec==='object')?rec.v:rec;
       const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
+      const note=(rec && typeof rec==='object')?rec.note:null;
       const scale=FEEDBACK_SCALE.find(s=>s.v===val);
       const tagsHtml=tags.map(k=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin-left:4px;">${t?t.label:k}</span>`;}).join('');
       return `<div style="padding:4px 0;font-size:12px;">
@@ -9920,6 +9921,7 @@ function renderFeedbackExistingList(existing, todayMenu){
           <span>${scale?`${scale.emoji} ${scale.label}`:'<span style="color:var(--muted);">– nicht probiert</span>'}</span>
         </div>
         ${tagsHtml?`<div style="margin-top:2px;">${tagsHtml}</div>`:''}
+        ${note?`<div style="font-size:11px;color:var(--sub);margin-top:2px;font-style:italic;">„${note}"</div>`:''}
       </div>`;
     }).join('');
     return `<div class="card" style="padding:12px 14px;margin-bottom:8px;">
@@ -10015,6 +10017,13 @@ function toggleFeedbackTag(btn){
   _feedbackDraft[dish].tags=tags;
 }
 window.toggleFeedbackTag=toggleFeedbackTag;
+
+function setFeedbackNote(input){
+  const dish=input.dataset.dish;
+  if(!_feedbackDraft[dish]) _feedbackDraft[dish]={v:null, tags:[]};
+  _feedbackDraft[dish].note=input.value.trim()||null;
+}
+window.setFeedbackNote=setFeedbackNote;
 
 async function submitFeedback(){
   const name=document.getElementById('feedback-name')?.value?.trim();
