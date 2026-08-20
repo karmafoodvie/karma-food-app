@@ -225,6 +225,7 @@ summary::marker{content:'';}
     <div id="v-kuechenlager" class="view"></div>
     <div id="v-grundreinigung" class="view"></div>
     <div id="v-stadtgemeinde" class="view"></div>
+    <div id="v-essenFeedback" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
@@ -990,7 +991,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.63.0';
+const APP_VERSION = '6.67.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1464,7 +1465,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -8972,6 +8973,9 @@ async function renderWaehrend(){
   const _laufendeWoche=getMenuWocheForDate(_todayStrWaehrend);
   const _WOCHE_COLORS={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
   const _wCol=_WOCHE_COLORS[_laufendeWoche]||'var(--green)';
+  const _feedbackDishes=(todayMenu||[]).filter(d=>d.name && !d.name.startsWith('ÖL') && !d.name.startsWith('ZUTATEN'));
+  const _feedbackExisting=await api(`essen_feedback?store_id=eq.${currentStore.id}&datum=eq.${_todayStrWaehrend}&select=*&order=submitted_at.asc`).catch(()=>[]);
+  _feedbackDraft={};
 
   let html=backToHomeHtml();
   html+=`<div style="display:inline-flex;align-items:center;background:#fff;border:1.5px solid ${_wCol};border-radius:8px;padding:3px 10px;margin-bottom:12px;">
@@ -8991,6 +8995,7 @@ async function renderWaehrend(){
         ...mainCodes.map(c=>`<span class="badge" style="background:var(--green-light);color:var(--green);">${c}</span>`),
         ...dressingCodes.map(c=>`<span class="badge" style="background:#FEF3C7;color:#92400E;">${c} (Dressing)</span>`)
       ].join(' ');
+      const isDish=_feedbackDishes.some(fd=>fd.name===d.name);
       html+=`<div style="padding:10px 12px;border:0.5px solid var(--border);border-radius:10px;margin-bottom:6px;background:var(--card);">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:22px;">${getDishEmoji(d.name)}</span>
@@ -8999,8 +9004,26 @@ async function renderWaehrend(){
         <div style="margin-top:6px;margin-left:32px;display:flex;flex-wrap:wrap;gap:4px;">
           ${badges || '<span style="font-size:11px;color:var(--muted);">keine Allergene angegeben</span>'}
         </div>
+        ${isDish?`<div style="margin-top:8px;margin-left:32px;display:flex;gap:4px;flex-wrap:wrap;">
+          ${FEEDBACK_SCALE.map(s=>`<button type="button" data-dish="${escAttr(d.name)}" data-val="${s.v}" onclick="setFeedbackRating(this)" title="${s.label}" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:15px;cursor:pointer;">${s.emoji}</button>`).join('')}
+          <button type="button" data-dish="${escAttr(d.name)}" data-val="" onclick="setFeedbackRating(this)" title="Nicht probiert" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:9.5px;color:var(--muted);cursor:pointer;white-space:nowrap;">nicht probiert</button>
+        </div>`:''}
       </div>`;
     });
+
+    // Team-Feedback direkt hier statt separat bei Schicht beenden (20.08.26, Wunsch Simone —
+    // Schichtende ist ohnehin oft stressig genug). Name + optional Kommentare, Bewertungen oben
+    // pro Gericht per Emoji-Reihe direkt in der Karte.
+    html+=`<div class="section-lbl" style="margin-top:14px;">😋 Team-Feedback zum Essen</div>`;
+    html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier Namen eintragen & abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
+    html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
+      <input id="feedback-name" type="text" placeholder="Dein Name" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-size:13.5px;">
+      <textarea id="feedback-kommentar" placeholder="Kommentar zum Essen (optional)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;min-height:44px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;"></textarea>
+      <div style="font-size:11px;font-weight:600;color:#7B3FE4;margin-bottom:4px;">💬 Feedback an uns — egal worum's geht, wenn Lust und Laune (optional)</div>
+      <textarea id="feedback-frei" placeholder="Ideen, Anliegen, was auch immer…" style="width:100%;padding:9px;border:1px solid #DDD6FE;border-radius:8px;min-height:50px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;background:#FAF5FF;"></textarea>
+      <button onclick="submitFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">Feedback abschicken ✓</button>
+    </div>`;
+    html+=`<div id="feedback-existing-list"></div>`;
   }
 
   html+=`<div style="margin-top:12px;">
@@ -9018,6 +9041,7 @@ async function renderWaehrend(){
 
   el.innerHTML=html;
   translateEl(el);
+  renderFeedbackExistingList(_feedbackExisting, _feedbackDishes);
 }
 
 function toggleWareChip(el, ware, i){
@@ -9644,13 +9668,148 @@ async function setMangelStatus(id, newStatus){
 window.setMangelStatus=setMangelStatus;
 
 // ---- SCHICHTENDE ----
+// ---- TEAM-FEEDBACK ZUM ESSEN (20.08.26, Wunsch Simone) ----
+// Emoji-Skala statt Sterne/Daumen — passt besser zur Marke. Ein Formular pro Store/Tag, mehrere
+// Personen tragen sich nacheinander ein (kein Einzel-Login pro Mitarbeiter:in vorhanden).
+// "Konnte nicht probieren" ist bewusst ein Feld, kein erzwungener Rating-Zwang — nicht jede:r kann
+// aus persönlichen Gründen (Allergie etc.) jedes Gericht probieren, obwohl alles vegan ist.
+const FEEDBACK_SCALE=[
+  {v:1, emoji:'😖', label:'Nicht meins'},
+  {v:2, emoji:'😐', label:'Geht so'},
+  {v:3, emoji:'🙂', label:'Gut'},
+  {v:4, emoji:'😋', label:'Lecker'},
+  {v:5, emoji:'🤩', label:'Liebe es!'}
+];
+let _feedbackDraft={};
+
+async function renderEssenFeedback(){
+  const el=document.getElementById('v-essenFeedback');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  _feedbackDraft={};
+
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('😋','Team-Feedback','Wie hat\'s heute geschmeckt?','#EC4899');
+  html+=`<div style="font-size:12px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
+
+  const todayMenu=(getTodayMenu()||[]).filter(d=>d.name && !d.name.startsWith('ÖL') && !d.name.startsWith('ZUTATEN'));
+  const today=new Date().toISOString().split('T')[0];
+  const existing=await api(`essen_feedback?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*&order=submitted_at.asc`).catch(()=>[]);
+
+  if(!todayMenu.length){
+    html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Kein Menü für heute hinterlegt.</div>`;
+    el.innerHTML=html; translateEl(el); return;
+  }
+
+  // Bereits abgegebene Bewertungen
+  html+=`<div id="feedback-existing-list"></div>`;
+  html+=`<button onclick="showFeedbackForm()" id="feedback-add-btn" style="width:100%;padding:12px;border:1.5px dashed #EC4899;border-radius:10px;background:#FDF2F8;color:#EC4899;font-size:13px;font-weight:600;cursor:pointer;margin-top:6px;">+ Bewertung hinzufügen</button>`;
+  html+=`<div id="feedback-form-wrap" style="margin-top:12px;"></div>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+  renderFeedbackExistingList(existing, todayMenu);
+}
+window.renderEssenFeedback=renderEssenFeedback;
+
+function renderFeedbackExistingList(existing, todayMenu){
+  const wrap=document.getElementById('feedback-existing-list');
+  if(!wrap) return;
+  if(!existing || !existing.length){
+    wrap.innerHTML=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Noch keine Bewertung heute — sei die/der Erste!</div>`;
+    return;
+  }
+  wrap.innerHTML=existing.map(e=>{
+    const rows=todayMenu.map(d=>{
+      const r=e.ratings?.[d.name];
+      const scale=FEEDBACK_SCALE.find(s=>s.v===r);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px;">
+        <span style="color:var(--sub);">${d.name}</span>
+        <span>${scale?`${scale.emoji} ${scale.label}`:'<span style="color:var(--muted);">– nicht probiert</span>'}</span>
+      </div>`;
+    }).join('');
+    return `<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <strong style="font-size:13px;">${e.name||'Anonym'}</strong>
+        <span style="font-size:10px;color:var(--muted);">${new Date(e.submitted_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div style="margin-top:4px;">${rows}</div>
+      ${e.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${e.kommentar}"</div>`:''}
+      ${e.feedback_frei?`<div style="font-size:12px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;">💬 ${e.feedback_frei}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function showFeedbackForm(){
+  const todayMenu=(getTodayMenu()||[]).filter(d=>d.name && !d.name.startsWith('ÖL') && !d.name.startsWith('ZUTATEN'));
+  _feedbackDraft={};
+  const wrap=document.getElementById('feedback-form-wrap');
+  document.getElementById('feedback-add-btn').style.display='none';
+  let html=`<div class="card" style="padding:14px;">
+    <input id="feedback-name" type="text" placeholder="Dein Name" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;font-size:13.5px;">`;
+  todayMenu.forEach(d=>{
+    html+=`<div style="margin-bottom:12px;">
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">${d.name}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        ${FEEDBACK_SCALE.map(s=>`<button type="button" data-dish="${escAttr(d.name)}" data-val="${s.v}" onclick="setFeedbackRating(this)" title="${s.label}" style="flex:1;min-width:38px;padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:18px;cursor:pointer;">${s.emoji}</button>`).join('')}
+        <button type="button" data-dish="${escAttr(d.name)}" data-val="" onclick="setFeedbackRating(this)" title="Nicht probiert" style="padding:8px 8px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:10.5px;color:var(--muted);cursor:pointer;white-space:nowrap;">nicht probiert</button>
+      </div>
+    </div>`;
+  });
+  html+=`<textarea id="feedback-kommentar" placeholder="Kommentar zum Essen (optional)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;min-height:50px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;"></textarea>
+    <div style="font-size:11px;font-weight:600;color:#7B3FE4;margin-bottom:4px;">💬 Feedback an uns — egal worum's geht, wenn Lust und Laune (optional)</div>
+    <textarea id="feedback-frei" placeholder="Ideen, Anliegen, was auch immer…" style="width:100%;padding:9px;border:1px solid #DDD6FE;border-radius:8px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;background:#FAF5FF;"></textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="cancelFeedbackForm()" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="submitFeedback()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern ✓</button>
+    </div>
+  </div>`;
+  wrap.innerHTML=html;
+  wrap.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+window.showFeedbackForm=showFeedbackForm;
+
+function cancelFeedbackForm(){
+  document.getElementById('feedback-form-wrap').innerHTML='';
+  document.getElementById('feedback-add-btn').style.display='block';
+  _feedbackDraft={};
+}
+window.cancelFeedbackForm=cancelFeedbackForm;
+
+function setFeedbackRating(btn){
+  const dish=btn.dataset.dish;
+  const val=btn.dataset.val;
+  _feedbackDraft[dish]=val===''?null:parseInt(val);
+  // Alle Buttons dieser Zeile zurücksetzen, den geklickten hervorheben
+  const row=btn.parentElement;
+  row.querySelectorAll('button').forEach(b=>{ b.style.background='#fff'; b.style.borderColor='var(--border)'; });
+  btn.style.background='#FDF2F8'; btn.style.borderColor='#EC4899';
+}
+window.setFeedbackRating=setFeedbackRating;
+
+async function submitFeedback(){
+  const name=document.getElementById('feedback-name')?.value?.trim();
+  const kommentar=document.getElementById('feedback-kommentar')?.value?.trim()||null;
+  const feedbackFrei=document.getElementById('feedback-frei')?.value?.trim()||null;
+  if(!name){ showToast('Bitte einen Namen eingeben', true); return; }
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name,ratings:_feedbackDraft,kommentar,feedback_frei:feedbackFrei}])});
+    showToast('✓ Danke für dein Feedback!');
+    // Primärer Ort ist jetzt "Während der Schicht" (20.08.26 verschoben, Schichtende ist oft
+    // stressig genug) — die alte Standalone-Seite bleibt als Fallback erreichbar.
+    if(currentView==='waehrend') renderWaehrend();
+    else { cancelFeedbackForm(); renderEssenFeedback(); }
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern', true); }
+}
+window.submitFeedback=submitFeedback;
+
 async function renderSchichtende(){
   const el=document.getElementById('v-schichtende');
   const today=new Date().toISOString().split('T')[0];
   const tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
 
   // Alle Daten parallel laden
-  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, submissionsToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow, beilagenReviewedToday] = await Promise.all([
+  const [clTemplates, clDoneToday, disposalToday, wochensalatToday, wekToday, reinToday, kuehlToday, uebergabeToday, submissionsToday, kcSubToday, forecastTomorrow, beilagenAdjustedTomorrow, beilagenReviewedToday, feedbackToday] = await Promise.all([
     api('checklist_templates?list_type=eq.abschluss&select=id').catch(()=>[]),
     api(`checklist_done?store_id=eq.${currentStore.id}&done_date=eq.${today}&select=template_id`).catch(()=>[]),
     api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=id`).catch(()=>[]),
@@ -9663,7 +9822,8 @@ async function renderSchichtende(){
     api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=id`).catch(()=>[]),
     api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${tomorrow}&select=id`).catch(()=>[]),
     api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${tomorrow}&is_adjusted=eq.true&select=id&limit=1`).catch(()=>[]),
-    api(`beilagen_reviewed?store_id=eq.${currentStore.id}&review_date=eq.${today}&select=id&limit=1`).catch(()=>[])
+    api(`beilagen_reviewed?store_id=eq.${currentStore.id}&review_date=eq.${today}&select=id&limit=1`).catch(()=>[]),
+    api(`essen_feedback?store_id=eq.${currentStore.id}&datum=eq.${today}&select=id`).catch(()=>[])
   ]);
 
   const clDoneIds=new Set((clDoneToday||[]).map(x=>x.template_id));
@@ -9680,6 +9840,7 @@ async function renderSchichtende(){
   const schritte=[
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
+    {id:'feedback', label:'Team-Feedback zum Essen', sub:'Wie hat\'s geschmeckt? Kurz eintragen', done:(feedbackToday||[]).length>0, link:'waehrend', group:'kueche'},
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
     {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
@@ -9694,6 +9855,7 @@ async function renderSchichtende(){
   const SCHRITT_META={
     abschluss: {emoji:'💡', label:'Abschluss-Checkliste (optionale Hilfe)', sub:`${clDoneCount} von ${clTotal} Punkten — kein Pflichtschritt`, link:'check'},
     entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
+    feedback: {emoji:'😋', label:'Team-Feedback zum Essen', sub:'Wie hat\'s geschmeckt?', link:'waehrend'},
     forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', link:'order', orderTab:'forecast'},
     beilagen_anpassen: {emoji:'🍳', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen', link:'order', orderTab:'kueche'},
     dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
@@ -10299,13 +10461,15 @@ window.submitGrundreinigung=submitGrundreinigung;
 // Filial-Zähl-Funktion; das gibt es laut Tini gar nicht, daher hier zusammengelegt).
 async function kuechenlagerBodyHtml(){
   const items=articles.filter(a=>a.category==='Kuechenlager');
-  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird um 15:00 automatisch an Simone gesammelt.</div>`;
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird jeden Dienstag um 15:00 automatisch an Simone gesammelt.</div>`;
 
   LIEFERANT_ORDER.forEach(lief=>{
     const liefItems=items.filter(a=>(a.lieferant||'Sonstiges')===lief).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
     if(!liefItems.length) return;
     html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">${lief}</div>`;
-    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th><th>Meldestand</th></tr></thead><tbody>`;
+    // Meldestand bewusst NICHT als eigene Spalte (20.08.26, Wunsch Tini: "nicht wesentlich bei
+    // Inventur") — bleibt aber intern für die Rot-Markierung der Zeile aktiv (min_stock).
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th></tr></thead><tbody>`;
     liefItems.forEach(a=>{
       const bestand=a.kuechenlager_bestand;
       const meldestand=a.min_stock||0;
@@ -10313,7 +10477,6 @@ async function kuechenlagerBodyHtml(){
       html+=`<tr style="${niedrig?'background:#FEF2F2;':''}">
         <td style="font-size:12px;">${a.name} <span style="color:var(--muted);">(${a.unit||''})</span></td>
         <td><input type="number" step="1" value="${bestand??''}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:56px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};"></td>
-        <td style="text-align:center;color:var(--muted);font-size:12px;">${meldestand}</td>
       </tr>`;
     });
     html+='</tbody></table></div></div>';
@@ -11739,6 +11902,21 @@ async function renderKitchen(){
   nextCookDay.setDate(nextCookDay.getDate()+1);
   while([0,6].includes(nextCookDay.getDay())){ nextCookDay.setDate(nextCookDay.getDate()+1); }
   const nextCookDayLabel=nextCookDay.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+  const nextCookDayStr=nextCookDay.toISOString().split('T')[0];
+  // Ungesehene Mengen-Änderungen: Punkt am 🌅-Tab, BEVOR Nooru überhaupt reinklickt (19.08.26 auf
+  // Wunsch Tini — bisher gab's nur den 🔄-Button + 60s-Auto-Refresh IM Tab, aber keinen Hinweis von
+  // außen, dass sich überhaupt was geändert hat). "Gesehen" = Zeitpunkt in localStorage pro Kochtag,
+  // wird beim tatsächlichen Öffnen von renderMorgenKoch aktualisiert (siehe dort).
+  let hasUnseenMorgenChanges=false;
+  try{
+    const _touchCheck=await api(`forecast_qty?forecast_date=eq.${nextCookDayStr}&select=changed_at,confirmed_at`).catch(()=>[]);
+    const _lastTouch=(_touchCheck||[]).reduce((max,r)=>{
+      const t=[r.changed_at,r.confirmed_at].filter(Boolean).sort().pop();
+      return (t && t>max) ? t : max;
+    }, '');
+    const _lastSeen=localStorage.getItem(`morgen_seen_${nextCookDayStr}`)||'';
+    hasUnseenMorgenChanges = !!_lastTouch && _lastTouch>_lastSeen;
+  }catch(e){}
   // Ab 13:00 Uhr zeigt "Nächste Woche" wirklich die kommende Woche (vorher die laufende) — Wording
   // im Tab passt sich automatisch mit an, damit nie unklar ist, welche Woche gerade gemeint ist.
   // Freitag ab 13:00 Uhr → Nächste Woche (Küche plant voraus), sonst immer Diese Woche
@@ -11759,7 +11937,8 @@ async function renderKitchen(){
   const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
   const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style="font-size:10px;font-weight:400;">'+forecastDateRange+'</span>';
   const menuTabLabel='🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche '+CURRENT_MENU_WOCHE+'</span>';
-  html+=`<div class="cl-tabs">${ktab('morgen','🌅 '+nextCookDayLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('entsorgung','🗑️ Entsorgung')}</div>`;
+  const morgenTabLabel='🌅 '+nextCookDayLabel+(hasUnseenMorgenChanges?' <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#EF4444;margin-left:2px;vertical-align:middle;"></span>':'');
+  html+=`<div class="cl-tabs">${ktab('morgen',morgenTabLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('entsorgung','🗑️ Entsorgung')}</div>`;
 
   if(kitchenTab==='daily'){
     // Daily Business — Store-Ansicht für Kassenbereich (Während der Schicht)
@@ -12138,6 +12317,23 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
 
   const forecasts = await api(`forecast_qty?forecast_date=eq.${tomorrowStr}&select=store_id,dish_name,qty,source,changed_at,groesse`).catch(()=>[]);
+
+  // Change-Erkennung (19.08.26, Wunsch Tini): vorherigen Snapshot fürs selbe Datum mit dem gerade
+  // frisch geladenen vergleichen. Bei echtem Unterschied — und NUR wenn schon einmal ein Snapshot
+  // da war, sonst würde der allererste Aufruf fälschlich als "Änderung" gelten — kurzer Toast.
+  // Das ist der aktive Hinweis fürs 60s-Auto-Refresh; der rote Punkt am Tab ist der passive Hinweis
+  // für den Fall, dass Nooru gar nicht im Morgen-Tab ist.
+  const _snapKey=`${tomorrowStr}`;
+  const _newSnap=JSON.stringify((forecasts||[]).map(f=>`${f.dish_name}|${f.store_id}|${f.qty}|${f.groesse}`).sort());
+  if(window._morgenSnapKey===_snapKey && window._morgenSnap!==undefined && window._morgenSnap!==_newSnap){
+    showToast('🔄 Mengen wurden aktualisiert');
+  }
+  window._morgenSnapKey=_snapKey; window._morgenSnap=_newSnap;
+  // "Gesehen"-Zeitpunkt für den roten Punkt am 🌅-Tab — erst NACH dem obigen Vergleich setzen,
+  // damit die aktuelle Änderung noch als "neu" markiert werden kann, siehe weiter unten bei den Zellen.
+  const _lastSeenBefore=localStorage.getItem(`morgen_seen_${tomorrowStr}`)||'';
+  localStorage.setItem(`morgen_seen_${tomorrowStr}`, new Date().toISOString());
+
   const fMap = {}; const fMapByCat = {};
   (forecasts||[]).forEach(f=>{
     if(!fMap[f.dish_name]) fMap[f.dish_name]={};
@@ -12298,6 +12494,9 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const changed=recs.some(r=>r.source==='manual'||r.source==='store'||r.source==='org');
       const changedByOrg=recs.some(r=>r.source==='org');
       const changedColor=changedByOrg?'#2B3A67':'#F97316';
+      // Seit Nooru's letztem Blick geändert (19.08.26) — eigener, auffälligerer Hinweis als das
+      // normale "changed" (das bleibt dauerhaft orange/blau markiert, auch nach Wochen).
+      const isNewSinceLastSeen=recs.some(r=>r.changed_at && r.changed_at>_lastSeenBefore);
       const activeRecs=recs.filter(r=>r.qty>0);
       const useShort=activeRecs.length>1; // mehrere Größen gleichzeitig -> abkürzen, sonst ausschreiben
       const sizeLabel=(isLasagne&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:${useShort?'8px':'8.5px'};font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)}× ${useShort?(SIZE_SHORT_MK[r.groesse]||'G')+' ('+(SIZE_PORTIONS_MK[r.groesse]||18)+')':(SIZE_FULL_MK[r.groesse]||'Groß')}</span>`).join('')}</div>`:'';
@@ -12307,7 +12506,8 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
         const a=disposalAmpel(dispRec.leftover_qty, dispRec.sold_out_time);
         ampelBadge=`<div style="font-size:9.5px;font-weight:700;color:${a.color};margin-top:1px;">${a.icon} ${dispRec.leftover_qty}</div>`;
       }
-      return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}">${!isLasagne?(qty?formatQty(qty):'–'):''}${sizeLabel}${ampelBadge}</td>`;
+      const neuBadge=isNewSinceLastSeen?`<div style="font-size:8px;font-weight:800;color:#fff;background:#EF4444;border-radius:4px;padding:0px 4px;display:inline-block;margin-top:2px;">NEU</div>`:'';
+      return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}${isNewSinceLastSeen?'background:#FEF2F2;':''}">${!isLasagne?(qty?formatQty(qty):'–'):''}${sizeLabel}${ampelBadge}${neuBadge}</td>`;
     }).join('');
     html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
       <td style="text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);word-break:break-word;"><span style="display:flex;align-items:center;gap:4px;"><span style="flex-shrink:0;">${dishImgHtml(dish, 16)}</span><span style="font-weight:600;font-size:11px;line-height:1.25;">${dish}</span></span></td>
