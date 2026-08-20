@@ -232,6 +232,7 @@ summary::marker{content:'';}
     <div id="v-stadtgemeinde" class="view"></div>
     <div id="v-essenFeedback" class="view"></div>
     <div id="v-kundenfeedback" class="view"></div>
+    <div id="v-teamFeedback" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
@@ -997,7 +998,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.78.0';
+const APP_VERSION = '6.79.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1625,7 +1626,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -5583,6 +5584,13 @@ async function renderManagement(){
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#E0521F;">Kundenfeedback</span>
         <span class="org-btn-sub">Anonym, über den Shopify-Link — Bewertung, Tags, Kommentare</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('teamFeedback')" style="border-color:#EC4899;">
+      <span class="org-btn-icon">😋</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#EC4899;">Food-Feedback vom Team</span>
+        <span class="org-btn-sub">Bewertungen je Gericht + freies App-Feedback</span>
       </div>
     </button>
 
@@ -13517,6 +13525,105 @@ async function renderKundenfeedback(){
   translateEl(el);
 }
 window.renderKundenfeedback=renderKundenfeedback;
+
+// ==== TEAM-FOOD-FEEDBACK-ÜBERSICHT (Organisation) — 20.08.26 ====
+// War bisher NIRGENDS für Organisation einsehbar (essen_feedback landete nur pro Store/Tag in der
+// DB) — das ist der eigentliche Fehler, den Tini gefunden hat: das App-Feedback (freier Text) war
+// komplett unsichtbar für sie.
+async function renderTeamFeedback(){
+  const el=document.getElementById('v-teamFeedback');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('😋','Food-Feedback vom Team','Bewertungen & freies App-Feedback','#EC4899');
+
+  const [rows, stores] = await Promise.all([
+    api('essen_feedback?select=*&order=submitted_at.desc&limit=150').catch(()=>[]),
+    api('stores?select=id,name').catch(()=>[])
+  ]);
+  const storeNameMap={}; (stores||[]).forEach(s=>storeNameMap[s.id]=s.name);
+
+  if(!rows || !rows.length){
+    html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Noch kein Team-Feedback eingegangen.</div>`;
+    el.innerHTML=html; translateEl(el); return;
+  }
+
+  // App-Feedback (freier Text) zuerst und prominent — das war der eigentlich vermisste Teil.
+  const freieEintraege=rows.filter(r=>r.feedback_frei && r.feedback_frei.trim());
+  html+=`<div class="section-lbl">💬 App-Feedback (frei)</div>`;
+  if(!freieEintraege.length){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Noch kein freies Feedback abgegeben.</div>`;
+  }
+  freieEintraege.forEach(r=>{
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#FAF5FF;border-color:#DDD6FE;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <strong style="font-size:13px;">${r.name||'Anonym'}</strong>
+        <span style="font-size:10px;color:var(--muted);">${storeNameMap[r.store_id]||r.store_id} · ${new Date(r.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</span>
+      </div>
+      <div style="font-size:12.5px;color:#4C1D95;margin-top:6px;white-space:pre-wrap;">${r.feedback_frei}</div>
+    </div>`;
+  });
+
+  // Gerichte-Auswertung — Team-Bewertungen pro Gericht, schlechtester Schnitt zuerst.
+  const byDish={};
+  rows.forEach(r=>{
+    Object.entries(r.ratings||{}).forEach(([dish,rec])=>{
+      const val=(rec && typeof rec==='object')?rec.v:rec;
+      if(val==null) return;
+      if(!byDish[dish]) byDish[dish]=[];
+      byDish[dish].push(val);
+    });
+  });
+  const dishStats=Object.entries(byDish).map(([name,vals])=>({name, count:vals.length, avg:vals.reduce((a,b)=>a+b,0)/vals.length})).sort((a,b)=>a.avg-b.avg);
+  if(dishStats.length){
+    html+=`<div class="section-lbl" style="margin-top:16px;">📊 Nach Gericht</div>`;
+    dishStats.forEach(d=>{
+      const scale=FEEDBACK_SCALE.find(s=>s.v===Math.round(d.avg));
+      const barColor=d.avg<3?'#DC2626':d.avg<4?'#EA580C':'#16A34A';
+      html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:13px;font-weight:600;flex:1;">${d.name}</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <span style="font-size:18px;">${scale?scale.emoji:'–'}</span>
+            <span style="font-size:15px;font-weight:800;color:${barColor};">${d.avg.toFixed(1)}</span>
+          </div>
+        </div>
+        <div style="height:4px;background:#F3F4F6;border-radius:2px;margin-top:6px;overflow:hidden;">
+          <div style="height:100%;width:${(d.avg/5*100).toFixed(0)}%;background:${barColor};"></div>
+        </div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:5px;">${d.count}× bewertet</div>
+      </div>`;
+    });
+  }
+
+  html+=`<div onclick="document.getElementById('tf-org-alle').style.display=document.getElementById('tf-org-alle').style.display==='none'?'block':'none';this.querySelector('span').textContent=this.querySelector('span').textContent.includes('▾')?'Alle ${rows.length} Einträge einzeln anzeigen ▸':'Einzeln einklappen ▾';" style="text-align:center;padding:10px;margin-top:8px;cursor:pointer;color:var(--muted);font-size:12px;text-decoration:underline;">
+    <span>Alle ${rows.length} Einträge einzeln anzeigen ▸</span>
+  </div>
+  <div id="tf-org-alle" style="display:none;">`;
+  rows.forEach(r=>{
+    const ratingRows=Object.entries(r.ratings||{}).map(([dish,rec])=>{
+      const val=(rec && typeof rec==='object')?rec.v:rec;
+      const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
+      const scale=FEEDBACK_SCALE.find(s=>s.v===val);
+      const tagsHtml=tags.map(k=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin-left:3px;">${t?t.label:k}</span>`;}).join('');
+      return `<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0;"><span style="color:var(--sub);">${dish}</span><span>${scale?scale.emoji:'– nicht probiert'}${tagsHtml}</span></div>`;
+    }).join('');
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <strong style="font-size:13px;">${r.name||'Anonym'}</strong>
+        <span style="font-size:10px;color:var(--muted);">${storeNameMap[r.store_id]||r.store_id} · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div style="margin-top:4px;">${ratingRows}</div>
+      ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${r.kommentar}"</div>`:''}
+      ${r.feedback_frei?`<div style="font-size:11.5px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;">💬 ${r.feedback_frei}</div>`:''}
+    </div>`;
+  });
+  html+='</div>';
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderTeamFeedback=renderTeamFeedback;
+
 
 
 async function renderSweets(){
