@@ -991,7 +991,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.67.0';
+const APP_VERSION = '6.67.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2690,6 +2690,7 @@ async function renderHome(){
   let dcStatus={wek:false,reinCount:0,kuehl:false};
   let gamificationHtml='';
   let disposalDone=false;
+  let feedbackDoneHome=false;
   let quickSoldOutDishes=[];
   let uebergabeNotiz=null;
   let isKCDay=false;
@@ -2716,6 +2717,9 @@ async function renderHome(){
     // Entsorgung heute Status
     const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=id`).catch(()=>[]);
     disposalDone=(disposalToday||[]).length>0;
+    // Team-Feedback heute Status (20.08.26)
+    const feedbackTodayHome=await api(`essen_feedback?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=id&limit=1`).catch(()=>[]);
+    feedbackDoneHome=(feedbackTodayHome||[]).length>0;
     // "Schon ausverkauft?"-Schnellmeldung — dieselben Gerichte/Helfer wie im Entsorgung-Tab, damit
     // die Filiale nie selbst wissen muss, in welcher Menü-Woche sie gerade ist. Nur Gerichte zeigen,
     // die heute noch NICHT als ausverkauft gemeldet wurden (sonst wird's unübersichtlich).
@@ -2940,6 +2944,10 @@ async function renderHome(){
       return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${cardsHtml}</div>
         <div id="dish-allergen-panels" style="margin-bottom:10px;">${panelsHtml}</div>`;
     })()}
+    ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="margin-bottom:6px;padding:8px 10px;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':''}">
+      <div style="font-size:13px;font-weight:500;">😋 Team-Feedback zum Essen</div>
+      <div style="font-size:10px;color:${feedbackDoneHome?'var(--green)':'var(--muted)'};margin-top:2px;">${feedbackDoneHome?'✓ heute schon abgegeben':'Wie hat\'s geschmeckt?'}</div>
+    </div>`:''}
     <div class="home-card kf-disposal" onclick="goTo('disposal')" style="margin-bottom:6px;padding:8px 10px;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
       <div style="font-size:13px;font-weight:500;">🗑️ Entsorgung / Food Waste</div>
       <div style="font-size:10px;color:${disposalDone?'var(--green)':'var(--muted)'};margin-top:2px;">${disposalDone?'✓ erledigt':'Restmengen eintragen'}</div>
