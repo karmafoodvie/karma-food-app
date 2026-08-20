@@ -997,7 +997,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.74.2';
+const APP_VERSION = '6.75.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1285,6 +1285,9 @@ function getMenuForDate(dateStr){
 // ==== ÖFFENTLICHES KUNDENFEEDBACK (20.08.26) ====
 // Kein Login, keine Personendaten. Erreichbar über ?feedback=1, z.B. von Shopify aus verlinkt.
 const KF_TAGS = [
+  {k:'perfekt_gewuerzt', label:'😍 Perfekt gewürzt', neg:false},
+  {k:'sehr_frisch', label:'🌟 Sehr frisch', neg:false},
+  {k:'wie_beschrieben', label:'👏 Genau wie beschrieben', neg:false},
   {k:'zu_scharf', label:'🌶️ Zu scharf', neg:true},
   {k:'zu_wenig_wuerze', label:'🧂 Zu wenig Würze', neg:true},
   {k:'zu_suess', label:'🍬 Zu süß', neg:true},
@@ -1292,10 +1295,7 @@ const KF_TAGS = [
   {k:'zu_wenig_protein', label:'🥩 Zu wenig Protein', neg:true},
   {k:'nicht_warm', label:'❄️ Nicht mehr warm', neg:true},
   {k:'nicht_frisch', label:'🧊 Nicht frisch', neg:true},
-  {k:'zu_oelig', label:'🧴 Zu ölig/fettig', neg:true},
-  {k:'perfekt_gewuerzt', label:'😍 Perfekt gewürzt', neg:false},
-  {k:'sehr_frisch', label:'🌟 Sehr frisch', neg:false},
-  {k:'wie_beschrieben', label:'👏 Genau wie beschrieben', neg:false}
+  {k:'zu_oelig', label:'🧴 Zu ölig/fettig', neg:true}
 ];
 let _kfRating=null, _kfTags=new Set();
 
@@ -13412,9 +13412,10 @@ async function renderKundenfeedback(){
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🗣️','Kundenfeedback','Anonym, über den Shopify-Link','#E0521F');
 
-  const [rows, stores] = await Promise.all([
+  const [rows, stores, teamRowsForWords] = await Promise.all([
     api('kunden_feedback?select=*&order=submitted_at.desc&limit=200').catch(()=>[]),
-    api('stores?select=id,name').catch(()=>[])
+    api('stores?select=id,name').catch(()=>[]),
+    api('essen_feedback?select=ratings&order=submitted_at.desc&limit=200').catch(()=>[])
   ]);
   const storeNameMap={}; (stores||[]).forEach(s=>storeNameMap[s.id]=s.name);
 
@@ -13437,6 +13438,29 @@ async function renderKundenfeedback(){
       ${topTags.length?`<div style="font-weight:600;margin-bottom:4px;">Häufigste Themen:</div>${topTags.map(([k,c])=>{const t=KF_TAGS.find(x=>x.k===k);return `${t?t.label:k} (${c})`;}).join(' · ')}`:'Noch keine Tags vergeben.'}
     </div>
   </div>`;
+
+  // Häufige Begriffe aus Freitexten — KEIN KI-Erkennen, sondern simple Wortzählung über alle
+  // Kommentare (Kund:innen + Team-Gründe). Zeigt, was oft vorkommt, damit man's manuell zu einem
+  // neuen Schnellauswahl-Tag machen kann, statt jeden Kommentar einzeln lesen zu müssen.
+  const STOPWORDS=new Set(['und','oder','aber','sehr','nicht','auch','war','ist','das','die','der','den','dem','ein','eine','einen','mit','für','von','auf','zu','im','am','als','wie','was','hat','habe','war','wäre','noch','nur','mal','bisschen','etwas','irgendwie','heute','bitte','danke','mehr','weniger','gut','schlecht','lecker']);
+  const wordCounts={};
+  const allTexts=[
+    ...rows.map(r=>r.kommentar),
+    ...(teamRowsForWords||[]).flatMap(r=>Object.values(r.ratings||{}).map(v=>(v&&typeof v==='object')?v.note:null))
+  ].filter(Boolean);
+  allTexts.forEach(text=>{
+    text.toLowerCase().replace(/[.,!?;:()"„"]/g,'').split(/\s+/).forEach(w=>{
+      if(w.length>=4 && !STOPWORDS.has(w)) wordCounts[w]=(wordCounts[w]||0)+1;
+    });
+  });
+  const topWords=Object.entries(wordCounts).filter(([,c])=>c>=2).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if(topWords.length){
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:14px;background:#FFFBEB;border-color:#FDE68A;">
+      <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;">💡 Häufige Begriffe in Kommentaren</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">${topWords.map(([w,c])=>`<span class="badge" style="background:#FEF3C7;color:#92400E;">${w} (${c}×)</span>`).join('')}</div>
+      <div style="font-size:10px;color:#B45309;margin-top:6px;">Taucht was oft auf und sollte ein eigener Schnellauswahl-Tag werden? Einfach sagen.</div>
+    </div>`;
+  }
 
   html+=`<div class="section-lbl">Letzte Einträge</div>`;
   rows.slice(0,60).forEach(r=>{
@@ -13790,7 +13814,14 @@ window.debounceFieldSave=debounceFieldSave;
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?6000:2500);}
 window.addEventListener('online',()=>{});
 
-initLogin().catch(console.error);
+// Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
+// würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
+// nicht URL-spezifisch) automatisch einloggen und die interne App zeigen, obwohl Kund:innen nur
+// das Feedback-Formular sehen sollen. Bug gefunden 20.08.26 — initLogin() lief bisher immer.
+const _isPublicFeedbackRoute = new URLSearchParams(window.location.search).get('feedback')==='1';
+if(!_isPublicFeedbackRoute){
+  initLogin().catch(console.error);
+}
 </script>
 </body>
 </html>
