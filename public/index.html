@@ -998,7 +998,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.84.0';
+const APP_VERSION = '6.85.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3599,10 +3599,12 @@ function renderOrder(){
 
   html+=`<div style="margin-top:16px;">
     <p style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Sonderbestellung / Anmerkung</p>
+    <div id="special-antwort-box"></div>
     <textarea id="special-note-${activeOrderTab}" placeholder="z.B. Bitte extra Servietten, oder spezielle Bestellung..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:80px;resize:vertical;font-family:inherit;"></textarea>
   </div>
   <button class="submit-btn" id="order-submit-btn" style="background:${tab.color};" onclick="submitOrder()">${tab.title} abschicken ✓</button>`;
   el.innerHTML=html;
+  loadSpecialOrderAntwortBox();
   translateEl(el);
   if(activeOrderTab==='transporter'){ loadGeldwechselList(); loadTransporterNoteList(); }
   if(activeOrderTab==='transporter' || activeOrderTab==='sweets'){ loadYesterdayOrderBox(); }
@@ -3675,8 +3677,12 @@ async function renderKCOrderTab(el, tabHtml){
   html+='</tbody></table></div></div>';
   html+=`<div style="font-size:11px;color:var(--muted);padding:4px 2px;">Negative Bestellung = Überbestand. Grün hinterlegtes Feld = heute aktualisiert (Datum darunter = letzte Eingabe).</div>`;
 
+  const todaySpec=await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=antwort&limit=1`).catch(()=>[]);
+  const specAntwort=todaySpec?.[0]?.antwort;
+
   html+=`<div style="margin-top:16px;">
     <p style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Sonderbestellung / Anmerkung</p>
+    ${specAntwort?`<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px;color:#1E40AF;">↩️ Antwort vom Transporter: „${specAntwort}"</div>`:''}
     <textarea id="special-note-kc" placeholder="z.B. Bitte extra Servietten, oder spezielle Bestellung..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:80px;resize:vertical;font-family:inherit;"></textarea>
   </div>
   <button class="submit-btn" style="background:${tab.color};" onclick="submitKCNote()">Shop Produkte abschicken ✓</button>`;
@@ -9532,6 +9538,48 @@ async function dismissSpecialOrder(id){
 }
 window.dismissSpecialOrder=dismissSpecialOrder;
 
+function toggleSpecialOrderReply(id){
+  const box=document.getElementById(`specreply-${id}`);
+  if(box) box.style.display=(box.style.display==='none')?'block':'none';
+}
+window.toggleSpecialOrderReply=toggleSpecialOrderReply;
+
+// Michi antwortet der Filiale auf eine Sonderbestellung (21.08.26, Wunsch Tini). Bei "nicht
+// vorrätig" geht zusätzlich automatisch ein Asana-Task an Simone, damit sie nachbestellt — ohne
+// Umweg über WhatsApp o.ä.
+// Lädt Michis Antwort zur heutigen Sonderbestellung nach (Haupt-Bestell-Tab ist NICHT async,
+// daher Nachladen statt direktem Await — 21.08.26, Wunsch Tini).
+async function loadSpecialOrderAntwortBox(){
+  const box=document.getElementById('special-antwort-box');
+  if(!box || !currentStore) return;
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    const rows=await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=antwort&limit=1`).catch(()=>[]);
+    const antwort=rows?.[0]?.antwort;
+    if(antwort) box.innerHTML=`<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px;color:#1E40AF;">↩️ Antwort vom Transporter: „${antwort}"</div>`;
+  }catch(e){ console.error(e); }
+}
+window.loadSpecialOrderAntwortBox=loadSpecialOrderAntwortBox;
+
+async function submitSpecialOrderReply(id, artikelText, storeName){
+  const antwort=document.getElementById(`specreply-text-${id}`)?.value?.trim();
+  const anSimone=document.getElementById(`specreply-simone-${id}`)?.checked||false;
+  if(!antwort){ showToast('Bitte kurz eine Antwort eintragen', true); return; }
+  try{
+    await api(`special_orders?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({antwort, antwort_am:new Date().toISOString(), an_simone_gemeldet:anSimone})});
+    if(anSimone){
+      await fetch(`${SUPABASE_URL}/functions/v1/asana-sonderbestellung`,{
+        method:'POST',
+        headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({store_name:storeName, artikel_text:artikelText, antwort})
+      }).catch(e=>console.error('Asana-Push an Simone fehlgeschlagen:',e));
+    }
+    showToast(anSimone?'✓ Antwort gespeichert & Simone benachrichtigt':'✓ Antwort gespeichert');
+    renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.submitSpecialOrderReply=submitSpecialOrderReply;
+
 // Freie Notiz von Filiale an Transporter — nutzt dieselbe transporter_tasks-Tabelle wie die
 // Organisation-Aufgaben, damit alles gesammelt im selben Info-Tab bei Michi ankommt.
 function toggleTransporterNoteForm(){
@@ -10878,7 +10926,7 @@ async function renderPack(){
     html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#9A3412;">📋 Ansicht eines vergangenen Tages — nur Anzeige, "eingepackt" kann hier nicht mehr geändert werden.</div>`;
   }
   const allOrdRaw=await api(`orders?order_date=eq.${bestellDateStr}&select=store_id,article_id,quantity,eingepackt`);
-  const specRaw=await api(`special_orders?order_date=eq.${bestellDateStr}&select=id,store_id,note`).catch(()=>[]);
+  const specRaw=await api(`special_orders?order_date=eq.${bestellDateStr}&select=id,store_id,note,antwort,an_simone_gemeldet`).catch(()=>[]);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
@@ -10957,7 +11005,30 @@ async function renderPack(){
   }
   if(specs.length){
     html+=`<div class="section-lbl">📝 Sonderbestellungen</div><div class="card">`;
-    specs.forEach(s=>{const store=stores.find(x=>x.id===s.store_id);const col=STORE_COLORS[s.store_id]||'#888';html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;"><span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span><div style="flex:1;"><div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div><div style="font-size:13px;color:var(--sub);">${s.note}</div></div><button onclick="dismissSpecialOrder(${s.id})" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;">✓ erledigt</button></div>`;});
+    specs.forEach(s=>{
+      const store=stores.find(x=>x.id===s.store_id);
+      const col=STORE_COLORS[s.store_id]||'#888';
+      html+=`<div style="padding:9px 14px;border-bottom:1px solid var(--border);">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div>
+            <div style="font-size:13px;color:var(--sub);">${s.note}</div>
+            ${s.antwort?`<div style="font-size:11.5px;color:var(--green);margin-top:4px;">↩️ Deine Antwort: „${s.antwort}"${s.an_simone_gemeldet?' · 📤 Simone benachrichtigt':''}</div>`:''}
+          </div>
+          <button onclick="toggleSpecialOrderReply(${s.id})" style="background:#EFF6FF;color:#1E40AF;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;">${s.antwort?'✏️':'💬'}</button>
+          <button onclick="dismissSpecialOrder(${s.id})" style="background:var(--green-light);color:var(--green);border:none;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:500;cursor:pointer;white-space:nowrap;">✓ erledigt</button>
+        </div>
+        <div id="specreply-${s.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+          <textarea id="specreply-text-${s.id}" placeholder="Antwort an die Filiale, z.B. 'Aktuell nicht vorrätig, wird nachbestellt'..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;min-height:50px;resize:vertical;font-family:inherit;box-sizing:border-box;">${s.antwort||''}</textarea>
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;color:var(--sub);cursor:pointer;">
+            <input type="checkbox" id="specreply-simone-${s.id}" style="width:16px;height:16px;">
+            ⚠️ Nicht vorrätig — Simone per Asana benachrichtigen, damit sie nachbestellt
+          </label>
+          <button onclick="submitSpecialOrderReply(${s.id},'${escAttr(s.note)}','${escAttr(store?.name||s.store_id)}')" style="margin-top:8px;width:100%;padding:8px;border:none;border-radius:8px;background:#1E40AF;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Antwort senden</button>
+        </div>
+      </div>`;
+    });
     html+='</div>';
   }
   if(!hasAny&&!specs.length) html+='<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Noch keine Bestellungen heute</div>';
