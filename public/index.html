@@ -998,7 +998,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.85.0';
+const APP_VERSION = '6.86.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -11650,21 +11650,33 @@ function getWeekDates(offset){
   return days;
 }
 function isoDate(d){return d.toISOString().split('T')[0];}
+let _samosaWeekOffset=0; // 21.08.26, Wunsch Tini: letzte/nächste Woche ansehbar
+
 async function renderSamosaTableHtml(){
   // SAMOSA-VERTEILUNG — eigene Tabelle, da Kitchen hier (anders als bei den Beilagen) selbst
   // auch eine Menge bekommt, nicht nur die Stores.
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
-  const weekDates=getWeekdayDates();
-  const todayWeekday=new Date().getDay();
+  const weekDates=getWeekdayDates(_samosaWeekOffset);
+  const todayWeekday=_samosaWeekOffset===0?new Date().getDay():-1; // "heute"-Hervorhebung nur in der aktuellen Woche
   const WD_LABEL={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag'};
+  const kw=getIsoWeekNumber(weekDates[1]);
 
   const baseline=await api('samosa_baseline?select=store_id,weekday,base_qty').catch(()=>[]);
   const todayVals=await api(`samosa_today?select=store_id,supply_date,qty,is_adjusted&supply_date=gte.${weekDates[1]}&supply_date=lte.${weekDates[4]}`).catch(()=>[]);
+  const erhaltenVals=await api(`samosa_erhalten?select=supply_date,qty&supply_date=gte.${weekDates[1]}&supply_date=lte.${weekDates[4]}`).catch(()=>[]);
+  const erhaltenMap={}; (erhaltenVals||[]).forEach(e=>erhaltenMap[e.supply_date]=e.qty);
   const valMap={}; // valMap[date][store_id] = rec
   (todayVals||[]).forEach(d=>{ if(!valMap[d.supply_date])valMap[d.supply_date]={}; valMap[d.supply_date][d.store_id]=d; });
 
-  let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+  // Wochen-Navigation — genau wie beim Kochtermin-Navigator an anderen Stellen der App.
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;">
+    <button onclick="_samosaWeekOffset--;renderPack();" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">← Letzte Woche</button>
+    <div style="flex:1.2;text-align:center;font-size:11.5px;color:var(--muted);">${_samosaWeekOffset===0?'Diese Woche':`KW ${kw}`}${_samosaWeekOffset!==0?`<div onclick="_samosaWeekOffset=0;renderPack();" style="font-size:10px;color:#F97316;cursor:pointer;text-decoration:underline;">zu heute</div>`:''}</div>
+    <button onclick="_samosaWeekOffset++;renderPack();" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">Nächste Woche →</button>
+  </div>`;
+
+  html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Standort</th>
     ${[1,2,3,4].map(wd=>`<th style="${wd===todayWeekday?'color:#F97316;font-weight:700;':''}">${WD_LABEL[wd]}${wd===todayWeekday?' (heute)':''}</th>`).join('')}
   </tr></thead><tbody>`;
@@ -11694,8 +11706,21 @@ async function renderSamosaTableHtml(){
   html+=`<tr style="font-weight:700;background:var(--green-light);"><td style="text-align:left;font-size:12px;color:#3B6D11;">GESAMT</td>
     ${[1,2,3,4].map(wd=>`<td style="color:#3B6D11;font-size:13px;">${dayTotals[wd]}</td>`).join('')}
   </tr>`;
+  // NEU (21.08.26, Wunsch Tini): tatsächlich vom Produzenten Geliefertes eintragen — immer wieder
+  // Abweichungen zur Bestellmenge, das macht sie auf einen Blick sichtbar (Differenz farbig).
+  html+=`<tr style="background:#FFF7ED;"><td style="text-align:left;font-size:11.5px;font-weight:600;color:#9A3412;">Tatsächlich<br>erhalten</td>
+    ${[1,2,3,4].map(wd=>{
+      const dateStr=weekDates[wd];
+      const erhalten=erhaltenMap[dateStr];
+      const diff=(erhalten!=null && dayTotals[wd])?Number(erhalten)-dayTotals[wd]:null;
+      const diffHtml=diff!=null&&diff!==0?`<div style="font-size:9.5px;font-weight:700;color:${diff<0?'#DC2626':'#16A34A'};">${diff>0?'+':''}${diff}</div>`:(diff===0?`<div style="font-size:9.5px;color:#16A34A;">✓ passt</div>`:'');
+      return `<td><input type="number" step="1" value="${erhalten??''}" placeholder="–" data-date="${dateStr}"
+        oninput="debounceFieldSave(this,()=>updateSamosaErhalten(this))" onchange="updateSamosaErhalten(this)"
+        style="width:44px;text-align:center;border:1.5px solid #FDBA74;border-radius:6px;font-size:12px;padding:3px 1px;background:#fff;">${diffHtml}</td>`;
+    }).join('')}
+  </tr>`;
   html+='</tbody></table></div></div>';
-  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = angepasst. Leere/graue Felder = aktuell kein Standard-Liefertag, aber jederzeit eintragbar.</div>`;
+  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = angepasst. Leere/graue Felder = aktuell kein Standard-Liefertag, aber jederzeit eintragbar. "Tatsächlich erhalten" = was der Produzent wirklich geliefert hat, zum Abgleich mit der Bestellmenge.</div>`;
 
   // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp — der braucht nur die
   // Gesamtmenge pro Tag (und die Wochensumme), keine Aufschlüsselung nach Filiale.
@@ -11748,6 +11773,24 @@ async function updateSamosaQty(input){
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateSamosaQty=updateSamosaQty;
+
+// "Tatsächlich erhalten" (21.08.26, Wunsch Tini) — pro Tag ein einziger Wert (nicht pro Filiale,
+// die Lieferung kommt gesamt vom Produzenten), Abgleich mit der Bestellmenge macht Abweichungen
+// auf einen Blick sichtbar.
+async function updateSamosaErhalten(input){
+  const dateStr=input.dataset.date;
+  const val=input.value===''?null:parseInt(input.value);
+  if(input.value!=='' && isNaN(val)) return;
+  try{
+    await api(`samosa_erhalten?supply_date=eq.${dateStr}`,{method:'DELETE'});
+    if(val!=null){
+      await api('samosa_erhalten',{method:'POST',body:JSON.stringify([{supply_date:dateStr,qty:val}])});
+    }
+    showToast('✔ Gespeichert');
+    if(activePackTab==='transporter') renderPack();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.updateSamosaErhalten=updateSamosaErhalten;
 
 // Speichert automatisch ~600ms nach der letzten Eingabe, statt sich auf's Wegtippen (blur/onchange)
 // zu verlassen — genau die Race-Condition, die zum "20 bestellt, 0 angekommen"-Fall geführt hat.
