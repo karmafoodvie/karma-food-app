@@ -998,7 +998,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.82.0';
+const APP_VERSION = '6.83.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -12569,7 +12569,7 @@ async function getDishFeedbackSummary(dishName, refDateStr){
   const heute=refDateStr || new Date().toISOString().split('T')[0];
   const [teamRows, kundenRows] = await Promise.all([
     api(`essen_feedback?datum=lt.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
-    api(`kunden_feedback?dish_name=eq.${encodeURIComponent(dishName)}&submitted_at=lt.${heute}T00:00:00&select=rating,quick_tags,submitted_at&order=submitted_at.desc&limit=400`).catch(()=>[])
+    api(`kunden_feedback?dish_name=eq.${encodeURIComponent(dishName)}&submitted_at=lt.${heute}T00:00:00&select=rating,quick_tags,kommentar,submitted_at&order=submitted_at.desc&limit=400`).catch(()=>[])
   ]);
 
   let teamLastDate=null;
@@ -12578,31 +12578,42 @@ async function getDishFeedbackSummary(dishName, refDateStr){
   }
   let teamAvg=null, teamCount=0;
   const teamTagCounts={};
+  const teamNotes=[];
   if(teamLastDate){
     const sameDay=(teamRows||[]).filter(r=>r.datum===teamLastDate && r.ratings && r.ratings[dishName]!=null);
     teamCount=sameDay.length;
     // Rückwärtskompatibel: alte Einträge haben hier eine reine Zahl statt {v,tags}.
     const vals=sameDay.map(r=>{ const rec=r.ratings[dishName]; return (rec && typeof rec==='object')?rec.v:rec; }).filter(v=>v!=null);
     if(vals.length) teamAvg=vals.reduce((s,v)=>s+Number(v),0)/vals.length;
-    sameDay.forEach(r=>{ const rec=r.ratings[dishName]; const tags=(rec && typeof rec==='object')?(rec.tags||[]):[]; tags.forEach(t=>teamTagCounts[t]=(teamTagCounts[t]||0)+1); });
+    sameDay.forEach(r=>{
+      const rec=r.ratings[dishName];
+      const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
+      tags.forEach(t=>teamTagCounts[t]=(teamTagCounts[t]||0)+1);
+      const note=(rec && typeof rec==='object')?rec.note:null;
+      if(note) teamNotes.push(note);
+    });
   }
 
   let kundenLastDate=null;
   if((kundenRows||[]).length){ kundenLastDate=(kundenRows[0].submitted_at||'').split('T')[0]; }
   let kundenAvg=null, kundenCount=0;
   const tagCounts={};
+  const kundenNotes=[];
   if(kundenLastDate){
     const sameDay=(kundenRows||[]).filter(r=>(r.submitted_at||'').split('T')[0]===kundenLastDate);
     kundenCount=sameDay.length;
     const rated=sameDay.filter(r=>r.rating!=null);
     if(rated.length) kundenAvg=(rated.reduce((s,r)=>s+Number(r.rating),0)/rated.length);
-    sameDay.forEach(r=>(r.quick_tags||[]).forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1));
+    sameDay.forEach(r=>{
+      (r.quick_tags||[]).forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1);
+      if(r.kommentar) kundenNotes.push(r.kommentar);
+    });
   }
   // Team- und Kund:innen-Tags gemeinsam zählen — beide Quellen nutzen dieselbe Tag-Liste (KF_TAGS).
   Object.entries(teamTagCounts).forEach(([k,c])=>tagCounts[k]=(tagCounts[k]||0)+c);
   const topTags=Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
-  return {teamAvg, teamCount, teamLastDate, kundenAvg, kundenCount, kundenLastDate, topTags};
+  return {teamAvg, teamCount, teamLastDate, teamNotes, kundenAvg, kundenCount, kundenLastDate, kundenNotes, topTags};
 }
 
 function feedbackSummaryHtml(sum){
@@ -12611,18 +12622,36 @@ function feedbackSummaryHtml(sum){
   }
   const emojiFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
   const dateFmt=(d)=>d?new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'';
-  let html=`<div style="display:flex;gap:8px;margin-bottom:8px;">`;
+  const boxId='fbnotes-'+Math.random().toString(36).slice(2,9);
+  const hasTeamNotes=sum.teamNotes && sum.teamNotes.length;
+  const hasKundenNotes=sum.kundenNotes && sum.kundenNotes.length;
+  const clickAttr=(hasTeamNotes||hasKundenNotes)?`onclick="const b=document.getElementById('${boxId}');b.style.display=b.style.display==='none'?'block':'none';" style="cursor:pointer;"`:'';
+  let html=`<div ${clickAttr}>`;
+  html+=`<div style="display:flex;gap:8px;margin-bottom:8px;">`;
   html+=`<div style="flex:1;background:#FDF2F8;border-radius:8px;padding:8px 10px;text-align:center;">
     <div style="font-size:9px;font-weight:700;color:#9D2463;letter-spacing:.04em;">👥 TEAM</div>
-    ${sum.teamAvg!=null?`<div style="font-size:18px;">${emojiFor(sum.teamAvg)}</div><div style="font-size:12px;font-weight:700;">${sum.teamAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${sum.teamCount}× · ${dateFmt(sum.teamLastDate)}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
+    ${sum.teamAvg!=null?`<div style="font-size:18px;">${emojiFor(sum.teamAvg)}</div><div style="font-size:12px;font-weight:700;">${sum.teamAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${sum.teamCount}× · ${dateFmt(sum.teamLastDate)}${hasTeamNotes?' · 💬':''}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
   </div>`;
   html+=`<div style="flex:1;background:#FFF7ED;border-radius:8px;padding:8px 10px;text-align:center;">
     <div style="font-size:9px;font-weight:700;color:#B8460F;letter-spacing:.04em;">🗣️ GÄSTE</div>
-    ${sum.kundenAvg!=null?`<div style="font-size:18px;">${emojiFor(sum.kundenAvg)}</div><div style="font-size:12px;font-weight:700;">${sum.kundenAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${sum.kundenCount}× · ${dateFmt(sum.kundenLastDate)}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
+    ${sum.kundenAvg!=null?`<div style="font-size:18px;">${emojiFor(sum.kundenAvg)}</div><div style="font-size:12px;font-weight:700;">${sum.kundenAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${sum.kundenCount}× · ${dateFmt(sum.kundenLastDate)}${hasKundenNotes?' · 💬':''}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
   </div>`;
   html+=`</div>`;
   if(sum.topTags && sum.topTags.length){
     html+=`<div style="display:flex;flex-wrap:wrap;gap:4px;">${sum.topTags.map(([k,c])=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};">${t?t.label:k}${c>1?` ×${c}`:''}</span>`;}).join('')}</div>`;
+  }
+  html+=`</div>`;
+  if(hasTeamNotes||hasKundenNotes){
+    html+=`<div id="${boxId}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">`;
+    if(hasTeamNotes){
+      html+=`<div style="font-size:9px;font-weight:700;color:#9D2463;margin-bottom:3px;">👥 TEAM SAGT:</div>`;
+      sum.teamNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+    }
+    if(hasKundenNotes){
+      html+=`<div style="font-size:9px;font-weight:700;color:#B8460F;margin-bottom:3px;${hasTeamNotes?'margin-top:6px;':''}">🗣️ GÄSTE SAGEN:</div>`;
+      sum.kundenNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+    }
+    html+=`</div>`;
   }
   return html;
 }
