@@ -998,7 +998,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.83.1';
+const APP_VERSION = '6.84.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10716,7 +10716,7 @@ window.submitGrundreinigung=submitGrundreinigung;
 // Filial-Zähl-Funktion; das gibt es laut Tini gar nicht, daher hier zusammengelegt).
 async function kuechenlagerBodyHtml(){
   const items=articles.filter(a=>a.category==='Kuechenlager');
-  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird jeden Dienstag um 15:00 automatisch an Simone gesammelt.</div>`;
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Bestand antippen und eintragen. Rot hinterlegt = unter Meldestand, wird jeden Dienstag um 15:00 automatisch an Simone gesammelt. Häkchen bei Artikeln, die auf lange Zeit reichen (z.B. Strohhalme, Becher) — dann muss nicht ständig neu gezählt werden.</div>`;
 
   LIEFERANT_ORDER.forEach(lief=>{
     const liefItems=items.filter(a=>(a.lieferant||'Sonstiges')===lief).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
@@ -10724,20 +10724,46 @@ async function kuechenlagerBodyHtml(){
     html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">${lief}</div>`;
     // Meldestand bewusst NICHT als eigene Spalte (20.08.26, Wunsch Tini: "nicht wesentlich bei
     // Inventur") — bleibt aber intern für die Rot-Markierung der Zeile aktiv (min_stock).
-    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th></tr></thead><tbody>`;
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th><th title="Reicht auf lange Zeit, keine Zählung nötig">✓</th></tr></thead><tbody>`;
     liefItems.forEach(a=>{
       const bestand=a.kuechenlager_bestand;
       const meldestand=a.min_stock||0;
       const niedrig=(bestand!=null && bestand<=meldestand);
-      html+=`<tr style="${niedrig?'background:#FEF2F2;':''}">
+      const stabil=!!a.bestand_stabil;
+      const stabilDatum=a.bestand_stabil_am?new Date(a.bestand_stabil_am).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
+      html+=`<tr style="${stabil?'background:#F0FDF4;':(niedrig?'background:#FEF2F2;':'')}">
         <td style="font-size:12px;">${a.name} <span style="color:var(--muted);">(${a.unit||''})</span></td>
-        <td><input type="number" step="1" value="${bestand??''}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:56px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};"></td>
+        <td>${stabil
+          ? `<div style="font-size:10px;color:var(--green);white-space:nowrap;">✓ reicht${stabilDatum?`<div style="font-size:8.5px;color:var(--muted);">seit ${stabilDatum}</div>`:''}</div>`
+          : `<input type="number" step="1" value="${bestand??''}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:56px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};">`}
+        </td>
+        <td style="text-align:center;">
+          <input type="checkbox" ${stabil?'checked':''} onchange="toggleBestandStabil(${a.id},this.checked)" style="width:18px;height:18px;cursor:pointer;accent-color:var(--green);">
+        </td>
       </tr>`;
     });
     html+='</tbody></table></div></div>';
   });
   return html;
 }
+
+// "Bestand ausreichend" umschalten (21.08.26, Wunsch Tini) — für Artikel, die auf lange Zeit
+// reichen (Strohhalme, Becher etc.) und keine regelmäßige Zählung brauchen. Ersetzt die
+// Zahlen-Eingabe durch ein Häkchen, nimmt den Artikel auch aus der Meldestand-Warnung raus.
+async function toggleBestandStabil(articleId, checked){
+  try{
+    await api(`articles?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestand_stabil:checked, bestand_stabil_am: checked?new Date().toISOString():null})});
+    const a=articles.find(x=>x.id===articleId);
+    if(a){ a.bestand_stabil=checked; a.bestand_stabil_am=checked?new Date().toISOString():null; }
+    showToast(checked?'✓ Als ausreichend markiert':'Zurück zur Zählung');
+    // Küchenlager lebt an zwei Stellen: eigene Seite (renderKuechenlager) und als Tab im
+    // Transporter-Bereich (renderPack, currentView==='pack') — je nachdem, wo man gerade ist.
+    if(currentView==='kuechenlager') renderKuechenlager();
+    else if(currentView==='pack') renderPack();
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern', true); }
+}
+window.toggleBestandStabil=toggleBestandStabil;
+
 
 async function renderKuechenlager(){
   const el=document.getElementById('v-kuechenlager');
