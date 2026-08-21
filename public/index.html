@@ -998,7 +998,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.80.0';
+const APP_VERSION = '6.81.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -11306,11 +11306,28 @@ async function renderDisposalOverviewHtml(){
 }
 window.renderDisposalOverviewHtml=renderDisposalOverviewHtml;
 
-async function renderDisposal(){
+let _disposalDate=null; // Modul-weiter Zustand: welcher Tag wird gerade in Entsorgung angeschaut
+
+async function renderDisposal(dateStr){
   const el=document.getElementById('v-disposal');
-  const today=new Date().toISOString().split('T')[0];
-  const dayIdx=(new Date().getDay()+6)%7; // Mon=0..Sun=6
+  const today=dateStr || new Date().toISOString().split('T')[0];
+  _disposalDate=today; // von updateLeftover/updateSoldOutTime/updateDisposalNote verwendet
+  const todayReal=new Date().toISOString().split('T')[0];
+  const isToday=today===todayReal;
+  const dObj=new Date(today+'T00:00:00');
+  const dayIdx=(dObj.getDay()+6)%7; // Mon=0..Sun=6
   const weekday=WEEKDAYS[dayIdx]?.k;
+
+  // Vorheriger/nächster Werktag — Wochenenden werden übersprungen (kein Speiseplan). Zurück
+  // unbegrenzt (Nachtragen soll auch nach längerer Pause noch gehen), vorwärts nur bis heute.
+  function shiftDay(base, dir){
+    const nd=new Date(base+'T00:00:00');
+    do{ nd.setDate(nd.getDate()+dir); } while([0,6].includes(nd.getDay()));
+    return nd.toISOString().split('T')[0];
+  }
+  const prevDate=shiftDay(today,-1);
+  const nextDate=shiftDay(today,1);
+  const nextDisabled=nextDate>todayReal;
 
   if(!weekday){
     el.innerHTML=`<div style="padding:2rem;text-align:center;color:var(--muted);font-size:14px;">Am Wochenende gibt es keinen Speiseplan.</div>`;
@@ -11321,10 +11338,9 @@ async function renderDisposal(){
   const dispMap={};
   (disp||[]).forEach(d=>dispMap[d.slot]=d);
 
-  // Tatsächliche Hauptgerichte aus dem aktuell laufenden Menü
-  const menuDishes=getMenuDishNamesForDay(weekday); // [Gericht A, Gericht B] dieser Woche
-  // Echter Salatname aus dem Menü holen (Slot 'salat')
-  const todayMenuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${weekday}`])||[];
+  // Tatsächliche Hauptgerichte aus dem für DIESEN Tag gültigen Menü (Wochenrotation!) — sonst
+  // würden beim Nachtragen älterer Tage die falschen Gerichtsnamen der aktuellen Woche gezeigt.
+  const menuDishes=getMenuDishNamesForDay(weekday, today);
   const salatName=getSalatNameForDate(today);
   const daySlots=[
     {k:'salat', l:'Salat', name:salatName},
@@ -11334,8 +11350,13 @@ async function renderDisposal(){
 
   let html=backToHomeHtml();
   html+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-    <div style="font-size:12px;color:var(--muted);">${new Date().toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})} — Uhrzeit & Restmenge pro Gericht eintragen</div>
+    <div style="font-size:12px;color:var(--muted);">${dObj.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})}${isToday?' (heute)':''} — Uhrzeit & Restmenge pro Gericht eintragen</div>
     <button onclick="showContainerInfo()" style="flex-shrink:0;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--green);background:#fff;color:var(--green);font-size:13px;font-weight:600;cursor:pointer;line-height:1;">i</button>
+  </div>`;
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:12px;">
+    <button onclick="renderDisposal('${prevDate}')" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">← Vorheriger</button>
+    ${!isToday?`<button onclick="renderDisposal()" style="flex:1;padding:8px;border:1px solid var(--green);border-radius:9px;background:var(--green-light);font-size:12.5px;font-weight:600;color:var(--green);cursor:pointer;">Heute</button>`:`<div style="flex:1;text-align:center;font-size:11px;color:var(--muted);">heute</div>`}
+    <button onclick="${nextDisabled?'':`renderDisposal('${nextDate}')`}" ${nextDisabled?'disabled':''} style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:${nextDisabled?'#F5F5F3':'#fff'};font-size:12.5px;font-weight:600;color:${nextDisabled?'var(--muted)':'var(--sub)'};cursor:${nextDisabled?'default':'pointer'};">Nächster →</button>
   </div>`;
 
   html+=`<div class="card"><table class="pack-table" style="width:100%;"><thead><tr>
@@ -11365,14 +11386,15 @@ async function renderDisposal(){
     </tr>`;
   });
   html+='</tbody></table></div>';
-  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px;">Uhrzeit antippen, um sie zu setzen oder nachträglich zu korrigieren. Restmenge in Portionen — bei Bedarf Umrechnungstabelle (i) nutzen. Notiz für Sonderfälle (z.B. Reste über mehrere Tage verteilt).</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px;">Uhrzeit antippen, um sie zu setzen oder nachträglich zu korrigieren. Restmenge in Portionen — bei Bedarf Umrechnungstabelle (i) nutzen. Notiz für Sonderfälle (z.B. Reste über mehrere Tage verteilt).${!isToday?' <strong>Du trägst gerade einen vergangenen Tag nach.</strong>':''}</div>`;
 
   el.innerHTML=html;
   translateEl(el);
 
-  // Gamification Widget laden und anhängen
+  // Gamification Widget nur bei "heute" — bezieht sich auf die laufende Woche, würde bei einem
+  // vergangenen Tag verwirrend wirken.
   const dayIdx2=(new Date().getDay()+6)%7;
-  if(dayIdx2<5){
+  if(isToday && dayIdx2<5){
     const gWidget=await loadGamificationWidget(currentStore.id).catch(()=>'');
     if(gWidget) el.insertAdjacentHTML('beforeend', gWidget);
   }
@@ -11397,7 +11419,6 @@ function showContainerInfo(){
 window.showContainerInfo=showContainerInfo;
 async function clearSoldOutTime(slot, dishName){
   await updateSoldOutTime(slot, dishName, null);
-  renderDisposal();
 }
 
 // Tippbare Uhrzeit statt Scroll-Rad: während des Tippens automatisch "hh:mm" formatieren
@@ -11430,7 +11451,7 @@ function quickReportSoldOut(slot, dishName){
 window.quickReportSoldOut=quickReportSoldOut;
 
 async function updateSoldOutTime(slot, dishName, value){
-  const today=new Date().toISOString().split('T')[0];
+  const today=_disposalDate || new Date().toISOString().split('T')[0];
   const v=value===''?null:value+':00';
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=leftover_qty,note`).catch(()=>[]);
@@ -11443,11 +11464,11 @@ async function updateSoldOutTime(slot, dishName, value){
       await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:v,leftover_qty:leftover,note}])});
     }
     showToast('✓ Gespeichert');
-    if(currentView==='home') renderHome(); else renderDisposal();
+    if(currentView==='home') renderHome(); else renderDisposal(today);
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateLeftover(slot, dishName, value){
-  const today=new Date().toISOString().split('T')[0];
+  const today=_disposalDate || new Date().toISOString().split('T')[0];
   const v=value===''?null:parseFloat(value);
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time,note`).catch(()=>[]);
@@ -11461,7 +11482,7 @@ async function updateLeftover(slot, dishName, value){
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateDisposalNote(slot, dishName, value){
-  const today=new Date().toISOString().split('T')[0];
+  const today=_disposalDate || new Date().toISOString().split('T')[0];
   const note=value.trim()===''?null:value.trim();
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time,leftover_qty`).catch(()=>[]);
