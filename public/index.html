@@ -998,7 +998,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.83.0';
+const APP_VERSION = '6.83.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -11340,9 +11340,10 @@ async function renderDisposal(dateStr){
   // Vorheriger/nächster Werktag — Wochenenden werden übersprungen (kein Speiseplan). Zurück
   // unbegrenzt (Nachtragen soll auch nach längerer Pause noch gehen), vorwärts nur bis heute.
   function shiftDay(base, dir){
-    const nd=new Date(base+'T00:00:00');
+    const [y,m,d]=base.split('-').map(Number);
+    const nd=new Date(y, m-1, d);
     do{ nd.setDate(nd.getDate()+dir); } while([0,6].includes(nd.getDay()));
-    return nd.toISOString().split('T')[0];
+    return nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');
   }
   const prevDate=shiftDay(today,-1);
   const nextDate=shiftDay(today,1);
