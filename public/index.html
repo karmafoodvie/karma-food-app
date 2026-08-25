@@ -1004,7 +1004,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.90.1';
+const APP_VERSION = '6.90.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2037,6 +2037,22 @@ function findProduktAllergene(name){
   return list.find(p=>p.name.toUpperCase()===n)||null;
 }
 
+// Wartet, bis ein per ID referenziertes Element wirklich im DOM existiert (statt eines festen
+// Timers) — nötig, weil manche Aufrufer von renderZutatenReadOnly (z.B. der Forecast-Tab) noch
+// jede Menge weitere asynchrone Arbeit erledigen, BEVOR das eigentliche el.innerHTML passiert.
+// Ein fester setTimeout-Wert war da oft schon abgelaufen, bevor die Kachel überhaupt existierte —
+// Bug gefunden 25.08.26, dadurch blieben die Englisch-Übersetzungen leer.
+async function waitForElAndSetText(id, getTextFn, maxWaitMs=10000){
+  const start=Date.now();
+  let elx;
+  while(!(elx=document.getElementById(id)) && Date.now()-start<maxWaitMs){
+    await new Promise(r=>setTimeout(r,150));
+  }
+  if(!elx) return;
+  const val=await getTextFn();
+  if(val) elx.textContent=val;
+}
+
 let _ztTileCounter=0;
 function renderZutatenReadOnly(text){
   if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
@@ -2086,15 +2102,14 @@ function renderZutatenReadOnly(text){
     </div>`;
   });
 
-  // Übersetzungen im Hintergrund nachladen — läuft nach dem synchronen DOM-Einbau (setTimeout 0),
-  // gleiche Technik wie loadDishFeedbackInto/loadSpecialOrderAntwortBox an anderer Stelle im Code.
-  setTimeout(()=>{
-    pendingTranslations.forEach(async ({id,text})=>{
+  // Übersetzungen im Hintergrund nachladen — wartet auf jede Kachel einzeln, statt einen festen
+  // Timer zu verwenden (siehe waitForElAndSetText oben).
+  pendingTranslations.forEach(({id,text})=>{
+    waitForElAndSetText(id, async ()=>{
       const en=await txToEnglish(text);
-      const elx=document.getElementById(id);
-      if(elx && en && en.toUpperCase()!==text.toUpperCase()) elx.textContent=en;
+      return (en && en.toUpperCase()!==text.toUpperCase()) ? en : null;
     });
-  }, 50);
+  });
 
   return html;
 }
