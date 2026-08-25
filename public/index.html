@@ -1004,7 +1004,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.89.0';
+const APP_VERSION = '6.90.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1075,6 +1075,25 @@ function goToPackTab(tab){
 }
 let lang = localStorage.getItem('kf_lang') || 'de';
 const tCache = {};
+
+// Feste Zutaten-Übersetzung (25.08.26, Wunsch Tini) — unabhängig von der eingestellten App-Sprache
+// (lang), damit Zutaten IMMER zweisprachig dastehen, egal ob die App gerade auf Deutsch oder
+// Englisch steht. txFixed übersetzt IMMER DE→EN (fürs Anzeigen), txToGerman erkennt die
+// Eingabesprache automatisch und übersetzt zurück nach Deutsch (fürs Eintragen durch den
+// englischsprachigen Chefkoch — die kanonische Quelle bleibt aber immer Deutsch).
+async function txFixed(text, sourceLang, targetLang){
+  if(!text || text.length<2) return text;
+  const key=`fixed:${sourceLang}>${targetLang}::${text}`;
+  if(tCache[key]) return tCache[key];
+  try{
+    const r=await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
+    const d=await r.json();
+    tCache[key]=d[0].map(x=>x[0]).join('');
+    return tCache[key];
+  }catch{ return text; }
+}
+async function txToGerman(text){ return txFixed(text,'auto','de'); }
+async function txToEnglish(text){ return txFixed(text,'de','en'); }
 
 // ---- TRANSLATE ----
 function toggleLangMenu(){
@@ -2018,6 +2037,7 @@ function findProduktAllergene(name){
   return list.find(p=>p.name.toUpperCase()===n)||null;
 }
 
+let _ztTileCounter=0;
 function renderZutatenReadOnly(text){
   if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
   const items=text.split(/[,\n]/).map(s=>s.trim()).filter(s=>s && !/^(GEM|GEW|GRUNDZ|GETREIDE|BEILAGE:|ZUTATEN|ÖL\/|DRESSING:)/i.test(s));
@@ -2031,6 +2051,11 @@ function renderZutatenReadOnly(text){
   // Anzeige-Label in gewohnter Schreibweise (z.B. "Gemüse" statt "GEMÜSE") fürs senkrechte Etikett
   const katLabel={}; ZUTAT_KAT_ORDER.forEach((k,i)=>{ katLabel[ZUTAT_KAT_ORDER_UP[i]]=k; });
 
+  // Zweisprachige Kacheln (25.08.26, Wunsch Tini, für den englischsprachigen Chefkoch): Deutsch
+  // groß wie bisher, Englisch klein darunter — lädt im Hintergrund per Übersetzung nach, damit
+  // die Kachel sofort erscheint statt auf jede einzelne Übersetzung zu warten.
+  const pendingTranslations=[];
+
   let html='';
   sorted.forEach(kat=>{
     const color=ZUTAT_KAT_COLOR[kat]||'#7D7268';
@@ -2039,13 +2064,16 @@ function renderZutatenReadOnly(text){
       const masterHit=findZutatMasterMatch(item);
       const isA=masterHit ? (masterHit.allergene_codes?.length>0) : ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
       const displayName=getEffectiveName(item);
+      const enId=`zt-en-${_ztTileCounter++}`;
+      pendingTranslations.push({id:enId, text:displayName});
       // Quadrat-Trick über padding-bottom:100% statt aspect-ratio — funktioniert garantiert in
       // JEDEM Browser/Webview, auch älteren, die die neuere aspect-ratio-Eigenschaft nicht
       // unterstützen (das war der Grund, warum es vorher trotz Fix noch nicht quadratisch war).
       tiles+=`<div style="position:relative;width:100%;padding-bottom:100%;">
-        <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
-          <div style="width:18px;height:18px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
-          <span style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;word-break:break-word;overflow-wrap:break-word;hyphens:auto;max-width:100%;">${displayName}</span>
+        <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
+          <div style="width:16px;height:16px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
+          <span data-no-translate style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;word-break:break-word;overflow-wrap:break-word;hyphens:auto;max-width:100%;">${displayName}</span>
+          <span id="${enId}" data-no-translate style="font-size:7px;font-weight:400;color:rgba(255,255,255,0.75);line-height:1.1;word-break:break-word;overflow-wrap:break-word;max-width:100%;"></span>
         </div>
         ${isA?'<span style="position:absolute;top:-6px;right:-6px;background:#F59E0B;color:#fff;font-size:10px;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;box-shadow:0 1px 3px rgba(0,0,0,0.4);z-index:2;">!</span>':''}
       </div>`;
@@ -2057,6 +2085,17 @@ function renderZutatenReadOnly(text){
       <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;align-items:start;">${tiles}</div>
     </div>`;
   });
+
+  // Übersetzungen im Hintergrund nachladen — läuft nach dem synchronen DOM-Einbau (setTimeout 0),
+  // gleiche Technik wie loadDishFeedbackInto/loadSpecialOrderAntwortBox an anderer Stelle im Code.
+  setTimeout(()=>{
+    pendingTranslations.forEach(async ({id,text})=>{
+      const en=await txToEnglish(text);
+      const elx=document.getElementById(id);
+      if(elx && en && en.toUpperCase()!==text.toUpperCase()) elx.textContent=en;
+    });
+  }, 50);
+
   return html;
 }
 
@@ -2248,16 +2287,21 @@ function renderZutatenEditable(text, dishSafeKey){
   const byKat=parseZutatenText(text);
   const sorted=ZUTAT_KAT_ORDER.filter(k=>byKat[k]).concat(Object.keys(byKat).filter(k=>!ZUTAT_KAT_ORDER.includes(k)));
   let html='<div class="zd-editor" data-key="'+dishSafeKey+'">';
+  html+='<div style="font-size:10.5px;color:var(--muted);background:#EFF6FF;border-radius:8px;padding:6px 8px;margin-bottom:10px;">💬 Auf Deutsch <em>oder</em> Englisch eintippen — wird beim Speichern automatisch als Deutsch abgelegt (kanonische Sprache), Englisch erscheint zur Kontrolle klein darunter.</div>';
   sorted.forEach(kat=>{
     html+='<div class="zd-kat" style="margin-bottom:8px;">'
       +'<div style="font-size:9px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;">'+kat+'</div>';
     (byKat[kat]||[]).forEach(item=>{
       const isA=ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
-      html+='<div class="zd-row" style="display:flex;align-items:center;gap:6px;padding:2px 0;">'
-        +'<span style="color:var(--muted);font-size:11px;">•</span>'
+      const enId=`zd-en-${_ztTileCounter++}`;
+      html+='<div class="zd-row" style="display:flex;align-items:flex-start;gap:6px;padding:2px 0;">'
+        +'<span style="color:var(--muted);font-size:11px;margin-top:2px;">•</span>'
+        +'<div style="flex:1;min-width:0;">'
         +'<span contenteditable="true" spellcheck="false" data-orig="'+item.replace(/"/g,'&quot;')+'" '
-        +'style="font-size:13px;flex:1;outline:none;border-bottom:1px dashed #ddd;padding:2px 3px;'+(isA?'font-weight:700;color:#92400E;':'')+'" '
+        +'style="font-size:13px;display:block;outline:none;border-bottom:1px dashed #ddd;padding:2px 3px;'+(isA?'font-weight:700;color:#92400E;':'')+'" '
         +'onblur="zdRowBlur(this)">'+item+'</span>'
+        +'<div id="'+enId+'" data-en-preview data-no-translate style="font-size:10px;color:#93C5FD;padding:2px 3px 0;"></div>'
+        +'</div>'
         +'<button class="zd-del" style="opacity:0.6;color:#DC2626;background:#FEE2E2;border:none;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>'
         +'</div>';
     });
@@ -2271,16 +2315,34 @@ function renderZutatenEditable(text, dishSafeKey){
   return html;
 }
 
-// Read all items from a rendered zd-editor
-function zdCollectItems(editor){
-  const items=[];
+// Englisch-Vorschauzeilen im Editor im Hintergrund nachladen — rein zur Orientierung beim
+// Bearbeiten, für die tatsächliche Speicherung wird beim Klick auf "Speichern" nochmal sauber
+// übersetzt/normalisiert (siehe zdCollectItems), das hier ist nur die Live-Anzeige.
+function zdLoadEnglishPreviews(editor){
+  if(!editor) return;
+  editor.querySelectorAll('[data-en-preview]').forEach(async(div)=>{
+    const row=div.closest('.zd-row');
+    const span=row?.querySelector('[contenteditable]');
+    const txt=span?.textContent.trim();
+    if(!txt) return;
+    const en=await txToEnglish(txt);
+    if(en && en.toUpperCase()!==txt.toUpperCase()) div.textContent=en;
+  });
+}
+
+// Read all items from a rendered zd-editor — async: jede Zeile wird beim Sammeln (also beim
+// Speichern) durch txToGerman geschickt, damit Englisch-Eingaben des Chefkochs automatisch als
+// Deutsch (die kanonische Sprache für Allergen-Abgleich & Co.) landen, egal was er getippt hat.
+async function zdCollectItems(editor){
+  const raw=[];
   editor.querySelectorAll('.zd-row').forEach(row=>{
     const span=row.querySelector('[contenteditable]');
     const input=row.querySelector('.zd-new-input');
     const val=(span&&span.textContent.trim())||(input&&input.value.trim());
-    if(val) items.push(val);
+    if(val) raw.push(val);
   });
-  return items;
+  const normalized=await Promise.all(raw.map(v=>txToGerman(v).catch(()=>v)));
+  return normalized;
 }
 
 // Blur handler — marks row dirty
@@ -2311,7 +2373,7 @@ function zdAttach(editor){
       // Echtes <input> mit selbstgebauter Vorschlagsliste (siehe attachZutatenAutocomplete) statt
       // nativem <datalist> — ermöglicht Gruppierung, Hervorhebung und Tippfehler-Toleranz.
       row.innerHTML='<span style="color:var(--muted);font-size:11px;">•</span>'
-        +'<input type="text" class="zd-new-input" placeholder="Zutat eingeben…" spellcheck="false" '
+        +'<input type="text" class="zd-new-input" placeholder="Zutat eingeben — Deutsch oder Englisch…" spellcheck="false" '
         +'style="font-size:13px;flex:1;outline:none;border:none;border-bottom:1px dashed #ddd;padding:2px 3px;background:transparent;">'
         +'<button class="zd-del" style="opacity:0.6;color:#DC2626;background:#FEE2E2;border:none;border-radius:5px;width:22px;height:22px;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>';
       katDiv.insertBefore(row, btn.parentElement);
@@ -2424,6 +2486,7 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   // Attach interactions
   const editor=body.querySelector('.zd-editor');
   zdAttach(editor);
+  zdLoadEnglishPreviews(editor);
 
   const closeModal=()=>overlay.remove();
   document.getElementById('zd-modal-close').addEventListener('click', closeModal);
@@ -2431,7 +2494,9 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
 
   document.getElementById('zd-modal-save').addEventListener('click', async ()=>{
-    const items=zdCollectItems(editor);
+    const saveBtn=document.getElementById('zd-modal-save');
+    saveBtn.disabled=true; saveBtn.textContent='Wird gespeichert…';
+    const items=await zdCollectItems(editor);
     const newText=items.join(', ');
     closeModal();
     // "Global speichern" wurde am 31.07.26 entfernt (hat Zutaten fälschlich in andere Gerichte
