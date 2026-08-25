@@ -318,7 +318,13 @@ summary::marker{content:'';}
   </div>
 </div>
 
-<script src="/menu_data.js"></script>
+<script>
+// menu_data.js OHNE Frische-Prüfung geladen, konnte tagelang aus dem Browser-Cache kommen — genau
+// das Problem, dass zwei Personen an unterschiedlichen Tagen zuletzt frisch geladen haben und
+// deshalb unterschiedliche Menüs sahen (21.08.26 gefunden). Cache-Buster mit heutigem Datum
+// erzwingt mindestens 1x täglich eine echte Neuabfrage, ohne bei jedem Laden neu zu holen.
+document.write('<script src="/menu_data.js?d=' + new Date().toISOString().split('T')[0] + '"><\/script>');
+</script>
 <script>
 const SUPABASE_URL = 'https://fkliyqjxnttzyuzogrng.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Eu6-MQxkfyaxii2vpCR-IQ_uqS90NRf';
@@ -998,7 +1004,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.86.0';
+const APP_VERSION = '6.89.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -11669,6 +11675,20 @@ async function renderSamosaTableHtml(){
   const valMap={}; // valMap[date][store_id] = rec
   (todayVals||[]).forEach(d=>{ if(!valMap[d.supply_date])valMap[d.supply_date]={}; valMap[d.supply_date][d.store_id]=d; });
 
+  // Vorwoche als Ausgangsbasis (24.08.26, Wunsch Tini) — statt einer starren Baseline-Zahl wird
+  // automatisch der zuletzt TATSÄCHLICH eingetragene Wert derselben Filiale/desselben Wochentags
+  // aus der Vorwoche übernommen, solange für den aktuellen Tag noch nichts eingetragen wurde. Das
+  // "wandert" automatisch mit, statt bei fehlendem Eintrag auf 0 zurückzufallen.
+  const lastWeekDates=getWeekdayDates(_samosaWeekOffset-1);
+  const lastWeekVals=await api(`samosa_today?select=store_id,supply_date,qty&supply_date=gte.${lastWeekDates[1]}&supply_date=lte.${lastWeekDates[4]}`).catch(()=>[]);
+  const lastWeekMap={}; // lastWeekMap[weekday][store_id] = qty
+  (lastWeekVals||[]).forEach(d=>{
+    const wd=Object.keys(lastWeekDates).find(k=>lastWeekDates[k]===d.supply_date);
+    if(!wd) return;
+    if(!lastWeekMap[wd]) lastWeekMap[wd]={};
+    lastWeekMap[wd][d.store_id]=d.qty;
+  });
+
   // Wochen-Navigation — genau wie beim Kochtermin-Navigator an anderen Stellen der App.
   let html=`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px;">
     <button onclick="_samosaWeekOffset--;renderPack();" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">← Letzte Woche</button>
@@ -11690,16 +11710,18 @@ async function renderSamosaTableHtml(){
       const b=baseline.find(x=>x.store_id===s.id && x.weekday===wd);
       const dateStr=weekDates[wd];
       const rec=(valMap[dateStr]||{})[s.id];
-      // Auch ohne hinterlegten Basiswert ein Eingabefeld anzeigen (z.B. für Filialen, die aktuell
-      // keine Samosas bekommen, aber künftig vielleicht welche brauchen) — Standard dann 0.
-      const val=rec?rec.qty:(b?b.base_qty:0);
+      const lastWeekVal=(lastWeekMap[wd]||{})[s.id];
+      // Reihenfolge: heute eingetragener Wert > Vorwoche derselben Filiale/desselben Tages >
+      // starre Baseline (nur als letzter Notanker, falls es noch gar keine Historie gibt) > 0.
+      const val=rec!=null?rec.qty:(lastWeekVal!=null?lastWeekVal:(b?b.base_qty:0));
+      const uebernommenAusVorwoche=(rec==null && lastWeekVal!=null);
       dayTotals[wd]+=parseInt(val)||0;
       if(parseInt(val)>0) dayValues[wd].push({name:s.name.split(' ')[0], val:parseInt(val)});
       const adjusted=!!rec?.is_adjusted;
-      const isOptional=!b; // kein Standard-Liefertag für diese Filiale — dezenter dargestellt
+      const isOptional=!b && lastWeekVal==null; // wirklich noch nie eine Zahl für diese Filiale/diesen Tag
       html+=`<td><input type="number" step="1" value="${val}" data-store="${s.id}" data-weekday="${wd}" data-date="${dateStr}"
         oninput="scheduleSamosaSave(this)" onchange="updateSamosaQty(this)"
-        style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:3px 1px;background:${adjusted?'#FFF7ED':isOptional?'transparent':'#fff'};color:${isOptional&&!val?'var(--muted)':'inherit'};"></td>`;
+        style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':uebernommenAusVorwoche?'#93C5FD':'var(--border)'};border-radius:6px;font-size:12px;padding:3px 1px;background:${adjusted?'#FFF7ED':uebernommenAusVorwoche?'#EFF6FF':isOptional?'transparent':'#fff'};color:${isOptional&&!val?'var(--muted)':'inherit'};" title="${uebernommenAusVorwoche?'Aus Vorwoche übernommen — noch nicht für diese Woche bestätigt':''}"></td>`;
     });
     html+='</tr>';
   });
@@ -11720,7 +11742,7 @@ async function renderSamosaTableHtml(){
     }).join('')}
   </tr>`;
   html+='</tbody></table></div></div>';
-  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = angepasst. Leere/graue Felder = aktuell kein Standard-Liefertag, aber jederzeit eintragbar. "Tatsächlich erhalten" = was der Produzent wirklich geliefert hat, zum Abgleich mit der Bestellmenge.</div>`;
+  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">Zahl antippen = für diesen Tag anpassen. Orange = für diese Woche bestätigt/angepasst. Blau = automatisch aus der Vorwoche übernommen, noch nicht bestätigt. Leere/graue Felder = noch nie eine Menge eingetragen. "Tatsächlich erhalten" = was der Produzent wirklich geliefert hat, zum Abgleich mit der Bestellmenge.</div>`;
 
   // Kopier-Textblock fürs Weiterleiten an den Produzenten per WhatsApp — der braucht nur die
   // Gesamtmenge pro Tag (und die Wochensumme), keine Aufschlüsselung nach Filiale.
@@ -12311,6 +12333,99 @@ async function renderKitchenDailyHtml(){
   return html;
 }
 
+// ==== KITCHEN MONITORING (25.08.26) ====
+// Ersetzt/ergänzt die bisherige Odoo-Umfrage "Kitchen Monitoring" — Lager-Kontrolle, Reinigung,
+// WC-Zuständigkeit, 4 Temperaturkontrollen. Ein Eintrag pro Kalendertag.
+const KITCHEN_MONITORING_LEUTE=['Dinesh','Nooru','Hortencia','Everton'];
+
+async function renderKitchenMonitoringHtml(){
+  const today=new Date().toISOString().split('T')[0];
+  const rows=await api(`kitchen_monitoring?datum=eq.${today}&select=*&limit=1`).catch(()=>[]);
+  const rec=rows?.[0]||null;
+
+  let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Tägliche Kitchen-Kontrolle — ersetzt die Odoo-Umfrage. ${rec?'Heute bereits eingetragen, kann bei Bedarf korrigiert werden.':'Noch nicht für heute eingetragen.'}</div>`;
+
+  html+=`<div class="card" style="padding:14px;">
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">📦 Das Lager wurde laut den Bestimmungen kontrolliert</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button type="button" id="km-lager-ja" onclick="setKmToggle('lager',true)" style="flex:1;padding:9px;border:1.5px solid ${rec?.lager_kontrolliert?'var(--green)':'var(--border)'};border-radius:8px;background:${rec?.lager_kontrolliert?'var(--green-light)':'#fff'};color:${rec?.lager_kontrolliert?'var(--green)':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✓ Kontrolliert</button>
+      <button type="button" id="km-lager-nein" onclick="setKmToggle('lager',false)" style="flex:1;padding:9px;border:1.5px solid ${rec&&!rec.lager_kontrolliert?'#DC2626':'var(--border)'};border-radius:8px;background:${rec&&!rec.lager_kontrolliert?'#FEE2E2':'#fff'};color:${rec&&!rec.lager_kontrolliert?'#DC2626':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✗ Noch nicht</button>
+    </div>
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">🧽 Die tägliche Reinigung wurde gemacht</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button type="button" id="km-rein-ja" onclick="setKmToggle('rein',true)" style="flex:1;padding:9px;border:1.5px solid ${rec?.reinigung_gemacht?'var(--green)':'var(--border)'};border-radius:8px;background:${rec?.reinigung_gemacht?'var(--green-light)':'#fff'};color:${rec?.reinigung_gemacht?'var(--green)':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✓ Durchgeführt</button>
+      <button type="button" id="km-rein-nein" onclick="setKmToggle('rein',false)" style="flex:1;padding:9px;border:1.5px solid ${rec&&!rec.reinigung_gemacht?'#DC2626':'var(--border)'};border-radius:8px;background:${rec&&!rec.reinigung_gemacht?'#FEE2E2':'#fff'};color:${rec&&!rec.reinigung_gemacht?'#DC2626':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✗ Noch nicht</button>
+    </div>
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">🚻 Wer hat das WC gereinigt?</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+      ${KITCHEN_MONITORING_LEUTE.map(n=>`<button type="button" data-person="${n}" onclick="setKmWcPerson(this)" style="padding:8px 12px;border:1.5px solid ${rec?.wc_gereinigt_von===n?'var(--green)':'var(--border)'};border-radius:20px;background:${rec?.wc_gereinigt_von===n?'var(--green-light)':'#fff'};color:${rec?.wc_gereinigt_von===n?'var(--green)':'var(--sub)'};font-size:12.5px;font-weight:500;cursor:pointer;">${n}</button>`).join('')}
+    </div>
+    <input type="text" id="km-wc-frei" placeholder="Oder anderer Name…" value="${rec?.wc_gereinigt_von && !KITCHEN_MONITORING_LEUTE.includes(rec.wc_gereinigt_von)?escAttr(rec.wc_gereinigt_von):''}" oninput="setKmWcFrei(this)" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:16px;">
+
+    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">🌡️ Temperaturkontrollen (°C)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Kühlhaus</label><input type="number" step="0.1" id="km-temp-kuehlhaus" value="${rec?.temp_kuehlhaus??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+      <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Kühlschrank Küche</label><input type="number" step="0.1" id="km-temp-kkueche" value="${rec?.temp_kuehlschrank_kueche??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+      <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Kühlschrank Shop</label><input type="number" step="0.1" id="km-temp-kshop" value="${rec?.temp_kuehlschrank_shop??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+      <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Tiefkühler</label><input type="number" step="0.1" id="km-temp-tiefkuehler" value="${rec?.temp_tiefkuehler??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+    </div>
+
+    <button onclick="submitKitchenMonitoring()" style="width:100%;padding:12px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">${rec?'Aktualisieren ✓':'Eintragen ✓'}</button>
+  </div>`;
+
+  // Letzte Einträge zum Vergleich/Verlauf
+  const hist=await api(`kitchen_monitoring?datum=lt.${today}&select=*&order=datum.desc&limit=7`).catch(()=>[]);
+  if(hist?.length){
+    html+=`<div class="section-lbl" style="margin-top:16px;">Letzte Einträge</div>`;
+    hist.forEach(h=>{
+      html+=`<div class="card" style="padding:10px 14px;margin-bottom:6px;font-size:11.5px;">
+        <div style="display:flex;justify-content:space-between;">
+          <strong>${new Date(h.datum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}</strong>
+          <span style="color:var(--muted);">🚻 ${h.wc_gereinigt_von||'–'}</span>
+        </div>
+        <div style="color:var(--sub);margin-top:3px;">Lager ${h.lager_kontrolliert?'✓':'✗'} · Reinigung ${h.reinigung_gemacht?'✓':'✗'} · Kühlhaus ${h.temp_kuehlhaus??'–'}° · Küche ${h.temp_kuehlschrank_kueche??'–'}° · Shop ${h.temp_kuehlschrank_shop??'–'}° · Tiefkühler ${h.temp_tiefkuehler??'–'}°</div>
+      </div>`;
+    });
+  }
+  return html;
+}
+
+let _kmDraft={};
+function setKmToggle(field, val){ _kmDraft[field]=val; if(kitchenTab==='monitoring') renderKitchen(); }
+window.setKmToggle=setKmToggle;
+function setKmWcPerson(btn){ _kmDraft.wc=btn.dataset.person; document.getElementById('km-wc-frei').value=''; if(kitchenTab==='monitoring') renderKitchen(); }
+window.setKmWcPerson=setKmWcPerson;
+function setKmWcFrei(input){ _kmDraft.wc=input.value.trim()||null; }
+window.setKmWcFrei=setKmWcFrei;
+
+async function submitKitchenMonitoring(){
+  const today=new Date().toISOString().split('T')[0];
+  const existing=await api(`kitchen_monitoring?datum=eq.${today}&select=lager_kontrolliert,reinigung_gemacht,wc_gereinigt_von`).catch(()=>[]);
+  const prev=existing?.[0]||{};
+  const wcFrei=document.getElementById('km-wc-frei')?.value?.trim();
+  const payload={
+    datum: today,
+    lager_kontrolliert: _kmDraft.lager!=null?_kmDraft.lager:(prev.lager_kontrolliert||false),
+    reinigung_gemacht: _kmDraft.rein!=null?_kmDraft.rein:(prev.reinigung_gemacht||false),
+    wc_gereinigt_von: wcFrei || _kmDraft.wc || prev.wc_gereinigt_von || null,
+    temp_kuehlhaus: document.getElementById('km-temp-kuehlhaus')?.value ? parseFloat(document.getElementById('km-temp-kuehlhaus').value) : null,
+    temp_kuehlschrank_kueche: document.getElementById('km-temp-kkueche')?.value ? parseFloat(document.getElementById('km-temp-kkueche').value) : null,
+    temp_kuehlschrank_shop: document.getElementById('km-temp-kshop')?.value ? parseFloat(document.getElementById('km-temp-kshop').value) : null,
+    temp_tiefkuehler: document.getElementById('km-temp-tiefkuehler')?.value ? parseFloat(document.getElementById('km-temp-tiefkuehler').value) : null,
+    submitted_by: currentStore?.name || 'Kitchen',
+  };
+  try{
+    await api(`kitchen_monitoring?datum=eq.${today}`,{method:'DELETE'});
+    await api('kitchen_monitoring',{method:'POST',body:JSON.stringify([payload])});
+    showToast('✓ Kitchen Monitoring gespeichert');
+    _kmDraft={};
+    renderKitchen();
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.submitKitchenMonitoring=submitKitchenMonitoring;
+
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam</div>`;
@@ -12355,7 +12470,7 @@ async function renderKitchen(){
   const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style="font-size:10px;font-weight:400;">'+forecastDateRange+'</span>';
   const menuTabLabel='🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche '+CURRENT_MENU_WOCHE+'</span>';
   const morgenTabLabel='🌅 '+nextCookDayLabel+(hasUnseenMorgenChanges?' <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#EF4444;margin-left:2px;vertical-align:middle;"></span>':'');
-  html+=`<div class="cl-tabs">${ktab('morgen',morgenTabLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('entsorgung','🗑️ Entsorgung')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen',morgenTabLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('entsorgung','🗑️ Entsorgung')}${ktab('monitoring','🌡️ Monitoring')}</div>`;
 
   if(kitchenTab==='daily'){
     // Daily Business — Store-Ansicht für Kassenbereich (Während der Schicht)
@@ -12470,6 +12585,13 @@ async function renderKitchen(){
 
   if(kitchenTab==='entsorgung'){
     html+=await renderDisposalOverviewHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
+  if(kitchenTab==='monitoring'){
+    html+=await renderKitchenMonitoringHtml();
     el.innerHTML=html;
     translateEl(el);
     return;
