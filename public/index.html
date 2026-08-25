@@ -1004,7 +1004,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.90.2';
+const APP_VERSION = '6.91.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1339,101 +1339,124 @@ async function renderPublicFeedback(){
 }
 window.renderPublicFeedback=renderPublicFeedback;
 
+let _kfMultiDraft={}; // {dishName: {v, tags:[], note}}
+
 async function renderKfForm(){
   const wrap=document.getElementById('kf-form-wrap');
   const stores=await api('stores?select=id,name&order=name').catch(()=>[]);
   const storeList=(stores||[]).filter(s=>!['zentrale','1070'].includes(s.id));
   const today=new Date().toISOString().split('T')[0];
   const minDate=new Date(Date.now()-30*86400000).toISOString().split('T')[0]; // 30 Tage zurück reicht
+  _kfMultiDraft={};
 
   let html=`<div style="background:#fff;border-radius:18px;padding:20px 18px;">
-    <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Welcher Tag war's? <span style="font-weight:400;color:#999;">(damit wir das richtige Gericht finden)</span></div>
+    <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Welcher Tag war's?</div>
     <input id="kf-date" type="date" value="${today}" max="${today}" min="${minDate}" onchange="onKfDateChange()" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:16px;box-sizing:border-box;background:#fff;">
 
-    <div id="kf-dish-wrap">
-      <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Welches Gericht?</div>
-      <select id="kf-dish" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:18px;box-sizing:border-box;background:#fff;"></select>
-    </div>
-
     <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:5px;">Wo warst du? <span style="font-weight:400;color:#999;">(optional)</span></div>
-    <select id="kf-store" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:16px;box-sizing:border-box;background:#fff;">
+    <select id="kf-store" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;font-size:14px;margin-bottom:18px;box-sizing:border-box;background:#fff;">
       <option value="">– nicht angeben –</option>
       ${storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
     </select>
 
-    <div style="font-size:13px;font-weight:700;color:#1a1a18;margin-bottom:8px;">Wie hat's geschmeckt?</div>
-    <div id="kf-rating-row" style="display:flex;gap:6px;justify-content:space-between;margin-bottom:18px;">
-      ${FEEDBACK_SCALE.map(s=>`<button type="button" data-val="${s.v}" onclick="setKfRating(this)" style="flex:1;padding:10px 2px;border:2px solid #eee;border-radius:12px;background:#fff;font-size:24px;cursor:pointer;">${s.emoji}</button>`).join('')}
-    </div>
+    <div style="font-size:13px;font-weight:700;color:#1a1a18;margin-bottom:2px;">Wie hat's geschmeckt?</div>
+    <div style="font-size:11px;color:#999;margin-bottom:10px;">Bewerte gerne alles, was du probiert hast — nicht nur ein Gericht.</div>
+    <div id="kf-dishes-wrap"></div>
 
-    <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:8px;">Was können wir noch verbessern (oder toll gemacht)? <span style="font-weight:400;color:#999;">(optional, Mehrfachauswahl)</span></div>
-    <div id="kf-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
-      ${KF_TAGS.map(t=>`<button type="button" data-tag="${t.k}" onclick="toggleKfTag(this)" style="padding:7px 11px;border:1.5px solid ${t.neg?'#FCA5A5':'#86EFAC'};border-radius:20px;background:#fff;color:#444;font-size:12.5px;cursor:pointer;">${t.label}</button>`).join('')}
-    </div>
-
-    <textarea id="kf-kommentar" placeholder="Noch was loswerden? (optional)" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;font-size:13.5px;margin-bottom:16px;"></textarea>
+    <textarea id="kf-kommentar" placeholder="Sonstiges Feedback, egal worum's geht (optional)" style="width:100%;padding:10px;border:1px solid #e5e5e2;border-radius:9px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;font-size:13.5px;margin:16px 0;"></textarea>
 
     <button onclick="submitKfFeedback()" style="width:100%;padding:14px;border:none;border-radius:12px;background:#D4FF3F;color:#1a1a18;font-size:15px;font-weight:700;cursor:pointer;">Feedback abschicken</button>
     <div style="font-size:10.5px;color:#999;text-align:center;margin-top:10px;line-height:1.5;">Anonym — wir erheben keine persönlichen Daten, nur dein Feedback.<br><a href="https://karmafood.at/pages/datenschutz" target="_blank" rel="noopener" style="color:#999;">Datenschutzerklärung</a></div>
   </div>`;
   wrap.innerHTML=html;
-  populateKfDishSelect(today);
+  renderKfDishRows(today);
 }
 
-// Gericht-Dropdown befüllen: Kategorie vorangestellt (z.B. "Curry (Mango Goa Curry)"), damit
-// Gäste, die eher den Gerichtstyp als den genauen Namen kennen, sich leichter zurechtfinden.
-function populateKfDishSelect(dateStr){
+// Zeigt alle Gerichte des gewählten Tages als eigene Bewertungs-Kachel, statt nur eines per
+// Dropdown — 25.08.26, Wunsch Tini: "wir im Team probieren alles durch".
+function renderKfDishRows(dateStr){
   const menu=getMenuForDate(dateStr);
-  const sel=document.getElementById('kf-dish');
-  if(!sel) return;
+  const wrap=document.getElementById('kf-dishes-wrap');
+  if(!wrap) return;
   if(!menu.length){
-    sel.innerHTML=`<option value="">Kein Menü an diesem Tag (Wochenende?)</option>`;
+    wrap.innerHTML=`<div style="font-size:12px;color:#999;padding:10px 0;">Kein Menü an diesem Tag (Wochenende?)</div>`;
     return;
   }
-  sel.innerHTML=`<option value="">– nicht angeben –</option>` +
-    menu.map(d=>{
-      const cat=mapDishNameToCategory(d.name, d.slot);
-      const label=cat==='Special'?d.name:`${cat} (${d.name})`;
-      return `<option value="${escAttr(d.name)}">${label}</option>`;
-    }).join('');
+  wrap.innerHTML=menu.map((d,i)=>{
+    const cat=mapDishNameToCategory(d.name, d.slot);
+    const label=cat==='Special'?d.name:`${cat} — ${d.name}`;
+    return `<div style="margin-bottom:14px;padding-bottom:14px;${i<menu.length-1?'border-bottom:1px solid #f0f0f0;':''}">
+      <div style="font-size:12.5px;font-weight:600;color:#333;margin-bottom:6px;">${label}</div>
+      <div style="display:flex;gap:5px;margin-bottom:6px;">
+        ${FEEDBACK_SCALE.map(s=>`<button type="button" data-dish="${escAttr(d.name)}" data-val="${s.v}" data-idx="${i}" onclick="setKfDishRating(this)" style="flex:1;padding:8px 2px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:19px;cursor:pointer;">${s.emoji}</button>`).join('')}
+      </div>
+      <div id="kf-reason-link-${i}" style="display:none;">
+        <a href="#" onclick="event.preventDefault();document.getElementById('kf-reason-panel-${i}').style.display='block';this.parentElement.style.display='none';" style="font-size:10.5px;color:#EC4899;text-decoration:underline;">+ Grund hinzufügen</a>
+      </div>
+      <div id="kf-reason-panel-${i}" style="display:none;margin-top:4px;">
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;">
+          ${KF_TAGS.map(t=>`<button type="button" data-dish="${escAttr(d.name)}" data-tag="${t.k}" onclick="toggleKfDishTag(this)" style="padding:5px 9px;border:1.5px solid ${t.neg?'#FCA5A5':'#86EFAC'};border-radius:16px;background:#fff;color:#444;font-size:11px;cursor:pointer;">${t.label}</button>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
+
+function populateKfDishSelect(dateStr){ renderKfDishRows(dateStr); } // Alias — alte Aufrufe (z.B. Rückwärtskompatibilität) bleiben gültig
 function onKfDateChange(){
   const dateStr=document.getElementById('kf-date')?.value;
-  if(dateStr) populateKfDishSelect(dateStr);
+  if(dateStr) renderKfDishRows(dateStr);
 }
 window.onKfDateChange=onKfDateChange;
 
-function setKfRating(btn){
-  _kfRating=parseInt(btn.dataset.val);
+function setKfDishRating(btn){
+  const dish=btn.dataset.dish, val=parseInt(btn.dataset.val), idx=btn.dataset.idx;
+  if(!_kfMultiDraft[dish]) _kfMultiDraft[dish]={v:null, tags:[], note:null};
+  _kfMultiDraft[dish].v=val;
   btn.parentElement.querySelectorAll('button').forEach(b=>{ b.style.borderColor='#eee'; b.style.background='#fff'; });
   btn.style.borderColor='#D4FF3F'; btn.style.background='#FBFFF0';
+  // "+ Grund hinzufügen"-Link für genau dieses Gericht einblenden
+  const link=document.getElementById(`kf-reason-link-${idx}`);
+  if(link) link.style.display='block';
 }
-window.setKfRating=setKfRating;
+window.setKfDishRating=setKfDishRating;
 
-function toggleKfTag(btn){
-  const tag=btn.dataset.tag;
+function toggleKfDishTag(btn){
+  const dish=btn.dataset.dish, tag=btn.dataset.tag;
   const t=KF_TAGS.find(x=>x.k===tag);
-  if(_kfTags.has(tag)){
-    _kfTags.delete(tag);
-    btn.style.background='#fff'; btn.style.color='#444';
-  }else{
-    _kfTags.add(tag);
-    btn.style.background=t.neg?'#FEE2E2':'#DCFCE7'; btn.style.color=t.neg?'#B91C1C':'#166534';
-  }
+  if(!_kfMultiDraft[dish]) _kfMultiDraft[dish]={v:null, tags:[], note:null};
+  const tags=_kfMultiDraft[dish].tags||[];
+  const idx=tags.indexOf(tag);
+  if(idx>-1){ tags.splice(idx,1); btn.style.background='#fff'; btn.style.color='#444'; }
+  else{ tags.push(tag); btn.style.background=t.neg?'#FEE2E2':'#DCFCE7'; btn.style.color=t.neg?'#B91C1C':'#166534'; }
+  _kfMultiDraft[dish].tags=tags;
 }
-window.toggleKfTag=toggleKfTag;
+window.toggleKfDishTag=toggleKfDishTag;
 
 async function submitKfFeedback(){
-  if(!_kfRating){ alert('Bitte kurz eine Bewertung antippen 🙂'); return; }
+  const rated=Object.entries(_kfMultiDraft).filter(([,v])=>v.v!=null);
+  if(!rated.length){ alert('Bitte mindestens ein Gericht bewerten 🙂'); return; }
   const storeId=document.getElementById('kf-store')?.value||null;
-  const dishName=document.getElementById('kf-dish')?.value||null;
   const kommentar=document.getElementById('kf-kommentar')?.value?.trim()||null;
+  const rows=rated.map(([dishName,v],idx)=>({
+    store_id: storeId,
+    dish_name: dishName,
+    rating: v.v,
+    quick_tags: v.tags||[],
+    // Der allgemeine Kommentar landet nur an der ersten bewerteten Zeile, damit er nicht
+    // mehrfach dupliziert in der Datenbank steht.
+    kommentar: idx===0 ? kommentar : null,
+  }));
   try{
-    await api('kunden_feedback',{method:'POST',body:JSON.stringify([{store_id:storeId,dish_name:dishName,rating:_kfRating,quick_tags:[..._kfTags],kommentar}])});
+    // return=minimal statt der App-weiten Standardeinstellung return=representation — sonst
+    // verlangt Postgres beim Zurücklesen der gespeicherten Zeile Leserechte, die kunden_feedback
+    // von außen bewusst NICHT hat (Sicherheits-Härtung vom 21.08.26). Bug gefunden 25.08.26: ohne
+    // diesen Header schlug das Speichern selbst fehl, obwohl es nur ums Zurücklesen ging.
+    await api('kunden_feedback',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify(rows)});
     document.getElementById('kf-form-wrap').innerHTML=`<div style="background:#fff;border-radius:18px;padding:36px 20px;text-align:center;">
       <div style="font-size:42px;margin-bottom:10px;">💛</div>
       <div style="font-size:16px;font-weight:700;color:#1a1a18;">Danke für dein Feedback!</div>
-      <div style="font-size:13px;color:#666;margin-top:6px;">Hilft uns wirklich weiter.</div>
+      <div style="font-size:13px;color:#666;margin-top:6px;">${rated.length} Gericht${rated.length>1?'e':''} bewertet — hilft uns wirklich weiter.</div>
       <button onclick="renderKfForm()" style="margin-top:18px;padding:11px 18px;border:1.5px solid #eee;border-radius:10px;background:#fff;color:#666;font-size:13px;cursor:pointer;">Noch eine Bewertung abgeben</button>
     </div>`;
   }catch(e){ console.error(e); alert('Fehler beim Speichern — bitte nochmal versuchen.'); }
@@ -3185,6 +3208,14 @@ async function renderHome(){
       return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${cardsHtml}</div>
         <div id="dish-allergen-panels" style="margin-bottom:10px;">${panelsHtml}</div>`;
     })()}
+    ${((getTodayMenu()||[]).length && !feedbackDoneHome)?`<div class="home-card" onclick="goTo('waehrend')" style="margin-bottom:8px;padding:12px 14px;background:linear-gradient(135deg,#FDF2F8,#FCE7F3);border-color:#F9A8D4;display:flex;align-items:center;gap:10px;cursor:pointer;">
+      <span style="font-size:26px;flex-shrink:0;">😋</span>
+      <div style="flex:1;">
+        <div style="font-size:13.5px;font-weight:700;color:#9D2463;">Wie hat's Essen heute geschmeckt?</div>
+        <div style="font-size:11px;color:#BE185D;margin-top:1px;">Bitte nicht vergessen — dauert nur 1 Minute</div>
+      </div>
+      <span style="color:#BE185D;font-size:16px;">→</span>
+    </div>`:''}
     <div style="display:flex;gap:6px;margin-bottom:6px;">
       ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="flex:1;padding:9px 8px;text-align:center;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':''}">
         <div style="font-size:20px;line-height:1;">😋</div>
@@ -13234,7 +13265,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
         const a=disposalAmpel(dispRec.leftover_qty, dispRec.sold_out_time);
         ampelBadge=`<div style="font-size:9.5px;font-weight:700;color:${a.color};margin-top:1px;">${a.icon} ${dispRec.leftover_qty}</div>`;
       }
-      const neuBadge=isNewSinceLastSeen?`<div style="font-size:7px;font-weight:800;color:#fff;background:#EF4444;border-radius:3px;padding:0px 3px;display:inline-block;margin-top:1px;line-height:1.4;">NEU</div>`:'';
+      const neuBadge=isNewSinceLastSeen?`<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#EF4444;margin-left:3px;vertical-align:middle;" title="Seit deinem letzten Blick geändert"></span>`:'';
       const qtyBlock=(!isLasagne && qty)?`<div>${formatQty(qty)}</div>`:(!isLasagne?'–':'');
       return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}${isNewSinceLastSeen?'background:#FEF2F2;':''}">${qtyBlock}${sizeLabel}${ampelBadge}${neuBadge}</td>`;
     }).join('');
@@ -13942,6 +13973,7 @@ async function renderTeamFeedback(){
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   let html=backToHomeHtml();
   html+=pageHeaderHtml('😋','Crew Food-Feedback','Standort-Crew + Adi/Tini/Ines gesammelt','#EC4899');
+  html+=`<a href="/?feedback=1" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;text-decoration:none;margin-bottom:14px;">😋 Eigene Bewertung abgeben</a>`;
 
   const [teamRows, linkRows, stores] = await Promise.all([
     api('essen_feedback?select=*&order=submitted_at.desc&limit=150').catch(()=>[]),
