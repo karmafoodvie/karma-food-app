@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.95.0';
+const APP_VERSION = '6.95.2';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6096,7 +6096,16 @@ async function renderSchrankerlTab(){
 // Reports von Schrankerl hängen oft "(vv)"/"(v)" und manchmal eine SKU-Nummer an, daher normalisiert
 // vergleichen statt exakt.
 function normSchrankerlName(n){
-  return (n||'').toLowerCase().replace(/\s*\(vv?\)\s*/g,'').replace(/\s*-\s*\d+\s*$/,'').trim();
+  // Schrankerl schreibt Gerichte manchmal anders als intern hinterlegt (Bindestriche,
+  // "Salad" statt "Salat") — robuster normalisieren, sonst werden Gerichte fälschlich als "kein
+  // Feedback vorhanden" angezeigt (Bug gefunden 26.08.26).
+  return (n||'').toLowerCase()
+    .replace(/\s*\(vv?\)\s*/g,'')
+    .replace(/\s*-\s*\d+\s*$/,'')
+    .replace(/-/g,' ')
+    .replace(/\bsalad\b/g,'salat')
+    .replace(/\s+/g,' ')
+    .trim();
 }
 
 async function renderSchrankerlFeedbackHtml(currentDishNames){
@@ -10556,6 +10565,24 @@ async function renderSchichtende(){
     html+=`<div style="margin-top:20px;">`;
     optionalOpen.forEach(s=>{
       const m=SCHRITT_META[s.id];
+      // Übergabe-Notiz hatte hier nie eine funktionierende Klick-Aktion (link ist bewusst null,
+      // das Eingabefeld existierte nur im "offene Pflichtschritte"-Bereich, den dieser Schritt als
+      // optional nie erreicht) — Bug gefunden 26.08.26, war für ALLE Filialen kaputt.
+      if(s.id==='uebergabe'){
+        html+=`<div onclick="const b=document.getElementById('uebergabe-optional-form');b.style.display=b.style.display==='none'?'block':'none';" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px dashed #BA7517;border-radius:10px;cursor:pointer;opacity:0.9;">
+          <span style="font-size:16px;">${m.emoji}</span>
+          <div style="flex:1;">
+            <div style="font-size:12.5px;font-weight:500;color:var(--sub);">${m.label}</div>
+            <div style="font-size:10.5px;color:var(--muted);">${m.sub}</div>
+          </div>
+          <span style="color:var(--muted);">→</span>
+        </div>
+        <div id="uebergabe-optional-form" style="display:none;margin-top:8px;">
+          <textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen?" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+          <button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>
+        </div>`;
+        return;
+      }
       const linkFn=m.link?`goTo('${m.link}')`:null;
       html+=`<div onclick="${linkFn}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px dashed var(--border);border-radius:10px;cursor:pointer;opacity:0.75;">
         <span style="font-size:16px;">${m.emoji}</span>
