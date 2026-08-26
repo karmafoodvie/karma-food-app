@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.93.0';
+const APP_VERSION = '6.94.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1318,11 +1318,14 @@ const KF_TAGS = [
   {k:'perfekt_gewuerzt', label:'😍 Perfekt gewürzt', neg:false},
   {k:'sehr_frisch', label:'🌟 Sehr frisch', neg:false},
   {k:'wie_beschrieben', label:'👏 Genau wie beschrieben', neg:false},
+  {k:'konsistenz_gut', label:'👌 Konsistenz sehr gut', neg:false},
   {k:'zu_scharf', label:'🌶️ Zu scharf', neg:true},
   {k:'zu_wenig_wuerze', label:'🧂 Zu wenig Würze', neg:true},
   {k:'zu_suess', label:'🍬 Zu süß', neg:true},
   {k:'nicht_wie_karte', label:'📋 Nicht wie auf der Karte beschrieben', neg:true},
   {k:'zu_wenig_protein', label:'🥩 Zu wenig Protein', neg:true},
+  {k:'nicht_ausgewogen', label:'⚖️ Nicht ausgewogen (Gemüse/Carbs)', neg:true},
+  {k:'zu_langweilig', label:'🥱 Zu langweilig', neg:true},
   {k:'nicht_warm', label:'❄️ Nicht mehr warm', neg:true},
   {k:'nicht_frisch', label:'🧊 Nicht frisch', neg:true},
   {k:'zu_oelig', label:'🧴 Zu ölig/fettig', neg:true}
@@ -1398,9 +1401,10 @@ function renderKfDishRows(dateStr){
         <a href="#" onclick="event.preventDefault();document.getElementById('kf-reason-panel-${i}').style.display='block';this.parentElement.style.display='none';" style="font-size:10.5px;color:#EC4899;text-decoration:underline;">+ Grund hinzufügen</a>
       </div>
       <div id="kf-reason-panel-${i}" style="display:none;margin-top:4px;">
-        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;">
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
           ${KF_TAGS.map(t=>`<button type="button" data-dish="${escAttr(d.name)}" data-tag="${t.k}" onclick="toggleKfDishTag(this)" style="padding:5px 9px;border:1.5px solid ${t.neg?'#FCA5A5':'#86EFAC'};border-radius:16px;background:#fff;color:#444;font-size:11px;cursor:pointer;">${t.label}</button>`).join('')}
         </div>
+        <input type="text" data-dish="${escAttr(d.name)}" placeholder="Noch was dazu? (optional)" oninput="setKfDishNote(this)" style="width:100%;padding:7px 9px;border:1px solid #eee;border-radius:8px;font-size:12px;box-sizing:border-box;">
       </div>
     </div>`;
   }).join('');
@@ -1437,20 +1441,29 @@ function toggleKfDishTag(btn){
 }
 window.toggleKfDishTag=toggleKfDishTag;
 
+function setKfDishNote(input){
+  const dish=input.dataset.dish;
+  if(!_kfMultiDraft[dish]) _kfMultiDraft[dish]={v:null, tags:[], note:null};
+  _kfMultiDraft[dish].note=input.value.trim()||null;
+}
+window.setKfDishNote=setKfDishNote;
+
 async function submitKfFeedback(){
   const rated=Object.entries(_kfMultiDraft).filter(([,v])=>v.v!=null);
   if(!rated.length){ alert('Bitte mindestens ein Gericht bewerten 🙂'); return; }
   const storeId=document.getElementById('kf-store')?.value||null;
-  const kommentar=document.getElementById('kf-kommentar')?.value?.trim()||null;
-  const rows=rated.map(([dishName,v],idx)=>({
+  const kommentarAllgemein=document.getElementById('kf-kommentar')?.value?.trim()||null;
+  const rows=rated.map(([dishName,v])=>({
     store_id: storeId,
     dish_name: dishName,
     rating: v.v,
     quick_tags: v.tags||[],
-    // Der allgemeine Kommentar landet nur an der ersten bewerteten Zeile, damit er nicht
-    // mehrfach dupliziert in der Datenbank steht.
-    kommentar: idx===0 ? kommentar : null,
+    kommentar: v.note||null, // Freitext pro Gericht (26.08.26, Wunsch Tini)
   }));
+  // Allgemeiner Kommentar (nicht an ein bestimmtes Gericht gebunden) als eigene Zeile.
+  if(kommentarAllgemein){
+    rows.push({store_id: storeId, dish_name: null, rating: null, quick_tags: [], kommentar: kommentarAllgemein});
+  }
   try{
     // return=minimal statt der App-weiten Standardeinstellung return=representation — sonst
     // verlangt Postgres beim Zurücklesen der gespeicherten Zeile Leserechte, die kunden_feedback
@@ -14021,26 +14034,33 @@ async function renderKundenfeedback(){
     el.innerHTML=html; translateEl(el); return;
   }
 
-  const avg=(rows.reduce((s,r)=>s+(r.rating||0),0)/rows.length).toFixed(1);
+  // Nur Zeilen mit echter Bewertung zählen — allgemeine Freitext-Zeilen (rating=null, kein
+  // Gericht) sollen den Schnitt nicht als "0" nach unten ziehen (26.08.26, seit allgemeiner
+  // Kommentar als eigene Zeile ohne Bewertung gespeichert wird).
+  const ratedRows=rows.filter(r=>r.rating!=null);
+  const avg=ratedRows.length?(ratedRows.reduce((s,r)=>s+r.rating,0)/ratedRows.length).toFixed(1):'–';
 
   html+=`<div class="card" style="padding:14px;margin-bottom:14px;display:flex;gap:16px;align-items:center;">
     <div style="text-align:center;">
       <div style="font-size:26px;font-weight:800;font-family:'Boldonse',sans-serif;">${avg}</div>
-      <div style="font-size:10px;color:var(--muted);">⌀ von ${rows.length}</div>
+      <div style="font-size:10px;color:var(--muted);">⌀ von ${ratedRows.length}</div>
+      <div style="font-size:9px;color:var(--muted);">${rows.length-ratedRows.length>0?`+ ${rows.length-ratedRows.length} allg. Kommentar${rows.length-ratedRows.length>1?'e':''}`:''}</div>
     </div>
     <div style="flex:1;font-size:11.5px;color:var(--sub);line-height:1.4;">Gesamt-Durchschnitt über alle Gerichte & Filialen.</div>
   </div>`;
 
   // Nach Gericht gruppiert, schlechtester Schnitt zuerst — das ist die eigentlich actionable
   // Ansicht: "wo brennt's" statt chronologisch durchscrollen (20.08.26, Wunsch Tini).
+  // Zeilen ohne Gericht/Bewertung (reine allgemeine Kommentare) gehören hier NICHT rein — sonst
+  // tauchen sie fälschlich als "Gericht" mit 0-Bewertung ganz oben in der Rangliste auf.
   const byDish={};
-  rows.forEach(r=>{
-    const key=r.dish_name||'– Ohne Gericht angegeben –';
+  rows.filter(r=>r.dish_name && r.rating!=null).forEach(r=>{
+    const key=r.dish_name;
     if(!byDish[key]) byDish[key]=[];
     byDish[key].push(r);
   });
   const dishStats=Object.entries(byDish).map(([name,entries])=>{
-    const a=entries.reduce((s,r)=>s+(r.rating||0),0)/entries.length;
+    const a=entries.reduce((s,r)=>s+r.rating,0)/entries.length;
     const tc={}; entries.forEach(r=>(r.quick_tags||[]).forEach(t=>tc[t]=(tc[t]||0)+1));
     const top=Object.entries(tc).sort((x,y)=>y[1]-x[1]).slice(0,3);
     return {name, count:entries.length, avg:a, topTags:top, entries};
