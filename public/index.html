@@ -1005,7 +1005,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.92.0';
+const APP_VERSION = '6.92.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13079,13 +13079,14 @@ let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 // Zwei Quellen: essen_feedback (Team, ratings ist JSON {gericht:wert}) + kunden_feedback
 // (Besucher:innen, dish_name direkt). Gibt Team-Ø, Kund:innen-Ø und Top-Tags zurück.
 async function getDishFeedbackSummary(dishName, refDateStr){
-  // Bezugsdatum: standardmäßig echtes "heute", aber beim Anschauen von z.B. morgen soll bereits
-  // heutiges Feedback als "letztes Mal" zählen — sonst wird es fälschlich als "noch keins" gezeigt,
-  // nur weil es zufällig am selben Kalendertag abgegeben wurde (Bug gefunden 20.08.26).
+  // Bezugsdatum: standardmäßig echtes "heute". lte statt lt, damit beim Anschauen von "Heute"
+  // bereits heute abgegebenes Feedback SOFORT als direkte Rückmeldung zählt, nicht erst beim
+  // nächsten Mal (Wunsch Tini, 26.08.26) — betrifft auch weiterhin korrekt Tage in der Zukunft,
+  // da für die selbst noch keine Daten existieren.
   const heute=refDateStr || new Date().toISOString().split('T')[0];
   const [teamRows, kundenRows] = await Promise.all([
-    api(`essen_feedback?datum=lt.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
-    api(`kunden_feedback?dish_name=eq.${encodeURIComponent(dishName)}&submitted_at=lt.${heute}T00:00:00&select=rating,quick_tags,kommentar,submitted_at&order=submitted_at.desc&limit=400`).catch(()=>[])
+    api(`essen_feedback?datum=lte.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
+    api(`kunden_feedback?dish_name=eq.${encodeURIComponent(dishName)}&submitted_at=lte.${heute}T23:59:59&select=rating,quick_tags,kommentar,submitted_at&order=submitted_at.desc&limit=400`).catch(()=>[])
   ]);
 
   let teamLastDate=null;
@@ -13137,7 +13138,8 @@ function feedbackSummaryHtml(sum){
     return `<div style="font-size:11px;color:var(--muted);">Noch kein Feedback vom letzten Mal vorhanden.</div>`;
   }
   const emojiFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
-  const dateFmt=(d)=>d?new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'';
+  const todayReal=new Date().toISOString().split('T')[0];
+  const dateFmt=(d)=>{ if(!d) return ''; if(d===todayReal) return 'heute'; return new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}); };
   const boxId='fbnotes-'+Math.random().toString(36).slice(2,9);
   const hasTeamNotes=sum.teamNotes && sum.teamNotes.length;
   const hasKundenNotes=sum.kundenNotes && sum.kundenNotes.length;
