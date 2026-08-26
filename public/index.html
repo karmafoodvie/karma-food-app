@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.94.0';
+const APP_VERSION = '6.95.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1328,7 +1328,10 @@ const KF_TAGS = [
   {k:'zu_langweilig', label:'🥱 Zu langweilig', neg:true},
   {k:'nicht_warm', label:'❄️ Nicht mehr warm', neg:true},
   {k:'nicht_frisch', label:'🧊 Nicht frisch', neg:true},
-  {k:'zu_oelig', label:'🧴 Zu ölig/fettig', neg:true}
+  {k:'zu_oelig', label:'🧴 Zu ölig/fettig', neg:true},
+  {k:'zu_cremig', label:'🥣 Zu cremig', neg:true},
+  {k:'zu_waessrig', label:'💧 Zu wässrig', neg:true},
+  {k:'zerfliesst', label:'💦 Zerfließt', neg:true}
 ];
 let _kfRating=null, _kfTags=new Set();
 
@@ -3227,14 +3230,6 @@ async function renderHome(){
       return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${cardsHtml}</div>
         <div id="dish-allergen-panels" style="margin-bottom:10px;">${panelsHtml}</div>`;
     })()}
-    ${((getTodayMenu()||[]).length && !feedbackDoneHome)?`<div class="home-card" onclick="goTo('waehrend')" style="margin-bottom:8px;padding:12px 14px;background:linear-gradient(135deg,#FDF2F8,#FCE7F3);border-color:#F9A8D4;display:flex;align-items:center;gap:10px;cursor:pointer;">
-      <span style="font-size:26px;flex-shrink:0;">😋</span>
-      <div style="flex:1;">
-        <div style="font-size:13.5px;font-weight:700;color:#9D2463;">Wie hat's Essen heute geschmeckt?</div>
-        <div style="font-size:11px;color:#BE185D;margin-top:1px;">Bitte nicht vergessen — dauert nur 1 Minute</div>
-      </div>
-      <span style="color:#BE185D;font-size:16px;">→</span>
-    </div>`:''}
     <div style="display:flex;gap:6px;margin-bottom:6px;">
       ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="flex:1;padding:9px 8px;text-align:center;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':''}">
         <div style="font-size:20px;line-height:1;">😋</div>
@@ -3267,6 +3262,7 @@ async function renderHome(){
         <span style="color:#fff;font-size:18px;">→</span>
       </div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
+        ${feedbackDoneHome?'<span class="badge badge-ok" style="font-size:10px;">😋 Food-Feedback ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">😋 Food-Feedback</span>'}
         ${sweetsDone?'<span class="badge badge-ok" style="font-size:10px;">Sweets ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Sweets</span>'}
         ${transporterDone?'<span class="badge badge-ok" style="font-size:10px;">Transporter ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Transporter</span>'}
         ${isKCDay?(kcDone?'<span class="badge badge-ok" style="font-size:10px;">Shop Produkte ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Shop Produkte</span>'):''}
