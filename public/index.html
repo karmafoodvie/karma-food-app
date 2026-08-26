@@ -233,6 +233,7 @@ summary::marker{content:'';}
     <div id="v-essenFeedback" class="view"></div>
     <div id="v-kundenfeedback" class="view"></div>
     <div id="v-teamFeedback" class="view"></div>
+    <div id="v-teamRating" class="view"></div>
     <div id="v-hilfe" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
@@ -1004,7 +1005,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.91.0';
+const APP_VERSION = '6.92.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1674,7 +1675,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -3506,6 +3507,10 @@ function renderOrderSection(cats, label, color, icon){
       const verfuegbar=a.verfuegbar!==false;
       const allergInfo=findProduktAllergene(a.name);
       const allergLine=(allergInfo?.allergene_codes?.length)?`<div style="font-size:10px;color:#B45309;margin-top:2px;">⚠️ ${allergInfo.allergene_codes.map(c=>ALLERGEN_NAMES[c]||c).join(', ')}</div>`:'';
+      // Sprung zur vollen Zutatenliste (25.08.26, Wunsch Tini) — nur bei Artikeln, die dort auch
+      // wirklich hinterlegt sind (Sweets), nicht bei jedem Shop-Produkt.
+      const hasFullZutaten=SWEETS_ZUTATEN.some(s=>s.name===a.name);
+      const zutatenLink=hasFullZutaten?`<div onclick="event.stopPropagation();goTo('allergene');setTimeout(()=>{const inp=document.getElementById('all-search');if(inp){inp.value='${escAttr(a.name)}';filterAllergeneCheatsheet();}},150);" style="font-size:10px;color:var(--green);text-decoration:underline;margin-top:2px;cursor:pointer;">→ Zutaten ansehen</div>`:'';
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
           ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
@@ -3513,6 +3518,7 @@ function renderOrderSection(cats, label, color, icon){
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
             ${allergLine}
+            ${zutatenLink}
             ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
@@ -6063,8 +6069,107 @@ async function renderSchrankerlTab(){
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(item.zutaten)}</div>
     </div>`;
   });
+
+  // Kund:innen-Feedback von Schrankerl (25.08.26, Wunsch Tini) — monatlicher Verlaufs-Report, den
+  // Tini per PDF bekommt, wird von Claude manuell nachgetragen. Zeigt auf einen Blick, wie die
+  // aktuell laufenden Gerichte bei den Kund:innen ankommen — inkl. Original-Kommentaren.
+  html+=await renderSchrankerlFeedbackHtml(menu.map(m=>m.name).filter(Boolean));
+
   return html;
 }
+
+// Findet zu einem internen Gerichtsnamen die passende(n) Schrankerl-Statistik-Zeile(n) — die
+// Reports von Schrankerl hängen oft "(vv)"/"(v)" und manchmal eine SKU-Nummer an, daher normalisiert
+// vergleichen statt exakt.
+function normSchrankerlName(n){
+  return (n||'').toLowerCase().replace(/\s*\(vv?\)\s*/g,'').replace(/\s*-\s*\d+\s*$/,'').trim();
+}
+
+async function renderSchrankerlFeedbackHtml(currentDishNames){
+  const [reportRows, statsRows] = await Promise.all([
+    api('schrankerl_reports?select=*&order=zeitraum_bis.desc&limit=1').catch(()=>[]),
+    api('schrankerl_dish_stats?select=*&report_id=eq.1').catch(()=>[]) // aktuell nur 1 Report vorhanden
+  ]);
+  const report=reportRows?.[0];
+  if(!report) return '';
+
+  let html=`<div class="section-lbl" style="margin-top:16px;">🗣️ Kund:innen-Feedback (Schrankerl)</div>`;
+  const vonLabel=new Date(report.zeitraum_von+'T00:00:00').toLocaleDateString('de-AT',{month:'short',year:'2-digit'});
+  const bisLabel=new Date(report.zeitraum_bis+'T00:00:00').toLocaleDateString('de-AT',{month:'short',year:'2-digit'});
+  html+=`<div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;gap:14px;align-items:center;">
+    <div style="text-align:center;">
+      <div style="font-size:24px;font-weight:800;font-family:'Boldonse',sans-serif;color:${report.zustimmung_pct>=85?'#16A34A':report.zustimmung_pct>=70?'#EA580C':'#DC2626'};">${report.zustimmung_pct}%</div>
+      <div style="font-size:9px;color:var(--muted);">Zustimmung</div>
+    </div>
+    <div style="flex:1;font-size:11px;color:var(--sub);">
+      ${vonLabel} – ${bisLabel} · ${report.bewertungen_anzahl} Bewertungen über ${report.gerichte_anzahl} Gerichte<br>
+      <span style="color:#16A34A;">👍 ${report.positiv}</span> · <span style="color:#DC2626;">👎 ${report.negativ}</span>
+    </div>
+  </div>`;
+
+  // Aktuell laufende Gerichte zuerst, gematcht mit den Schrankerl-Statistiken — das ist, was den
+  // Koch gerade konkret interessiert. Mehrere SKU-Zeilen desselben Gerichts werden zusammengezählt.
+  const normCurrent=currentDishNames.map(normSchrankerlName);
+  const relevant=(statsRows||[]).filter(s=>normCurrent.includes(normSchrankerlName(s.gericht)));
+  const grouped={};
+  relevant.forEach(s=>{
+    const key=normSchrankerlName(s.gericht);
+    if(!grouped[key]) grouped[key]={gericht:s.gericht, pos:0, neg:0};
+    grouped[key].pos+=s.positiv||0; grouped[key].neg+=s.negativ||0;
+  });
+  const dishList=Object.values(grouped).map(g=>({...g, pct: g.pos+g.neg>0?Math.round(g.pos/(g.pos+g.neg)*100):null}));
+
+  if(dishList.length){
+    html+=`<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:6px;">DIESE WOCHE IM ANGEBOT</div>`;
+    dishList.forEach(d=>{
+      const barColor=d.pct==null?'#ccc':d.pct>=85?'#16A34A':d.pct>=70?'#EA580C':'#DC2626';
+      const boxId='schr-'+Math.random().toString(36).slice(2,9);
+      html+=`<div class="card" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;" onclick="const b=document.getElementById('${boxId}');const wasOpen=b.style.display==='block';b.style.display=wasOpen?'none':'block';if(!wasOpen)loadSchrankerlKommentare('${boxId}','${d.gericht.replace(/'/g,"\\'")}');">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:12.5px;font-weight:600;flex:1;" data-no-translate>${d.gericht.replace(/\s*\(vv?\)\s*/,'')}</div>
+          <span style="font-size:15px;font-weight:800;color:${barColor};">${d.pct!=null?d.pct+'%':'–'}</span>
+        </div>
+        <div style="height:4px;background:#F3F4F6;border-radius:2px;margin-top:5px;overflow:hidden;">
+          <div style="height:100%;width:${d.pct||0}%;background:${barColor};"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">👍 ${d.pos} · 👎 ${d.neg} · antippen für Kommentare</div>
+        <div id="${boxId}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);" onclick="event.stopPropagation();"></div>
+      </div>`;
+    });
+  }
+
+  // Top-Kritikpunkte insgesamt — hilft, Muster über alle Gerichte hinweg zu erkennen, nicht nur
+  // pro einzelnem Gericht.
+  const grundCounts={};
+  (await api('schrankerl_kommentare?sentiment=eq.kritik&select=grund').catch(()=>[])).forEach(r=>{
+    const g=r.grund||'Ohne Angabe'; grundCounts[g]=(grundCounts[g]||0)+1;
+  });
+  const topGruende=Object.entries(grundCounts).sort((a,b)=>b[1]-a[1]);
+  if(topGruende.length){
+    html+=`<div class="card" style="padding:10px 14px;margin-top:10px;background:#FFFBEB;border-color:#FDE68A;">
+      <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:4px;">💡 HÄUFIGSTE KRITIKPUNKTE INSGESAMT</div>
+      <div style="font-size:11.5px;color:#78350F;">${topGruende.map(([g,c])=>`${g} (${c}×)`).join(' · ')}</div>
+    </div>`;
+  }
+
+  return html;
+}
+window.renderSchrankerlFeedbackHtml=renderSchrankerlFeedbackHtml;
+
+// Kommentare für ein Gericht lazy nachladen, wenn die Karte aufgeklappt wird
+async function loadSchrankerlKommentare(boxId, gericht){
+  const box=document.getElementById(boxId);
+  if(!box || box.dataset.loaded) return;
+  const norm=normSchrankerlName(gericht);
+  const all=await api(`schrankerl_kommentare?select=*&order=datum.desc&limit=500`).catch(()=>[]);
+  const matching=(all||[]).filter(k=>normSchrankerlName(k.gericht)===norm);
+  box.dataset.loaded='1';
+  if(!matching.length){ box.innerHTML='<div style="font-size:11px;color:var(--muted);">Keine Kommentare vorhanden.</div>'; return; }
+  box.innerHTML=matching.map(k=>`<div style="font-size:11px;color:${k.sentiment==='kritik'?'#991B1B':'#166534'};margin-bottom:5px;">
+    ${k.sentiment==='kritik'?'👎':'👍'} „${k.kommentar}"${k.grund?` <span style="color:var(--muted);">(${k.grund})</span>`:''}
+  </div>`).join('');
+}
+window.loadSchrankerlKommentare=loadSchrankerlKommentare;
 window.renderSchrankerlTab=renderSchrankerlTab;
 
 async function saveSchrankerlMenge(lieferdatum, slot){
@@ -8265,6 +8370,30 @@ async function deleteAllergenEntry(id){
 }
 
 let allergeneCache=[];
+// Sweets & Shop-Produkte — feste Zutatenliste (25.08.26, aus Tinis Tabelle übernommen). Anders als
+// die Mittagsgerichte rotieren diese nicht wochenweise, daher als einfache statische Liste statt
+// über menu_data.js/Supabase-Overrides.
+const SWEETS_ZUTATEN = [
+  {name:'Tahini Banana Muffin mit Tahini Topping', info:'vegan · 2 Tage haltbar',
+   zutaten:'Bananenzubereitung, WEIZENMEHL, Zucker, pflanzliches Öl, Malzextrakt, Getränk aus SOJA, Margarine 80% Fett, Säuerungsmittel: Zitronensäure, WALNÜSSE, Puddingpulver, MANDELN, Natron, jodiertes Speisesalz, Zimt, Tahini Sauce',
+   allergene:'A, F, H, N'},
+  {name:'Choco Cocos Cake', info:'2-3 Tage haltbar',
+   zutaten:'Zucker, pflanzliche Öle und Fette (Raps, Palm, Sonnenblumen), Wasser, Kokosnuss (11,5%), EI, Mehl (WEIZEN), Stärke (WEIZEN), Volleipulver, fettarmes Kakaopulver (1,8%), modifizierte Stärke, Süßmolkenpulver (MILCH), Glukosesirup, Backtriebmittel (E341, E450, E500), Sahnepulver (MILCH), Salz, Emulgator (E472e, E481, E472b, E471), Magermilchpulver, Milcheiweiß, Invertzucker, Dextrose, Säureregulator (Citronensäure, E331), Geliermittel (Pektine), natürliches Aroma, Karottenextrakt',
+   allergene:'A, C, G'},
+  {name:'Raw Cake Mango-Lime', info:'vegan, glutenfrei · 7 Tage haltbar',
+   zutaten:'Datteln 19%, MANDELN 16%, CASHEWKERNE 16%, Kokosfett ungehärtet, Mangopüree 9%, Agavensirup, Oligofruktose, Kokosmilch (Kokosnussextrakt, Wasser), Limettenpüree 5,7%, Zitronenpüree, Kornblumen-Blütenblätter',
+   allergene:'H'},
+  {name:'Raw Cake Dirty Chai', info:'vegan, glutenfrei · 7 Tage haltbar',
+   zutaten:'Datteln 20%, Kokosmilch (Kokosextrakt, Wasser), CASHEWKERNE, nicht gehärtetes Kokosöl, Oligofruktose, MANDELN, Agavensirup, Buchweizen, getrocknetes Kokospulver, Kakaopulver (2,2%), Kaffee (1,4%), Salz. Kann HASELNÜSSE, PISTAZIEN, PARANÜSSE und SESAM enthalten. Trotz sorgfältiger Herstellung können Dattelkernfragmente und Schalenstücke enthalten sein.',
+   allergene:'H'},
+  {name:'Samosa', info:'vegan · 2-3 Tage haltbar',
+   zutaten:'WEIZENMEHL, Kartoffeln, Erbsen, Kreuzkümmel, Koriandersamen, Kasoori Methi (Bockshornklee), Salz, Chiliflocken, Ajwain, Öl',
+   allergene:'A'},
+  {name:'Mango Chutney', info:'vegan · 30 Tage haltbar',
+   zutaten:'Zucker, geschälte Mangoscheiben 46%, Rohrzucker, Salz, Chilipulver, Ingwerpulver, Knoblauchpulver',
+   allergene:''},
+];
+
 async function loadAllergeneCheatsheet(){
   allergeneCache=await api('allergene_rezepturen?select=*&order=gericht.asc').catch(()=>[]);
   // Heute's Menü aus MENU_DATA oben anzeigen
@@ -8385,11 +8514,23 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
   } else if(!todayMenu.length){
     html='<div style="font-size:13px;color:var(--muted);padding:8px 2px;">Noch keine Gerichte angelegt.</div>';
   }
+
+  // Sweets & Shop-Produkte — feste Liste, im selben Suchfeld mitdurchsuchbar (25.08.26, Wunsch Tini).
+  const sweetsFiltered=(window._sweetsSearchQ) ? SWEETS_ZUTATEN.filter(s=>s.name.toLowerCase().includes(window._sweetsSearchQ)) : SWEETS_ZUTATEN;
+  if(sweetsFiltered.length){
+    html+=`<div style="font-size:11px;font-weight:700;color:#EC4899;letter-spacing:.05em;margin:14px 0 8px;">🍰 SWEETS &amp; SHOP-PRODUKTE</div>`;
+    sweetsFiltered.forEach(s=>{
+      html+=renderDishCard(s.name, s.zutaten, s.allergene);
+      html+=`<div style="font-size:10.5px;color:var(--muted);margin:-6px 0 10px 2px;">${s.info}</div>`;
+    });
+    html+=`<div style="font-size:10.5px;color:#92400E;background:#FFFBEB;border-radius:8px;padding:8px 10px;margin-top:4px;">⚠️ Alle Sweets &amp; Shop-Produkte können Spuren von Senf, Samen &amp; Nüssen enthalten.</div>`;
+  }
   wrap.innerHTML=html;
 }
 
 function filterAllergeneCheatsheet(){
   const q=document.getElementById('all-search').value.toLowerCase();
+  window._sweetsSearchQ=q;
   // Filter both today's menu and Supabase list
   const filteredMenu=getTodayMenu()?.filter(d=>d.name?.toLowerCase().includes(q))||[];
   renderAllergeneCheatlist(allergeneCache.filter(e=>e.gericht.toLowerCase().includes(q)), filteredMenu);
@@ -13973,7 +14114,7 @@ async function renderTeamFeedback(){
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   let html=backToHomeHtml();
   html+=pageHeaderHtml('😋','Crew Food-Feedback','Standort-Crew + Adi/Tini/Ines gesammelt','#EC4899');
-  html+=`<a href="/?feedback=1" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;text-decoration:none;margin-bottom:14px;">😋 Eigene Bewertung abgeben</a>`;
+  html+=`<button onclick="goTo('teamRating')" style="width:100%;display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">😋 Eigene Bewertung abgeben</button>`;
 
   const [teamRows, linkRows, stores] = await Promise.all([
     api('essen_feedback?select=*&order=submitted_at.desc&limit=150').catch(()=>[]),
@@ -14089,6 +14230,20 @@ async function renderTeamFeedback(){
   translateEl(el);
 }
 window.renderTeamFeedback=renderTeamFeedback;
+
+// In-App-Bewertung für Adi/Tini/Ines (25.08.26, Wunsch Tini) — bettet dasselbe Formular ein, das
+// bisher nur über den externen Link (?feedback=1) erreichbar war. Landet in derselben Tabelle
+// (kunden_feedback), fließt also automatisch mit in "Crew Food-Feedback" ein, nicht extern.
+async function renderTeamRating(){
+  const el=document.getElementById('v-teamRating');
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('😋','Eigene Bewertung','Fließt direkt ins Crew Food-Feedback ein','#EC4899');
+  html+=`<div id="kf-form-wrap"></div>`;
+  el.innerHTML=html;
+  translateEl(el);
+  await renderKfForm();
+}
+window.renderTeamRating=renderTeamRating;
 
 
 
