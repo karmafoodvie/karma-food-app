@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.1';
+const APP_VERSION = '6.99.3';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3525,10 +3525,10 @@ function renderOrderSection(cats, label, color, icon){
       const verfuegbar=a.verfuegbar!==false;
       const allergInfo=findProduktAllergene(a.name);
       const allergLine=(allergInfo?.allergene_codes?.length)?`<div style="font-size:10px;color:#B45309;margin-top:2px;">⚠️ ${allergInfo.allergene_codes.map(c=>ALLERGEN_NAMES[c]||c).join(', ')}</div>`:'';
-      // Sprung zur vollen Zutatenliste (25.08.26, Wunsch Tini) — nur bei Artikeln, die dort auch
-      // wirklich hinterlegt sind (Sweets), nicht bei jedem Shop-Produkt.
-      const hasFullZutaten=SWEETS_ZUTATEN.some(s=>s.name===a.name);
-      const zutatenLink=hasFullZutaten?`<div onclick="event.stopPropagation();goTo('allergene');setTimeout(()=>{const inp=document.getElementById('all-search');if(inp){inp.value='${escAttr(a.name)}';filterAllergeneCheatsheet();}},150);" style="font-size:10px;color:var(--green);text-decoration:underline;margin-top:2px;cursor:pointer;">→ Zutaten ansehen</div>`:'';
+      // Zutaten + Haltbarkeit direkt anzeigen statt Link (27.08.26, Wunsch Tini — der Link zur
+      // Zutaten&Allergene-Seite hat hier nicht gepasst, direkt hier ist praktischer).
+      const sweetInfo=SWEETS_ZUTATEN.find(s=>s.name===a.name);
+      const zutatenInline=sweetInfo?`<div style="font-size:10px;color:var(--sub);margin-top:3px;line-height:1.5;">${sweetInfo.zutaten}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">${sweetInfo.info}</div>`:'';
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
           ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
@@ -3536,7 +3536,7 @@ function renderOrderSection(cats, label, color, icon){
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
             ${allergLine}
-            ${zutatenLink}
+            ${zutatenInline}
             ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${verfuegbarLabel(a)}</div>`:''}
           </div>
         </div>
@@ -8414,13 +8414,13 @@ let allergeneCache=[];
 // die Mittagsgerichte rotieren diese nicht wochenweise, daher als einfache statische Liste statt
 // über menu_data.js/Supabase-Overrides.
 const SWEETS_ZUTATEN = [
-  {name:'Tahini Banana Muffin mit Tahini Topping', info:'vegan · 2 Tage haltbar',
+  {name:'Tahini Banana Muffin', info:'vegan · 2 Tage haltbar',
    zutaten:'Bananenzubereitung, WEIZENMEHL, Zucker, pflanzliches Öl, Malzextrakt, Getränk aus SOJA, Margarine 80% Fett, Säuerungsmittel: Zitronensäure, WALNÜSSE, Puddingpulver, MANDELN, Natron, jodiertes Speisesalz, Zimt, Tahini Sauce',
    allergene:'A, F, H, N'},
-  {name:'Choco Cocos Cake', info:'2-3 Tage haltbar',
+  {name:'Choco Coco Cake', info:'2-3 Tage haltbar',
    zutaten:'Zucker, pflanzliche Öle und Fette (Raps, Palm, Sonnenblumen), Wasser, Kokosnuss (11,5%), EI, Mehl (WEIZEN), Stärke (WEIZEN), Volleipulver, fettarmes Kakaopulver (1,8%), modifizierte Stärke, Süßmolkenpulver (MILCH), Glukosesirup, Backtriebmittel (E341, E450, E500), Sahnepulver (MILCH), Salz, Emulgator (E472e, E481, E472b, E471), Magermilchpulver, Milcheiweiß, Invertzucker, Dextrose, Säureregulator (Citronensäure, E331), Geliermittel (Pektine), natürliches Aroma, Karottenextrakt',
    allergene:'A, C, G'},
-  {name:'Raw Cake Mango-Lime', info:'vegan, glutenfrei · 7 Tage haltbar',
+  {name:'Raw Cake Mango Lime', info:'vegan, glutenfrei · 7 Tage haltbar',
    zutaten:'Datteln 19%, MANDELN 16%, CASHEWKERNE 16%, Kokosfett ungehärtet, Mangopüree 9%, Agavensirup, Oligofruktose, Kokosmilch (Kokosnussextrakt, Wasser), Limettenpüree 5,7%, Zitronenpüree, Kornblumen-Blütenblätter',
    allergene:'H'},
   {name:'Raw Cake Dirty Chai', info:'vegan, glutenfrei · 7 Tage haltbar',
@@ -12770,6 +12770,25 @@ async function renderKitchenMonitoringHtml(){
 
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Tägliche Kitchen-Kontrolle — ersetzt die Odoo-Umfrage. ${rec?'Heute bereits eingetragen, kann bei Bedarf korrigiert werden.':'Noch nicht für heute eingetragen.'}</div>`;
 
+  if(rec){
+    html+=`<div class="card" style="padding:10px 14px;margin-bottom:10px;cursor:pointer;background:#F0FDF4;border-color:var(--green);" onclick="const b=document.getElementById('km-today-detail');b.style.display=b.style.display==='none'?'block':'none';">
+      <div style="font-size:12.5px;font-weight:600;color:var(--green);">📋 Heutige Kontrolle ansehen</div>
+      <div id="km-today-detail" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11.5px;" onclick="event.stopPropagation();">
+        <div style="font-weight:600;margin-bottom:3px;">📦 Lager: ${rec.lager_kontrolliert?'✓ Kontrolliert':'✗ Nicht kontrolliert'}</div>
+        <div style="background:#fff;border-radius:8px;padding:7px 9px;margin-bottom:8px;">
+          ${KM_LAGER_ITEMS.map(l=>`<div style="color:var(--muted);line-height:1.5;">• ${l}</div>`).join('')}
+        </div>
+        <div style="font-weight:600;margin-bottom:3px;">🧽 Reinigung: ${rec.reinigung_gemacht?'✓ Durchgeführt':'✗ Nicht durchgeführt'}</div>
+        <div style="background:#fff;border-radius:8px;padding:7px 9px;margin-bottom:8px;">
+          ${KM_REINIGUNG_ITEMS.map(l=>`<div style="color:var(--muted);line-height:1.5;">• ${l}</div>`).join('')}
+        </div>
+        <div style="font-weight:600;margin-bottom:3px;">🌡️ Temperaturen</div>
+        <div style="color:var(--sub);margin-bottom:8px;">Kühlhaus ${rec.temp_kuehlhaus??'–'}° · Küche ${rec.temp_kuehlschrank_kueche??'–'}° · Shop ${rec.temp_kuehlschrank_shop??'–'}° · Tiefkühler ${rec.temp_tiefkuehler??'–'}° · Vitrine ${rec.temp_vitrine??'–'}°</div>
+        <div style="color:var(--muted);font-size:10.5px;">Eingetragen von ${rec.submitted_by||'–'}${rec.submitted_at?' · '+new Date(rec.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' Uhr':''}</div>
+      </div>
+    </div>`;
+  }
+
   html+=`<div class="card" style="padding:14px;">
     <div style="font-size:12px;font-weight:600;margin-bottom:6px;">📦 Das Lager wurde laut den Bestimmungen kontrolliert</div>
     ${kmInfoBoxHtml(KM_LAGER_ITEMS)}
@@ -12803,17 +12822,31 @@ async function renderKitchenMonitoringHtml(){
     <button onclick="submitKitchenMonitoring()" style="width:100%;padding:12px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">${rec?'Aktualisieren ✓':'Eintragen ✓'}</button>
   </div>`;
 
-  // Letzte Einträge zum Vergleich/Verlauf
-  const hist=await api(`kitchen_monitoring?datum=lt.${today}&select=*&order=datum.desc&limit=7`).catch(()=>[]);
+  // Letzte Einträge zum Vergleich/Verlauf — aufklappbar mit vollem Detail, damit ein Eintrag als
+  // echte Kontrolle abrufbar ist (Wunsch Tini, 27.08.26), nicht nur eine Kurzzeile.
+  const hist=await api(`kitchen_monitoring?datum=lt.${today}&select=*&order=datum.desc&limit=14`).catch(()=>[]);
   if(hist?.length){
-    html+=`<div class="section-lbl" style="margin-top:16px;">Letzte Einträge</div>`;
-    hist.forEach(h=>{
-      html+=`<div class="card" style="padding:10px 14px;margin-bottom:6px;font-size:11.5px;">
-        <div style="display:flex;justify-content:space-between;">
+    html+=`<div class="section-lbl" style="margin-top:16px;">📋 Kontroll-Verlauf — antippen für Details</div>`;
+    hist.forEach((h,i)=>{
+      const boxId=`km-hist-${i}`;
+      html+=`<div class="card" style="padding:10px 14px;margin-bottom:6px;font-size:11.5px;cursor:pointer;" onclick="const b=document.getElementById('${boxId}');b.style.display=b.style.display==='none'?'block':'none';">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
           <strong>${new Date(h.datum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}</strong>
-          <span style="color:var(--muted);">🚻 ${h.wc_gereinigt_von||'–'}</span>
+          <span style="color:var(--muted);">🚻 ${h.wc_gereinigt_von||'–'} · <span style="color:${h.lager_kontrolliert&&h.reinigung_gemacht?'var(--green)':'#DC2626'};">${h.lager_kontrolliert&&h.reinigung_gemacht?'✓ vollständig':'⚠ unvollständig'}</span></span>
         </div>
-        <div style="color:var(--sub);margin-top:3px;">Lager ${h.lager_kontrolliert?'✓':'✗'} · Reinigung ${h.reinigung_gemacht?'✓':'✗'} · Kühlhaus ${h.temp_kuehlhaus??'–'}° · Küche ${h.temp_kuehlschrank_kueche??'–'}° · Shop ${h.temp_kuehlschrank_shop??'–'}° · Tiefkühler ${h.temp_tiefkuehler??'–'}° · Vitrine ${h.temp_vitrine??'–'}°</div>
+        <div id="${boxId}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);" onclick="event.stopPropagation();">
+          <div style="font-weight:600;margin-bottom:3px;">📦 Lager: ${h.lager_kontrolliert?'✓ Kontrolliert':'✗ Nicht kontrolliert'}</div>
+          <div style="background:#F5F5F3;border-radius:8px;padding:7px 9px;margin-bottom:8px;">
+            ${KM_LAGER_ITEMS.map(l=>`<div style="color:var(--muted);line-height:1.5;">• ${l}</div>`).join('')}
+          </div>
+          <div style="font-weight:600;margin-bottom:3px;">🧽 Reinigung: ${h.reinigung_gemacht?'✓ Durchgeführt':'✗ Nicht durchgeführt'}</div>
+          <div style="background:#F5F5F3;border-radius:8px;padding:7px 9px;margin-bottom:8px;">
+            ${KM_REINIGUNG_ITEMS.map(l=>`<div style="color:var(--muted);line-height:1.5;">• ${l}</div>`).join('')}
+          </div>
+          <div style="font-weight:600;margin-bottom:3px;">🌡️ Temperaturen</div>
+          <div style="color:var(--sub);margin-bottom:8px;">Kühlhaus ${h.temp_kuehlhaus??'–'}° · Küche ${h.temp_kuehlschrank_kueche??'–'}° · Shop ${h.temp_kuehlschrank_shop??'–'}° · Tiefkühler ${h.temp_tiefkuehler??'–'}° · Vitrine ${h.temp_vitrine??'–'}°</div>
+          <div style="color:var(--muted);font-size:10.5px;">Eingetragen von ${h.submitted_by||'–'}${h.submitted_at?' · '+new Date(h.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' Uhr':''}</div>
+        </div>
       </div>`;
     });
   }
