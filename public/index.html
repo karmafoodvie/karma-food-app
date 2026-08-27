@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.98.2';
+const APP_VERSION = '6.99.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -12729,6 +12729,40 @@ async function renderKitchenDailyHtml(){
 // WC-Zuständigkeit, 4 Temperaturkontrollen. Ein Eintrag pro Kalendertag.
 const KITCHEN_MONITORING_LEUTE=['Dinesh','Nooru','Hortencia','Everton'];
 
+// Lager- und Reinigungs-Checkliste, 26.08.26 (Wunsch Tini) — ersetzt die einfachen Ja/Nein-Toggle
+// durch die tatsächlichen Einzelpunkte laut Hygienebestimmungen.
+const KM_LAGER_ITEMS=[
+  'Produktgruppen sind weit genug entfernt',
+  'Alle LM werden in Regalen gelagert',
+  'Es stehen keine LM auf dem Fußboden',
+  'Alle LM sind ordnungsgemäß abgedeckt',
+  'Neue Ware steht vor alter Ware (First In – First Out)',
+  'Alle LM (auch selbst produzierte) sind mit MHD versehen',
+  'Rohe Ware ist von gegarter Ware getrennt',
+  'Alle LM sind noch im vorgegebenen MHD',
+  'Eier sind ohne Kartonagen in einem Behälter gelagert',
+  'Angebrochene LM werden in geeignete Behälter umgefüllt',
+  'Überproduktionen sind mit Inhaltsbezeichnung versehen',
+  'Überproduktionen sind mit Einlagerungsdatum versehen',
+  'Taste kontrolliert',
+];
+const KM_REINIGUNG_ITEMS=[
+  'Spülbecken & Abflüsse',
+  'Arbeitsgeräte & Flächen',
+  'Türen, Rahmen und Griffe',
+  'Fußböden & Abflüsse',
+  'Mülleimer',
+];
+
+// Reiner Infotext (25.08.26, korrigiert 27.08.26 — Wunsch Tini: nicht einzeln abhaken, nur als
+// Erinnerung/Referenz anzeigen, was "kontrolliert" beinhaltet). Bleibt bei einem einzigen
+// Ja/Nein-Toggle pro Bereich wie ursprünglich.
+function kmInfoBoxHtml(items){
+  return `<div style="background:#F5F5F3;border-radius:8px;padding:8px 10px;margin-bottom:12px;">
+    ${items.map(l=>`<div style="font-size:11px;color:var(--muted);line-height:1.6;">• ${l}</div>`).join('')}
+  </div>`;
+}
+
 async function renderKitchenMonitoringHtml(){
   const today=new Date().toISOString().split('T')[0];
   const rows=await api(`kitchen_monitoring?datum=eq.${today}&select=*&limit=1`).catch(()=>[]);
@@ -12737,16 +12771,18 @@ async function renderKitchenMonitoringHtml(){
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Tägliche Kitchen-Kontrolle — ersetzt die Odoo-Umfrage. ${rec?'Heute bereits eingetragen, kann bei Bedarf korrigiert werden.':'Noch nicht für heute eingetragen.'}</div>`;
 
   html+=`<div class="card" style="padding:14px;">
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">📦 Das Lager wurde laut den Bestimmungen kontrolliert</div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px;">📦 Das Lager wurde laut den Bestimmungen kontrolliert</div>
+    ${kmInfoBoxHtml(KM_LAGER_ITEMS)}
     <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <button type="button" id="km-lager-ja" onclick="setKmToggle('lager',true)" style="flex:1;padding:9px;border:1.5px solid ${rec?.lager_kontrolliert?'var(--green)':'var(--border)'};border-radius:8px;background:${rec?.lager_kontrolliert?'var(--green-light)':'#fff'};color:${rec?.lager_kontrolliert?'var(--green)':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✓ Kontrolliert</button>
-      <button type="button" id="km-lager-nein" onclick="setKmToggle('lager',false)" style="flex:1;padding:9px;border:1.5px solid ${rec&&!rec.lager_kontrolliert?'#DC2626':'var(--border)'};border-radius:8px;background:${rec&&!rec.lager_kontrolliert?'#FEE2E2':'#fff'};color:${rec&&!rec.lager_kontrolliert?'#DC2626':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✗ Noch nicht</button>
+      <button type="button" id="km-lager-ja" onclick="setKmToggle('lager',true)" style="flex:1;padding:9px;border:1.5px solid ${(_kmDraft.lager??rec?.lager_kontrolliert)?'var(--green)':'var(--border)'};border-radius:8px;background:${(_kmDraft.lager??rec?.lager_kontrolliert)?'var(--green-light)':'#fff'};color:${(_kmDraft.lager??rec?.lager_kontrolliert)?'var(--green)':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✓ Kontrolliert</button>
+      <button type="button" id="km-lager-nein" onclick="setKmToggle('lager',false)" style="flex:1;padding:9px;border:1.5px solid ${(_kmDraft.lager===false||(rec&&!rec.lager_kontrolliert&&_kmDraft.lager==null))?'#DC2626':'var(--border)'};border-radius:8px;background:${(_kmDraft.lager===false||(rec&&!rec.lager_kontrolliert&&_kmDraft.lager==null))?'#FEE2E2':'#fff'};color:${(_kmDraft.lager===false||(rec&&!rec.lager_kontrolliert&&_kmDraft.lager==null))?'#DC2626':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✗ Noch nicht</button>
     </div>
 
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">🧽 Die tägliche Reinigung wurde gemacht</div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px;">🧽 Die tägliche Reinigung wurde gemacht</div>
+    ${kmInfoBoxHtml(KM_REINIGUNG_ITEMS)}
     <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <button type="button" id="km-rein-ja" onclick="setKmToggle('rein',true)" style="flex:1;padding:9px;border:1.5px solid ${rec?.reinigung_gemacht?'var(--green)':'var(--border)'};border-radius:8px;background:${rec?.reinigung_gemacht?'var(--green-light)':'#fff'};color:${rec?.reinigung_gemacht?'var(--green)':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✓ Durchgeführt</button>
-      <button type="button" id="km-rein-nein" onclick="setKmToggle('rein',false)" style="flex:1;padding:9px;border:1.5px solid ${rec&&!rec.reinigung_gemacht?'#DC2626':'var(--border)'};border-radius:8px;background:${rec&&!rec.reinigung_gemacht?'#FEE2E2':'#fff'};color:${rec&&!rec.reinigung_gemacht?'#DC2626':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✗ Noch nicht</button>
+      <button type="button" id="km-rein-ja" onclick="setKmToggle('rein',true)" style="flex:1;padding:9px;border:1.5px solid ${(_kmDraft.rein??rec?.reinigung_gemacht)?'var(--green)':'var(--border)'};border-radius:8px;background:${(_kmDraft.rein??rec?.reinigung_gemacht)?'var(--green-light)':'#fff'};color:${(_kmDraft.rein??rec?.reinigung_gemacht)?'var(--green)':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✓ Durchgeführt</button>
+      <button type="button" id="km-rein-nein" onclick="setKmToggle('rein',false)" style="flex:1;padding:9px;border:1.5px solid ${(_kmDraft.rein===false||(rec&&!rec.reinigung_gemacht&&_kmDraft.rein==null))?'#DC2626':'var(--border)'};border-radius:8px;background:${(_kmDraft.rein===false||(rec&&!rec.reinigung_gemacht&&_kmDraft.rein==null))?'#FEE2E2':'#fff'};color:${(_kmDraft.rein===false||(rec&&!rec.reinigung_gemacht&&_kmDraft.rein==null))?'#DC2626':'var(--sub)'};font-size:13px;font-weight:600;cursor:pointer;">✗ Noch nicht</button>
     </div>
 
     <div style="font-size:12px;font-weight:600;margin-bottom:8px;">🚻 Wer hat das WC gereinigt?</div>
@@ -12761,6 +12797,7 @@ async function renderKitchenMonitoringHtml(){
       <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Kühlschrank Küche</label><input type="number" step="0.1" id="km-temp-kkueche" value="${rec?.temp_kuehlschrank_kueche??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
       <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Kühlschrank Shop</label><input type="number" step="0.1" id="km-temp-kshop" value="${rec?.temp_kuehlschrank_shop??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
       <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Tiefkühler</label><input type="number" step="0.1" id="km-temp-tiefkuehler" value="${rec?.temp_tiefkuehler??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
+      <div><label style="font-size:10.5px;color:var(--muted);display:block;margin-bottom:3px;">Vitrine</label><input type="number" step="0.1" id="km-temp-vitrine" value="${rec?.temp_vitrine??''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;"></div>
     </div>
 
     <button onclick="submitKitchenMonitoring()" style="width:100%;padding:12px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">${rec?'Aktualisieren ✓':'Eintragen ✓'}</button>
@@ -12776,7 +12813,7 @@ async function renderKitchenMonitoringHtml(){
           <strong>${new Date(h.datum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}</strong>
           <span style="color:var(--muted);">🚻 ${h.wc_gereinigt_von||'–'}</span>
         </div>
-        <div style="color:var(--sub);margin-top:3px;">Lager ${h.lager_kontrolliert?'✓':'✗'} · Reinigung ${h.reinigung_gemacht?'✓':'✗'} · Kühlhaus ${h.temp_kuehlhaus??'–'}° · Küche ${h.temp_kuehlschrank_kueche??'–'}° · Shop ${h.temp_kuehlschrank_shop??'–'}° · Tiefkühler ${h.temp_tiefkuehler??'–'}°</div>
+        <div style="color:var(--sub);margin-top:3px;">Lager ${h.lager_kontrolliert?'✓':'✗'} · Reinigung ${h.reinigung_gemacht?'✓':'✗'} · Kühlhaus ${h.temp_kuehlhaus??'–'}° · Küche ${h.temp_kuehlschrank_kueche??'–'}° · Shop ${h.temp_kuehlschrank_shop??'–'}° · Tiefkühler ${h.temp_tiefkuehler??'–'}° · Vitrine ${h.temp_vitrine??'–'}°</div>
       </div>`;
     });
   }
@@ -12805,6 +12842,7 @@ async function submitKitchenMonitoring(){
     temp_kuehlschrank_kueche: document.getElementById('km-temp-kkueche')?.value ? parseFloat(document.getElementById('km-temp-kkueche').value) : null,
     temp_kuehlschrank_shop: document.getElementById('km-temp-kshop')?.value ? parseFloat(document.getElementById('km-temp-kshop').value) : null,
     temp_tiefkuehler: document.getElementById('km-temp-tiefkuehler')?.value ? parseFloat(document.getElementById('km-temp-tiefkuehler').value) : null,
+    temp_vitrine: document.getElementById('km-temp-vitrine')?.value ? parseFloat(document.getElementById('km-temp-vitrine').value) : null,
     submitted_by: currentStore?.name || 'Kitchen',
   };
   try{
