@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.3';
+const APP_VERSION = '6.99.4';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7640,7 +7640,11 @@ async function updateForecastQtyOrg(inputEl){
   // ignoriert statt gespeichert.
   if(qty!=null && isNaN(qty)){ showToast('Bitte eine gültige Zahl eingeben', true); inputEl.value=inputEl.dataset.sugg||''; return; }
   if(qty!=null && qty<0) qty=0;
-  if(qty!=null) inputEl.value=formatQty(qty).replace(',','.');
+  // Das Feld NICHT mehr automatisch umformatieren/überschreiben (Bug gefunden 27.08.26): weil
+  // beim Tippen im Hintergrund nach einer kurzen Pause automatisch gespeichert wird
+  // (debounceFieldSave), hat das Zurückschreiben von formatQty() mitten im Eintippen den Wert
+  // wieder überschrieben — z.B. konnte "0,75" nie fertig eingetippt werden. Die hübsche
+  // Bruch-Darstellung (¾ etc.) passiert stattdessen beim nächsten normalen Neuladen der Seite.
   // War der Wert schon von der Filiale gesetzt (orange)? Dann bleibt er beim Anpassen durch
   // Operations weiterhin als "Filiale" markiert (source='store') — sonst geht beim Speichern
   // verloren, dass der Wert ursprünglich von der Filiale kam, und das Feld würde fälschlich navy.
