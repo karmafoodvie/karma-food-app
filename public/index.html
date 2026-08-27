@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.96.0';
+const APP_VERSION = '6.97.0';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3667,6 +3667,7 @@ const ORDER_TABS={
   kc:{label:'📦 Shop Produkte',cats:KC_CATS,color:'#A855F7',title:'Shop Produkte',icon:'📦'},
   sweets:{label:'🍰 Sweets',cats:SWEETS_CATS,color:'#EC4899',title:'Sweets — für morgen',icon:'🍰'},
   kueche:{label:'🍳<br><span style="font-size:8.5px;line-height:1.25;display:block;font-weight:400;">Saucen<br>Limetten<br>Dressings</span>',cats:[],color:'#3B6D11',title:'Saucen, Limetten & Dressings',icon:'🍳'},
+  samosas:{label:'🥟 Samosas',cats:[],color:'#D97706',title:'Samosas',icon:'🥟'},
   forecast:{label:'📅 Forecast',cats:[],color:'#0EA5E9',title:'Forecast — Portionsmengen',icon:'📅'}
 };
 function renderOrder(){
@@ -3693,6 +3694,10 @@ function renderOrder(){
   }
   if(activeOrderTab==='kueche'){
     renderKuecheOrderTab(el, html);
+    return;
+  }
+  if(activeOrderTab==='samosas'){
+    renderStoreSamosaTab(el, html);
     return;
   }
 
@@ -11960,6 +11965,64 @@ function getWeekDates(offset){
 function isoDate(d){return d.toISOString().split('T')[0];}
 let _samosaWeekOffset=0; // 21.08.26, Wunsch Tini: letzte/nächste Woche ansehbar
 
+// Store-seitige Samosa-Ansicht (26.08.26, Wunsch Tini) — bisher war Samosas nur zentral bei
+// Transporter sichtbar, Filialen hatten keine eigene, klare Stelle dafür und haben's oft vergessen
+// anzupassen. Zeigt nur die eigene Filiale, groß und deutlich, gleiche Speicherlogik/Datenbasis wie
+// die Transporter-Tabelle (samosa_today/samosa_baseline, Vorwoche als Ausgangsbasis).
+async function renderStoreSamosaTab(el, tabHtml){
+  let html=tabHtml;
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Menge für Mo–Do eintragen. Wird von der Vorwoche übernommen, solange nichts geändert wird — bitte prüfen und anpassen, wenn's diese Woche anders sein soll.</div>`;
+
+  const weekDates=getWeekdayDates(_samosaWeekOffset||0);
+  const kw=getIsoWeekNumber(weekDates[1]);
+  const todayWeekday=_samosaWeekOffset?-1:new Date().getDay();
+  const WD_LABEL={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag'};
+
+  html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:14px;">
+    <button onclick="_samosaWeekOffset=(_samosaWeekOffset||0)-1;renderOrder();" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">← Letzte Woche</button>
+    <div style="flex:1.2;text-align:center;font-size:11.5px;color:var(--muted);">${!_samosaWeekOffset?'Diese Woche':`KW ${kw}`}${_samosaWeekOffset?`<div onclick="_samosaWeekOffset=0;renderOrder();" style="font-size:10px;color:#D97706;cursor:pointer;text-decoration:underline;">zu heute</div>`:''}</div>
+    <button onclick="_samosaWeekOffset=(_samosaWeekOffset||0)+1;renderOrder();" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">Nächste Woche →</button>
+  </div>`;
+
+  const baseline=await api(`samosa_baseline?store_id=eq.${currentStore.id}&select=weekday,base_qty`).catch(()=>[]);
+  const todayVals=await api(`samosa_today?store_id=eq.${currentStore.id}&select=supply_date,qty,is_adjusted&supply_date=gte.${weekDates[1]}&supply_date=lte.${weekDates[4]}`).catch(()=>[]);
+  const valMap={}; (todayVals||[]).forEach(d=>valMap[d.supply_date]=d);
+  const lastWeekDates=getWeekdayDates((_samosaWeekOffset||0)-1);
+  const lastWeekVals=await api(`samosa_today?store_id=eq.${currentStore.id}&select=supply_date,qty&supply_date=gte.${lastWeekDates[1]}&supply_date=lte.${lastWeekDates[4]}`).catch(()=>[]);
+  const lastWeekMap={}; (lastWeekVals||[]).forEach(d=>{
+    const wd=Object.keys(lastWeekDates).find(k=>lastWeekDates[k]===d.supply_date);
+    if(wd) lastWeekMap[wd]=d.qty;
+  });
+
+  [1,2,3,4].forEach(wd=>{
+    const b=baseline.find(x=>x.weekday===wd);
+    const dateStr=weekDates[wd];
+    const rec=valMap[dateStr];
+    const lastWeekVal=lastWeekMap[wd];
+    const val=rec!=null?rec.qty:(lastWeekVal!=null?lastWeekVal:(b?b.base_qty:0));
+    const uebernommenAusVorwoche=(rec==null && lastWeekVal!=null);
+    const adjusted=!!rec?.is_adjusted;
+    const isToday=wd===todayWeekday;
+    html+=`<div class="card" style="padding:14px 16px;margin-bottom:10px;${isToday?'border-color:#D97706;border-width:1.5px;':''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:${isToday?'#D97706':'#1a1a18'};">${WD_LABEL[wd]}${isToday?' (heute)':''}</div>
+          <div style="font-size:10px;color:${uebernommenAusVorwoche?'#2563EB':'var(--muted)'};margin-top:1px;">${adjusted?'✓ für diese Woche bestätigt':uebernommenAusVorwoche?'aus Vorwoche übernommen — bitte prüfen':'noch nie eingetragen'}</div>
+        </div>
+        <input type="text" inputmode="numeric" value="${val}" data-store="${currentStore.id}" data-weekday="${wd}" data-date="${dateStr}"
+          onchange="updateSamosaQty(this)"
+          style="width:64px;text-align:center;border:2px solid ${adjusted?'#F97316':uebernommenAusVorwoche?'#93C5FD':'var(--border)'};border-radius:10px;font-size:20px;font-weight:700;padding:8px 4px;background:${adjusted?'#FFF7ED':uebernommenAusVorwoche?'#EFF6FF':'#fff'};">
+      </div>
+    </div>`;
+  });
+
+  html+=`<div style="font-size:10px;color:var(--muted);padding:6px 2px;">🟠 Orange = von euch bestätigt · 🔵 Blau = automatisch aus Vorwoche übernommen, noch nicht geprüft</div>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderStoreSamosaTab=renderStoreSamosaTab;
+
 async function renderSamosaTableHtml(){
   // SAMOSA-VERTEILUNG — eigene Tabelle, da Kitchen hier (anders als bei den Beilagen) selbst
   // auch eine Menge bekommt, nicht nur die Stores.
@@ -12094,6 +12157,7 @@ async function updateSamosaQty(input){
     await api('samosa_today',{method:'POST',body:JSON.stringify([{store_id:storeId,supply_date:dateStr,qty,is_adjusted:true}])});
     showToast('✔ Gespeichert');
     if(activePackTab==='transporter') renderPack();
+    else if(activeOrderTab==='samosas') renderOrder();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateSamosaQty=updateSamosaQty;
