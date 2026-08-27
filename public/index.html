@@ -1008,7 +1008,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.98.0';
+const APP_VERSION = '6.98.1';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9516,6 +9516,27 @@ async function renderWaehrend(){
       </div>`;
     });
 
+    // Sweets & Samosas — Zutaten (26.08.26, Wunsch Tini) — direkt unter den 3 Hauptgerichten,
+    // genau hier fragen Kund:innen am häufigsten nach, deshalb näher oben statt ganz unten.
+    html+=`<div class="section-lbl" style="margin-top:14px;">🍰 Sweets & Samosas — Zutaten</div>
+    <div class="card" style="padding:4px 14px;margin-bottom:14px;">`;
+    SWEETS_ZUTATEN.forEach((s,i)=>{
+      html+=`<div style="border-bottom:${i<SWEETS_ZUTATEN.length-1?'0.5px solid var(--border)':'none'};">
+        <div onclick="const b=document.getElementById('sw-zut-${i}');b.style.display=b.style.display==='none'?'block':'none';" style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;cursor:pointer;">
+          <div>
+            <div style="font-size:13px;font-weight:500;">${s.name}</div>
+            <div style="font-size:10px;color:var(--muted);">${s.info}</div>
+          </div>
+          <span style="color:var(--muted);">→</span>
+        </div>
+        <div id="sw-zut-${i}" style="display:none;padding-bottom:12px;">
+          <div style="font-size:11px;line-height:1.6;color:var(--sub);">${s.zutaten}</div>
+          ${s.allergene?`<div style="font-size:10.5px;color:#B45309;margin-top:6px;">⚠️ ${s.allergene}</div>`:''}
+        </div>
+      </div>`;
+    });
+    html+=`</div>`;
+
     // Team-Feedback direkt hier statt separat bei Schicht beenden (20.08.26, Wunsch Simone —
     // Schichtende ist ohnehin oft stressig genug). Name + optional Kommentare, Bewertungen oben
     // pro Gericht per Emoji-Reihe direkt in der Karte.
@@ -9529,27 +9550,6 @@ async function renderWaehrend(){
     </div>`;
     html+=`<div id="feedback-existing-list"></div>`;
   }
-
-  // Sweets & Samosas — Zutaten (26.08.26, Wunsch Tini) — genau hier fragen Kund:innen am
-  // häufigsten nach, deshalb zusätzlich zur "Zutaten & Allergene"-Seite auch direkt hier.
-  html+=`<div class="section-lbl" style="margin-top:16px;">🍰 Sweets & Samosas — Zutaten</div>
-  <div class="card" style="padding:4px 14px;">`;
-  SWEETS_ZUTATEN.forEach((s,i)=>{
-    html+=`<div style="border-bottom:${i<SWEETS_ZUTATEN.length-1?'0.5px solid var(--border)':'none'};">
-      <div onclick="const b=document.getElementById('sw-zut-${i}');b.style.display=b.style.display==='none'?'block':'none';" style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;cursor:pointer;">
-        <div>
-          <div style="font-size:13px;font-weight:500;">${s.name}</div>
-          <div style="font-size:10px;color:var(--muted);">${s.info}</div>
-        </div>
-        <span style="color:var(--muted);">→</span>
-      </div>
-      <div id="sw-zut-${i}" style="display:none;padding-bottom:12px;">
-        <div style="font-size:11px;line-height:1.6;color:var(--sub);">${s.zutaten}</div>
-        ${s.allergene?`<div style="font-size:10.5px;color:#B45309;margin-top:6px;">⚠️ ${s.allergene}</div>`:''}
-      </div>
-    </div>`;
-  });
-  html+=`</div>`;
 
   html+=`<div style="margin-top:12px;">
     <button onclick="goTo('allergene')" style="width:100%;background:var(--card);border:0.5px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:13px;font-weight:500;color:var(--green);">
