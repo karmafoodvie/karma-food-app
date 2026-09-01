@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Karma Food">
 <meta name="theme-color" content="#0F6E56">
@@ -4601,6 +4602,50 @@ async function renderForecastTrial(){
 // Datenquelle: wöchentlicher Odoo-Export (Verkauf → Berichtswesen → Verkauf), manuell hochgeladen.
 // Kein Live-API-Zugriff — bewusste Entscheidung (siehe Absprache), einfacher & sicherer.
 let umsatzPeriod='month'; // 'week' | 'month' | 'all'
+let umsatzSelectedProduct=null; // Produkt-Verlauf: gewähltes Produkt für Chart
+
+// Timezone-sicher: Montag der Woche zu einem Datum (YYYY-MM-DD), rein lokal, keine toISOString()-Falle
+function umsatzWeekStartLocal(dateStr){
+  const [y,m,d]=dateStr.split('-').map(Number);
+  const dt=new Date(y,m-1,d);
+  const day=dt.getDay();
+  const diff=(day===0?-6:1-day);
+  dt.setDate(dt.getDate()+diff);
+  const yy=dt.getFullYear(), mm=String(dt.getMonth()+1).padStart(2,'0'), dd=String(dt.getDate()).padStart(2,'0');
+  return `${yy}-${mm}-${dd}`;
+}
+function umsatzFmtDateShort(dateStr){
+  const [y,m,d]=dateStr.split('-');
+  return `${d}.${m}.`;
+}
+// Baut ein einfaches SVG-Liniendiagramm (keine externe Lib) für eine Zeitreihe [{date,value}]
+function buildUmsatzLineChartSVG(series){
+  if(!series.length) return `<div style="text-align:center;color:var(--muted);font-size:12px;padding:24px;">Keine Daten für diesen Zeitraum</div>`;
+  const w=600,h=180,padL=44,padR=10,padT=10,padB=22;
+  const innerW=w-padL-padR, innerH=h-padT-padB;
+  const values=series.map(p=>p.value);
+  const maxV=Math.max(...values,0), minV=Math.min(...values,0);
+  const range=(maxV-minV)||1;
+  const stepX=series.length>1?innerW/(series.length-1):0;
+  const pts=series.map((p,i)=>({x:padL+i*stepX, y:padT+innerH-((p.value-minV)/range*innerH)}));
+  const pathD=pts.map((pt,i)=>(i===0?'M':'L')+pt.x.toFixed(1)+','+pt.y.toFixed(1)).join(' ');
+  const areaD=pathD+` L${pts[pts.length-1].x.toFixed(1)},${(padT+innerH).toFixed(1)} L${pts[0].x.toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
+  const firstLbl=umsatzFmtDateShort(series[0].date), lastLbl=umsatzFmtDateShort(series[series.length-1].date);
+  const midIdx=Math.floor((series.length-1)/2);
+  const midLbl=series.length>2?umsatzFmtDateShort(series[midIdx].date):null;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+innerH}" stroke="var(--border)" stroke-width="1"/>
+    <line x1="${padL}" y1="${padT+innerH}" x2="${w-padR}" y2="${padT+innerH}" stroke="var(--border)" stroke-width="1"/>
+    <text x="${padL-6}" y="${padT+4}" font-size="9" fill="var(--muted)" text-anchor="end">${Math.round(maxV).toLocaleString('de-AT')}€</text>
+    <text x="${padL-6}" y="${padT+innerH+2}" font-size="9" fill="var(--muted)" text-anchor="end">${Math.round(minV).toLocaleString('de-AT')}€</text>
+    <path d="${areaD}" fill="#7B3FE4" fill-opacity="0.08" stroke="none"/>
+    <path d="${pathD}" fill="none" stroke="#7B3FE4" stroke-width="2"/>
+    ${pts.map(pt=>`<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="2" fill="#7B3FE4"/>`).join('')}
+    <text x="${padL}" y="${h-4}" font-size="9" fill="var(--muted)" text-anchor="start">${firstLbl}</text>
+    ${midLbl?`<text x="${(padL+w-padR)/2}" y="${h-4}" font-size="9" fill="var(--muted)" text-anchor="middle">${midLbl}</text>`:''}
+    <text x="${w-padR}" y="${h-4}" font-size="9" fill="var(--muted)" text-anchor="end">${lastLbl}</text>
+  </svg>`;
+}
 
 async function renderUmsatz(){
   const el=document.getElementById('v-umsatz');
@@ -4679,6 +4724,28 @@ async function renderUmsatzContent(){
   });
   const topByRevenue=Object.entries(byProduct).sort((a,b)=>b[1].netto-a[1].netto).slice(0,10);
   const topByQty=Object.entries(byProduct).sort((a,b)=>b[1].menge-a[1].menge).slice(0,10);
+
+  // Produkt-Verlauf — frei wählbares Produkt, Umsatz über Zeit als Liniendiagramm
+  const allProductNames=Object.keys(byProduct).sort((a,b)=>byProduct[b].netto-byProduct[a].netto);
+  const chartProduct=(umsatzSelectedProduct && byProduct[umsatzSelectedProduct])?umsatzSelectedProduct:allProductNames[0];
+  if(!umsatzSelectedProduct) umsatzSelectedProduct=chartProduct;
+  const byDateForProduct={};
+  filtered.filter(r=>r.product_name===chartProduct).forEach(r=>{
+    byDateForProduct[r.sale_date]=(byDateForProduct[r.sale_date]||0)+(Number(r.net_amount)||0);
+  });
+  let chartSeries=Object.entries(byDateForProduct).sort((a,b)=>a[0]<b[0]?-1:1).map(([date,value])=>({date,value}));
+  if(chartSeries.length>60){
+    const byWeek={};
+    chartSeries.forEach(pt=>{ const wk=umsatzWeekStartLocal(pt.date); byWeek[wk]=(byWeek[wk]||0)+pt.value; });
+    chartSeries=Object.entries(byWeek).sort((a,b)=>a[0]<b[0]?-1:1).map(([date,value])=>({date,value}));
+  }
+  html+=`<div class="section-lbl" style="margin-top:14px;">📈 Produkt-Verlauf</div><div class="card" style="padding:12px;">
+    <select onchange="umsatzSelectedProduct=this.value;renderUmsatzContent()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;margin-bottom:10px;background:#fff;" data-no-translate>
+      ${allProductNames.map(name=>`<option value="${name.replace(/"/g,'&quot;')}" ${name===chartProduct?'selected':''}>${name}</option>`).join('')}
+    </select>
+    ${buildUmsatzLineChartSVG(chartSeries)}
+    ${chartSeries.length>1 && chartSeries.length<=60 ? `<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px;">Tageswerte</div>`:(chartSeries.length>60?`<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px;">Wochenwerte (aggregiert)</div>`:'')}
+  </div>`;
 
   html+=`<div class="section-lbl" style="margin-top:14px;">🏆 Bestseller nach Umsatz</div><div class="card" style="overflow:hidden;">`;
   topByRevenue.forEach(([name,d],i)=>{
