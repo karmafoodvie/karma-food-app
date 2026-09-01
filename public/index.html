@@ -6300,12 +6300,13 @@ function normSchrankerlName(n){
 }
 
 async function renderSchrankerlFeedbackHtml(currentDishNames){
-  const [reportRows, statsRows] = await Promise.all([
-    api('schrankerl_reports?select=*&order=zeitraum_bis.desc&limit=1').catch(()=>[]),
-    api('schrankerl_dish_stats?select=*&report_id=eq.1').catch(()=>[]) // aktuell nur 1 Report vorhanden
-  ]);
+  const reportRows = await api('schrankerl_reports?select=*&order=zeitraum_bis.desc&limit=1').catch(()=>[]);
   const report=reportRows?.[0];
   if(!report) return '';
+  // Gerichte-Statistik gehört zum jeweils AKTUELLEN Report — report_id dynamisch aus dem gerade
+  // geladenen Report nehmen, nicht fix verdrahten. Sonst zeigt die Küche nach jedem neuen Monatsreport
+  // weiterhin die Zahlen des allerersten Reports statt der aktuellen.
+  const statsRows = await api(`schrankerl_dish_stats?select=*&report_id=eq.${report.id}`).catch(()=>[]);
 
   let html=`<div class="section-lbl" style="margin-top:16px;">🗣️ Kund:innen-Feedback (Schrankerl)</div>`;
   const vonLabel=new Date(report.zeitraum_von+'T00:00:00').toLocaleDateString('de-AT',{month:'short',year:'2-digit'});
