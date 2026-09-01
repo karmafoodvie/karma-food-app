@@ -4618,8 +4618,11 @@ async function renderForecastTrial(){
 // ---- UMSATZ-DASHBOARD ----
 // Datenquelle: wöchentlicher Odoo-Export (Verkauf → Berichtswesen → Verkauf), manuell hochgeladen.
 // Kein Live-API-Zugriff — bewusste Entscheidung (siehe Absprache), einfacher & sicherer.
-let umsatzPeriod='month'; // 'week' | 'month' | 'all'
-let umsatzSelectedProduct=null; // Produkt-Verlauf: gewähltes Produkt für Chart
+let umsatzPeriod='month'; // 'week' | 'month' | 'all' | 'custom'
+let umsatzCustomFrom=null, umsatzCustomTo=null; // Benutzerdefinierter Zeitraum
+let umsatzChartProducts=[]; // Umsatz-Verlauf: gewählte Produkte (+ '__TOTAL__' für Gesamt), Mehrfachauswahl
+let umsatzYoY=false; // Vorjahresvergleich an/aus
+const UMSATZ_CHART_COLORS=['#7B3FE4','#E94E1B','#0F6E56','#D4A017','#2563EB','#DB2777'];
 
 // Timezone-sicher: Montag der Woche zu einem Datum (YYYY-MM-DD), rein lokal, keine toISOString()-Falle
 function umsatzWeekStartLocal(dateStr){
@@ -4631,37 +4634,88 @@ function umsatzWeekStartLocal(dateStr){
   const yy=dt.getFullYear(), mm=String(dt.getMonth()+1).padStart(2,'0'), dd=String(dt.getDate()).padStart(2,'0');
   return `${yy}-${mm}-${dd}`;
 }
+// Timezone-sicher: gleiches Datum N Jahre verschoben (rein lokal, keine toISOString()-Falle)
+function umsatzShiftYearLocal(dateStr, deltaYears){
+  const [y,m,d]=dateStr.split('-').map(Number);
+  const dt=new Date(y,m-1,d);
+  dt.setFullYear(dt.getFullYear()+deltaYears);
+  const yy=dt.getFullYear(), mm=String(dt.getMonth()+1).padStart(2,'0'), dd=String(dt.getDate()).padStart(2,'0');
+  return `${yy}-${mm}-${dd}`;
+}
 function umsatzFmtDateShort(dateStr){
   const [y,m,d]=dateStr.split('-');
   return `${d}.${m}.`;
 }
-// Baut ein einfaches SVG-Liniendiagramm (keine externe Lib) für eine Zeitreihe [{date,value}]
-function buildUmsatzLineChartSVG(series){
-  if(!series.length) return `<div style="text-align:center;color:var(--muted);font-size:12px;padding:24px;">Keine Daten für diesen Zeitraum</div>`;
-  const w=600,h=180,padL=44,padR=10,padT=10,padB=22;
+// Baut aus einer Zeilen-Teilmenge eine Tages-Zeitreihe [{date,value}], ab >60 Punkten auf Wochenwerte verdichtet
+function umsatzBuildSeries(rowsSubset){
+  const byDate={};
+  rowsSubset.forEach(r=>{ byDate[r.sale_date]=(byDate[r.sale_date]||0)+(Number(r.net_amount)||0); });
+  let series=Object.entries(byDate).sort((a,b)=>a[0]<b[0]?-1:1).map(([date,value])=>({date,value}));
+  if(series.length>60){
+    const byWeek={};
+    series.forEach(pt=>{ const wk=umsatzWeekStartLocal(pt.date); byWeek[wk]=(byWeek[wk]||0)+pt.value; });
+    series=Object.entries(byWeek).sort((a,b)=>a[0]<b[0]?-1:1).map(([date,value])=>({date,value}));
+  }
+  return series;
+}
+// Baut die komplette Serienliste fürs Umsatz-Verlauf-Chart: eine Serie je gewähltem Produkt (oder Gesamt),
+// plus optional je eine gestrichelte Vorjahres-Serie
+function umsatzBuildSeriesList(allRows, filteredRows, allProductNames){
+  const list=[];
+  umsatzChartProducts.forEach((name,i)=>{
+    const subset = name==='__TOTAL__' ? filteredRows : filteredRows.filter(r=>r.product_name===name);
+    const pts=umsatzBuildSeries(subset);
+    const color=UMSATZ_CHART_COLORS[i%UMSATZ_CHART_COLORS.length];
+    if(pts.length) list.push({label:name==='__TOTAL__'?'Gesamt':name, color, points:pts, dashed:false});
+    if(umsatzYoY && subset.length){
+      const datesSorted=subset.map(r=>r.sale_date).sort();
+      const prevFromStr=umsatzShiftYearLocal(datesSorted[0],-1), prevToStr=umsatzShiftYearLocal(datesSorted[datesSorted.length-1],-1);
+      const prevSubset=(name==='__TOTAL__'?allRows:allRows.filter(r=>r.product_name===name)).filter(r=>r.sale_date>=prevFromStr && r.sale_date<=prevToStr);
+      const prevPts=umsatzBuildSeries(prevSubset);
+      if(prevPts.length) list.push({label:(name==='__TOTAL__'?'Gesamt':name)+' (Vorjahr)', color, points:prevPts, dashed:true});
+    }
+  });
+  return list;
+}
+function umsatzToggleChartProduct(name){
+  const idx=umsatzChartProducts.indexOf(name);
+  if(idx>-1){ umsatzChartProducts.splice(idx,1); }
+  else{
+    if(umsatzChartProducts.length>=6){ showToast('Max. 6 gleichzeitig — erst eins abwählen'); return; }
+    umsatzChartProducts.push(name);
+  }
+  renderUmsatzContent();
+}
+// Mehrserien-Liniendiagramm (SVG, keine externe Lib). Serien werden nach Index (nicht Kalenderdatum) positioniert,
+// damit Vorjahres-Serien (andere Kalenderdaten, aber gleiche Position im Zeitraum) sich sauber überlagern.
+function buildUmsatzMultiLineChartSVG(seriesList){
+  if(!seriesList.length) return `<div style="text-align:center;color:var(--muted);font-size:12px;padding:24px;">Oben mindestens ein Produkt bzw. "Gesamt" wählen</div>`;
+  const w=600,h=200,padL=48,padR=10,padT=10,padB=22;
   const innerW=w-padL-padR, innerH=h-padT-padB;
-  const values=series.map(p=>p.value);
-  const maxV=Math.max(...values,0), minV=Math.min(...values,0);
+  const allValues=seriesList.flatMap(s=>s.points.map(p=>p.value));
+  const maxV=Math.max(...allValues,0), minV=Math.min(...allValues,0);
   const range=(maxV-minV)||1;
-  const stepX=series.length>1?innerW/(series.length-1):0;
-  const pts=series.map((p,i)=>({x:padL+i*stepX, y:padT+innerH-((p.value-minV)/range*innerH)}));
-  const pathD=pts.map((pt,i)=>(i===0?'M':'L')+pt.x.toFixed(1)+','+pt.y.toFixed(1)).join(' ');
-  const areaD=pathD+` L${pts[pts.length-1].x.toFixed(1)},${(padT+innerH).toFixed(1)} L${pts[0].x.toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
-  const firstLbl=umsatzFmtDateShort(series[0].date), lastLbl=umsatzFmtDateShort(series[series.length-1].date);
-  const midIdx=Math.floor((series.length-1)/2);
-  const midLbl=series.length>2?umsatzFmtDateShort(series[midIdx].date):null;
-  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
+  let svg=`<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block;">
     <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+innerH}" stroke="var(--border)" stroke-width="1"/>
     <line x1="${padL}" y1="${padT+innerH}" x2="${w-padR}" y2="${padT+innerH}" stroke="var(--border)" stroke-width="1"/>
     <text x="${padL-6}" y="${padT+4}" font-size="9" fill="var(--muted)" text-anchor="end">${Math.round(maxV).toLocaleString('de-AT')}€</text>
-    <text x="${padL-6}" y="${padT+innerH+2}" font-size="9" fill="var(--muted)" text-anchor="end">${Math.round(minV).toLocaleString('de-AT')}€</text>
-    <path d="${areaD}" fill="#7B3FE4" fill-opacity="0.08" stroke="none"/>
-    <path d="${pathD}" fill="none" stroke="#7B3FE4" stroke-width="2"/>
-    ${pts.map(pt=>`<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="2" fill="#7B3FE4"/>`).join('')}
-    <text x="${padL}" y="${h-4}" font-size="9" fill="var(--muted)" text-anchor="start">${firstLbl}</text>
-    ${midLbl?`<text x="${(padL+w-padR)/2}" y="${h-4}" font-size="9" fill="var(--muted)" text-anchor="middle">${midLbl}</text>`:''}
+    <text x="${padL-6}" y="${padT+innerH+2}" font-size="9" fill="var(--muted)" text-anchor="end">${Math.round(minV).toLocaleString('de-AT')}€</text>`;
+  seriesList.forEach(s=>{
+    const n=s.points.length;
+    const stepX=n>1?innerW/(n-1):0;
+    const pts=s.points.map((p,i)=>({x:padL+i*stepX, y:padT+innerH-((p.value-minV)/range*innerH)}));
+    const pathD=pts.map((pt,i)=>(i===0?'M':'L')+pt.x.toFixed(1)+','+pt.y.toFixed(1)).join(' ');
+    svg+=`<path d="${pathD}" fill="none" stroke="${s.color}" stroke-width="2"${s.dashed?' stroke-dasharray="4,3" opacity="0.55"':''}/>`;
+  });
+  const longest=seriesList.reduce((a,b)=>b.points.length>a.points.length?b:a);
+  const firstLbl=umsatzFmtDateShort(longest.points[0].date), lastLbl=umsatzFmtDateShort(longest.points[longest.points.length-1].date);
+  svg+=`<text x="${padL}" y="${h-4}" font-size="9" fill="var(--muted)" text-anchor="start">${firstLbl}</text>
     <text x="${w-padR}" y="${h-4}" font-size="9" fill="var(--muted)" text-anchor="end">${lastLbl}</text>
   </svg>`;
+  const legend=`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;justify-content:center;">
+    ${seriesList.map(s=>`<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--sub);"><span style="width:10px;height:2.5px;background:${s.color};display:inline-block;${s.dashed?'opacity:0.55;':''}"></span><span data-no-translate>${s.label}</span></div>`).join('')}
+  </div>`;
+  return svg+legend;
 }
 
 async function renderUmsatz(){
@@ -4694,12 +4748,35 @@ async function renderUmsatzContent(){
   const today=new Date();
   const weekAgo=new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
   const monthAgo=new Date(today); monthAgo.setDate(monthAgo.getDate()-30);
-  const cutoff=umsatzPeriod==='week'?weekAgo:(umsatzPeriod==='month'?monthAgo:null);
-  const filtered=cutoff?rows.filter(r=>new Date(r.sale_date)>=cutoff):rows;
+  let periodFrom=null, periodTo=null;
+  if(umsatzPeriod==='week') periodFrom=weekAgo;
+  else if(umsatzPeriod==='month') periodFrom=monthAgo;
+  else if(umsatzPeriod==='custom'){
+    if(umsatzCustomFrom) periodFrom=new Date(umsatzCustomFrom+'T00:00:00');
+    if(umsatzCustomTo) periodTo=new Date(umsatzCustomTo+'T23:59:59');
+  }
+  const filtered=rows.filter(r=>{
+    const d=new Date(r.sale_date+'T12:00:00'); // Mittag als Anker vermeidet TZ-Randfälle beim reinen Datumsvergleich
+    if(periodFrom && d<periodFrom) return false;
+    if(periodTo && d>periodTo) return false;
+    return true;
+  });
 
-  html+=`<div style="display:flex;gap:6px;margin-bottom:12px;">
-    ${['week','month','all'].map(p=>`<button onclick="umsatzPeriod='${p}';renderUmsatzContent()" style="flex:1;padding:8px;border-radius:9px;border:${umsatzPeriod===p?'2px solid #7B3FE4':'1.5px solid var(--border)'};background:${umsatzPeriod===p?'#7B3FE4':'#fff'};color:${umsatzPeriod===p?'#fff':'var(--sub)'};font-size:12px;font-weight:600;cursor:pointer;">${p==='week'?'7 Tage':(p==='month'?'30 Tage':'Alles')}</button>`).join('')}
+  html+=`<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+    ${['week','month','all','custom'].map(p=>`<button onclick="umsatzPeriod='${p}';renderUmsatzContent()" style="flex:1;min-width:76px;padding:8px;border-radius:9px;border:${umsatzPeriod===p?'2px solid #7B3FE4':'1.5px solid var(--border)'};background:${umsatzPeriod===p?'#7B3FE4':'#fff'};color:${umsatzPeriod===p?'#fff':'var(--sub)'};font-size:12px;font-weight:600;cursor:pointer;">${p==='week'?'7 Tage':(p==='month'?'30 Tage':(p==='all'?'Alles':'📅 Zeitraum'))}</button>`).join('')}
   </div>`;
+  if(umsatzPeriod==='custom'){
+    html+=`<div class="card" style="padding:10px;margin-bottom:12px;display:flex;gap:8px;">
+      <div style="flex:1;">
+        <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Von</label>
+        <input type="date" value="${umsatzCustomFrom||''}" onchange="umsatzCustomFrom=this.value;renderUmsatzContent()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;box-sizing:border-box;">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Bis</label>
+        <input type="date" value="${umsatzCustomTo||''}" onchange="umsatzCustomTo=this.value;renderUmsatzContent()" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;box-sizing:border-box;">
+      </div>
+    </div>`;
+  }
 
   const totalNetto=filtered.reduce((a,r)=>a+(Number(r.net_amount)||0),0);
   const totalMenge=filtered.reduce((a,r)=>a+(Number(r.quantity)||0),0);
@@ -4716,7 +4793,17 @@ async function renderUmsatzContent(){
     </div>
   </div>`;
 
-  // Filial-Vergleich
+  if(umsatzYoY && filtered.length){
+    const datesSorted=filtered.map(r=>r.sale_date).sort();
+    const prevFromStr=umsatzShiftYearLocal(datesSorted[0],-1), prevToStr=umsatzShiftYearLocal(datesSorted[datesSorted.length-1],-1);
+    const prevRows=rows.filter(r=>r.sale_date>=prevFromStr && r.sale_date<=prevToStr);
+    const prevTotalNetto=prevRows.reduce((a,r)=>a+(Number(r.net_amount)||0),0);
+    const deltaPct=prevTotalNetto>0?((totalNetto-prevTotalNetto)/prevTotalNetto*100):null;
+    html+=`<div class="card" style="padding:10px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:11px;color:var(--muted);">Vorjahreszeitraum (${prevFromStr.split('-').reverse().join('.')}–${prevToStr.split('-').reverse().join('.')}): ${prevRows.length?prevTotalNetto.toLocaleString('de-AT',{maximumFractionDigits:0})+' €':'keine Daten'}</div>
+      ${deltaPct!==null?`<div style="font-size:13px;font-weight:700;color:${deltaPct>=0?'#0F6E56':'#DC2626'};white-space:nowrap;">${deltaPct>=0?'▲':'▼'} ${Math.abs(deltaPct).toFixed(1)}%</div>`:''}
+    </div>`;
+  }
   const byStore={};
   filtered.forEach(r=>{ byStore[r.store_id]=(byStore[r.store_id]||0)+(Number(r.net_amount)||0); });
   const storeNames=await api('stores?select=id,name').catch(()=>[]);
@@ -4742,26 +4829,21 @@ async function renderUmsatzContent(){
   const topByRevenue=Object.entries(byProduct).sort((a,b)=>b[1].netto-a[1].netto).slice(0,10);
   const topByQty=Object.entries(byProduct).sort((a,b)=>b[1].menge-a[1].menge).slice(0,10);
 
-  // Produkt-Verlauf — frei wählbares Produkt, Umsatz über Zeit als Liniendiagramm
+  // Umsatz-Verlauf — mehrere Produkte gleichzeitig wählbar (inkl. "Gesamt aller Produkte"), optional mit Vorjahresvergleich
   const allProductNames=Object.keys(byProduct).sort((a,b)=>byProduct[b].netto-byProduct[a].netto);
-  const chartProduct=(umsatzSelectedProduct && byProduct[umsatzSelectedProduct])?umsatzSelectedProduct:allProductNames[0];
-  if(!umsatzSelectedProduct) umsatzSelectedProduct=chartProduct;
-  const byDateForProduct={};
-  filtered.filter(r=>r.product_name===chartProduct).forEach(r=>{
-    byDateForProduct[r.sale_date]=(byDateForProduct[r.sale_date]||0)+(Number(r.net_amount)||0);
-  });
-  let chartSeries=Object.entries(byDateForProduct).sort((a,b)=>a[0]<b[0]?-1:1).map(([date,value])=>({date,value}));
-  if(chartSeries.length>60){
-    const byWeek={};
-    chartSeries.forEach(pt=>{ const wk=umsatzWeekStartLocal(pt.date); byWeek[wk]=(byWeek[wk]||0)+pt.value; });
-    chartSeries=Object.entries(byWeek).sort((a,b)=>a[0]<b[0]?-1:1).map(([date,value])=>({date,value}));
-  }
-  html+=`<div class="section-lbl" style="margin-top:14px;">📈 Produkt-Verlauf</div><div class="card" style="padding:12px;">
-    <select onchange="umsatzSelectedProduct=this.value;renderUmsatzContent()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;margin-bottom:10px;background:#fff;" data-no-translate>
-      ${allProductNames.map(name=>`<option value="${name.replace(/"/g,'&quot;')}" ${name===chartProduct?'selected':''}>${name}</option>`).join('')}
-    </select>
-    ${buildUmsatzLineChartSVG(chartSeries)}
-    ${chartSeries.length>1 && chartSeries.length<=60 ? `<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px;">Tageswerte</div>`:(chartSeries.length>60?`<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:2px;">Wochenwerte (aggregiert)</div>`:'')}
+  if(!umsatzChartProducts.length) umsatzChartProducts=['__TOTAL__'];
+  const chartSeriesList=umsatzBuildSeriesList(rows, filtered, allProductNames);
+  html+=`<div class="section-lbl" style="margin-top:14px;">📈 Umsatz-Verlauf</div><div class="card" style="padding:12px;">
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+      <button onclick="umsatzToggleChartProduct('__TOTAL__')" style="padding:5px 10px;border-radius:14px;border:1.5px solid ${umsatzChartProducts.includes('__TOTAL__')?'#7B3FE4':'var(--border)'};background:${umsatzChartProducts.includes('__TOTAL__')?'#7B3FE4':'#fff'};color:${umsatzChartProducts.includes('__TOTAL__')?'#fff':'var(--sub)'};font-size:11px;font-weight:600;cursor:pointer;">Gesamt (alle Produkte)</button>
+      ${allProductNames.map(name=>`<button onclick="umsatzToggleChartProduct('${name.replace(/'/g,"\\'")}')" data-no-translate style="padding:5px 10px;border-radius:14px;border:1.5px solid ${umsatzChartProducts.includes(name)?'#7B3FE4':'var(--border)'};background:${umsatzChartProducts.includes(name)?'#7B3FE4':'#fff'};color:${umsatzChartProducts.includes(name)?'#fff':'var(--sub)'};font-size:11px;font-weight:600;cursor:pointer;">${name}</button>`).join('')}
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+      <input type="checkbox" id="umsatz-yoy-check" ${umsatzYoY?'checked':''} onchange="umsatzYoY=this.checked;renderUmsatzContent()">
+      <label for="umsatz-yoy-check" style="font-size:11.5px;color:var(--sub);cursor:pointer;">Vorjahreszeitraum einblenden (gestrichelt)</label>
+    </div>
+    ${buildUmsatzMultiLineChartSVG(chartSeriesList)}
+    <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:4px;">Tageswerte, bei langen Zeiträumen automatisch auf Wochenwerte verdichtet · max. 6 Produkte gleichzeitig</div>
   </div>`;
 
   html+=`<div class="section-lbl" style="margin-top:14px;">🏆 Bestseller nach Umsatz</div><div class="card" style="overflow:hidden;">`;
