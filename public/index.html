@@ -1188,6 +1188,23 @@ async function api(path, opts={}) {
   return t ? JSON.parse(t) : null;
 }
 
+// Holt ALLE Zeilen über die projektweite Supabase "Max Rows"-Grenze hinweg (Standard 1000, wird
+// serverseitig hart erzwungen — ein &limit= im Query-String allein reicht NICHT, wenn der gewünschte
+// Wert über dem Server-Max liegt). Blättert seitenweise via limit/offset, bis eine Seite kleiner als
+// pageSize ist. Für Tabellen wie sales_data, die inzwischen über 1000 Zeilen haben, IMMER das hier
+// statt einem einzelnen api()-Aufruf mit hohem &limit= verwenden.
+async function apiAllPages(basePath, pageSize=1000, maxPages=30){
+  let all=[];
+  for(let p=0;p<maxPages;p++){
+    const sep=basePath.includes('?')?'&':'?';
+    const page=await api(`${basePath}${sep}limit=${pageSize}&offset=${p*pageSize}`).catch(()=>[]);
+    if(!page || !page.length) break;
+    all=all.concat(page);
+    if(page.length<pageSize) break;
+  }
+  return all;
+}
+
 // Gemeinsamer Helfer für das wiederkehrende Muster "gibt es für heute schon einen Eintrag in Tabelle X?"
 // (Wareneingang, Entsorgung, Wochensalat, Kühlung, Übergabe-Notiz etc. folgen alle demselben Schema)
 async function hasTodayEntry(table, dateCol, storeId=currentStore?.id){
@@ -4666,7 +4683,7 @@ async function renderUmsatzContent(){
     <button onclick="document.getElementById('umsatz-file-input').click()" id="umsatz-upload-btn" style="width:100%;padding:11px;background:#7B3FE4;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">📊 Odoo-Export (.xlsx) auswählen</button>
   </div>`;
 
-  const rows=await api('sales_data?select=*&limit=20000').catch(()=>[]);
+  const rows=await apiAllPages('sales_data?select=*');
   if(!rows?.length){
     html+=`<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Noch keine Umsatzdaten — Export oben hochladen.</div>`;
     target.innerHTML=html;
@@ -4766,7 +4783,7 @@ async function renderUmsatzContent(){
   html+=`</div>`;
 
   html+=`<div style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0;">${days} Verkaufstage im gewählten Zeitraum · ${filtered.length} Zeilen</div>`;
-  html+=`<div style="font-size:9px;color:#DC2626;text-align:center;padding:0 0 12px 0;">🔧 Debug: ${rows.length} Zeilen roh von API (vor Zeitraum-Filter)</div>`;
+  html+=`<div style="font-size:9px;color:var(--muted);text-align:center;padding:0 0 12px 0;">✓ ${rows.length} Zeilen insgesamt geladen (paginiert)</div>`;
 
   target.innerHTML=html;
   translateEl(target);
@@ -7248,7 +7265,7 @@ async function renderOrgForecast(){
   const salesTrend={}; // salesTrend[store_id][weekdayNum] = {pct, dir}
   try{
     const sinceDate=dateMinusDays(fromDate, 42); // ~6 Wochen zurück reicht für 4 gleiche Wochentage
-    const salesRows=await api(`sales_data?sale_date=gte.${sinceDate}&select=store_id,sale_date,net_amount&limit=20000`).catch(()=>[]);
+    const salesRows=await apiAllPages(`sales_data?sale_date=gte.${sinceDate}&select=store_id,sale_date,net_amount`);
     const byStoreDay={}; // [store][date] = summe
     (salesRows||[]).forEach(r=>{
       if(!byStoreDay[r.store_id])byStoreDay[r.store_id]={};
