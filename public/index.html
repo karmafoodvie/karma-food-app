@@ -4622,6 +4622,7 @@ let umsatzPeriod='month'; // 'week' | 'month' | 'all' | 'custom'
 let umsatzCustomFrom=null, umsatzCustomTo=null; // Benutzerdefinierter Zeitraum
 let umsatzChartProducts=[]; // Umsatz-Verlauf: gewählte Produkte (+ '__TOTAL__' für Gesamt), Mehrfachauswahl
 let umsatzYoY=false; // Vorjahresvergleich an/aus
+let umsatzBestsellerSort='netto'; // 'netto' | 'proTag' — Bestseller-Sortierung: Gesamtumsatz oder fair normalisiert auf Ø pro Verkaufstag
 const UMSATZ_CHART_COLORS=['#7B3FE4','#E94E1B','#0F6E56','#D4A017','#2563EB','#DB2777'];
 
 // Timezone-sicher: Montag der Woche zu einem Datum (YYYY-MM-DD), rein lokal, keine toISOString()-Falle
@@ -4819,14 +4820,20 @@ async function renderUmsatzContent(){
   });
   html+=`</div>`;
 
-  // Bestseller nach Umsatz
+  // Bestseller nach Umsatz — trackt zusätzlich an wie vielen Tagen ein Produkt im Zeitraum verkauft
+  // wurde (tage-Set), damit man Gesamtumsatz und Ø pro Verkaufstag fair vergleichen kann. Ein Produkt,
+  // das nur 2x/Woche im Menü ist (z.B. Lasagne), hat sonst strukturell weniger Gesamtumsatz als ein
+  // Produkt, das täglich angeboten wird (z.B. Curry) — obwohl es pro Verkaufstag stärker performen kann.
   const byProduct={};
   filtered.forEach(r=>{
-    if(!byProduct[r.product_name]) byProduct[r.product_name]={menge:0,netto:0};
+    if(!byProduct[r.product_name]) byProduct[r.product_name]={menge:0,netto:0,tage:new Set()};
     byProduct[r.product_name].menge+=Number(r.quantity)||0;
     byProduct[r.product_name].netto+=Number(r.net_amount)||0;
+    byProduct[r.product_name].tage.add(r.sale_date);
   });
-  const topByRevenue=Object.entries(byProduct).sort((a,b)=>b[1].netto-a[1].netto).slice(0,10);
+  Object.values(byProduct).forEach(d=>{ d.tageAnzahl=d.tage.size; d.proTag=d.tageAnzahl?d.netto/d.tageAnzahl:0; });
+  const bestsellerSort = umsatzBestsellerSort==='proTag' ? ((a,b)=>b[1].proTag-a[1].proTag) : ((a,b)=>b[1].netto-a[1].netto);
+  const topByRevenue=Object.entries(byProduct).sort(bestsellerSort).slice(0,10);
   const topByQty=Object.entries(byProduct).sort((a,b)=>b[1].menge-a[1].menge).slice(0,10);
 
   // Umsatz-Verlauf — mehrere Produkte gleichzeitig wählbar (inkl. "Gesamt aller Produkte"), optional mit Vorjahresvergleich
@@ -4846,11 +4853,19 @@ async function renderUmsatzContent(){
     <div style="font-size:9px;color:var(--muted);text-align:center;margin-top:4px;">Tageswerte, bei langen Zeiträumen automatisch auf Wochenwerte verdichtet · max. 6 Produkte gleichzeitig</div>
   </div>`;
 
-  html+=`<div class="section-lbl" style="margin-top:14px;">🏆 Bestseller nach Umsatz</div><div class="card" style="overflow:hidden;">`;
+  html+=`<div class="section-lbl" style="margin-top:14px;">🏆 Bestseller nach Umsatz</div>
+  <div style="display:flex;gap:6px;margin-bottom:8px;">
+    <button onclick="umsatzBestsellerSort='netto';renderUmsatzContent()" style="flex:1;padding:6px;border-radius:8px;border:${umsatzBestsellerSort==='netto'?'1.5px solid #7B3FE4':'1.5px solid var(--border)'};background:${umsatzBestsellerSort==='netto'?'#7B3FE4':'#fff'};color:${umsatzBestsellerSort==='netto'?'#fff':'var(--sub)'};font-size:11px;font-weight:600;cursor:pointer;">Gesamtumsatz</button>
+    <button onclick="umsatzBestsellerSort='proTag';renderUmsatzContent()" style="flex:1;padding:6px;border-radius:8px;border:${umsatzBestsellerSort==='proTag'?'1.5px solid #7B3FE4':'1.5px solid var(--border)'};background:${umsatzBestsellerSort==='proTag'?'#7B3FE4':'#fff'};color:${umsatzBestsellerSort==='proTag'?'#fff':'var(--sub)'};font-size:11px;font-weight:600;cursor:pointer;">Ø pro Verkaufstag</button>
+  </div>
+  <div class="card" style="overflow:hidden;">`;
   topByRevenue.forEach(([name,d],i)=>{
     html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;${i<topByRevenue.length-1?'border-bottom:0.5px solid var(--border);':''}">
-      <div style="font-size:12px;" data-no-translate>${i+1}. ${name}</div>
-      <div style="font-size:12px;font-weight:700;color:#7B3FE4;white-space:nowrap;">${d.netto.toLocaleString('de-AT',{maximumFractionDigits:0})} €</div>
+      <div style="font-size:12px;" data-no-translate>${i+1}. ${name} <span style="color:var(--muted);font-size:10.5px;">(${d.tageAnzahl} Tage)</span></div>
+      <div style="text-align:right;white-space:nowrap;">
+        <div style="font-size:12px;font-weight:700;color:#7B3FE4;">${umsatzBestsellerSort==='proTag'?d.proTag.toLocaleString('de-AT',{maximumFractionDigits:0})+' €/Tag':d.netto.toLocaleString('de-AT',{maximumFractionDigits:0})+' €'}</div>
+        <div style="font-size:9.5px;color:var(--muted);">${umsatzBestsellerSort==='proTag'?d.netto.toLocaleString('de-AT',{maximumFractionDigits:0})+' € gesamt':d.proTag.toLocaleString('de-AT',{maximumFractionDigits:0})+' €/Tag'}</div>
+      </div>
     </div>`;
   });
   html+=`</div>`;
