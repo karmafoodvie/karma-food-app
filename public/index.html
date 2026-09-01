@@ -4621,7 +4621,7 @@ async function renderUmsatzContent(){
     <button onclick="document.getElementById('umsatz-file-input').click()" id="umsatz-upload-btn" style="width:100%;padding:11px;background:#7B3FE4;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;">📊 Odoo-Export (.xlsx) auswählen</button>
   </div>`;
 
-  const rows=await api('sales_data?select=*').catch(()=>[]);
+  const rows=await api('sales_data?select=*&limit=20000').catch(()=>[]);
   if(!rows?.length){
     html+=`<div class="card" style="padding:2rem;text-align:center;color:var(--muted);font-size:13px;">Noch keine Umsatzdaten — Export oben hochladen.</div>`;
     target.innerHTML=html;
@@ -7180,7 +7180,7 @@ async function renderOrgForecast(){
   const salesTrend={}; // salesTrend[store_id][weekdayNum] = {pct, dir}
   try{
     const sinceDate=dateMinusDays(fromDate, 42); // ~6 Wochen zurück reicht für 4 gleiche Wochentage
-    const salesRows=await api(`sales_data?sale_date=gte.${sinceDate}&select=store_id,sale_date,net_amount`).catch(()=>[]);
+    const salesRows=await api(`sales_data?sale_date=gte.${sinceDate}&select=store_id,sale_date,net_amount&limit=20000`).catch(()=>[]);
     const byStoreDay={}; // [store][date] = summe
     (salesRows||[]).forEach(r=>{
       if(!byStoreDay[r.store_id])byStoreDay[r.store_id]={};
