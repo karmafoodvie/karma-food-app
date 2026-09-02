@@ -2611,9 +2611,57 @@ function isVegan(allergenMain){
   return !allergenMain.some(c=>['G','C','D','B','R'].includes(c.toUpperCase()));
 }
 
+// Gerichte, die laut Allergenliste als "nicht vegan" durchfallen würden, weil ein OPTIONALES Topping
+// (z.B. Parmesan bei den Meatballs) das auslöst — das Gericht selbst ist ohne dieses Topping vegan.
+// Wird von Mitarbeitenden immer wieder nachgefragt, deshalb explizit als eigener Hinweis statt
+// einfach "nicht vegan" zu zeigen. Keyword-basiert wie DISH_BEILAGEN.
+const VEGAN_TOPPING_AUSNAHMEN = [
+  { match: /MEATBALLS/, topping: 'Parmesan' },
+];
+function getVeganToppingAusnahme(dishName){
+  if(!dishName) return null;
+  const n = dishName.toUpperCase();
+  return VEGAN_TOPPING_AUSNAHMEN.find(e => e.match.test(n)) || null;
+}
+// Liefert fertiges Badge-HTML fürs Vegan-Zeichen — berücksichtigt die Topping-Ausnahme, damit an
+// allen Stellen (Während der Schicht, Kochplan, ...) derselbe Hinweis erscheint.
+function veganBadgeHtml(dishName, allergenMain){
+  if(isVegan(allergenMain)){
+    return '<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;">🌱 Vegan</span>';
+  }
+  const exc=getVeganToppingAusnahme(dishName);
+  if(exc){
+    return `<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;" title="Ohne ${exc.topping} ist das Gericht vegan">🌱 Vegan ohne ${exc.topping}</span>`;
+  }
+  return '';
+}
+
 function isGlutenfrei(allergenMain){
   if(!allergenMain||!allergenMain.length) return true;
   return !allergenMain.some(c=>c.toUpperCase()==='A');
+}
+
+// Gleiche Logik wie bei VEGAN_TOPPING_AUSNAHMEN, nur für Gluten: manche Gerichte fallen wegen eines
+// optionalen Toppings (z.B. Röstzwiebel bei manchen Biryanis) als "glutenhaltig" durch, sind aber ohne
+// dieses Topping glutenfrei. Matcht auf das Topping selbst im Gerichtnamen, nicht auf das Grundgericht
+// (z.B. "BIRYANI"), da nicht jede Biryani-Variante Röstzwiebel enthält.
+const GLUTEN_TOPPING_AUSNAHMEN = [
+  { match: /RÖSTZWIEBEL/, topping: 'Röstzwiebel' },
+];
+function getGlutenToppingAusnahme(dishName){
+  if(!dishName) return null;
+  const n = dishName.toUpperCase();
+  return GLUTEN_TOPPING_AUSNAHMEN.find(e => e.match.test(n)) || null;
+}
+function glutenfreiBadgeHtml(dishName, allergenMain){
+  if(isGlutenfrei(allergenMain)){
+    return '<span style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;">🟣 Glutenfrei</span>';
+  }
+  const exc=getGlutenToppingAusnahme(dishName);
+  if(exc){
+    return `<span style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;" title="Ohne ${exc.topping} ist das Gericht glutenfrei">🟣 Glutenfrei ohne ${exc.topping}</span>`;
+  }
+  return '';
 }
 
 async function saveGemuese(dishName, newGemuese){
@@ -4018,6 +4066,17 @@ async function renderKuecheOrderTab(el, tabHtml){
   </div>`;
 
   const baseline=await api(`kitchen_supply_baseline?store_id=eq.${currentStore.id}&select=weekday,article_name,unit,base_qty&order=weekday`).catch(()=>[]);
+  // Parmesan gehört nicht in die fixe Grundmenge — läuft laut Menü-Rotation nur an den Tagen, an denen
+  // tatsächlich ein Meatballs-Gericht auf dem Plan steht (i.d.R. 1x alle 4 Wochen). Dynamisch pro
+  // angezeigter Woche ergänzen, statt fix jede Woche.
+  [1,2,3,4,5].forEach(wd=>{
+    const dateStr=weekDates[wd];
+    const wdStr=WEEKDAY_STR[wd];
+    const dishNames=(typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(wdStr,dateStr):[];
+    if(dishNames.some(n=>getDishBeilagen(n).includes('Parmesan'))){
+      baseline.push({weekday:wd, article_name:'Parmesan', unit:'Becher', base_qty:0.5});
+    }
+  });
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekVals=await api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=supply_date,article_name,qty,is_adjusted`).catch(()=>[]);
   const valMap={}; // valMap[date][article_name] = rec
@@ -4087,6 +4146,66 @@ async function renderKuecheOrderTab(el, tabHtml){
   el.innerHTML=html;
   translateEl(el);
 }
+// Kompakte Beilagen/Saucen-Matrix zur Wiederverwendung außerhalb des Küche-Tabs — z.B. unterhalb vom
+// Forecast, weil die Zuordnung "welche Beilage passt zu welcher Menge" dort oft intuitiver ist als
+// separat im Küche-Tab nachzuschauen. Selbe Logik wie im Küche-Tab (inkl. dynamischem Parmesan an
+// Meatballs-Tagen), aber ohne die Wochensalat-Sonderbehandlung, die nur dort gebraucht wird.
+async function renderStoreBeilagenMiniMatrixHtml(weekDates, isCurrentWeek, accentColor){
+  const todayWeekday=new Date().getDay();
+  const baseline=await api(`kitchen_supply_baseline?store_id=eq.${currentStore.id}&select=weekday,article_name,unit,base_qty&order=weekday`).catch(()=>[]);
+  [1,2,3,4,5].forEach(wd=>{
+    const dateStr=weekDates[wd];
+    const wdStr=WEEKDAY_STR[wd];
+    const dishNames=(typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(wdStr,dateStr):[];
+    if(dishNames.some(n=>getDishBeilagen(n).includes('Parmesan'))){
+      baseline.push({weekday:wd, article_name:'Parmesan', unit:'Becher', base_qty:0.5});
+    }
+  });
+  if(!baseline.length) return '';
+  const fromDate=weekDates[1], toDate=weekDates[5];
+  const weekVals=await api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=supply_date,article_name,qty,is_adjusted`).catch(()=>[]);
+  const valMap={};
+  (weekVals||[]).forEach(d=>{if(!valMap[d.supply_date])valMap[d.supply_date]={};valMap[d.supply_date][d.article_name]=d;});
+  const displayDays=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
+  if(!displayDays.length) return '';
+  const articleNames=[...new Set(baseline.map(b=>b.article_name))];
+  let html=`<div class="section-lbl" style="margin-top:14px;">🥗 Beilagen & Saucen dazu</div>
+  <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Artikel</th>
+    ${displayDays.map(wd=>{
+      const dateStr=weekDates[wd];
+      const dateLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      const isToday=wd===todayWeekday && isCurrentWeek;
+      return `<th style="${isToday?`color:${accentColor};font-weight:700;`:''}">${WEEKDAY_NAMES[wd].slice(0,2)}<div style="font-size:9px;font-weight:400;">${dateLabel}${isToday?' 📍 heute':''}</div></th>`;
+    }).join('')}
+  </tr></thead><tbody>`;
+  articleNames.forEach(name=>{
+    const unit=baseline.find(b=>b.article_name===name)?.unit||'';
+    const color=ARTICLE_COLORS[name]||'#1a1a18';
+    const cells=displayDays.map(wd=>{
+      const b=baseline.find(x=>x.weekday===wd && x.article_name===name);
+      const dateStr=weekDates[wd];
+      const rec=(valMap[dateStr]||{})[name];
+      const val=rec ? rec.qty : (b ? b.base_qty : null);
+      if(val==null) return `<td style="color:var(--border);font-size:12px;padding:6px 3px;text-align:center;">–</td>`;
+      const adjusted=rec?.is_adjusted;
+      return `<td style="text-align:center;font-size:13px;font-weight:${adjusted?'700':'500'};color:${adjusted?'#F97316':'#1a1a18'};padding:6px 3px;">${formatQty(val)}</td>`;
+    }).join('');
+    html+=`<tr>
+      <td data-no-translate style="font-size:12.5px;font-weight:600;color:${color};white-space:nowrap;padding:6px 8px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
+          <div>${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></div>
+        </div>
+      </td>
+      ${cells}
+    </tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  html+=`<div style="font-size:10px;color:var(--muted);padding:5px 2px;">Grundmengen laut Plan — Anpassen weiterhin im Küche-Tab.</div>`;
+  return html;
+}
+
 async function updateKuecheQty(input){
   const dateStr=input.dataset.date;
   const articleName=input.dataset.article;
@@ -5406,6 +5525,11 @@ async function renderForecastOrderTab(el, tabHtml){
   if(!isHistoric){
     html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
   }
+
+  // Beilagen/Saucen direkt darunter — oft intuitiver, die Mengen im selben Blick wie den Forecast
+  // zu sehen, statt extra in den Küche-Tab wechseln zu müssen. Rein informativ hier, angepasst wird
+  // weiterhin im Küche-Tab (dort liegt auch die Speicherlogik dafür).
+  html+=await renderStoreBeilagenMiniMatrixHtml(weekDates, forecastWeekOffset===0, tab.color);
 
   el.innerHTML=html;
   translateEl(el);
@@ -9680,9 +9804,11 @@ async function renderWaehrend(){
       const mainCodes=d.allergene?.main||[];
       const dressingCodes=d.allergene?.dressing||[];
       const badges=[
+        veganBadgeHtml(d.name, mainCodes),
+        glutenfreiBadgeHtml(d.name, mainCodes),
         ...mainCodes.map(c=>`<span class="badge" style="background:var(--green-light);color:var(--green);">${c}</span>`),
         ...dressingCodes.map(c=>`<span class="badge" style="background:#FEF3C7;color:#92400E;">${c} (Dressing)</span>`)
-      ].join(' ');
+      ].filter(Boolean).join(' ');
       const isDish=_feedbackDishes.some(fd=>fd.name===d.name);
       html+=`<div style="padding:10px 12px;border:0.5px solid var(--border);border-radius:10px;margin-bottom:6px;background:var(--card);">
         <div style="display:flex;align-items:center;gap:10px;">
@@ -13229,8 +13355,8 @@ async function renderKitchen(){
                 <div style="font-size:14px;font-weight:600;color:#1a1a18;">${dish.name}</div>
                 <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
                   ${allergenMain.length?`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}${allergenDressing.length?` · Dressing: ${allergenDressing.join(', ')}`:''}</span>`:''}
-                  ${vegan?'<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;">🌱 Vegan</span>':''}
-                  ${gf?'<span style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;">🟣 Glutenfrei</span>':''}
+                  ${veganBadgeHtml(dish.name, allergenMain)}
+                  ${glutenfreiBadgeHtml(dish.name, allergenMain)}
                 </div>
               </div>
               <span style="color:var(--muted);font-size:14px;">›</span>
