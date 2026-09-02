@@ -5642,10 +5642,16 @@ async function autoSaveForecastCell(inputEl){
   await run;
 }
 async function _autoSaveForecastCellInner(inputEl, dateStr, dishName){
+  // WICHTIG: Nicht nur Lasagne hat mehrere Felder pro Zelle — Meatballs (Sauce/Bällchen) genauso.
+  // Beide müssen hier als "Mehrfeld-Gericht" behandelt werden, sonst löscht das Speichern eines
+  // Feldes das jeweils andere mit (macht ein hartes DELETE über ALLE groesse-Werte des Gerichts)
+  // und speichert zusätzlich fälschlich unter groesse='gross' statt dem echten data-groesse-Wert.
   const isLasagneDish=dishName.includes('Lasagne');
+  const isMeatballsDish=mapDishNameToCategory(dishName)==='Meatballs';
+  const isMultiField=isLasagneDish||isMeatballsDish;
   const rowsToInsert=[];
   try{
-    if(isLasagneDish){
+    if(isMultiField){
       const allSizeInputs=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)];
       allSizeInputs.forEach(inp=>{
         // WICHTIG: Für das Feld, das GERADE geändert wurde (inputEl), den neuen Live-Wert nehmen.
@@ -5672,7 +5678,7 @@ async function _autoSaveForecastCellInner(inputEl, dateStr, dishName){
       await api('forecast_qty',{method:'POST',body:JSON.stringify(rowsToInsert)});
     }
     // Alle Inputs dieser Zelle als "gespeichert" (data-original nachziehen) markieren, Rand grün kurz aufblitzen
-    const cellInputs=isLasagneDish
+    const cellInputs=isMultiField
       ? [...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)]
       : [inputEl];
     cellInputs.forEach(inp=>{
