@@ -343,6 +343,10 @@ const STORE_SHORT = {'lb':'Laurenz.','boerse':'Börse','1020':'Ausst.','3400':'S
 // in echten Portionen statt "Behälter" rechnen müssen, um niemals krumme Bleche vorzuschlagen.
 const LASAGNE_SIZE_YIELD={gross:18, mittel:12, klein:8};
 const LASAGNE_SIZES=[{k:'gross',l:'Groß·18'},{k:'mittel',l:'Mit.·12'},{k:'klein',l:'Kl.·8'}];
+// Meatballs: statt einer einzelnen Portionenzahl zwei getrennte Mengen — Sauce (in Behältern) und
+// Bällchen (Stück, roh gezählt, NICHT automatisch aus Portionen × 6 hochgerechnet — Anfrage Tini
+// 02.09., der reine Umrechner war zu ungenau). Gleiches UI-Muster wie LASAGNE_SIZES/groesse-Spalte.
+const MEATBALLS_TEILE=[{k:'behaelter',l:'Sauce (Beh.)'},{k:'baellchen',l:'Bällchen'}];
 // Kräftige, markante Farben speziell für die Login-Auswahl (eigene Palette, unabhängig von STORE_COLORS)
 const STORE_LOGIN_COLORS = {'lb':'#00A878','boerse':'#00B4CC','1020':'#F0806B','3400':'#E0521F','kitchen':'#F0A500','zentrale':'#2B3A67'};
 const TRANSPORTER_CATS = ['Verpackungen','Alltag','Food & Drinks','Reinigung'];
@@ -386,6 +390,37 @@ const DISH_BEILAGEN = [
   { match: /LASAGNE/,                      beilagen: ['Lasagne Dressing'] },
   { match: /MEATBALLS/,                    beilagen: ['Parmesan'] },
 ];
+
+// Umrechnung Portionen -> Stück, für Gerichte wo das für die Küchen-Produktion relevant ist
+// (Anfrage Tini 02.09.: "wie viele Bällchen bei X Portionen Meatballs"). Keyword-basiert wie
+// DISH_BEILAGEN — bei Bedarf um weitere Gerichte erweiterbar (z.B. Samosas pro Portion).
+const DISH_STUECK_PRO_PORTION = [
+  { match: /MEATBALLS/, stueck: 6, label: 'Bällchen' },
+];
+function getStueckProPortion(dishName){
+  if(!dishName) return null;
+  const n = dishName.toUpperCase();
+  return DISH_STUECK_PRO_PORTION.find(e => e.match.test(n)) || null;
+}
+// Kleiner Hinweistext fürs Erstrendern einer Mengenzelle — wird bei Eingabe live per updateStueckHint()
+// aktualisiert, ohne dass ein Server-Roundtrip/Re-Render nötig ist.
+function stueckHintHtml(dishName, qty){
+  const conf=getStueckProPortion(dishName);
+  if(!conf) return '';
+  const q=parseFloat(qty);
+  const txt=(q>0)?`🍖 ${Math.round(q*conf.stueck)} ${conf.label}`:`🍖 × ${conf.stueck} ${conf.label}`;
+  return `<div class="stueck-hint" style="font-size:8px;color:#7B3FE4;margin-top:1px;white-space:nowrap;">${txt}</div>`;
+}
+// Live-Update bei Eingabe — sucht das Hinweis-Element in derselben Zelle/demselben Wrapper.
+function updateStueckHint(inputEl){
+  const wrap = inputEl.closest('td') || inputEl.parentElement;
+  const hintEl = wrap?.querySelector('.stueck-hint');
+  if(!hintEl) return;
+  const conf=getStueckProPortion(inputEl.dataset.dish||'');
+  if(!conf) return;
+  const v=parseFloat(inputEl.value)||0;
+  hintEl.textContent = v>0 ? `🍖 ${Math.round(v*conf.stueck)} ${conf.label}` : `🍖 × ${conf.stueck} ${conf.label}`;
+}
 function getDishBeilagen(dishName){
   if(!dishName) return [];
   const n = dishName.toUpperCase();
@@ -5400,6 +5435,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const isSuggestion=!rec && autoVal!=null;
     const isLasagne=dish.includes('Lasagne');
     if(isLasagne) return lasagneCellInput(dateStr, dish, lockedNote, autoVal);
+    if(mapDishNameToCategory(dish)==='Meatballs') return meatballsCellInput(dateStr, dish, lockedNote);
     if(isHistoric){
       // Historie: nur Anzeige, nicht mehr veraenderbar
       return `<div style="width:48px;margin:0 auto;text-align:center;font-size:13px;font-weight:600;color:${manual?manualColor:'#1a1a18'};">${val!=null?formatQty(val):'–'}</div>`;
@@ -5414,9 +5450,9 @@ async function renderForecastOrderTab(el, tabHtml){
     const copiedTitle=isCopied?' · automatisch von Vorwoche übernommen, bei Bedarf anpassen':'';
     const fullTitle=escAttr((suggReason+lwTitle+orgTitle+copiedTitle+(lockedNote?' · '+lockedNote:'')).trim());
     const inputHtml=`<input type="text" inputmode="decimal" step="0.25" value="${val??''}" placeholder="–" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-original="${val??''}"
-      oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
+      oninput="markForecastDirty(this);updateStueckHint(this)" onchange="autoSaveForecastCell(this)"
       title="${fullTitle}"
-      style="width:48px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isCopied?'#0D9488':(isSuggestion?'#0EA5E9':'var(--border)')))};border-radius:6px;font-size:12px;padding:4px 1px;background:${lockedNote?'#FFF7ED':(manual?manualBg:(isCopied?'#F0FDFA':(isSuggestion?'#F0F9FF':'#fff')))};">`;
+      style="width:48px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isCopied?'#0D9488':(isSuggestion?'#0EA5E9':'var(--border)')))};border-radius:6px;font-size:12px;padding:4px 1px;background:${lockedNote?'#FFF7ED':(manual?manualBg:(isCopied?'#F0FDFA':(isSuggestion?'#F0F9FF':'#fff')))};">`+stueckHintHtml(dish, val);
     if(lockedNote){
       return `<div style="text-align:center;"><div style="font-size:14px;line-height:1;margin-bottom:2px;" title="${escAttr(lockedNote)}">⚠️</div>${inputHtml}</div>`;
     }
@@ -5452,6 +5488,36 @@ async function renderForecastOrderTab(el, tabHtml){
           data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
           oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
           style="width:40px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isSugg?'#0EA5E9':'var(--border)'))};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual||lockedNote?manualBg:(isSugg?'#F0F9FF':'#fff')};">`;
+    });
+    h+='</div>';
+    return h;
+  }
+
+  // Meatballs: zwei Felder statt einer Zahl — Sauce (Behälter) und Bällchen (Stück). Gleicher Aufbau
+  // wie lasagneCellInput, nur mit MEATBALLS_TEILE statt LASAGNE_SIZES und ohne Auto-Vorschlag-Vorbefüllung.
+  function meatballsCellInput(dateStr, dish, lockedNote){
+    const records=(fRecordsMap[dateStr]||{})[dish]||[];
+    const LABELS={behaelter:'Sauce (Beh.)',baellchen:'Bällchen'};
+    if(isHistoric){
+      return `<div style="display:grid;grid-template-columns:62px 32px;gap:3px 4px;font-size:10px;text-align:left;">${MEATBALLS_TEILE.map(t=>{
+        const r=records.find(x=>x.groesse===t.k);
+        return `<span style="font-size:8px;color:var(--muted);">${LABELS[t.k]}</span><span>${r?formatQty(r.qty):'–'}</span>`;
+      }).join('')}</div>`;
+    }
+    let h=lockedNote?`<div style="font-size:8px;color:#C2410C;font-weight:600;margin-bottom:2px;" title="${escAttr(lockedNote)}">⚠️ ${lockedNote}</div>`:'';
+    h+='<div style="display:grid;grid-template-columns:62px 40px;gap:4px 4px;align-items:center;">';
+    MEATBALLS_TEILE.forEach(t=>{
+      const rec=records.find(r=>r.groesse===t.k);
+      const val=rec ? rec.qty : '';
+      const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
+      const isOrgSet=rec?.source==='org';
+      const manualColor=lockedNote?'#F97316':(isOrgSet?'#2B3A67':'#F97316');
+      const manualBg=lockedNote?'#FFF7ED':(isOrgSet?'#EEF1F8':'#FFF7ED');
+      h+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LABELS[t.k]}</span>
+        <input type="text" inputmode="decimal" step="1" value="${val}" placeholder="–"
+          data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${t.k}" data-original="${val}"
+          oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
+          style="width:40px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual||lockedNote?manualBg:'#fff'};">`;
     });
     h+='</div>';
     return h;
@@ -7268,6 +7334,27 @@ async function renderOrgStoreForecast(){
         html+=lh;
         return;
       }
+      // Meatballs: statt einer Portionenzahl zwei getrennte Felder — Sauce (Behälter) + Bällchen
+      // (Stück, direkt eingetragen statt automatisch aus Portionen hochgerechnet — der reine
+      // ×6-Umrechner war der Küche zu ungenau, Wunsch Tini 02.09.).
+      if(mapDishNameToCategory(dish)==='Meatballs'){
+        const MLBL={behaelter:'Sauce (Beh.)',baellchen:'Bällchen'};
+        let mh=`<td style="padding:5px 3px;vertical-align:top;min-width:112px;">${dishLabelHtml}
+          <div style="display:grid;grid-template-columns:62px 44px;gap:3px 4px;align-items:center;">`;
+        MEATBALLS_TEILE.forEach(t=>{
+          const rec=qtyBySize[key+'|'+t.k];
+          const v=rec?rec.qty:'';
+          mh+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${MLBL[t.k]}</span>
+            <input type="text" inputmode="decimal" step="1" value="${v}" placeholder="–"
+              data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${t.k}"
+              data-orig-source="${src||''}"
+              oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
+              style="width:44px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:12px;font-weight:${isStore?'700':'400'};padding:4px 1px;background:${bBg};">`;
+        });
+        mh+=`</div>${srcLbl}${dispLine}</td>`;
+        html+=mh;
+        return;
+      }
 
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         ${dishLabelHtml}
@@ -7279,6 +7366,7 @@ async function renderOrgStoreForecast(){
         ${srcLbl}
         ${dispLine}
       </td>`;
+      return;
     });
     html+='</tr>';
   }
