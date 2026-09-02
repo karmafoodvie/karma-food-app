@@ -12520,6 +12520,15 @@ async function renderTransporterBeilagenHtml(){
   const weekdayNum=todayWd===0?7:todayWd; // 1=Mo..7=So
 
   const baseline=await api(`kitchen_supply_baseline?weekday=eq.${weekdayNum}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
+  // Gleiche Logik wie in der Küche-Matrix: Parmesan nur einblenden, wenn laut Menü-Rotation HEUTE
+  // tatsächlich ein Meatballs-Gericht dran ist (nicht jede Woche fix).
+  {
+    const wdStr=WEEKDAY_STR[weekdayNum];
+    const dishNamesToday_=(typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(wdStr,today):[];
+    if(dishNamesToday_.some(n=>getDishBeilagen(n).includes('Parmesan'))){
+      storeList.forEach(st=>{ baseline.push({store_id:st.id, article_name:'Parmesan', unit:'Becher', base_qty:0.5}); });
+    }
+  }
   const weekDates=getWeekdayDates();
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
@@ -12636,6 +12645,23 @@ async function renderBeilagenTableHtml(mode='kueche'){
     const DAY_SHORT=['','Mo','Di','Mi','Do','Fr'];
 
     const baseline=await api('kitchen_supply_baseline?select=store_id,weekday,article_name,unit,base_qty').catch(()=>[]);
+
+    // Parmesan gehört NICHT in die fixe Grundmenge (kitchen_supply_baseline) — Meatballs (und damit
+    // Parmesan) läuft laut Menü-Rotation nur ca. 1x alle 4 Wochen, nicht jede Woche. Deshalb wird die
+    // Zeile hier dynamisch nur für die Tage DIESER angezeigten Woche ergänzt, an denen laut
+    // MENU_DATA/getMenuDishNamesForDay tatsächlich ein Meatballs-Gericht auf dem Plan steht.
+    [1,2,3,4,5].forEach(wd=>{
+      const dateStr=weekDates[wd];
+      const wdStr=WEEKDAY_STR[wd];
+      const dishNames=(typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(wdStr,dateStr):[];
+      const hasParmesan=dishNames.some(n=>getDishBeilagen(n).includes('Parmesan'));
+      if(hasParmesan){
+        storeList.forEach(st=>{
+          baseline.push({store_id:st.id, weekday:wd, article_name:'Parmesan', unit:'Becher', base_qty:0.5});
+        });
+      }
+    });
+
     const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
 
     const valMap={};
