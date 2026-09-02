@@ -3283,6 +3283,7 @@ async function renderHome(){
             ${dishVisual}
             <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
             <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes)}${glutenfreiBadgeHtml(d.name, mainCodes)}</div>
           </div>
           <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
             <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
@@ -13013,11 +13014,13 @@ async function renderKitchenDailyHtml(){
 
   allDishes.forEach(d=>{
     const entry=menuEntries.find(e=>e.name===d.name);
-    const allergene=entry?.allergene?.main?.join(', ')||entry?.allergene_codes?.join(', ')||'keine Allergene angegeben';
+    const mainCodesKD=entry?.allergene?.main||[];
+    const allergene=mainCodesKD.join(', ')||entry?.allergene_codes?.join(', ')||'keine Allergene angegeben';
     html+=`<div style="flex:1;min-width:130px;background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;">
       <div style="font-size:26px;line-height:1;margin-bottom:4px;">${getDishEmoji(d.name)}</div>
       <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;">${d.cat}</div>
       <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:2px;line-height:1.3;">${d.name}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodesKD)}${glutenfreiBadgeHtml(d.name, mainCodesKD)}</div>
       <div style="font-size:9px;color:${allergene==='keine Allergene angegeben'?'var(--muted)':'#C2410C'};margin-top:4px;background:${allergene==='keine Allergene angegeben'?'var(--surface-1)':' #FFF7ED'};border-radius:4px;padding:2px 4px;">${allergene}</div>
     </div>`;
   });
