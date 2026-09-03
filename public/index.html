@@ -388,14 +388,14 @@ const DISH_BEILAGEN = [
   { match: /BIRYANI/,                      beilagen: ['Raita'] },
   { match: /\bBOWL\b|LENTIL|LINSEN.*BOWL/, beilagen: ['Sauce Bowl/Salat'] },
   { match: /LASAGNE/,                      beilagen: ['Lasagne Dressing'] },
-  { match: /MEATBALLS/,                    beilagen: ['Parmesan'] },
+  { match: /EATBALLS/,                     beilagen: ['Parmesan'] }, // "EATBALLS" statt "MEATBALLS" — matcht auch "(M)eatballs"-Schreibweise
 ];
 
 // Umrechnung Portionen -> Stück, für Gerichte wo das für die Küchen-Produktion relevant ist
 // (Anfrage Tini 02.09.: "wie viele Bällchen bei X Portionen Meatballs"). Keyword-basiert wie
 // DISH_BEILAGEN — bei Bedarf um weitere Gerichte erweiterbar (z.B. Samosas pro Portion).
 const DISH_STUECK_PRO_PORTION = [
-  { match: /MEATBALLS/, stueck: 6, label: 'Bällchen' },
+  { match: /EATBALLS/, stueck: 6, label: 'Bällchen' }, // s.o., "(M)eatballs"-Schreibweise
 ];
 function getStueckProPortion(dishName){
   if(!dishName) return null;
@@ -1796,21 +1796,39 @@ function goToReminder(tab, orderTab){
 window.goToReminder=goToReminder;
 
 // ---- HOME ----
-// ---- SOMMER MENÜ ----
-// Woche 1 startete Mo 29.06.2026. 4-Wochen-Zyklus läuft automatisch weiter, keine manuelle Pflege mehr nötig.
-// Läuft laut Ansage bis Ende August 2026, danach kommt ein neues (Herbst-)Menü — dann muss diese Logik neu aufgesetzt werden.
-const MENU_WOCHE_START = new Date(2026, 5, 29); // Monat 0-indiziert: 5 = Juni
+// ---- MENÜ-EPOCHEN ----
+// WICHTIG: Es gibt nicht EIN durchlaufendes Menü, sondern mehrere aufeinanderfolgende "Epochen" mit je
+// eigenem 4-Wochen-Zyklus (eigener Wochenstart + eigene Gerichte). Jede Datumsabfrage muss zuerst die
+// passende Epoche für DAS jeweilige Datum finden, bevor Woche/Gericht berechnet wird — sonst würde z.B.
+// ein alter Sommer-Tag rückwirkend mit dem neuen Herbst-Menü berechnet (falsche Gerichte/Beilagen/
+// Vegan-Badges für historische Ansichten, Forecast-Rückblick, Entsorgungslisten etc.).
+// Neue Epoche ergänzen: einfach einen weiteren Eintrag ans Ende von MENU_ERAS anhängen, "bis" der
+// vorigen Epoche setzen, "bis" der neuen auf null lassen (= "bis auf Weiteres aktuell").
+const MENU_ERAS = [
+  { key:'sommer2026', label:'Sommer 2026', von:'2026-06-29', bis:'2026-09-06', wocheStart:new Date(2026,5,29), get data(){ return (typeof MENU_DATA_SOMMER_2026!=='undefined')?MENU_DATA_SOMMER_2026:{}; } },
+  { key:'herbstwinter2026_27', label:'Herbst/Winter 2026/27', von:'2026-09-07', bis:null, wocheStart:new Date(2026,8,7), get data(){ return (typeof MENU_DATA_HERBST_WINTER_2026_27!=='undefined')?MENU_DATA_HERBST_WINTER_2026_27:{}; } },
+];
+function getMenuEraForDate(dateStr){
+  const ds = dateStr || new Date().toISOString().split('T')[0];
+  for(let i=MENU_ERAS.length-1;i>=0;i--){
+    const era=MENU_ERAS[i];
+    if(ds>=era.von && (!era.bis || ds<=era.bis)) return era;
+  }
+  return MENU_ERAS[0]; // Fallback: Datum vor der ältesten bekannten Epoche — der ältesten zuordnen
+}
+function getMenuEraLabelForDate(dateStr){
+  return getMenuEraForDate(dateStr).label;
+}
 function getCurrentMenuWoche(){
-  const start = new Date(MENU_WOCHE_START); start.setHours(0,0,0,0);
-  const now = new Date(); now.setHours(0,0,0,0);
-  const diffDays = Math.round((now - start) / 86400000);
-  if(diffDays < 0) return 1; // vor Start: zeige Woche 1
-  return (Math.floor(diffDays / 7) % 4) + 1;
+  return getMenuWocheForDate(new Date().toISOString().split('T')[0]);
 }
 let CURRENT_MENU_WOCHE = getCurrentMenuWoche();
 // Reis ist immer als Beilage bei Curry/Dal/Special dabei, hat keinen eigenen wechselnden Namen —
 // deshalb reicht eine feste Konstante statt einer Datenbank-Abfrage (ersetzt die alte weekly_menu-Tabelle).
-const REIS_DISH_NAME = 'Reis';
+const REIS_DISH_NAME = 'Kurkuma Reis'; // War bisher immer ident (reiner Kurkuma Reis). Ab dem neuen Menü
+// gibt's laut Plan zukünftig wechselnde "Rice of the Week"-Namen — die Namen dafür fehlen aber noch in
+// der Excel (Spalte ist leer). Sobald die geliefert werden, muss das hier von einer einzelnen globalen
+// Konstante auf pro Woche/Tag wechselnde Werte umgebaut werden (aktuell bewusst noch nicht gemacht).
 
 const WEEKDAY_MENU_KEY = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'};
 
@@ -2651,7 +2669,7 @@ function isVegan(allergenMain){
 // Wird von Mitarbeitenden immer wieder nachgefragt, deshalb explizit als eigener Hinweis statt
 // einfach "nicht vegan" zu zeigen. Keyword-basiert wie DISH_BEILAGEN.
 const VEGAN_TOPPING_AUSNAHMEN = [
-  { match: /MEATBALLS/, topping: 'Parmesan' },
+  { match: /EATBALLS/, topping: 'Parmesan' }, // s.o., "(M)eatballs"-Schreibweise
 ];
 function getVeganToppingAusnahme(dishName){
   if(!dishName) return null;
@@ -4575,11 +4593,18 @@ function dateMinusDays(dateStr, days){
   return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 }
 
+// Explizite Special-Deklaration aus der Menü-Excel — manche Special-Gerichte enthalten Wörter wie
+// "Curry" oder "Tofu" im Namen, die sonst von der Stichwort-Erkennung unten fälschlich als eigene
+// Kategorie einsortiert würden (z.B. "Paneer Tikka Masala Curry" → würde sonst "Curry"). Excel-
+// Deklaration hat hier Vorrang (Anfrage Tini 02.09.: "wenn es als special deklariert ist, ist es Special").
+const SPECIAL_DECLARED_DISHES = ['tofu tikka masala','paneer tikka masala curry','tofu tikka masala curry'];
+
 function mapDishNameToCategory(dishName, slot){
   const n=(dishName||'').toLowerCase();
   // Slot hat immer Vorrang — das ist die verlässlichste Information.
   if(slot==='salat') return 'Salat';
   if(slot==='reis') return 'Reis';
+  if(SPECIAL_DECLARED_DISHES.includes(n.trim())) return 'Special';
   // WICHTIG: Erst die konkreten Hauptgerichte prüfen, DANN erst Reis. Sonst wird z.B.
   // "Parmesan-Basilikum-Meatballs mit Gewürzreis" wegen des Wortteils "…reis" fälschlich als
   // Beilagen-Reis einsortiert und zeigt dann die Reis-Zahlen statt der echten Meatballs-Historie.
@@ -4587,11 +4612,12 @@ function mapDishNameToCategory(dishName, slot){
   if(n.includes('biryani')) return 'Biryani';
   if(n.includes('gulasch')) return 'Gulasch';
   if(n.includes('chili')) return 'Chili';
-  if(n.includes('meatball')) return 'Meatballs';
+  if(n.includes('eatball')) return 'Meatballs'; // 'eatball' statt 'meatball' — matcht auch "(M)eatballs"
   if(n.includes('tofu')) return 'Tofu';
   if(n.includes('mix portion')||n.includes('mixportion')) return 'MixPortion';
   if(n.includes('dal')||n.includes('linsen')) return 'Dal';
   if(n.includes('curry')) return 'Curry';
+  if(n.includes('aloo gobi')||n.includes('aloo ghobi')) return 'Curry'; // z.B. "Summertime Aloo Ghobi mit Mango Chutney" — wäre sonst fälschlich in den "Special"-Auffangfall gefallen, da kein Wort "Curry" im Namen vorkommt
   if(n.includes('salat')||n.includes('salad')||n.includes('bowl')) return 'Salat'; // inkl. englisch + bowl
   // Reis nur noch als eigenständiges Gericht erkennen (Wortgrenze) — "Gewürzreis"/"Safranreis"
   // als Beilage in einem Gerichtsnamen zählt NICHT als Kategorie Reis.
@@ -4623,8 +4649,9 @@ function getSalatNameForDate(dateStr){
 }
 
 function getMenuWocheForDate(dateStr){
-  if(!dateStr) return CURRENT_MENU_WOCHE;
-  const start = new Date(MENU_WOCHE_START); start.setHours(0,0,0,0);
+  if(!dateStr) dateStr = new Date().toISOString().split('T')[0];
+  const era = getMenuEraForDate(dateStr);
+  const start = new Date(era.wocheStart); start.setHours(0,0,0,0);
   const d = new Date(dateStr+'T00:00:00'); d.setHours(0,0,0,0);
   const diffDays = Math.round((d - start) / 86400000);
   if(diffDays < 0) return 1;
@@ -4632,8 +4659,9 @@ function getMenuWocheForDate(dateStr){
 }
 
 function getMenuDishNamesForDay(wdStr, dateStr){
-  const woche = dateStr ? getMenuWocheForDate(dateStr) : CURRENT_MENU_WOCHE;
-  const entries = (typeof MENU_DATA!=='undefined' && MENU_DATA[`w${woche}_${wdStr}`]) || [];
+  const era = getMenuEraForDate(dateStr);
+  const woche = getMenuWocheForDate(dateStr);
+  const entries = era.data[`w${woche}_${wdStr}`] || [];
   return [...new Set(entries.filter(e=>e.slot!=='salat').map(e=>e.name).filter(Boolean))];
 }
 
@@ -7237,6 +7265,7 @@ async function renderOrgStoreForecast(){
     <div style="text-align:center;">
       <div style="font-size:13px;font-weight:700;">KW ${kw}${orgForecastWeekOffset===0?' (diese Woche)':(orgForecastWeekOffset===1?' (nächste)':'')}</div>
       <div style="font-size:11px;color:var(--muted);">${new Date(fromDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(toDate+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
+      <div style="font-size:9.5px;color:var(--border);margin-top:1px;">Menü ${getMenuEraLabelForDate(fromDate)}</div>
     </div>
     <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">→</button>
   </div>`;
@@ -14220,7 +14249,7 @@ async function renderMenuWoche(el, tabHtml){
   });
 
   let html = tabHtml;
-  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Woche ${woche} von 4 · aktuelles Menü mit Zutaten & Allergenen</div>`;
+  html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Menü <strong>${getMenuEraLabelForDate()}</strong> · Woche ${woche} von 4 · aktuelles Menü mit Zutaten & Allergenen</div>`;
 
   DAYS_ORDER.forEach(day=>{
     const key = `w${woche}_${day}`;
