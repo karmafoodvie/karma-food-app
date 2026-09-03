@@ -686,15 +686,6 @@ const MENU_DATA_SOMMER_2026 = {
 const MENU_DATA_HERBST_WINTER_2026_27 = {
  "w1_mo": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Melanzani Couscous Bowl mit Limetten Dip",
    "zutaten": "",
@@ -723,15 +714,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w1_di": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Rajma Masala Curry mit Kidneybohnen",
@@ -762,15 +744,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w1_mi": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Roasted Brokkoli Biryani mit Curry Raita",
    "zutaten": "",
@@ -799,15 +772,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w1_do": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Kürbis Masala Linsen Lasagne",
@@ -838,15 +802,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w1_fr": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Sweet & Sour Chana Biryani mit fruchtigem Raita",
    "zutaten": "",
@@ -875,15 +830,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w2_mo": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Tajín Süßkartoffel Quinoa Bowl mit würzigem Tomaten Dip",
@@ -914,15 +860,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w2_di": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Cremiges Erbsen Minz Curry",
    "zutaten": "",
@@ -951,15 +888,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w2_mi": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Kichererbsen Masala Veggie Biryani mit pink Raita",
@@ -990,15 +918,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w2_do": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Indian Ratatouille Lasagne",
    "zutaten": "",
@@ -1027,15 +946,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w2_fr": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Zitronen Veggie Biryani mit Salzzitronen Raita",
@@ -1066,15 +976,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w3_mo": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Orientalische Couscous Veggie Bowl mit Harissa Dip",
    "zutaten": "",
@@ -1103,15 +1004,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w3_di": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Vegan Butter Veggie Curry",
@@ -1142,15 +1034,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w3_mi": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Kaffir Lime Kokos Biryani",
    "zutaten": "",
@@ -1179,15 +1062,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w3_do": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "White Bean Pesto Veggie Lasagna",
@@ -1218,15 +1092,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w3_fr": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Bean Power Biryani mit Röstzwiebel",
    "zutaten": "",
@@ -1255,15 +1120,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w4_mo": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Chana Masala Quinoa Bowl mit Lemon Tahini Dip",
@@ -1294,15 +1150,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w4_di": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Fruchtiges Chana Curry",
    "zutaten": "",
@@ -1331,15 +1178,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w4_mi": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Kerala Veggie Biryani",
@@ -1370,15 +1208,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  ],
  "w4_do": [
   {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
-  {
    "slot": "gericht1",
    "name": "Veggie Bolognese Lasagne",
    "zutaten": "",
@@ -1407,15 +1236,6 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   }
  ],
  "w4_fr": [
-  {
-   "slot": "salat",
-   "name": "⚠️ Salat der Woche — TBD (noch nicht in der Excel enthalten)",
-   "zutaten": "",
-   "allergene": {
-    "main": [],
-    "dressing": []
-   }
-  },
   {
    "slot": "gericht1",
    "name": "Smoky Melanzani Biryani & mit Kidneybohnen & smokey Raita",
