@@ -3155,7 +3155,11 @@ async function renderHome(){
         const weekday=WEEKDAYS[dayIdx]?.k;
         const menuDishes=getMenuDishNamesForDay(weekday);
         const salatName=getSalatNameForDate(todayDate);
-        const daySlotsQ=[
+        const quickIsHerbst=getMenuEraForDate(todayDate).key==='herbstwinter2026_27';
+        const daySlotsQ=quickIsHerbst ? [
+          ...menuDishes.slice(0,3).map((name,i)=>({k: `gericht${i+1}`, name})),
+          {k:'reis', name:REIS_DISH_NAME}
+        ] : [
           {k:'salat', name:salatName},
           ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', name})),
           {k:'reis', name:REIS_DISH_NAME}
@@ -7283,8 +7287,15 @@ async function renderOrgStoreForecast(){
     <button onclick="orgForecastWeekOffset++;renderOrgForecast()" style="padding:8px 12px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;cursor:pointer;">→</button>
   </div>`;
 
+  // Ab Herbst/Winter (07.09.) gibt's keinen wöchentlich-gleichbleibenden "Wochensalat" mehr, sondern
+  // 3 echte, täglich wechselnde Hauptgerichte — deshalb hier je nach Epoche der ANGEZEIGTEN Woche
+  // (nicht rückwirkend für Sommer-Wochen!) andere Spalten: Sommer = Salat+Gericht1+Gericht2,
+  // Herbst/Winter = Gericht1+Gericht2+Gericht3 (kein extra Salat-Feld).
+  const weekEra=getMenuEraForDate(fromDate);
+  const isHerbstWeek=weekEra.key==='herbstwinter2026_27';
+
   html+=`<div class="card" style="overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
-    <thead><tr><th style="text-align:left;font-size:10.5px;">Tag</th><th style="font-size:10.5px;">Salat</th><th style="font-size:10.5px;">Gericht 1</th><th style="font-size:10.5px;">Gericht 2</th><th style="font-size:10.5px;">Reis</th></tr></thead><tbody>`;
+    <thead><tr><th style="text-align:left;font-size:10.5px;">Tag</th>${isHerbstWeek?'':'<th style="font-size:10.5px;">Salat</th>'}<th style="font-size:10.5px;">Gericht 1</th><th style="font-size:10.5px;">Gericht 2</th>${isHerbstWeek?'<th style="font-size:10.5px;">Gericht 3</th>':''}<th style="font-size:10.5px;">Reis</th></tr></thead><tbody>`;
 
   window._orgDetailData={};
   for(let d=1; d<=5; d++){
@@ -7292,7 +7303,7 @@ async function renderOrgStoreForecast(){
     const wdStr=WEEKDAYS[d-1]?.k;
     const dishes=getMenuDishNamesForDay(wdStr, dateStr);
     const salat=getSalatNameForDate(dateStr);
-    const cols=[salat, dishes[0], dishes[1], REIS_DISH_NAME];
+    const cols=isHerbstWeek?[dishes[0], dishes[1], dishes[2], REIS_DISH_NAME]:[salat, dishes[0], dishes[1], REIS_DISH_NAME];
     const isToday=dateStr===todayStr;
     const dl=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
     // Wetter direkt in der Tabelle sichtbar (nicht erst im "Frühere Termine"-Fenster) — genau
@@ -12255,7 +12266,13 @@ async function renderDisposal(dateStr){
   // würden beim Nachtragen älterer Tage die falschen Gerichtsnamen der aktuellen Woche gezeigt.
   const menuDishes=getMenuDishNamesForDay(weekday, today);
   const salatName=getSalatNameForDate(today);
-  const daySlots=[
+  // Ab Herbst/Winter (07.09.) kein extra Wochensalat mehr, sondern 3 echte Tagesgerichte — epochen-
+  // abhängig für DIESEN Tag (nicht rückwirkend für Sommer-Tage), analog zur Mengenplanung.
+  const dayIsHerbst=getMenuEraForDate(today).key==='herbstwinter2026_27';
+  const daySlots=dayIsHerbst ? [
+    ...menuDishes.slice(0,3).map((name,i)=>({k: `gericht${i+1}`, l: `Gericht ${i+1}`, name})),
+    {k:'reis', l:'Reis', name:REIS_DISH_NAME}
+  ] : [
     {k:'salat', l:'Salat', name:salatName},
     ...menuDishes.slice(0,2).map((name,i)=>({k: i===0?'gericht2':'gericht3', l: `Gericht ${i+1}`, name})),
     {k:'reis', l:'Reis', name:REIS_DISH_NAME}
@@ -13644,7 +13661,12 @@ async function renderKitchen(){
 
       // Beilagen nur im Beilagen-Tab sichtbar, nicht hier
       // Zutaten optional aufklappbar — ohne die Seite zu verlassen (kein Zurück-Klick nötig)
-      const dayDishObjs=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${CURRENT_MENU_WOCHE}_${wdStr}`])||[];
+      // WICHTIG: für DIESEN Tag (dateStr), nicht pauschal "heute" — sonst zeigt die Zutatenliste bei
+      // einer Woche, die über den Menü-Wechsel-Stichtag hinausgeht, für die späteren Tage noch die
+      // Zutaten der falschen (heutigen) Epoche.
+      const dayEra=getMenuEraForDate(dateStr);
+      const dayWoche=getMenuWocheForDate(dateStr);
+      const dayDishObjs=(dayEra.data && dayEra.data[`w${dayWoche}_${wdStr}`])||[];
       const dayDetailId=`nw_zut_${wd}`;
       html+=`<div style="margin:-4px 0 12px;">
         <div onclick="document.getElementById('${dayDetailId}').style.display=document.getElementById('${dayDetailId}').style.display==='none'?'block':'none'" style="font-size:11.5px;color:var(--muted);cursor:pointer;padding:4px 2px;">📖 Zutaten & Allergene anzeigen</div>
