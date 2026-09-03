@@ -5433,13 +5433,10 @@ async function renderForecastOrderTab(el, tabHtml){
     suggestionMap[j.dateStr][j.dish]={qty,reason:reasons.join(' · ')};
   });
 
-  // Automatisches Vorausfüllen leerer Felder mit dem reinen Vorwochen-Wert (1:1, KEINE Wetter-/
-  // Entsorgungs-Anpassung — die bleibt bewusst deaktiviert) — passiert automatisch im Hintergrund,
-  // kein Klick nötig. Wird sofort als echter Datensatz gespeichert (source='copied', eigene
-  // Einfärbung), damit Küche/Organisation die Zahl sofort sehen, auch wenn niemand die Zelle
-  // anfasst. Nur für leere Zellen, überschreibt nie einen bereits vorhandenen (auch nicht 0-)Wert.
+  // Komplett abgeschaltet (Anfrage Tini 03.09.) — Forecast wird täglich frisch eingetragen, nichts
+  // soll automatisch aus der Vorwoche übernommen werden, auch nicht im Hintergrund ohne Klick.
   const carryForwardRows=[];
-  Object.keys(lastWeekQtyMap).forEach(dateStr=>{
+  if(FORECAST_SUGGESTIONS_ENABLED) Object.keys(lastWeekQtyMap).forEach(dateStr=>{
     Object.keys(lastWeekQtyMap[dateStr]).forEach(dish=>{
       const already=(fMap[dateStr]||{})[dish];
       const lwQty=lastWeekQtyMap[dateStr][dish]?.qty;
@@ -7094,8 +7091,10 @@ async function renderOrgSimple(){
   });
 
   // Nur echte Handlungsfälle sammeln
+  // Komplett abgeschaltet (Anfrage Tini 03.09.), gleicher Grund wie bei computeOrgSuggestion —
+  // keine automatischen Mehr/Weniger-Empfehlungen aus Vorwochen-Daten mehr.
   const todos=[];
-  for(let d=1; d<=5; d++){
+  for(let d=1; d<=5 && FORECAST_SUGGESTIONS_ENABLED; d++){
     const dateStr=wd[d];
     const wdStr=WEEKDAYS[d-1]?.k;
     const dishes=getMenuDishNamesForDay(wdStr, dateStr);
@@ -7709,6 +7708,10 @@ async function renderOrgForecast(){
   }
 
   function computeOrgSuggestion(storeId, dish, dateStr, groesse){
+    // Komplett abgeschaltet (Anfrage Tini 03.09.): Forecast wird täglich frisch eingetragen, nichts
+    // soll automatisch aus Vorwochen übernommen/vorgeschlagen werden. Zentral hier an der Quelle
+    // deaktiviert, nicht nur beim Anzeigen — betrifft alle Aufrufer dieser Funktion gleichermaßen.
+    if(!FORECAST_SUGGESTIONS_ENABLED) return null;
     // Einfache, nachvollziehbare Logik — baut ab dieser Woche eigene Historie auf:
     // 1. Vorwoche bestätigte Menge als Basis (1:1 übernehmen)
     // 2. Falls Entsorgung eingetragen → anpassen
@@ -7725,10 +7728,12 @@ async function renderOrgForecast(){
     const yieldPerContainer = isLasagneSize ? LASAGNE_SIZE_YIELD[groesse] : null;
 
     const cat=mapDishNameToCategory(dish);
-    // Menü rotiert im 4-Wochen-Rhythmus → 4/8/12 Wochen zurück ist exakt dasselbe Gericht am selben
-    // Wochentag. Diese Referenz zuerst versuchen, erst danach auf ähnliche Gerichte ausweichen.
+    // Menü rotiert im 4-Wochen-Rhythmus, ABER seit dem neuen Menü (07.09.) sind die Gerichtnamen
+    // jede Woche unterschiedlich — "4 Wochen zurück = exakt dasselbe Gericht" stimmt nicht mehr
+    // zuverlässig. Chronologisch (letzte Woche zuerst) statt 4-Wochen-Sprung zuerst (Bug vom 03.09.,
+    // hat bei Kategorie-Vergleichen systematisch veraltete Daten bevorzugt).
     let prevDateStr=null, prevQty=null, isExactRef=false;
-    for(const wBack of [4,8,12,16]){
+    for(const wBack of [1,2,3,4,8,12,16]){
       const tryDate=dateMinusDays(dateStr, wBack*7);
       const tryQty=prevFcMap[tryDate]?.[storeId]?.[cat]?.[groesse||'gross'];
       if(tryQty!=null){ prevDateStr=tryDate; prevQty=tryQty; isExactRef=true; break; }
@@ -7878,7 +7883,9 @@ async function renderOrgForecast(){
     // ausverkauft bzw. blieben überall stark liegen? Das ist die Information, wegen der man sonst
     // selbst durch alle Zellen suchen müsste — sie steht jetzt oben, bevor man plant.
     const dayAlerts=[];
-    allDishes.forEach(dish=>{
+    // Abgeschaltet (Anfrage Tini 03.09.) — gleicher Grund wie oben, keine automatischen
+    // Vorwochen-basierten Warnungen mehr.
+    if(FORECAST_SUGGESTIONS_ENABLED) allDishes.forEach(dish=>{
       const cat=mapDishNameToCategory(dish);
       let soldOutStores=0, tooMuchStores=0, checked=0;
       storeList.forEach(s=>{
@@ -7968,21 +7975,19 @@ async function renderOrgForecast(){
             suggestionLogRows.push({store_id:s.id, forecast_date:dateStr, dish_name:dish, category:mapDishNameToCategory(dish), suggested_qty:sugg.qty, suggestion_reason:(sugg.reason||'').slice(0,500)});
           }
           const cmpCat=mapDishNameToCategory(dish);
-          // Das Menü rotiert im 4-Wochen-Rhythmus (siehe getMenuWocheForDate) — 4/8/12 Wochen zurück
-          // ist derselbe Wochentag in derselben Menü-Woche, also EXAKT dasselbe Gericht. Das ist die
-          // mit Abstand beste Referenz. Erst wenn dort nichts gefunden wird (z.B. bei Specials, die
-          // außerhalb der Rotation eingeschoben wurden), wird auf ähnliche Gerichte derselben
-          // Kategorie aus beliebigen Vorwochen ausgewichen.
+          // Komplett abgeschaltet (Anfrage Tini 03.09.) — auch die reine Referenzanzeige "letztes Mal
+          // war...", da sie auf denselben Vorwochen-Daten beruht. Variablen bleiben definiert (leer),
+          // damit der Rest der Zellen-Logik unten unverändert funktioniert.
           const occurrences=[];
           let cmpExact=false;
-          for(const wBack of [4,8,12,16]){
+          if(FORECAST_SUGGESTIONS_ENABLED) for(const wBack of [1,2,3,4,8,12,16]){
             if(occurrences.length>=3) break;
             const tryDate=dateMinusDays(dateStr, wBack*7);
             const tryQty=prevFcMap[tryDate]?.[s.id]?.[cmpCat]?.['gross'];
             const tryDisp=prevDispByDateStore[tryDate]?.[s.id]?.[cmpCat];
             if(tryQty!=null || tryDisp){ occurrences.push({date:tryDate, qty:tryQty??null, disp:tryDisp||null}); cmpExact=true; }
           }
-          if(!occurrences.length){
+          if(FORECAST_SUGGESTIONS_ENABLED && !occurrences.length){
             for(let wBack=1; wBack<=12 && occurrences.length<3; wBack++){
               const tryDate=dateMinusDays(dateStr, wBack*7);
               const tryQty=prevFcMap[tryDate]?.[s.id]?.[cmpCat]?.['gross'];
