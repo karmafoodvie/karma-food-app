@@ -1449,4 +1449,9 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
 // Alias: aktuell aktive Epoche — für Code-Stellen, die "das Menü" ohne Datumsbezug meinen
 // (immer "gerade jetzt"). Für datumsbezogene/historische Abfragen IMMER
 // getMenuDishNamesForDay(wdStr, dateStr) verwenden — das wählt automatisch die richtige Epoche.
-const MENU_DATA = MENU_DATA_HERBST_WINTER_2026_27;
+// Datumsabhängig statt fix — wählt beim Laden automatisch die Epoche, die HEUTE tatsächlich gilt.
+// Wichtig für alle Code-Stellen im Index, die noch direkt auf MENU_DATA zugreifen (ohne über
+// getMenuDishNamesForDay/getMenuEraForDate zu gehen) — die meinen damit praktisch immer "heute",
+// nicht zwingend die neueste Epoche. Verhindert genau den Fehler vom 03.09., wo vor dem Menü-Wechsel
+// (07.09.) trotzdem schon Herbst-Gerichte angezeigt wurden.
+const MENU_DATA = (new Date().toISOString().split('T')[0] >= '2026-09-07') ? MENU_DATA_HERBST_WINTER_2026_27 : MENU_DATA_SOMMER_2026;
