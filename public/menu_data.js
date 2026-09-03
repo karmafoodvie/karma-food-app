@@ -725,7 +725,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Green Power Pesto Veggie Lasagna",
+   "name": "Green Power Pesto Veggie Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -754,7 +754,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Cremiges Coconut Dal",
+   "name": "Tofu Tikka Masala",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -763,7 +763,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht3",
-   "name": "Tofu Tikka Masala",
+   "name": "Cremiges Coconut Dal",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -774,7 +774,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  "w1_do": [
   {
    "slot": "gericht1",
-   "name": "Kürbis Masala Linsen Lasagne",
+   "name": "Ras el Hanout Karotten Quinoa Bowl mit Zitronen Hummus",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -783,7 +783,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Ras el Hanout Karotten Quinoa Bowl mit Zitronen Hummus",
+   "name": "Kürbis Masala Linsen Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -870,7 +870,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Veggie Bolognese Lasagna",
+   "name": "Veggie Bolognese Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -899,7 +899,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Baingan Bharta Style Curry",
+   "name": "Smoky Erdäpfel Gulasch",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -908,7 +908,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht3",
-   "name": "Smoky Erdäpfel Gulasch",
+   "name": "Baingan Bharta Style Curry",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -919,7 +919,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  "w2_do": [
   {
    "slot": "gericht1",
-   "name": "Indian Ratatouille Lasagne",
+   "name": "Schmorgemüse Quinoa Bowl mit Hummus Dip",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -928,7 +928,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Schmorgemüse Quinoa Bowl mit Hummus Dip",
+   "name": "Indian Ratatouille Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1044,7 +1044,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Vindaloo Veggie Curry",
+   "name": "Veggie (M)eatballs und Parmesan",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1053,7 +1053,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht3",
-   "name": "Veggie (M)eatballs und Parmesan",
+   "name": "Vindaloo Veggie Curry",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1064,7 +1064,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  "w3_do": [
   {
    "slot": "gericht1",
-   "name": "White Bean Pesto Veggie Lasagna",
+   "name": "Za'atar Karfiol Quinoa Bowl mit Curry Hummus",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1073,7 +1073,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Za'atar Karfiol Quinoa Bowl mit Curry Hummus",
+   "name": "White Bean Pesto Veggie Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1160,7 +1160,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Tandoori Style Veggie Lasagna",
+   "name": "Tandoori Style Veggie Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1189,7 +1189,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Süßkartoffel Paprika Masala Curry",
+   "name": "Proteinreiches Quinoa Chili sin Carne mit Sojahack",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1198,7 +1198,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht3",
-   "name": "Proteinreiches Quinoa Chili sin Carne mit Sojahack",
+   "name": "Süßkartoffel Paprika Masala Curry",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1209,7 +1209,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  "w4_do": [
   {
    "slot": "gericht1",
-   "name": "Veggie Bolognese Lasagne",
+   "name": "Sweet Potato Quinoa Bowl mit Limetten Dip",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1218,7 +1218,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Sweet Potato Quinoa Bowl mit Limetten Dip",
+   "name": "Veggie Bolognese Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
