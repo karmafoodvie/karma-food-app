@@ -1363,7 +1363,8 @@ function getMenuForDate(dateStr){
   const wdStr=WEEKDAY_MENU_KEY[wd];
   if(!wdStr) return []; // Wochenende — kein Menü
   const woche=getMenuWocheForDate(dateStr);
-  const entries=(typeof MENU_DATA!=='undefined' && MENU_DATA[`w${woche}_${wdStr}`])||[];
+  const era=getMenuEraForDate(dateStr);
+  const entries=(era.data && era.data[`w${woche}_${wdStr}`])||[];
   return entries.filter(e=>e.name && !e.name.startsWith('ÖL') && !e.name.startsWith('ZUTATEN'));
 }
 
@@ -1805,8 +1806,20 @@ window.goToReminder=goToReminder;
 // Neue Epoche ergänzen: einfach einen weiteren Eintrag ans Ende von MENU_ERAS anhängen, "bis" der
 // vorigen Epoche setzen, "bis" der neuen auf null lassen (= "bis auf Weiteres aktuell").
 const MENU_ERAS = [
-  { key:'sommer2026', label:'Sommer 2026', von:'2026-06-29', bis:'2026-09-06', wocheStart:new Date(2026,5,29), get data(){ return (typeof MENU_DATA_SOMMER_2026!=='undefined')?MENU_DATA_SOMMER_2026:{}; } },
-  { key:'herbstwinter2026_27', label:'Herbst/Winter 2026/27', von:'2026-09-07', bis:null, wocheStart:new Date(2026,8,7), get data(){ return (typeof MENU_DATA_HERBST_WINTER_2026_27!=='undefined')?MENU_DATA_HERBST_WINTER_2026_27:{}; } },
+  { key:'sommer2026', label:'Sommer 2026', von:'2026-06-29', bis:'2026-09-06', wocheStart:new Date(2026,5,29), get data(){
+    // Fallback-Kette: neue Variable -> altes einzelnes MENU_DATA (falls menu_data.js noch nicht aktualisiert
+    // wurde, während index.html schon das Epochen-System hat) -> leeres Objekt als letzter Ausweg.
+    // Verhindert einen kompletten Datenausfall (leere Gerichteliste) bei versehentlich nur teilweise
+    // gepushten Dateien — genau das ist am 03.09. bei Stadtplatz passiert.
+    if(typeof MENU_DATA_SOMMER_2026!=='undefined') return MENU_DATA_SOMMER_2026;
+    if(typeof MENU_DATA!=='undefined') return MENU_DATA;
+    return {};
+  } },
+  { key:'herbstwinter2026_27', label:'Herbst/Winter 2026/27', von:'2026-09-07', bis:null, wocheStart:new Date(2026,8,7), get data(){
+    if(typeof MENU_DATA_HERBST_WINTER_2026_27!=='undefined') return MENU_DATA_HERBST_WINTER_2026_27;
+    if(typeof MENU_DATA!=='undefined') return MENU_DATA;
+    return {};
+  } },
 ];
 function getMenuEraForDate(dateStr){
   const ds = dateStr || new Date().toISOString().split('T')[0];
@@ -4637,11 +4650,12 @@ function isLasagneLocked(dateStr){
 // statt aus der statischen weekly_menu-Tabelle — sonst sind Forecast-Spalten (z.B. "Lasagne") veraltet/falsch.
 function getSalatNameForDate(dateStr){
   const woche = dateStr ? getMenuWocheForDate(dateStr) : CURRENT_MENU_WOCHE;
+  const era = getMenuEraForDate(dateStr);
   // Salat hat keinen fixen Wochentag-Key — er ist täglich gleich pro Woche
   // Wir nehmen den Mo-Eintrag als Referenz (Salat ändert sich wöchentlich, nicht täglich)
   const days = ['mo','di','mi','do','fr'];
   for(const day of days){
-    const entries = (typeof MENU_DATA!=='undefined' && MENU_DATA[`w${woche}_${day}`]) || [];
+    const entries = (era.data && era.data[`w${woche}_${day}`]) || [];
     const salatEntry = entries.find(e=>e.slot==='salat');
     if(salatEntry?.name) return salatEntry.name;
   }
@@ -7093,7 +7107,7 @@ async function renderOrgSimple(){
       storeList.forEach(s=>{
         // letztes Vorkommen dieses Gerichts bei dieser Filiale suchen
         let ref=null;
-        for(const wBack of [4,8,12,16,1,2,3]){
+        for(const wBack of [1,2,3,4,8,12,16]){ // chronologisch, NÄCHSTE Woche zuerst statt 4-Wochen-Sprung zuerst (Bug vom 03.09.)
           const td=dateMinusDays(dateStr, wBack*7);
           const dp=dispMap[s.id+'|'+td+'|'+cat];
           if(dp){ ref={date:td, disp:dp, qty:lookupQty(s.id, td, cat, dish)}; break; }
@@ -7869,7 +7883,7 @@ async function renderOrgForecast(){
       let soldOutStores=0, tooMuchStores=0, checked=0;
       storeList.forEach(s=>{
         let occ=null;
-        for(const wBack of [4,8,12,16,1,2,3]){
+        for(const wBack of [1,2,3,4,8,12,16]){ // chronologisch, NÄCHSTE Woche zuerst statt 4-Wochen-Sprung zuerst (Bug vom 03.09.)
           const td=dateMinusDays(dateStr, wBack*7);
           const dp=prevDispByDateStore[td]?.[s.id]?.[cat];
           if(dp){ occ=dp; break; }
@@ -13928,9 +13942,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const disposalBySlotStore={};
   (disposalForDay||[]).forEach(d=>{ (disposalBySlotStore[d.slot]=disposalBySlotStore[d.slot]||{})[d.store_id]=d; });
 
-  // Get tomorrow's menu dishes from MENU_DATA
+  // Get tomorrow's menu dishes from MENU_DATA — epochen-bewusst, da "morgen" genau auf einen
+  // Menü-Wechsel-Stichtag fallen kann (z.B. heute 06.09., morgen bereits 07.09. = neue Epoche).
   const _cookWoche=getMenuWocheForDate(tomorrowStr);
-  const menuDishesRaw = (typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${_cookWoche}_${tomorrowWd}`])||[];
+  const _cookEra=getMenuEraForDate(tomorrowStr);
+  const menuDishesRaw = (_cookEra.data && _cookEra.data[`w${_cookWoche}_${tomorrowWd}`])||[];
   const dishNames = menuDishesRaw.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
   // Reis wird nicht im Menüplan geführt, aber jeden Tag mitproduziert — daher hier synthetisch
   // ergänzt, DAMIT die Reis-Menge in der "Gerichte & Mengen"-Tabelle auftaucht (wie in Forecast/Daily).
