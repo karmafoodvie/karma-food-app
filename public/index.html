@@ -7334,22 +7334,28 @@ async function renderOrgStoreForecast(){
       const cur=qtyByDish[key];
       const disp=dispByDateCat[dateStr+'|'+cat];
       // Historie für die Detail-Aufstellung sammeln — Tab 1: DIESES Gericht (4-Wochen-Menüzyklus,
-      // exakter Namens-Match). Bleibt exakt wie gehabt, unverändert.
+      // NUR exakter Namens-Match). WICHTIG (Fund 03.09.): früher fiel das bei fehlendem exaktem
+      // Treffer still auf den Kategorie-Durchschnitt zurück, zeigte den aber weiterhin unter "Dieses
+      // Gericht" an — bei neuen, wöchentlich wechselnden Gerichtnamen (Herbst-Menü) griff dieser
+      // Rückfall praktisch IMMER, ohne dass sichtbar war, dass es gar nicht mehr dasselbe Gericht war.
+      // Jetzt: kein Treffer = kein Eintrag, ehrlich leer statt falsch beschriftet. Der bewusste
+      // Kategorie-Vergleich existiert schon separat und korrekt benannt in Tab 2 ("Alle Wochentage").
       const hist=[];
       const catIsLasagne=cat==='Lasagne';
-      for(const wBack of [4,8,12,16,20]){
+      for(const wBack of [1,2,3,4,8,12,16,20]){
         const td=dateMinusDays(dateStr, wBack*7);
         const dp=dispByDateCat[td+'|'+cat];
         const list=catIndex[td+'|'+cat];
         const exact=list?.find(x=>x.dish===dish);
-        const q=exact?exact.qty:(list?.length?Math.max(...list.map(x=>x.qty)):null);
+        if(!exact) continue; // kein exakter Namens-Match -> in Tab 1 nicht anzeigen
+        const q=exact.qty;
         // Bei Lasagne-Gerichten die Größen einzeln mitgeben (Groß/Mittel/Klein), nicht nur die
         // zusammengefasste Bhlt-Zahl — exakter Namens-Match wie beim Rest von Tab 1.
         let sizes=null;
-        if(catIsLasagne && exact){
+        if(catIsLasagne){
           sizes=LASAGNE_SIZES.map(sz=>({l:sz.l, qty:qtyBySize[td+'|'+dish+'|'+sz.k]?.qty})).filter(s=>s.qty);
         }
-        if(dp||q!=null) hist.push({date:td, qty:q, sizes, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
+        hist.push({date:td, qty:q, sizes, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
       }
       // Tab 2: ALLE [Wochentag]e in dieser Kategorie, unabhängig vom konkreten Gericht — jede Woche
       // rückwirkend (nicht nur die 4-Wochen-Menüzyklus-Punkte), Menge = Summe aller Gerichte der
