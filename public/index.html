@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.4';
+const APP_VERSION = '6.99.5';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -11168,14 +11168,16 @@ async function toggleOrderEingepackt(articleId, storeId, currentPacked, el, qty,
 }
 window.toggleOrderEingepackt=toggleOrderEingepackt;
 
-// Sammel-Aktion: alles für diesen Tag als eingepackt markieren UND die Menge auf 0 zurücksetzen —
-// so gewünscht, damit Filialen danach nicht mehr die alte (bereits gelieferte) Menge sehen,
-// sondern wieder bei 0 starten. Räumt zusätzlich offene Geldwechsel-Anfragen und Sonderbestellungen
-// mit auf, damit Michi nicht noch extra jede einzeln antippen muss.
+// Sammel-Aktion: alles für diesen Tag als eingepackt markieren — Menge bleibt erhalten (nicht mehr
+// auf 0 zurückgesetzt, seit v7.0), damit die Bestellliste-Übersicht rückblickend noch zeigt, was an
+// dem Tag tatsächlich eingepackt/geliefert wurde. Verhält sich damit wie das Einzeln-Antippen
+// (toggleOrderEingepackt), nur für alle Zeilen des Tages auf einmal. Räumt zusätzlich offene
+// Geldwechsel-Anfragen und Sonderbestellungen mit auf, damit Michi nicht noch extra jede einzeln
+// antippen muss.
 async function markAllPackedAndReset(orderDateStr){
-  if(!confirm('Wirklich ALLES für diesen Tag als eingepackt markieren, auf 0 zurücksetzen und Geldwechsel/Sonderbestellungen erledigen? Das kann nicht rückgängig gemacht werden.')) return;
+  if(!confirm('Wirklich ALLES für diesen Tag als eingepackt markieren und Geldwechsel/Sonderbestellungen erledigen? Das kann nicht rückgängig gemacht werden.')) return;
   try{
-    await api(`orders?order_date=eq.${orderDateStr}&quantity=gt.0`,{method:'PATCH',body:JSON.stringify({eingepackt:true,quantity:0})});
+    await api(`orders?order_date=eq.${orderDateStr}&quantity=gt.0`,{method:'PATCH',body:JSON.stringify({eingepackt:true})});
     await api(`geldwechsel?status=eq.offen`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}).catch(()=>{});
     await api(`special_orders?order_date=eq.${orderDateStr}`,{method:'DELETE'}).catch(()=>{});
     showToast('✓ Alles eingepackt & aufgeräumt');
