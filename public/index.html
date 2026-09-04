@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.5';
+const APP_VERSION = '6.99.6';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8928,15 +8928,27 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
   if(!wrap) return;
   let html='';
 
+  // Konvention (seit v6.99.6): Leerzeile + eigene, kurze Namenszeile (z.B. "RAITA", "MANGO CHUTNEY")
+  // markiert einen neuen benannten Teil — beliebig viele, nicht mehr nur ein Dressing. Eine Namenszeile
+  // ist: kurz (<30 Zeichen), enthält kein Komma, endet optional mit ":". Alte Einträge ohne solche
+  // Zeile fallen zurück auf "Dressing" (Rückwärtskompatibilität zu vor v6.99.6).
+  function looksLikeLabelLine(line){
+    const t=line.trim();
+    return t.length>0 && t.length<30 && !t.includes(',') && !/[.]{2,}/.test(t);
+  }
   function parseZutatenSections(zutaten){
     if(!zutaten) return [];
-    // Split on double newline or "ÖL" appearing after first section
+    // Split on double newline or "ÖL" appearing after first section (alte Konvention, weiter unterstützt)
     const parts = zutaten.split(/\n\s*\n|(?=ÖL\s*[,\.])/g).filter(p=>p.trim());
     if(parts.length<=1) return [{label:null, text:zutaten.replace(/\n/g,' ').trim()}];
-    return parts.map((p,i)=>({
-      label: i===0?null:'Dressing',
-      text: p.replace(/\n/g,' ').trim()
-    }));
+    return parts.map((p,i)=>{
+      if(i===0) return {label:null, text:p.replace(/\n/g,' ').trim()};
+      const lines=p.split('\n').map(l=>l.trim()).filter(Boolean);
+      if(lines.length>1 && looksLikeLabelLine(lines[0])){
+        return {label: lines[0].replace(/:$/,''), text: lines.slice(1).join(' ').trim()};
+      }
+      return {label:'Dressing', text:p.replace(/\n/g,' ').trim()};
+    });
   }
 
   function isZutatAllergen(item){
@@ -8997,7 +9009,7 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
       </div>
       ${sections.length?`<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">🧂 Zutaten</div>
       ${sections.map(sec=>`
-        ${sec.label?`<div style="font-size:10px;font-weight:700;color:#185FA5;letter-spacing:.05em;margin:6px 0 3px;">🥗 DRESSING</div>`:''}
+        ${sec.label?`<div style="font-size:10px;font-weight:700;color:#185FA5;letter-spacing:.05em;margin:6px 0 3px;">🥗 ${sec.label.toUpperCase()}</div>`:''}
         <div style="font-size:12px;color:var(--sub);line-height:1.8;">${renderZutatItems(sec.text)}</div>
       `).join('')}`:''}
     </div>`;
