@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.22';
+const APP_VERSION = '6.99.23';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3185,17 +3185,8 @@ window.renderMessenStore=renderMessenStore;
 // Store-Startseite UND der Kitchen-"Daily Business"-Ansicht, damit Kitchen nicht mehr über eine
 // eigene, schwächere Kopie hinterherhinkt (07.09.26, Wunsch Tini).
 function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPrefix=''){
-  const todayMenuRaw=getTodayMenu()||[];
-  if(!todayMenuRaw.length) return '';
-  // Reis als eigene Karte neben den Gerichten — bisher immer Kurkuma Reis (REIS_DISH_NAME), künftig
-  // wechselnde Reissorten pro Woche/Tag (Wunsch Tini 07.09.26). Sobald echte, wechselnde Namen da
-  // sind, hier place der Konstante durch eine pro Datum berechnete Zuordnung ersetzen.
-  // Samosas direkt daneben (Wunsch Tini 07.09.26) — beide brauchen wenig Platz, stehen dadurch
-  // gemeinsam in einer Zeile statt dass Reis allein umbricht.
-  const todayMenu=[...todayMenuRaw,
-    {name:REIS_DISH_NAME, slot:'reis', allergene:{main:[],dressing:[]}, zutaten:''},
-    {name:'Samosa', slot:'samosa', allergene:{main:['A'],dressing:[]}, zutaten:'WEIZENMEHL, Kartoffeln, Erbsen, Kreuzkümmel, Koriandersamen, Kasoori Methi (Bockshornklee), Salz, Chiliflocken, Ajwain, Öl'}
-  ];
+  const todayMenu=getTodayMenu()||[];
+  if(!todayMenu.length) return '';
   let cardsHtml='';
   let panelsHtml='';
   todayMenu.forEach((d,i)=>{
@@ -3226,7 +3217,38 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
     </div>`;
   });
+
+  // Reis / Samosas / Sweets — schmale Drittel-Zeile statt eigene große Karten (Wunsch Tini 07.09.26:
+  // "nicht breit, Symbol wenn dann hintennach"), gleiche Höhe wie die frühere "Sweets & Samosas"-Kachel.
+  // Reis/Samosas bleiben antippbar für die volle Zutatenliste (gleiches Panel-Muster wie oben), Sweets
+  // verlinkt direkt weiter zur bestehenden Sweets-Übersicht.
+  const reisEntry={name:REIS_DISH_NAME, slot:'reis', allergene:{main:[],dressing:[]}, zutaten:''};
+  const samosaEntry={name:'Samosa', slot:'samosa', allergene:{main:['A'],dressing:[]}, zutaten:'WEIZENMEHL, Kartoffeln, Erbsen, Kreuzkümmel, Koriandersamen, Kasoori Methi (Bockshornklee), Salz, Chiliflocken, Ajwain, Öl'};
+  [reisEntry, samosaEntry].forEach(d=>{
+    const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
+    const zutatenMerged=(zKeyHome && zutatenOverrideMap[zKeyHome])||zutatenOverrideMap[d.name]||d.zutaten;
+    panelsHtml+=`<div id="dish-allergen-${idPrefix}${d.slot}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
+      <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
+    </div>`;
+  });
+  const thirdsRow=`<div class="home-card" style="display:flex;padding:0;margin-bottom:6px;overflow:hidden;">
+    <div onclick="toggleDishAllergeneCard('${idPrefix}reis')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:0.5px solid var(--border);">
+      <div style="font-size:12px;font-weight:600;">Reis 🍚</div>
+      <div data-no-translate style="font-size:9px;color:var(--muted);margin-top:1px;">${REIS_DISH_NAME}</div>
+    </div>
+    <div onclick="toggleDishAllergeneCard('${idPrefix}samosa')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:0.5px solid var(--border);">
+      <div style="font-size:12px;font-weight:600;">Samosas 🥟</div>
+      <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
+    </div>
+    <div onclick="goTo('waehrend')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;">
+      <div style="font-size:12px;font-weight:600;">Sweets 🍰</div>
+      <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
+    </div>
+  </div>`;
+
   return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${cardsHtml}</div>
+    ${thirdsRow}
     <div id="dish-allergen-panels-${idPrefix}" style="margin-bottom:10px;">${panelsHtml}</div>`;
 }
 // Lädt die Zutaten-/Allergen-Overrides aus der Datenbank einmal und gibt beide Lookup-Maps zurück —
@@ -3478,10 +3500,6 @@ async function renderHome(){
       <button onclick="dismissUebergabeNotiz()" title="Als erledigt markieren" style="background:none;border:none;color:#B45309;font-size:14px;cursor:pointer;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
     </div>`:''}
     ${renderTodayDishCardsHtml(homeZutatenOverrideMap, homeAllergenOverrideMap, '')}
-    ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="margin-bottom:6px;padding:8px 10px;">
-      <div style="font-size:13px;font-weight:500;">🍰 Sweets &amp; Samosas</div>
-      <div style="font-size:10px;color:var(--muted);margin-top:2px;">Zutaten ansehen</div>
-    </div>`:''}
     <div style="display:flex;gap:6px;margin-bottom:6px;">
       ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="flex:1;padding:9px 8px;text-align:center;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':''}">
         <div style="font-size:20px;line-height:1;">😋</div>
