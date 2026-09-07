@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.13';
+const APP_VERSION = '6.99.14';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -12947,7 +12947,11 @@ async function renderTransporterBeilagenHtml(){
   // Essensmengen (Gerichte) für heute — Michi macht die Endkontrolle und braucht Gerichte + Beilagen
   // zusammen an einer Stelle, statt zwischen Tabs wechseln zu müssen.
   const fcToday=await api(`forecast_qty?forecast_date=eq.${today}&select=store_id,dish_name,qty,groesse,eingepackt`).catch(()=>[]);
-  const dishNamesToday=[...new Set((fcToday||[]).filter(f=>f.qty>0).map(f=>f.dish_name))];
+  // Nur Gerichte zeigen, die WIRKLICH auf dem heutigen (epochen-bewussten) Menü stehen — sonst
+  // bleiben alte Forecast-Zeilen aus einer vergangenen Epoche (z.B. Sommer-Gerichte) sichtbar,
+  // obwohl sie längst nicht mehr aktuell sind. Bug gefunden 07.09.26, erster Herbst/Winter-Tag.
+  const _validDishNamesToday=new Set((typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(WEEKDAY_STR[weekdayNum],today):[]);
+  const dishNamesToday=[...new Set((fcToday||[]).filter(f=>f.qty>0 && _validDishNamesToday.has(f.dish_name)).map(f=>f.dish_name))];
   let dishHtml='';
   if(dishNamesToday.length){
     dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte</div>
