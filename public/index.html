@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.12';
+const APP_VERSION = '6.99.13';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2202,6 +2202,25 @@ async function waitForElAndSetText(id, getTextFn, maxWaitMs=10000){
   if(val) elx.textContent=val;
 }
 
+// Text in Hauptteil + zusammengeführten Extra-Teil (Dip/Sauce/Toppings/Raita/...) aufteilen —
+// gemeinsame Logik für Anzeige (renderZutatenReadOnly) UND Editor (openZutatenEditor), damit beide
+// dieselbe "NAME:"-Konvention gleich interpretieren.
+function splitZutatenMainExtra(text){
+  if(!text) return {main:'', extra:''};
+  const rawParts=text.split(/\n\s*\n/).map(p=>p.trim()).filter(Boolean);
+  if(rawParts.length<=1) return {main:text, extra:''};
+  const mainText=rawParts[0];
+  const extraChunks=[];
+  for(let i=1;i<rawParts.length;i++){
+    const lines=rawParts[i].split('\n').map(l=>l.trim()).filter(Boolean);
+    if(lines.length>1 && /^[^,]{1,30}:$/.test(lines[0])){
+      extraChunks.push(lines.slice(1).join(' '));
+    } else {
+      extraChunks.push(rawParts[i].replace(/\n/g,' '));
+    }
+  }
+  return {main:mainText, extra:extraChunks.join(', ')};
+}
 let _ztTileCounter=0;
 let _ztTabCounter=0;
 // Baut das Kachel-Raster (gruppiert nach Zutatentyp) für einen Text-Abschnitt — ausgelagert aus
@@ -2262,21 +2281,7 @@ function renderZutatenReadOnly(text){
   // v6.99.6 per Leerzeile + "NAME:"-Zeile markiert) aufteilen. Bei mehreren Extra-Teilen werden sie
   // HIER bewusst zusammengeführt (nicht einzeln), weil die Crew sie gemeinsam in einem "Dip/Sauce/
   // Toppings"-Tab sehen will (Wunsch Tini 07.09.26) statt für jeden Teil einen eigenen Tab zu bauen.
-  const rawParts=text.split(/\n\s*\n/).map(p=>p.trim()).filter(Boolean);
-  let mainText=text, extraText='';
-  if(rawParts.length>1){
-    mainText=rawParts[0];
-    const extraChunks=[];
-    for(let i=1;i<rawParts.length;i++){
-      const lines=rawParts[i].split('\n').map(l=>l.trim()).filter(Boolean);
-      if(lines.length>1 && /^[^,]{1,30}:$/.test(lines[0])){
-        extraChunks.push(lines.slice(1).join(' '));
-      } else {
-        extraChunks.push(rawParts[i].replace(/\n/g,' '));
-      }
-    }
-    extraText=extraChunks.join(', ');
-  }
+  const {main:mainText, extra:extraText}=splitZutatenMainExtra(text);
 
   const mainResult=_ztBuildGrid(mainText);
   if(!extraText){
@@ -2669,11 +2674,19 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
     +'<button id="zd-modal-close" style="background:var(--surface-1);border:none;border-radius:50%;width:30px;height:30px;font-size:17px;cursor:pointer;line-height:1;flex-shrink:0;">✕</button>';
   sheet.appendChild(hdr);
 
-  // Body with editable list
+  // Body with editable list — Haupt-Gericht und benannter Extra-Teil (Dip/Sauce/Toppings/Raita/...)
+  // getrennt editierbar (seit v6.99.13), damit die Trennung beim Bearbeiten erhalten bleibt statt
+  // beim Speichern wieder zu einer flachen Liste zu verschmelzen.
+  const {main:zdMainText, extra:zdExtraText}=splitZutatenMainExtra(currentText);
   const body=document.createElement('div');
   body.style.padding='14px 16px';
-  body.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🧂 Zutaten</div>'
-    +renderZutatenEditable(currentText, safeKey);
+  body.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🧂 Gericht</div>'
+    +renderZutatenEditable(zdMainText, safeKey+'_main')
+    +'<div id="zd-extra-wrap" style="margin-top:14px;">'
+    +(zdExtraText
+      ? '<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🥗 Dip / Sauce / Toppings</div>'+renderZutatenEditable(zdExtraText, safeKey+'_extra')
+      : '<button id="zd-add-extra-btn" style="font-size:12px;color:var(--green);background:var(--green-light);border:1px dashed rgba(29,94,58,0.3);border-radius:8px;padding:8px 12px;cursor:pointer;width:100%;">+ Dip / Sauce / Toppings hinzufügen</button>')
+    +'</div>';
   sheet.appendChild(body);
 
   // Footer buttons
@@ -2685,10 +2698,22 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
 
-  // Attach interactions
-  const editor=body.querySelector('.zd-editor');
-  zdAttach(editor);
-  zdLoadEnglishPreviews(editor);
+  // Attach interactions — es kann jetzt ZWEI .zd-editor-Bereiche geben (Gericht + Dip/Sauce/Toppings)
+  const mainEditor=body.querySelector('.zd-editor');
+  zdAttach(mainEditor);
+  zdLoadEnglishPreviews(mainEditor);
+  const existingExtraEditor=document.getElementById('zd-extra-wrap').querySelector('.zd-editor');
+  if(existingExtraEditor){ zdAttach(existingExtraEditor); zdLoadEnglishPreviews(existingExtraEditor); }
+  const addExtraBtn=document.getElementById('zd-add-extra-btn');
+  if(addExtraBtn){
+    addExtraBtn.addEventListener('click', ()=>{
+      const wrap=document.getElementById('zd-extra-wrap');
+      wrap.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🥗 Dip / Sauce / Toppings</div>'
+        +renderZutatenEditable('', safeKey+'_extra');
+      const newExtraEditor=wrap.querySelector('.zd-editor');
+      zdAttach(newExtraEditor);
+    });
+  }
 
   const closeModal=()=>overlay.remove();
   document.getElementById('zd-modal-close').addEventListener('click', closeModal);
@@ -2698,8 +2723,11 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   document.getElementById('zd-modal-save').addEventListener('click', async ()=>{
     const saveBtn=document.getElementById('zd-modal-save');
     saveBtn.disabled=true; saveBtn.textContent='Wird gespeichert…';
-    const items=await zdCollectItems(editor);
-    const newText=items.join(', ');
+    const mainEditorEl=body.querySelector('.zd-editor');
+    const mainItems=await zdCollectItems(mainEditorEl);
+    const extraEditorEl=document.getElementById('zd-extra-wrap').querySelector('.zd-editor');
+    const extraItems=extraEditorEl?await zdCollectItems(extraEditorEl):[];
+    const newText=mainItems.join(', ')+(extraItems.length?('\n\nDIP/SAUCE/TOPPINGS:\n'+extraItems.join(', ')):'');
     closeModal();
     // "Global speichern" wurde am 31.07.26 entfernt (hat Zutaten fälschlich in andere Gerichte
     // gemischt, sobald sie nur eine gemeinsame Basis-Zutat wie Salz/Öl/Zwiebel hatten — siehe
