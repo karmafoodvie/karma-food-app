@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.15';
+const APP_VERSION = '6.99.16';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3180,6 +3180,59 @@ async function renderMessenStore(el){
 }
 window.renderMessenStore=renderMessenStore;
 
+// Baut die "Während der Schicht"-Gerichtekarten (Name, Vegan/Glutenfrei-Badges, Allergene,
+// aufklappbare Zutaten mit Dip/Sauce/Toppings-Tabs) — gemeinsam genutzt von der normalen
+// Store-Startseite UND der Kitchen-"Daily Business"-Ansicht, damit Kitchen nicht mehr über eine
+// eigene, schwächere Kopie hinterherhinkt (07.09.26, Wunsch Tini).
+function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPrefix=''){
+  const todayMenu=getTodayMenu()||[];
+  if(!todayMenu.length) return '';
+  let cardsHtml='';
+  let panelsHtml='';
+  todayMenu.forEach((d,i)=>{
+    const cat=mapDishNameToCategory(d.name, d.slot);
+    const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
+    const mainCodes=(zKeyHome && allergenOverrideMap[zKeyHome])||allergenOverrideMap[d.name]||d.allergene?.main||[];
+    const dressingCodes=d.allergene?.dressing||[];
+    const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
+    const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
+    const allNames=[...namesMain,...namesDressing];
+    const zutatenMerged=(zKeyHome && zutatenOverrideMap[zKeyHome])||zutatenOverrideMap[d.name]||d.zutaten;
+    const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
+    cardsHtml+=`<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
+      <div onclick="toggleDishAllergeneCard('${idPrefix}${i}')" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
+        ${dishVisual}
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
+        <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes)}${glutenfreiBadgeHtml(d.name, mainCodes)}</div>
+      </div>
+      <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
+        <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
+      </div>
+    </div>`;
+    // Zutaten-Panel bewusst NICHT in der schmalen Gericht-Spalte, sondern als eigener,
+    // volle-Breite-Bereich darunter — sonst kann sich die Zutatenliste nie richtig ausdehnen.
+    panelsHtml+=`<div id="dish-allergen-${idPrefix}${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+      <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
+      <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
+    </div>`;
+  });
+  return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${cardsHtml}</div>
+    <div id="dish-allergen-panels-${idPrefix}" style="margin-bottom:10px;">${panelsHtml}</div>`;
+}
+// Lädt die Zutaten-/Allergen-Overrides aus der Datenbank einmal und gibt beide Lookup-Maps zurück —
+// eigene Funktion, damit renderTodayDishCardsHtml() von überall (Store-Startseite, Kitchen Daily
+// Business, ...) mit frischen Daten aufgerufen werden kann, ohne den Fetch zu duplizieren.
+async function fetchZutatenAllergenOverrideMaps(){
+  const raw=await api('allergene_rezepturen?select=gericht,zutaten,zkey,allergene_codes').catch(()=>[]);
+  const zutatenMap={}, allergenMap={};
+  (raw||[]).forEach(r=>{
+    if(r.zutaten){ zutatenMap[r.gericht]=r.zutaten; if(r.zkey) zutatenMap[r.zkey]=r.zutaten; }
+    if(r.allergene_codes?.length){ allergenMap[r.gericht]=r.allergene_codes; if(r.zkey) allergenMap[r.zkey]=r.allergene_codes; }
+  });
+  return {zutatenMap, allergenMap};
+}
+
 async function renderHome(){
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
   const allItems=Object.values(templates).flat();
@@ -3188,22 +3241,10 @@ async function renderHome(){
   // Zutaten-Datenbank früh laden (nicht abwarten), damit die Kategorie-Erkennung bei den
   // Gericht-Karten unten gleich die verlässlichen, gepflegten Kategorien nutzt statt nur zu raten.
   getZutatenMaster();
-  getProduktAllergene();
-  // Zutaten-Overrides einmal laden, damit die Gericht-Karten unten die vom Koch bearbeiteten
-  // Zutaten zeigen — sonst sieht die Filiale immer nur den ursprünglichen Menü-Text.
-  const homeZutatenOverrideRaw=await api('allergene_rezepturen?select=gericht,zutaten,zkey,allergene_codes').catch(()=>[]);
-  const homeZutatenOverrideMap={};
-  const homeAllergenOverrideMap={};
-  (homeZutatenOverrideRaw||[]).forEach(r=>{
-    if(r.zutaten){
-      homeZutatenOverrideMap[r.gericht]=r.zutaten; // Fallback für Altbestand
-      if(r.zkey) homeZutatenOverrideMap[r.zkey]=r.zutaten; // stabiler Schlüssel hat Vorrang
-    }
-    if(r.allergene_codes?.length){
-      homeAllergenOverrideMap[r.gericht]=r.allergene_codes;
-      if(r.zkey) homeAllergenOverrideMap[r.zkey]=r.allergene_codes;
-    }
-  });
+  // Zutaten-/Allergen-Overrides einmal laden, damit die Gericht-Karten unten die vom Koch
+  // bearbeiteten Zutaten & Allergene zeigen — sonst sieht die Filiale immer nur den
+  // ursprünglichen Menü-Text.
+  const {zutatenMap:homeZutatenOverrideMap, allergenMap:homeAllergenOverrideMap}=await fetchZutatenAllergenOverrideMaps();
 
   let remindersHtml='';
   let monthlyCleaningHtml='';
@@ -3427,42 +3468,7 @@ async function renderHome(){
       <div style="flex:1;"><strong style="color:#E0521F;">📋 Übergabe-Notiz:</strong> ${uebergabeNotiz}</div>
       <button onclick="dismissUebergabeNotiz()" title="Als erledigt markieren" style="background:none;border:none;color:#B45309;font-size:14px;cursor:pointer;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
     </div>`:''}
-    ${(()=>{
-      const todayMenu=getTodayMenu()||[];
-      if(!todayMenu.length) return '';
-      let cardsHtml='';
-      let panelsHtml='';
-      todayMenu.forEach((d,i)=>{
-        const cat=mapDishNameToCategory(d.name, d.slot);
-        const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
-        const mainCodes=(zKeyHome && homeAllergenOverrideMap[zKeyHome])||homeAllergenOverrideMap[d.name]||d.allergene?.main||[];
-        const dressingCodes=d.allergene?.dressing||[];
-        const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
-        const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
-        const allNames=[...namesMain,...namesDressing];
-        const zutatenMerged=(zKeyHome && homeZutatenOverrideMap[zKeyHome])||homeZutatenOverrideMap[d.name]||d.zutaten;
-        const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
-        cardsHtml+=`<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
-          <div onclick="toggleDishAllergeneCard(${i})" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
-            ${dishVisual}
-            <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
-            <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
-            <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes)}${glutenfreiBadgeHtml(d.name, mainCodes)}</div>
-          </div>
-          <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
-            <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
-          </div>
-        </div>`;
-        // Zutaten-Panel bewusst NICHT in der schmalen Gericht-Spalte, sondern als eigener,
-        // volle-Breite-Bereich darunter — sonst kann sich die Zutatenliste nie richtig ausdehnen.
-        panelsHtml+=`<div id="dish-allergen-${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
-          <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
-          <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
-        </div>`;
-      });
-      return `<div class="kf-dishes" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${cardsHtml}</div>
-        <div id="dish-allergen-panels" style="margin-bottom:10px;">${panelsHtml}</div>`;
-    })()}
+    ${renderTodayDishCardsHtml(homeZutatenOverrideMap, homeAllergenOverrideMap, '')}
     ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="margin-bottom:6px;padding:8px 10px;">
       <div style="font-size:13px;font-weight:500;">🍰 Sweets &amp; Samosas</div>
       <div style="font-size:10px;color:var(--muted);margin-top:2px;">Zutaten ansehen</div>
@@ -3589,8 +3595,11 @@ function toggleDishAllergeneCard(i){
   const target=document.getElementById('dish-allergen-'+i);
   if(!target) return;
   const wasOpen=target.style.display!=='none' && target.style.display!=='';
-  // Immer erst alle anderen offenen Zutaten-Ansichten schließen — nie mehrere gleichzeitig offen
-  const panelsWrap=document.getElementById('dish-allergen-panels');
+  // Immer erst alle anderen offenen Zutaten-Ansichten INNERHALB DERSELBEN Karten-Gruppe schließen —
+  // über closest() statt fester ID, damit das auch funktioniert, wenn dieselbe Komponente mehrfach
+  // mit unterschiedlichem Prefix auf der Seite steht (Store-Startseite + Kitchen Daily Business
+  // teilen sich seit v6.99.16 dieselbe Funktion, siehe renderTodayDishCardsHtml).
+  const panelsWrap=target.closest('[id^="dish-allergen-panels"]');
   if(panelsWrap) panelsWrap.querySelectorAll('[id^="dish-allergen-"]').forEach(p=>{ p.style.display='none'; });
   target.style.display = wasOpen ? 'none' : 'block';
 }
@@ -13288,36 +13297,12 @@ async function renderKitchenDailyHtml(){
     <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${_kdWoche}</span>
   </div>`;
 
-  // Heutige Gerichte mit Allergenen
+  // Heutige Gerichte mit Allergenen — seit v6.99.16 dieselbe Komponente wie die Store-Startseite
+  // (renderTodayDishCardsHtml), damit Kitchen nicht mehr hinter den Filialen zurückbleibt und auch
+  // aufklappbare Zutaten inkl. Dip/Sauce/Toppings-Tabs bekommt (Wunsch Tini 07.09.26).
   html+=`<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">☕ WÄHREND DER SCHICHT</div>`;
-  html+=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">`;
-
-  const allDishes=[{cat:'SALAT',name:salatName},{...dishNames[0]&&{cat:'GERICHT 1',name:dishNames[0]}},{...dishNames[1]&&{cat:'GERICHT 2',name:dishNames[1]}}].filter(d=>d.name);
-
-  // Load allergene for today's dishes
-  const woche=getMenuWocheForDate(todayDate);
-  const menuEntries=getMenuDataForDate(todayDate)[`w${woche}_${wdStr}`]||[];
-  // Overrides aus der Datenbank mit einbeziehen — sonst zeigt diese Kärtchen-Ansicht Allergene, die
-  // der Koch grad über den Zutaten-Editor ergänzt hat, nicht an (Bug gefunden 07.09.26, Erdnuss-Fall).
-  const kdOverridesRaw = await api('allergene_rezepturen?select=gericht,zkey,allergene_codes').catch(()=>[]);
-  const kdOverrideMap = {};
-  (kdOverridesRaw||[]).forEach(e=>{ if(e.zkey) kdOverrideMap[e.zkey]=e; kdOverrideMap[e.gericht]=e; });
-
-  allDishes.forEach(d=>{
-    const entry=menuEntries.find(e=>e.name===d.name);
-    const zKeyKD = entry ? zutatenKey(woche, wdStr, entry.slot) : null;
-    const kdOverride = (zKeyKD && kdOverrideMap[zKeyKD]) || kdOverrideMap[d.name];
-    const mainCodesKD = (kdOverride?.allergene_codes?.length ? kdOverride.allergene_codes : (entry?.allergene?.main||[]));
-    const allergene=mainCodesKD.join(', ')||entry?.allergene_codes?.join(', ')||'keine Allergene angegeben';
-    html+=`<div style="flex:1;min-width:130px;background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;">
-      <div style="font-size:26px;line-height:1;margin-bottom:4px;">${getDishEmoji(d.name)}</div>
-      <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;">${d.cat}</div>
-      <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:2px;line-height:1.3;">${d.name}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodesKD)}${glutenfreiBadgeHtml(d.name, mainCodesKD)}</div>
-      <div style="font-size:9px;color:${allergene==='keine Allergene angegeben'?'var(--muted)':'#C2410C'};margin-top:4px;background:${allergene==='keine Allergene angegeben'?'var(--surface-1)':' #FFF7ED'};border-radius:4px;padding:2px 4px;">${allergene}</div>
-    </div>`;
-  });
-  html+='</div>';
+  const {zutatenMap:kdZutatenMap, allergenMap:kdAllergenMap}=await fetchZutatenAllergenOverrideMaps();
+  html+=renderTodayDishCardsHtml(kdZutatenMap, kdAllergenMap, 'kd');
 
   // Entsorgung
   html+=`<div onclick="goTo('disposal')" style="background:var(--surface-1);border:0.5px solid var(--border);border-radius:10px;padding:10px 14px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;gap:10px;">
