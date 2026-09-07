@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.9';
+const APP_VERSION = '6.99.10';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3118,12 +3118,18 @@ async function renderHome(){
   getProduktAllergene();
   // Zutaten-Overrides einmal laden, damit die Gericht-Karten unten die vom Koch bearbeiteten
   // Zutaten zeigen — sonst sieht die Filiale immer nur den ursprünglichen Menü-Text.
-  const homeZutatenOverrideRaw=await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
+  const homeZutatenOverrideRaw=await api('allergene_rezepturen?select=gericht,zutaten,zkey,allergene_codes').catch(()=>[]);
   const homeZutatenOverrideMap={};
+  const homeAllergenOverrideMap={};
   (homeZutatenOverrideRaw||[]).forEach(r=>{
-    if(!r.zutaten) return;
-    homeZutatenOverrideMap[r.gericht]=r.zutaten; // Fallback für Altbestand
-    if(r.zkey) homeZutatenOverrideMap[r.zkey]=r.zutaten; // stabiler Schlüssel hat Vorrang
+    if(r.zutaten){
+      homeZutatenOverrideMap[r.gericht]=r.zutaten; // Fallback für Altbestand
+      if(r.zkey) homeZutatenOverrideMap[r.zkey]=r.zutaten; // stabiler Schlüssel hat Vorrang
+    }
+    if(r.allergene_codes?.length){
+      homeAllergenOverrideMap[r.gericht]=r.allergene_codes;
+      if(r.zkey) homeAllergenOverrideMap[r.zkey]=r.allergene_codes;
+    }
   });
 
   let remindersHtml='';
@@ -3355,12 +3361,12 @@ async function renderHome(){
       let panelsHtml='';
       todayMenu.forEach((d,i)=>{
         const cat=mapDishNameToCategory(d.name, d.slot);
-        const mainCodes=d.allergene?.main||[];
+        const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
+        const mainCodes=(zKeyHome && homeAllergenOverrideMap[zKeyHome])||homeAllergenOverrideMap[d.name]||d.allergene?.main||[];
         const dressingCodes=d.allergene?.dressing||[];
         const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
         const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
         const allNames=[...namesMain,...namesDressing];
-        const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
         const zutatenMerged=(zKeyHome && homeZutatenOverrideMap[zKeyHome])||homeZutatenOverrideMap[d.name]||d.zutaten;
         const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
         cardsHtml+=`<div style="flex:1;min-width:110px;display:flex;flex-direction:column;">
