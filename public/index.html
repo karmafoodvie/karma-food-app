@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.6';
+const APP_VERSION = '6.99.8';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1832,6 +1832,14 @@ function getMenuEraForDate(dateStr){
 function getMenuEraLabelForDate(dateStr){
   return getMenuEraForDate(dateStr).label;
 }
+// Epochen-bewusster Ersatz für den rohen "MENU_DATA"-Zugriff — MENU_DATA (ohne Suffix) ist nur ein
+// Kompatibilitäts-Fallback (siehe MENU_ERAS[].data oben) und zeigt NICHT zuverlässig auf die zum
+// jeweiligen Datum passende Epoche. Bug gefunden 07.09.26 (erster Tag Herbst/Winter-Epoche): mehrere
+// Stellen lasen weiterhin direkt aus MENU_DATA und zeigten dadurch noch die alte Sommer-Zutatenliste,
+// obwohl schon die neue Epoche aktiv war.
+function getMenuDataForDate(dateStr){
+  return getMenuEraForDate(dateStr).data || {};
+}
 function getCurrentMenuWoche(){
   return getMenuWocheForDate(new Date().toISOString().split('T')[0]);
 }
@@ -1850,7 +1858,8 @@ function getTodayMenu(){
   const dayKey = WEEKDAY_MENU_KEY[wd];
   if(!dayKey) return null; // Wochenende
   const key = `w${CURRENT_MENU_WOCHE}_${dayKey}`;
-  return (typeof MENU_DATA !== 'undefined' && MENU_DATA[key]) ? MENU_DATA[key] : null;
+  const data = getMenuDataForDate();
+  return data[key] || null;
 }
 
 function getTodayDishNames(){
@@ -1888,12 +1897,14 @@ function guessZutatKat(name){
 }
 
 function parseZutatenText(text){
-  // Strip old section headers
+  // Strip old section headers UND neue Teil-Label-Zeilen (z.B. "RAITA:", seit v6.99.6) — beide
+  // dürfen hier nicht als Zutat landen, diese Funktion listet alles flach nach Zutatentyp auf.
   const lines=text.split('\n').filter(line=>{
     const l=line.trim().toUpperCase();
     return !l.startsWith('GEM') && !l.startsWith('GEW') && !l.startsWith('GRUNDZ')
         && !l.startsWith('GETREIDE') && !l.startsWith('BEILAGE:') && !l.startsWith('ZUTATEN')
-        && !l.startsWith('ÖL/') && !l.startsWith('DRESSING:') && l!=='';
+        && !l.startsWith('ÖL/') && !l.startsWith('DRESSING:') && l!==''
+        && !/^[^,]{1,30}:$/.test(line.trim());
   });
   const items=lines.join(',').split(',').map(s=>s.trim()).filter(Boolean);
   const upToTitle={}; ZUTAT_KAT_ORDER.forEach((k,i)=>{ upToTitle[ZUTAT_KAT_ORDER_UP[i]]=k; });
@@ -2187,7 +2198,7 @@ async function waitForElAndSetText(id, getTextFn, maxWaitMs=10000){
 let _ztTileCounter=0;
 function renderZutatenReadOnly(text){
   if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
-  const items=text.split(/[,\n]/).map(s=>s.trim()).filter(s=>s && !/^(GEM|GEW|GRUNDZ|GETREIDE|BEILAGE:|ZUTATEN|ÖL\/|DRESSING:)/i.test(s));
+  const items=text.split(/[,\n]/).map(s=>s.trim()).filter(s=>s && !/^(GEM|GEW|GRUNDZ|GETREIDE|BEILAGE:|ZUTATEN|ÖL\/|DRESSING:)/i.test(s) && !/^[^,]{1,30}:$/.test(s));
   if(!items.length) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
   const byKat={};
   items.forEach(item=>{
@@ -2298,9 +2309,12 @@ async function buildZutatenIndex(){
     else entries.push({name:m.name, norm, isMaster:true, kategorie:m.kategorie, variants:[]}); // Fallback falls Basis fehlt
   });
   // Freitext aus Rezepten ergänzen — dedupliziert per Normalisierung, NICHT mehr case-sensitive
-  if(typeof MENU_DATA!=='undefined'){
-    Object.keys(MENU_DATA).forEach(key=>{
-      (MENU_DATA[key]||[]).forEach(dish=>{
+  // Alle Epochen durchsuchen (nicht nur die aktuell aktive), damit auch Zutaten aus Sommer- oder
+  // künftigen Gerichten in der Vorschlagsliste auftauchen.
+  MENU_ERAS.forEach(era=>{
+    const eraData=era.data||{};
+    Object.keys(eraData).forEach(key=>{
+      (eraData[key]||[]).forEach(dish=>{
         (dish.zutaten||'').split(',').forEach(z=>{
           const t=z.trim();
           if(!t) return;
@@ -2311,7 +2325,7 @@ async function buildZutatenIndex(){
         });
       });
     });
-  }
+  });
   entries.sort((a,b)=>a.name.localeCompare(b.name,'de'));
   _zutatenIndexCache=entries;
   return entries;
@@ -2414,16 +2428,17 @@ let _zutatenVocabCache=null;
 function getZutatenVocabulary(){
   if(_zutatenVocabCache) return _zutatenVocabCache;
   const set=new Set();
-  if(typeof MENU_DATA!=='undefined'){
-    Object.keys(MENU_DATA).forEach(key=>{
-      (MENU_DATA[key]||[]).forEach(dish=>{
+  MENU_ERAS.forEach(era=>{
+    const eraData=era.data||{};
+    Object.keys(eraData).forEach(key=>{
+      (eraData[key]||[]).forEach(dish=>{
         (dish.zutaten||'').split(',').forEach(z=>{
           const t=z.trim();
           if(t) set.add(t);
         });
       });
     });
-  }
+  });
   _zutatenVocabCache=[...set].sort((a,b)=>a.localeCompare(b,'de'));
   return _zutatenVocabCache;
 }
@@ -8934,7 +8949,7 @@ function renderAllergeneCheatlist(list, todayMenu=[]){
   // Zeile fallen zurück auf "Dressing" (Rückwärtskompatibilität zu vor v6.99.6).
   function looksLikeLabelLine(line){
     const t=line.trim();
-    return t.length>0 && t.length<30 && !t.includes(',') && !/[.]{2,}/.test(t);
+    return /^[^,]{1,30}:$/.test(t);
   }
   function parseZutatenSections(zutaten){
     if(!zutaten) return [];
@@ -13060,7 +13075,7 @@ async function renderKitchenDaily(){
   const wd=new Date().getDay();
   const wdStr=WEEKDAY_STR[wd]||'mo';
   const woche=getMenuWocheForDate(todayDate);
-  const menuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${woche}_${wdStr}`])||[];
+  const menuEntries=getMenuDataForDate(todayDate)[`w${woche}_${wdStr}`]||[];
   const dishNames=getMenuDishNamesForDay(wdStr, todayDate);
   const salatName=getSalatNameForDate(todayDate);
 
@@ -13198,7 +13213,7 @@ async function renderKitchenDailyHtml(){
 
   // Load allergene for today's dishes
   const woche=getMenuWocheForDate(todayDate);
-  const menuEntries=(typeof MENU_DATA!=='undefined'&&MENU_DATA[`w${woche}_${wdStr}`])||[];
+  const menuEntries=getMenuDataForDate(todayDate)[`w${woche}_${wdStr}`]||[];
 
   allDishes.forEach(d=>{
     const entry=menuEntries.find(e=>e.name===d.name);
@@ -13517,7 +13532,7 @@ async function renderKitchen(){
 
     DAYS_ORDER.forEach(day=>{
       const key=`w${selectedWoche}_${day}`;
-      const dishes=(typeof MENU_DATA!=='undefined'&&MENU_DATA[key])||[];
+      const dishes=getMenuDataForDate()[key]||[];
       const isToday=day===todayWd && selectedWoche===CURRENT_MENU_WOCHE;
       html+=`<div style="border:${isToday?'2px solid var(--green)':'0.5px solid var(--border)'};border-radius:12px;margin-bottom:10px;overflow:hidden;">
         <div style="background:${isToday?'var(--green)':'#F5F5F3'};padding:8px 14px;font-size:13px;font-weight:700;color:${isToday?'#fff':'var(--sub)'};">${DAYS_FULL[day]}${isToday?' 👈 Heute':''}</div>`;
@@ -14325,7 +14340,7 @@ async function renderMenuWoche(el, tabHtml){
 
   DAYS_ORDER.forEach(day=>{
     const key = `w${woche}_${day}`;
-    const dishes = (typeof MENU_DATA!=='undefined'&&MENU_DATA[key])||[];
+    const dishes = getMenuDataForDate()[key]||[];
     if(!dishes.length) return;
     const isToday = day===todayWd;
     html += `<div style="font-size:12px;font-weight:700;color:${isToday?'var(--green)':'var(--sub)'};letter-spacing:.04em;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid ${isToday?'var(--green)':'var(--border)'};">${DAYS_DE[day]}${isToday?' 👈 HEUTE':''}</div>`;
