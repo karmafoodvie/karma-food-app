@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.27';
+const APP_VERSION = '6.99.29';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10226,7 +10226,9 @@ async function renderWaehrend(){
           <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">
             ${KF_TAGS.map(t=>`<button type="button" data-dish="${escAttr(d.name)}" data-tag="${t.k}" onclick="toggleFeedbackTag(this)" style="padding:5px 9px;border:1.5px solid ${t.neg?'#FCA5A5':'#86EFAC'};border-radius:16px;background:#fff;color:#444;font-size:11px;cursor:pointer;">${t.label}</button>`).join('')}
           </div>
-          <input type="text" data-dish="${escAttr(d.name)}" placeholder="Passt nichts davon? Kurz reinschreiben…" oninput="setFeedbackNote(this)" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:11.5px;box-sizing:border-box;">
+          <input type="text" data-dish="${escAttr(d.name)}" placeholder="Passt nichts davon? Kurz reinschreiben…" oninput="setFeedbackNote(this)" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:11.5px;box-sizing:border-box;margin-bottom:6px;">
+          <div style="font-size:9.5px;color:var(--muted);margin-bottom:4px;">Was bräuchte es, dass es eine 5/5 wird? (optional)</div>
+          <input type="text" data-dish="${escAttr(d.name)}" placeholder="z.B. mehr Würze, weniger scharf…" oninput="setFeedbackImprove(this)" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:11.5px;box-sizing:border-box;">
         </div>`:''}
       </div>`;
     });
@@ -11122,6 +11124,13 @@ function setFeedbackNote(input){
   _feedbackDraft[dish].note=input.value.trim()||null;
 }
 window.setFeedbackNote=setFeedbackNote;
+
+function setFeedbackImprove(input){
+  const dish=input.dataset.dish;
+  if(!_feedbackDraft[dish]) _feedbackDraft[dish]={v:null, tags:[]};
+  _feedbackDraft[dish].improve=input.value.trim()||null;
+}
+window.setFeedbackImprove=setFeedbackImprove;
 
 async function submitFeedback(){
   const name=document.getElementById('feedback-name')?.value?.trim();
@@ -14026,103 +14035,134 @@ function formatZutatenFuerKoch(zutaten, allergene){
 
 let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 
-// Feedback-Zusammenfassung fürs "letzte Mal", als ein Gericht serviert wurde (20.08.26).
+// Feedback-Zusammenfassung: HEUTE und LETZTES MAL (vor heute) getrennt, damit die Überschrift nie
+// "letztes Mal" sagt, während eigentlich schon heutiges Feedback drinsteht (Verwirrung gemeldet
+// 07.09.26, Wunsch Tini: beides klar getrennt zeigen statt nur das jeweils neueste Datum).
 // Zwei Quellen: essen_feedback (Team, ratings ist JSON {gericht:wert}) + kunden_feedback
-// (Besucher:innen, dish_name direkt). Gibt Team-Ø, Kund:innen-Ø und Top-Tags zurück.
+// (Besucher:innen, dish_name direkt). Gibt für beide Zeiträume Ø, Anzahl, Notizen, Top-Tags zurück.
 async function getDishFeedbackSummary(dishName, refDateStr){
-  // Bezugsdatum: standardmäßig echtes "heute". lte statt lt, damit beim Anschauen von "Heute"
-  // bereits heute abgegebenes Feedback SOFORT als direkte Rückmeldung zählt, nicht erst beim
-  // nächsten Mal (Wunsch Tini, 26.08.26) — betrifft auch weiterhin korrekt Tage in der Zukunft,
-  // da für die selbst noch keine Daten existieren.
   const heute=refDateStr || new Date().toISOString().split('T')[0];
   const [teamRows, kundenRows] = await Promise.all([
     api(`essen_feedback?datum=lte.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
     api(`kunden_feedback?dish_name=eq.${encodeURIComponent(dishName)}&submitted_at=lte.${heute}T23:59:59&select=rating,quick_tags,kommentar,submitted_at&order=submitted_at.desc&limit=400`).catch(()=>[])
   ]);
 
-  let teamLastDate=null;
-  for(const r of (teamRows||[])){
-    if(r.ratings && r.ratings[dishName]!=null){ teamLastDate=r.datum; break; }
+  function summarizeTeam(dateFilterFn){
+    let date=null;
+    for(const r of (teamRows||[])){
+      if(r.ratings && r.ratings[dishName]!=null && dateFilterFn(r.datum)){ date=r.datum; break; }
+    }
+    let avg=null, count=0; const tagCounts={}; const notes=[];
+    if(date){
+      const sameDay=(teamRows||[]).filter(r=>r.datum===date && r.ratings && r.ratings[dishName]!=null);
+      count=sameDay.length;
+      const vals=sameDay.map(r=>{ const rec=r.ratings[dishName]; return (rec && typeof rec==='object')?rec.v:rec; }).filter(v=>v!=null);
+      if(vals.length) avg=vals.reduce((s,v)=>s+Number(v),0)/vals.length;
+      sameDay.forEach(r=>{
+        const rec=r.ratings[dishName];
+        const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
+        tags.forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1);
+        const note=(rec && typeof rec==='object')?rec.note:null;
+        if(note) notes.push(note);
+        const improve=(rec && typeof rec==='object')?rec.improve:null;
+        if(improve) notes.push('→ Für 5/5: '+improve);
+      });
+    }
+    return {avg, count, date, notes, tagCounts};
   }
-  let teamAvg=null, teamCount=0;
-  const teamTagCounts={};
-  const teamNotes=[];
-  if(teamLastDate){
-    const sameDay=(teamRows||[]).filter(r=>r.datum===teamLastDate && r.ratings && r.ratings[dishName]!=null);
-    teamCount=sameDay.length;
-    // Rückwärtskompatibel: alte Einträge haben hier eine reine Zahl statt {v,tags}.
-    const vals=sameDay.map(r=>{ const rec=r.ratings[dishName]; return (rec && typeof rec==='object')?rec.v:rec; }).filter(v=>v!=null);
-    if(vals.length) teamAvg=vals.reduce((s,v)=>s+Number(v),0)/vals.length;
-    sameDay.forEach(r=>{
-      const rec=r.ratings[dishName];
-      const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
-      tags.forEach(t=>teamTagCounts[t]=(teamTagCounts[t]||0)+1);
-      const note=(rec && typeof rec==='object')?rec.note:null;
-      if(note) teamNotes.push(note);
-    });
+  function summarizeKunden(dateFilterFn){
+    let date=null;
+    for(const r of (kundenRows||[])){
+      const d=(r.submitted_at||'').split('T')[0];
+      if(d && dateFilterFn(d)){ date=d; break; }
+    }
+    let avg=null, count=0; const tagCounts={}; const notes=[];
+    if(date){
+      const sameDay=(kundenRows||[]).filter(r=>(r.submitted_at||'').split('T')[0]===date);
+      count=sameDay.length;
+      const rated=sameDay.filter(r=>r.rating!=null);
+      if(rated.length) avg=(rated.reduce((s,r)=>s+Number(r.rating),0)/rated.length);
+      sameDay.forEach(r=>{
+        (r.quick_tags||[]).forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1);
+        if(r.kommentar) notes.push(r.kommentar);
+      });
+    }
+    return {avg, count, date, notes, tagCounts};
   }
 
-  let kundenLastDate=null;
-  if((kundenRows||[]).length){ kundenLastDate=(kundenRows[0].submitted_at||'').split('T')[0]; }
-  let kundenAvg=null, kundenCount=0;
-  const tagCounts={};
-  const kundenNotes=[];
-  if(kundenLastDate){
-    const sameDay=(kundenRows||[]).filter(r=>(r.submitted_at||'').split('T')[0]===kundenLastDate);
-    kundenCount=sameDay.length;
-    const rated=sameDay.filter(r=>r.rating!=null);
-    if(rated.length) kundenAvg=(rated.reduce((s,r)=>s+Number(r.rating),0)/rated.length);
-    sameDay.forEach(r=>{
-      (r.quick_tags||[]).forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1);
-      if(r.kommentar) kundenNotes.push(r.kommentar);
-    });
-  }
-  // Team- und Kund:innen-Tags gemeinsam zählen — beide Quellen nutzen dieselbe Tag-Liste (KF_TAGS).
-  Object.entries(teamTagCounts).forEach(([k,c])=>tagCounts[k]=(tagCounts[k]||0)+c);
-  const topTags=Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const teamToday=summarizeTeam(d=>d===heute);
+  const teamLast=summarizeTeam(d=>d!==heute);
+  const kundenToday=summarizeKunden(d=>d===heute);
+  const kundenLast=summarizeKunden(d=>d!==heute);
 
-  return {teamAvg, teamCount, teamLastDate, teamNotes, kundenAvg, kundenCount, kundenLastDate, kundenNotes, topTags};
+  function combineTags(team, kunden){
+    const tagCounts={...team.tagCounts};
+    Object.entries(kunden.tagCounts).forEach(([k,c])=>tagCounts[k]=(tagCounts[k]||0)+c);
+    return Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  }
+
+  return {
+    today:{teamAvg:teamToday.avg, teamCount:teamToday.count, teamNotes:teamToday.notes,
+           kundenAvg:kundenToday.avg, kundenCount:kundenToday.count, kundenNotes:kundenToday.notes,
+           topTags:combineTags(teamToday, kundenToday)},
+    lastTime:{teamAvg:teamLast.avg, teamCount:teamLast.count, teamDate:teamLast.date, teamNotes:teamLast.notes,
+              kundenAvg:kundenLast.avg, kundenCount:kundenLast.count, kundenDate:kundenLast.date, kundenNotes:kundenLast.notes,
+              topTags:combineTags(teamLast, kundenLast)}
+  };
 }
 
 function feedbackSummaryHtml(sum){
-  if(!sum || (sum.teamAvg==null && sum.kundenAvg==null)){
-    return `<div style="font-size:11px;color:var(--muted);">Noch kein Feedback vom letzten Mal vorhanden.</div>`;
+  if(!sum) return `<div style="font-size:11px;color:var(--muted);">Feedback konnte nicht geladen werden.</div>`;
+  const {today, lastTime}=sum;
+  const hasToday=today.teamAvg!=null || today.kundenAvg!=null;
+  const hasLastTime=lastTime.teamAvg!=null || lastTime.kundenAvg!=null;
+  if(!hasToday && !hasLastTime){
+    return `<div style="font-size:11px;color:var(--muted);">Noch kein Feedback vorhanden.</div>`;
   }
   const emojiFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
-  const todayReal=new Date().toISOString().split('T')[0];
-  const dateFmt=(d)=>{ if(!d) return ''; if(d===todayReal) return 'heute'; return '🕐 letztes Mal '+new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}); };
-  const boxId='fbnotes-'+Math.random().toString(36).slice(2,9);
-  const hasTeamNotes=sum.teamNotes && sum.teamNotes.length;
-  const hasKundenNotes=sum.kundenNotes && sum.kundenNotes.length;
-  const clickAttr=(hasTeamNotes||hasKundenNotes)?`onclick="const b=document.getElementById('${boxId}');b.style.display=b.style.display==='none'?'block':'none';" style="cursor:pointer;"`:'';
-  let html=`<div ${clickAttr}>`;
-  html+=`<div style="display:flex;gap:8px;margin-bottom:8px;">`;
-  html+=`<div style="flex:1;background:#FDF2F8;border-radius:8px;padding:8px 10px;text-align:center;">
-    <div style="font-size:9px;font-weight:700;color:#9D2463;letter-spacing:.04em;">👥 TEAM</div>
-    ${sum.teamAvg!=null?`<div style="font-size:18px;">${emojiFor(sum.teamAvg)}</div><div style="font-size:12px;font-weight:700;">${sum.teamAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${sum.teamCount}× · ${dateFmt(sum.teamLastDate)}${hasTeamNotes?' · 💬':''}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
-  </div>`;
-  html+=`<div style="flex:1;background:#FFF7ED;border-radius:8px;padding:8px 10px;text-align:center;">
-    <div style="font-size:9px;font-weight:700;color:#B8460F;letter-spacing:.04em;">🗣️ GÄSTE</div>
-    ${sum.kundenAvg!=null?`<div style="font-size:18px;">${emojiFor(sum.kundenAvg)}</div><div style="font-size:12px;font-weight:700;">${sum.kundenAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${sum.kundenCount}× · ${dateFmt(sum.kundenLastDate)}${hasKundenNotes?' · 💬':''}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
-  </div>`;
-  html+=`</div>`;
-  if(sum.topTags && sum.topTags.length){
-    html+=`<div style="display:flex;flex-wrap:wrap;gap:4px;">${sum.topTags.map(([k,c])=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};">${t?t.label:k}${c>1?` ×${c}`:''}</span>`;}).join('')}</div>`;
-  }
-  html+=`</div>`;
-  if(hasTeamNotes||hasKundenNotes){
-    html+=`<div id="${boxId}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">`;
-    if(hasTeamNotes){
-      html+=`<div style="font-size:9px;font-weight:700;color:#9D2463;margin-bottom:3px;">👥 TEAM SAGT:</div>`;
-      sum.teamNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+  const dateFmt=(d)=>d?new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'';
+
+  function block(label, s, dateLabelFn){
+    const hasTeamNotes=s.teamNotes && s.teamNotes.length;
+    const hasKundenNotes=s.kundenNotes && s.kundenNotes.length;
+    const boxId='fbnotes-'+Math.random().toString(36).slice(2,9);
+    const clickAttr=(hasTeamNotes||hasKundenNotes)?`onclick="const b=document.getElementById('${boxId}');b.style.display=b.style.display==='none'?'block':'none';" style="cursor:pointer;"`:'';
+    let html=`<div style="margin-bottom:10px;">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:5px;">${label}</div>
+      <div ${clickAttr}>
+      <div style="display:flex;gap:8px;margin-bottom:6px;">
+        <div style="flex:1;background:#FDF2F8;border-radius:8px;padding:8px 10px;text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:#9D2463;letter-spacing:.04em;">👥 TEAM</div>
+          ${s.teamAvg!=null?`<div style="font-size:18px;">${emojiFor(s.teamAvg)}</div><div style="font-size:12px;font-weight:700;">${s.teamAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${s.teamCount}× ${dateLabelFn(s.teamDate)}${hasTeamNotes?' · 💬':''}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
+        </div>
+        <div style="flex:1;background:#FFF7ED;border-radius:8px;padding:8px 10px;text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:#B8460F;letter-spacing:.04em;">🗣️ GÄSTE</div>
+          ${s.kundenAvg!=null?`<div style="font-size:18px;">${emojiFor(s.kundenAvg)}</div><div style="font-size:12px;font-weight:700;">${s.kundenAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${s.kundenCount}× ${dateLabelFn(s.kundenDate)}${hasKundenNotes?' · 💬':''}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
+        </div>
+      </div>`;
+    if(s.topTags && s.topTags.length){
+      html+=`<div style="display:flex;flex-wrap:wrap;gap:4px;">${s.topTags.map(([k,c])=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};">${t?t.label:k}${c>1?` ×${c}`:''}</span>`;}).join('')}</div>`;
     }
-    if(hasKundenNotes){
-      html+=`<div style="font-size:9px;font-weight:700;color:#B8460F;margin-bottom:3px;${hasTeamNotes?'margin-top:6px;':''}">🗣️ GÄSTE SAGEN:</div>`;
-      sum.kundenNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+    if(hasTeamNotes||hasKundenNotes){
+      html+=`<div id="${boxId}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">`;
+      if(hasTeamNotes){
+        html+=`<div style="font-size:9px;font-weight:700;color:#9D2463;margin-bottom:3px;">👥 TEAM SAGT:</div>`;
+        s.teamNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+      }
+      if(hasKundenNotes){
+        html+=`<div style="font-size:9px;font-weight:700;color:#B8460F;margin-bottom:3px;${hasTeamNotes?'margin-top:6px;':''}">🗣️ GÄSTE SAGEN:</div>`;
+        s.kundenNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+      }
+      html+=`</div>`;
     }
-    html+=`</div>`;
+    html+=`</div></div>`;
+    return html;
   }
-  return html;
+
+  let out='';
+  out+=block('📅 HEUTE', today, ()=>'');
+  out+=block('🕐 LETZTES MAL', lastTime, (d)=>d?('· '+dateFmt(d)):'');
+  return out;
 }
 
 async function loadDishFeedbackInto(elemId, dishName, refDateStr){
@@ -14411,7 +14451,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
         <span style="font-size:20px;">${getDishEmoji(dish)}</span>
         <span style="font-size:13.5px;font-weight:700;" data-no-translate>${dish}</span>
       </div>
-      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">💬 SO KAM'S LETZTES MAL AN</div>
+      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">💬 FEEDBACK</div>
       <div id="${fbId}" style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);">Wird geladen…</div></div>
       <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:4px;">🧂 ZUTATEN</div>
       <div style="font-size:11px;line-height:1.6;">${renderZutatenReadOnly(zutaten)}</div>
