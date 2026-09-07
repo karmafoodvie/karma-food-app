@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.20';
+const APP_VERSION = '6.99.22';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3190,7 +3190,12 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
   // Reis als eigene Karte neben den Gerichten — bisher immer Kurkuma Reis (REIS_DISH_NAME), künftig
   // wechselnde Reissorten pro Woche/Tag (Wunsch Tini 07.09.26). Sobald echte, wechselnde Namen da
   // sind, hier place der Konstante durch eine pro Datum berechnete Zuordnung ersetzen.
-  const todayMenu=[...todayMenuRaw, {name:REIS_DISH_NAME, slot:'reis', allergene:{main:[],dressing:[]}, zutaten:''}];
+  // Samosas direkt daneben (Wunsch Tini 07.09.26) — beide brauchen wenig Platz, stehen dadurch
+  // gemeinsam in einer Zeile statt dass Reis allein umbricht.
+  const todayMenu=[...todayMenuRaw,
+    {name:REIS_DISH_NAME, slot:'reis', allergene:{main:[],dressing:[]}, zutaten:''},
+    {name:'Samosa', slot:'samosa', allergene:{main:['A'],dressing:[]}, zutaten:'WEIZENMEHL, Kartoffeln, Erbsen, Kreuzkümmel, Koriandersamen, Kasoori Methi (Bockshornklee), Salz, Chiliflocken, Ajwain, Öl'}
+  ];
   let cardsHtml='';
   let panelsHtml='';
   todayMenu.forEach((d,i)=>{
@@ -4728,6 +4733,7 @@ function mapDishNameToCategory(dishName, slot){
   // Slot hat immer Vorrang — das ist die verlässlichste Information.
   if(slot==='salat') return 'Salat';
   if(slot==='reis') return 'Reis';
+  if(slot==='samosa') return 'Samosas';
   if(SPECIAL_DECLARED_DISHES.includes(n.trim())) return 'Special';
   // WICHTIG: Erst die konkreten Hauptgerichte prüfen, DANN erst Reis. Sonst wird z.B.
   // "Parmesan-Basilikum-Meatballs mit Gewürzreis" wegen des Wortteils "…reis" fälschlich als
@@ -14036,16 +14042,15 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     if(currentView==='kitchen' && kitchenTab==='morgen') renderKitchen();
     else clearInterval(window._morgenKochRefreshTimer);
   }, 60000);
-  // dayOffset: null = auto (morgen), 0 = heute, 1 = übermorgen etc. — außer morgen ist Samstag/Sonntag (nicht gekocht),
-  // dann automatisch weiter auf den nächsten Montag springen.
-  // Calculate cook day based on offset (skip weekends)
+  // dayOffset: null = auto (heute, außer Wochenende -> nächster Montag), 0 = heute, 1 = morgen etc.
+  // (07.09.26: zurückgestellt von "morgen" auf "heute" als Standard, Wunsch Tini — war früher schon
+  // mal so eingestellt.)
   if(window._morgenDayOffset===undefined) window._morgenDayOffset=null;
   const _offset = dayOffset!==null ? dayOffset : (window._morgenDayOffset!==null ? window._morgenDayOffset : null);
   const tomorrow = new Date();
   if(_offset!==null){
     tomorrow.setDate(tomorrow.getDate()+_offset);
   } else {
-    tomorrow.setDate(tomorrow.getDate()+1);
     while([0,6].includes(tomorrow.getDay())){ tomorrow.setDate(tomorrow.getDate()+1); }
   }
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
