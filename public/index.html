@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.8';
+const APP_VERSION = '6.99.9';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13214,10 +13214,17 @@ async function renderKitchenDailyHtml(){
   // Load allergene for today's dishes
   const woche=getMenuWocheForDate(todayDate);
   const menuEntries=getMenuDataForDate(todayDate)[`w${woche}_${wdStr}`]||[];
+  // Overrides aus der Datenbank mit einbeziehen — sonst zeigt diese Kärtchen-Ansicht Allergene, die
+  // der Koch grad über den Zutaten-Editor ergänzt hat, nicht an (Bug gefunden 07.09.26, Erdnuss-Fall).
+  const kdOverridesRaw = await api('allergene_rezepturen?select=gericht,zkey,allergene_codes').catch(()=>[]);
+  const kdOverrideMap = {};
+  (kdOverridesRaw||[]).forEach(e=>{ if(e.zkey) kdOverrideMap[e.zkey]=e; kdOverrideMap[e.gericht]=e; });
 
   allDishes.forEach(d=>{
     const entry=menuEntries.find(e=>e.name===d.name);
-    const mainCodesKD=entry?.allergene?.main||[];
+    const zKeyKD = entry ? zutatenKey(woche, wdStr, entry.slot) : null;
+    const kdOverride = (zKeyKD && kdOverrideMap[zKeyKD]) || kdOverrideMap[d.name];
+    const mainCodesKD = (kdOverride?.allergene_codes?.length ? kdOverride.allergene_codes : (entry?.allergene?.main||[]));
     const allergene=mainCodesKD.join(', ')||entry?.allergene_codes?.join(', ')||'keine Allergene angegeben';
     html+=`<div style="flex:1;min-width:130px;background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;">
       <div style="font-size:26px;line-height:1;margin-bottom:4px;">${getDishEmoji(d.name)}</div>
