@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.11';
+const APP_VERSION = '6.99.12';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2203,24 +2203,22 @@ async function waitForElAndSetText(id, getTextFn, maxWaitMs=10000){
 }
 
 let _ztTileCounter=0;
-function renderZutatenReadOnly(text){
-  if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
+let _ztTabCounter=0;
+// Baut das Kachel-Raster (gruppiert nach Zutatentyp) für einen Text-Abschnitt — ausgelagert aus
+// renderZutatenReadOnly, damit dieselbe Logik für "Gericht" UND "Dip/Sauce/Toppings" getrennt
+// aufgerufen werden kann (Tab-Aufteilung, Wunsch Tini 07.09.26).
+function _ztBuildGrid(text){
+  if(!text) return {html:'<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>', pending:[]};
   const items=text.split(/[,\n]/).map(s=>s.trim()).filter(s=>s && !/^(GEM|GEW|GRUNDZ|GETREIDE|BEILAGE:|ZUTATEN|ÖL\/|DRESSING:)/i.test(s) && !/^[^,]{1,30}:$/.test(s));
-  if(!items.length) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
+  if(!items.length) return {html:'<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>', pending:[]};
   const byKat={};
   items.forEach(item=>{
     const k=getEffectiveKat(item);
     (byKat[k]=byKat[k]||[]).push(item);
   });
   const sorted=ZUTAT_KAT_ORDER_UP.filter(k=>byKat[k]).concat(Object.keys(byKat).filter(k=>!ZUTAT_KAT_ORDER_UP.includes(k)));
-  // Anzeige-Label in gewohnter Schreibweise (z.B. "Gemüse" statt "GEMÜSE") fürs senkrechte Etikett
   const katLabel={}; ZUTAT_KAT_ORDER.forEach((k,i)=>{ katLabel[ZUTAT_KAT_ORDER_UP[i]]=k; });
-
-  // Zweisprachige Kacheln (25.08.26, Wunsch Tini, für den englischsprachigen Chefkoch): Deutsch
-  // groß wie bisher, Englisch klein darunter — lädt im Hintergrund per Übersetzung nach, damit
-  // die Kachel sofort erscheint statt auf jede einzelne Übersetzung zu warten.
-  const pendingTranslations=[];
-
+  const pending=[];
   let html='';
   sorted.forEach(kat=>{
     const color=ZUTAT_KAT_COLOR[kat]||'#7D7268';
@@ -2230,10 +2228,7 @@ function renderZutatenReadOnly(text){
       const isA=masterHit ? (masterHit.allergene_codes?.length>0) : ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
       const displayName=getEffectiveName(item);
       const enId=`zt-en-${_ztTileCounter++}`;
-      pendingTranslations.push({id:enId, text:displayName});
-      // Quadrat-Trick über padding-bottom:100% statt aspect-ratio — funktioniert garantiert in
-      // JEDEM Browser/Webview, auch älteren, die die neuere aspect-ratio-Eigenschaft nicht
-      // unterstützen (das war der Grund, warum es vorher trotz Fix noch nicht quadratisch war).
+      pending.push({id:enId, text:displayName});
       tiles+=`<div style="position:relative;width:100%;padding-bottom:100%;">
         <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
           <div style="width:16px;height:16px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
@@ -2250,17 +2245,56 @@ function renderZutatenReadOnly(text){
       <div style="flex:1;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;align-items:start;">${tiles}</div>
     </div>`;
   });
-
-  // Übersetzungen im Hintergrund nachladen — wartet auf jede Kachel einzeln, statt einen festen
-  // Timer zu verwenden (siehe waitForElAndSetText oben).
-  pendingTranslations.forEach(({id,text})=>{
+  return {html, pending};
+}
+function _ztLoadTranslations(pending){
+  pending.forEach(({id,text})=>{
     waitForElAndSetText(id, async ()=>{
       const en=await txToEnglish(text);
       return (en && en.toUpperCase()!==text.toUpperCase()) ? en : null;
     });
   });
+}
+function renderZutatenReadOnly(text){
+  if(!text) return '<span style="font-size:11px;color:var(--muted);">Keine Zutaten hinterlegt</span>';
 
-  return html;
+  // Text in Hauptteil ("Gericht") + benannte Extra-Teile (Raita/Dip/Sauce/Chutney/Toppings, seit
+  // v6.99.6 per Leerzeile + "NAME:"-Zeile markiert) aufteilen. Bei mehreren Extra-Teilen werden sie
+  // HIER bewusst zusammengeführt (nicht einzeln), weil die Crew sie gemeinsam in einem "Dip/Sauce/
+  // Toppings"-Tab sehen will (Wunsch Tini 07.09.26) statt für jeden Teil einen eigenen Tab zu bauen.
+  const rawParts=text.split(/\n\s*\n/).map(p=>p.trim()).filter(Boolean);
+  let mainText=text, extraText='';
+  if(rawParts.length>1){
+    mainText=rawParts[0];
+    const extraChunks=[];
+    for(let i=1;i<rawParts.length;i++){
+      const lines=rawParts[i].split('\n').map(l=>l.trim()).filter(Boolean);
+      if(lines.length>1 && /^[^,]{1,30}:$/.test(lines[0])){
+        extraChunks.push(lines.slice(1).join(' '));
+      } else {
+        extraChunks.push(rawParts[i].replace(/\n/g,' '));
+      }
+    }
+    extraText=extraChunks.join(', ');
+  }
+
+  const mainResult=_ztBuildGrid(mainText);
+  if(!extraText){
+    _ztLoadTranslations(mainResult.pending);
+    return mainResult.html;
+  }
+  const extraResult=_ztBuildGrid(extraText);
+  _ztLoadTranslations([...mainResult.pending, ...extraResult.pending]);
+  const tg=`zt-tabs-${_ztTabCounter++}`;
+  const mainId=`${tg}-main`, extraId=`${tg}-extra`, btnMainId=`${tg}-btn-main`, btnExtraId=`${tg}-btn-extra`;
+  const activeStyle='flex:1;padding:8px 0;font-size:11.5px;font-weight:700;letter-spacing:0.02em;border:none;border-radius:8px;cursor:pointer;background:var(--green);color:#fff;';
+  const inactiveStyle='flex:1;padding:8px 0;font-size:11.5px;font-weight:700;letter-spacing:0.02em;border:none;border-radius:8px;cursor:pointer;background:var(--surface-1);color:var(--sub);';
+  return `<div style="display:flex;gap:6px;margin-bottom:12px;">
+    <button id="${btnMainId}" onclick="document.getElementById('${mainId}').style.display='block';document.getElementById('${extraId}').style.display='none';document.getElementById('${btnMainId}').setAttribute('style','${activeStyle}');document.getElementById('${btnExtraId}').setAttribute('style','${inactiveStyle}');" style="${activeStyle}">GERICHT</button>
+    <button id="${btnExtraId}" onclick="document.getElementById('${extraId}').style.display='block';document.getElementById('${mainId}').style.display='none';document.getElementById('${btnExtraId}').setAttribute('style','${activeStyle}');document.getElementById('${btnMainId}').setAttribute('style','${inactiveStyle}');" style="${inactiveStyle}">DIP/SAUCE/TOPPINGS</button>
+  </div>
+  <div id="${mainId}" style="display:block;">${mainResult.html}</div>
+  <div id="${extraId}" style="display:none;">${extraResult.html}</div>`;
 }
 
 // Render editable ingredient list — uses contenteditable with data-dish
