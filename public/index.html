@@ -435,7 +435,7 @@ const ARTICLE_COLORS={'Bowl Sauce':'#1D4ED8','Sauce Bowl/Salat':'#1D4ED8','Limet
 // "Eier", L war "Sesam" statt "Sellerie", N war "Nüsse" statt "Sesam") — am 30.07.26 korrigiert
 // und die 3 betroffenen Datenbank-Einträge entsprechend migriert.
 const ALLERGEN_NAMES={A:'Gluten',B:'Krebstiere',C:'Eier',D:'Fisch',E:'Erdnüsse',F:'Soja',G:'Milch',H:'Nüsse',L:'Sellerie',M:'Senf',N:'Sesam',O:'Sulfite',P:'Lupinen',R:'Weichtiere'};
-const ZUTAT_KAT_ORDER=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Sonstiges'];
+const ZUTAT_KAT_ORDER=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Toppings','Sonstiges'];
 // Manche neuere Teile (Zutaten-Datenbank, Illustrationen) verwenden GROSSBUCHSTABEN-Kategorien —
 // hier einmal normalisiert, damit beide Konventionen zusammenpassen, statt an zwei Stellen mit
 // unterschiedlicher Schreibweise aneinander vorbeizulaufen.
@@ -472,7 +472,7 @@ function getEffectiveName(name){
   return (hit ? hit.name : name).toUpperCase();
 }
 const ALLERGEN_BOLD=['sesam','käse','joghurt','butter','teigblätter','soja','tofu','sellerie','senf','weizen','mehl','gluten','milch','laktose','nuss','mandel','erdnuss','cashew','ebly'];
-const ZUTAT_KATEGORIEN=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Sonstiges'];
+const ZUTAT_KATEGORIEN=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Toppings','Sonstiges'];
 const ALLERGEN_BOLD_WORDS=['senf','gluten','milch','laktose','sesam','soja','nuss','mandel','erdnuss','weizen','joghurt','butter','käse','teigblätter','sellerie','cashew','ebly'];
 
 // FAQ & Ansprechpartner — beides einfach hier erweiterbar, sobald mehr Inhalte/Kontaktdaten da sind.
@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.10';
+const APP_VERSION = '6.99.11';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1884,6 +1884,7 @@ function zutatenKey(woche, tag, slot){
 
 function guessZutatKat(name){
   const n=name.toLowerCase();
+  if(/röstzwiebel|crouton|krokant|sprossen(?!.*salat)|crispy onion/.test(n)) return 'Toppings';
   if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
   if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|mais|sellerie|blumenkohl|karfiol|süßkartoffel/.test(n)) return 'Gemüse';
   if(/limett|zitronen|orange|mango|kokos|ananas|apfel|banane|granatapfel|tamarinde|maracuja/.test(n)) return 'Obst';
@@ -1954,7 +1955,7 @@ function zutatEmoji(name){
 // im Grundton an Karma-Orange angelehnt (Bring-artige Optik: farbige Kachel, Icon, Name).
 const ZUTAT_KAT_COLOR={
   'GEMÜSE':'#4C8C5A','OBST':'#E85D75','HÜLSENFRÜCHTE':'#A9825C','KRÄUTER':'#2F7A6E',
-  'GETREIDE/REIS':'#C99A3D','ÖLE/FETTE':'#D9B23C','GEWÜRZE':'#B8452F','SONSTIGES':'#7D7268',
+  'GETREIDE/REIS':'#C99A3D','ÖLE/FETTE':'#D9B23C','GEWÜRZE':'#B8452F','TOPPINGS':'#8B5E34','SONSTIGES':'#7D7268',
 };
 
 // Handgezeichnete Kategorie-Illustrationen im Bring-Stil (weiße Linien-Zeichnung auf farbigem
@@ -1992,6 +1993,12 @@ const ZUTAT_KAT_ICON={
     <rect x="22" y="22" width="20" height="26" rx="4"/><path d="M26 22v-6a6 6 0 0 1 12 0v6"/>
     <circle cx="28" cy="32" r="1.3" fill="#fff" stroke="none"/><circle cx="34" cy="36" r="1.3" fill="#fff" stroke="none"/>
     <circle cx="29" cy="41" r="1.3" fill="#fff" stroke="none"/>
+  </svg>`,
+  'TOPPINGS':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 40c4-14 24-14 28 0" stroke-width="2"/>
+    <circle cx="24" cy="24" r="1.6" fill="#fff" stroke="none"/><circle cx="32" cy="19" r="1.6" fill="#fff" stroke="none"/>
+    <circle cx="40" cy="24" r="1.6" fill="#fff" stroke="none"/><circle cx="28" cy="30" r="1.6" fill="#fff" stroke="none"/>
+    <circle cx="36" cy="30" r="1.6" fill="#fff" stroke="none"/>
   </svg>`,
   'SONSTIGES':`<svg viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M20 26h24l-2 22a4 4 0 0 1-4 4H26a4 4 0 0 1-4-4z"/><path d="M24 26v-4a8 8 0 0 1 16 0v4"/>
