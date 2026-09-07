@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.24';
+const APP_VERSION = '6.99.27';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3241,7 +3241,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
       <div style="font-size:12px;font-weight:600;">Samosas 🥟</div>
       <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
-    <div onclick="goTo('waehrend')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;">
+    <div onclick="window._waehrendHideFeedback=true;goTo('waehrend')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;">
       <div style="font-size:12px;font-weight:600;">Sweets 🍰</div>
       <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
@@ -3501,7 +3501,7 @@ async function renderHome(){
     </div>`:''}
     ${renderTodayDishCardsHtml(homeZutatenOverrideMap, homeAllergenOverrideMap, '')}
     <div style="display:flex;gap:6px;margin-bottom:6px;">
-      ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="goTo('waehrend')" style="flex:1;padding:9px 8px;text-align:center;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':''}">
+      ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="window._waehrendHideFeedback=false;goTo('waehrend')" style="flex:1;padding:9px 8px;text-align:center;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':''}">
         <div style="font-size:20px;line-height:1;">😋</div>
         <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Food-Feedback</div>
         <div style="font-size:9.5px;color:${feedbackDoneHome?'var(--green)':'var(--muted)'};margin-top:1px;">${feedbackDoneHome?'✓ abgegeben':'Wie war\'s?'}</div>
@@ -4371,7 +4371,7 @@ async function renderStoreBeilagenMiniMatrixHtml(weekDates, isCurrentWeek, accen
   if(!displayDays.length) return '';
   const articleNames=[...new Set(baseline.map(b=>b.article_name))];
   let html=`<div class="section-lbl" style="margin-top:14px;">🥗 Beilagen & Saucen dazu</div>
-  <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+  <div class="card" id="beilagen-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
     <th style="text-align:left;">Artikel</th>
     ${displayDays.map(wd=>{
       const dateStr=weekDates[wd];
@@ -4390,7 +4390,11 @@ async function renderStoreBeilagenMiniMatrixHtml(weekDates, isCurrentWeek, accen
       const val=rec ? rec.qty : (b ? b.base_qty : null);
       if(val==null) return `<td style="color:var(--border);font-size:12px;padding:6px 3px;text-align:center;">–</td>`;
       const adjusted=rec?.is_adjusted;
-      return `<td style="text-align:center;font-size:13px;font-weight:${adjusted?'700':'500'};color:${adjusted?'#F97316':'#1a1a18'};padding:6px 3px;">${formatQty(val)}</td>`;
+      return `<td style="text-align:center;padding:4px 2px;">
+        <input type="text" inputmode="decimal" step="0.25" value="${val}" data-artikel="${escAttr(name)}" data-date="${dateStr}" data-original="${val}"
+          oninput="markBeilageDirty(this)" onchange="autoSaveBeilageCell(this)"
+          style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:4px 1px;background:${adjusted?'#FFF7ED':'#fff'};color:${adjusted?'#F97316':'#1a1a18'};font-weight:${adjusted?'700':'500'};">
+      </td>`;
     }).join('');
     html+=`<tr>
       <td data-no-translate style="font-size:12.5px;font-weight:600;color:${color};white-space:nowrap;padding:6px 8px;">
@@ -4403,9 +4407,72 @@ async function renderStoreBeilagenMiniMatrixHtml(weekDates, isCurrentWeek, accen
     </tr>`;
   });
   html+='</tbody></table></div></div>';
-  html+=`<div style="font-size:10px;color:var(--muted);padding:5px 2px;">Grundmengen laut Plan — Anpassen weiterhin im Küche-Tab.</div>`;
+  html+=`<button id="beilagen-save-btn" class="submit-btn" disabled onclick="saveBeilagenChanges()" style="background:${accentColor};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
   return html;
 }
+function markBeilageDirty(input){
+  const dirty=input.value!==input.dataset.original;
+  input.style.borderColor=dirty?'#F97316':'var(--border)';
+  input.style.background=dirty?'#FFF7ED':'#fff';
+  const btn=document.getElementById('beilagen-save-btn');
+  if(btn){
+    const anyDirty=[...document.querySelectorAll('#beilagen-table-wrap input[data-artikel]')].some(i=>i.value!==i.dataset.original);
+    btn.disabled=!anyDirty;
+    btn.style.opacity=anyDirty?'1':'0.4';
+  }
+}
+window.markBeilageDirty=markBeilageDirty;
+// Speichert eine einzelne Beilagen-Zelle sofort bei Verlassen des Feldes (onchange) — gleiches Muster
+// wie bei den Gerichten (autoSaveForecastCell). Der Sammel-Button bleibt zusätzlich als Absicherung
+// bestehen (Wunsch Tini 07.09.26), speichert aber im Normalfall nichts mehr, weil längst autogespeichert.
+const _beilagenSaveQueue={};
+async function autoSaveBeilageCell(inputEl){
+  const dateStr=inputEl.dataset.date;
+  const artikel=inputEl.dataset.artikel;
+  if(!dateStr||!artikel) return;
+  const queueKey=`${dateStr}|${artikel}`;
+  const prev=_beilagenSaveQueue[queueKey]||Promise.resolve();
+  const run=prev.then(()=>_autoSaveBeilageCellInner(inputEl, dateStr, artikel)).catch(()=>{});
+  _beilagenSaveQueue[queueKey]=run;
+  await run;
+}
+async function _autoSaveBeilageCellInner(inputEl, dateStr, artikel){
+  try{
+    const qty=parseFloat(inputEl.value.replace(',','.'));
+    if(isNaN(qty)||qty<0) return;
+    await api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${dateStr}&article_name=eq.${encodeURIComponent(artikel)}`,{method:'DELETE'}).catch(()=>{});
+    await api('kitchen_supply_today',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,supply_date:dateStr,article_name:artikel,qty,is_adjusted:true}])});
+    inputEl.dataset.original=inputEl.value;
+    inputEl.style.borderColor='#22C55E';
+    setTimeout(()=>{ markBeilageDirty(inputEl); }, 600);
+    if(document.activeElement && document.activeElement.tagName==='INPUT') document.activeElement.blur();
+    showToast('✓ Gespeichert');
+  }catch(e){
+    console.error(e);
+    showToast('❌ Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
+  }
+}
+window.autoSaveBeilageCell=autoSaveBeilageCell;
+// Sammel-Speichern als Absicherung — im Normalfall längst per Autosave gespeichert (siehe oben),
+// bleibt aber als manueller Fallback bestehen (Wunsch Tini 07.09.26).
+async function saveBeilagenChanges(){
+  const inputs=[...document.querySelectorAll('#beilagen-table-wrap input[data-artikel]')].filter(i=>i.value!==i.dataset.original);
+  if(!inputs.length){ showToast('Keine Änderungen'); return; }
+  const btn=document.getElementById('beilagen-save-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Speichert …'; }
+  try{
+    for(const inp of inputs){
+      await autoSaveBeilageCell(inp);
+    }
+    showToast('✓ Änderungen gespeichert');
+  }catch(e){
+    console.error(e);
+    showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='💾 Änderungen speichern'; }
+  }
+}
+window.saveBeilagenChanges=saveBeilagenChanges;
 
 async function updateKuecheQty(input){
   const dateStr=input.dataset.date;
@@ -5703,7 +5770,12 @@ async function renderForecastOrderTab(el, tabHtml){
   // in der Operations-Mengenplanung.
   const storeWeekEra=getMenuEraForDate(weekDates[1]);
   const storeIsHerbstWeek=storeWeekEra.key==='herbstwinter2026_27';
-  html+=`<div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;">
+  html+=`<div style="display:flex;gap:6px;margin-bottom:10px;">
+    <button id="ft-tab-btn-gerichte" data-accent="${tab.color}" onclick="switchForecastTab('gerichte')" style="flex:1;padding:8px 0;font-size:12.5px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:${tab.color};color:#fff;">🍽️ Gerichte</button>
+    <button id="ft-tab-btn-beilagen" onclick="switchForecastTab('beilagen')" style="flex:1;padding:8px 0;font-size:12.5px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:var(--surface-1);color:var(--sub);">🥗 Beilagen</button>
+  </div>
+  <div id="ft-tab-gerichte">
+  <div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;">
     <thead>
       <tr>
         <th style="text-align:left;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Tag</th>
@@ -5764,26 +5836,39 @@ async function renderForecastOrderTab(el, tabHtml){
   }
   html+='</tbody></table></div></div>';
 
-  if(anyLasagne){
-    html+=`<div style="font-size:10.5px;color:#15803D;padding:6px 2px 2px;">🥗 An Lasagne-Tagen wird grüner Salat + Dressing automatisch mitproduziert · ⚠️ Änderung nach 14:00 Uhr am Vortag weiterhin möglich, ggf. aber Rücksprache mit der Küche nötig</div>`;
-  }
-  html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px 4px;">
-    🔵 Blau = KI-Vorschlag (Vorwoche + Wetter + Ferien) — antippen für Begründung &nbsp;·&nbsp; 🟠 Orange = von dir angepasst &nbsp;·&nbsp; 🟣 Navy = von Operations gesetzt<br>
-    Kleine Zahl darunter = tatsächliche Menge Vorwoche &nbsp;·&nbsp; 🔥 = Vorwoche ausverkauft &nbsp;·&nbsp; 📦 = Vorwoche viel übrig
-  </div>`;
-
   if(!isHistoric){
     html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
   }
+  html+='</div>';
 
-  // Beilagen/Saucen direkt darunter — oft intuitiver, die Mengen im selben Blick wie den Forecast
-  // zu sehen, statt extra in den Küche-Tab wechseln zu müssen. Rein informativ hier, angepasst wird
-  // weiterhin im Küche-Tab (dort liegt auch die Speicherlogik dafür).
+  // Beilagen/Saucen als eigener Tab (07.09.26, Wunsch Tini: eigener Tab statt darunter, ging sonst
+  // im UX unter) — jetzt direkt hier editierbar mit derselben Autosave-Logik wie bei den Gerichten,
+  // nicht mehr nur Referenzanzeige mit Verweis auf den Küche-Tab.
+  html+=`<div id="ft-tab-beilagen" style="display:none;">`;
   html+=await renderStoreBeilagenMiniMatrixHtml(weekDates, forecastWeekOffset===0, tab.color);
+  html+='</div>';
 
   el.innerHTML=html;
   translateEl(el);
 }
+function switchForecastTab(which){
+  const gEl=document.getElementById('ft-tab-gerichte'), bEl=document.getElementById('ft-tab-beilagen');
+  const gBtn=document.getElementById('ft-tab-btn-gerichte'), bBtn=document.getElementById('ft-tab-btn-beilagen');
+  if(!gEl||!bEl) return;
+  const activeStyle=(bg)=>`flex:1;padding:8px 0;font-size:12.5px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:${bg};color:#fff;`;
+  const inactiveStyle='flex:1;padding:8px 0;font-size:12.5px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:var(--surface-1);color:var(--sub);';
+  const accent=gBtn?.dataset.accent||'#1D9E75';
+  if(which==='beilagen'){
+    gEl.style.display='none'; bEl.style.display='block';
+    if(gBtn) gBtn.setAttribute('style', inactiveStyle);
+    if(bBtn) bBtn.setAttribute('style', activeStyle(accent));
+  } else {
+    gEl.style.display='block'; bEl.style.display='none';
+    if(gBtn) gBtn.setAttribute('style', activeStyle(accent));
+    if(bBtn) bBtn.setAttribute('style', inactiveStyle);
+  }
+}
+window.switchForecastTab=switchForecastTab;
 
 // Zeigt eine Zelle als "geändert, noch nicht gespeichert" (orange) und aktiviert den Speichern-Button —
 // speichert aber noch NICHT selbst, damit man erst alle Felder in Ruhe ausfüllen kann, ohne dass
@@ -10080,12 +10165,17 @@ async function saveDailyCheckAll(){
       })()
     ]);
     showToast('✔ Daily Check-up gespeichert!');
+    window._waehrendHideFeedback=false;
     goTo('waehrend');
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
 async function renderWaehrend(){
   const el=document.getElementById('v-waehrend');
+  // Direkt-Einstieg über den "Sweets"-Link (Home) will nur Zutaten sehen, kein Feedback-Formular —
+  // Flag wird hier ausgelesen und sofort zurückgesetzt, gilt also nur für genau diesen einen Aufruf.
+  const _hideFeedbackThisTime=!!window._waehrendHideFeedback;
+  window._waehrendHideFeedback=false;
   const todayMenu=getTodayMenu()||[]; // volle Einträge inkl. Allergene, nicht nur Namen
   const _todayStrWaehrend=new Date().toISOString().split('T')[0];
   const _laufendeWoche=getMenuWocheForDate(_todayStrWaehrend);
@@ -10164,7 +10254,9 @@ async function renderWaehrend(){
 
     // Team-Feedback direkt hier statt separat bei Schicht beenden (20.08.26, Wunsch Simone —
     // Schichtende ist ohnehin oft stressig genug). Name + optional Kommentare, Bewertungen oben
-    // pro Gericht per Emoji-Reihe direkt in der Karte.
+    // pro Gericht per Emoji-Reihe direkt in der Karte. Nicht zeigen, wenn direkt über den
+    // "Sweets"-Link auf der Startseite aufgerufen (Wunsch Tini 07.09.26).
+    if(!_hideFeedbackThisTime){
     html+=`<div class="section-lbl" style="margin-top:14px;">😋 Food-Feedback</div>`;
     html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier Namen eintragen & abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
     html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
@@ -10174,6 +10266,7 @@ async function renderWaehrend(){
       <button onclick="submitFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">Feedback abschicken ✓</button>
     </div>`;
     html+=`<div id="feedback-existing-list"></div>`;
+    }
   }
 
   html+=`<div style="margin-top:12px;">
@@ -13997,7 +14090,7 @@ function feedbackSummaryHtml(sum){
   }
   const emojiFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
   const todayReal=new Date().toISOString().split('T')[0];
-  const dateFmt=(d)=>{ if(!d) return ''; if(d===todayReal) return 'heute'; return new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}); };
+  const dateFmt=(d)=>{ if(!d) return ''; if(d===todayReal) return 'heute'; return '🕐 letztes Mal '+new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}); };
   const boxId='fbnotes-'+Math.random().toString(36).slice(2,9);
   const hasTeamNotes=sum.teamNotes && sum.teamNotes.length;
   const hasKundenNotes=sum.kundenNotes && sum.kundenNotes.length;
