@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.14';
+const APP_VERSION = '6.99.15';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2492,7 +2492,11 @@ function getZutatenVocabulary(){
 function renderZutatenEditable(text, dishSafeKey){
   if(!text) text='';
   const byKat=parseZutatenText(text);
-  const sorted=ZUTAT_KAT_ORDER.filter(k=>byKat[k]).concat(Object.keys(byKat).filter(k=>!ZUTAT_KAT_ORDER.includes(k)));
+  let sorted=ZUTAT_KAT_ORDER.filter(k=>byKat[k]).concat(Object.keys(byKat).filter(k=>!ZUTAT_KAT_ORDER.includes(k)));
+  // Komplett leerer Editor (z.B. frisch angelegter Dip/Sauce/Toppings-Bereich): ohne mindestens
+  // eine Kategorie gibt's keinen "+ Zutat"-Button, nur das versteckte "+ Kategorie" mit Extra-Dialog
+  // — das hat Tini/den Koch blockiert (07.09.26). Deshalb hier mit "Sonstiges" vorbelegen.
+  if(!sorted.length){ byKat['Sonstiges']=[]; sorted=['Sonstiges']; }
   let html='<div class="zd-editor" data-key="'+dishSafeKey+'">';
   html+='<div style="font-size:10.5px;color:var(--muted);background:#EFF6FF;border-radius:8px;padding:6px 8px;margin-bottom:10px;">💬 Auf Deutsch <em>oder</em> Englisch eintippen — wird beim Speichern automatisch als Deutsch abgelegt (kanonische Sprache), Englisch erscheint zur Kontrolle klein darunter.</div>';
   sorted.forEach(kat=>{
