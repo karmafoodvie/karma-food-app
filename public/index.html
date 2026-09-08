@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.29';
+const APP_VERSION = '6.99.31';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3576,7 +3576,24 @@ async function renderHome(){
     `:''}
     ${currentStore?.id==='kitchen' && !window._homeHideRoles?`
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
-    <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle Bereiche auch über die Leiste unten erreichbar</div>
+    <div class="card" style="margin-bottom:6px;overflow:hidden;">
+      <div onclick="goTo('grundreinigung')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:0.5px solid var(--border);">
+        <span style="font-size:18px;">🧹</span>
+        <div style="flex:1;"><div style="font-size:12.5px;font-weight:600;">Grundreinigung</div><div style="font-size:10px;color:var(--muted);">Fällige Stores & Checkliste eintragen</div></div>
+        <span style="color:var(--muted);">→</span>
+      </div>
+      <div onclick="goTo('stadtgemeinde')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:0.5px solid var(--border);">
+        <span style="font-size:18px;">🏛️</span>
+        <div style="flex:1;"><div style="font-size:12.5px;font-weight:600;">Stadtgemeinde</div><div style="font-size:10px;color:var(--muted);">Zahlungen erfassen & Übersicht</div></div>
+        <span style="color:var(--muted);">→</span>
+      </div>
+      <div onclick="goTo('kuechenlager')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;">
+        <span style="font-size:18px;">🏭</span>
+        <div style="flex:1;"><div style="font-size:12.5px;font-weight:600;">Küchenlager</div><div style="font-size:10px;color:var(--muted);">Zentraler Bestand — FOODPACK, INVOLO & Co.</div></div>
+        <span style="color:var(--muted);">→</span>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0 6px;">Alle weiteren Bereiche auch über die Leiste unten erreichbar</div>
     `:''}
 `;
   el.innerHTML+=`<div class="kf-hilfe" onclick="goTo('hilfe')" style="display:flex;align-items:center;gap:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 14px;margin-top:10px;cursor:pointer;">
@@ -6686,6 +6703,21 @@ window.deleteZutatenMaster=deleteZutatenMaster;
 // Wird jeden Freitag für die kommende Woche produziert (1 Curry + 1 Salat + 1 Dessert, rotiert
 // über dieselben 4 Wochen wie das Hauptmenü). Die Menge wird meist Dienstag Nachmittag
 // durchgegeben und hier manuell eingetragen.
+// Schrankerl läuft komplett unabhängig vom Hauptmenü (Wunsch Tini 08.09.26) — braucht deshalb eine
+// EIGENE Wochenzählung statt CURRENT_MENU_WOCHE, sonst reißt der Rhythmus bei jedem Menü-Epochen-
+// Wechsel ab (genau das ist am 07.09. passiert: Massaman/Woche 3 wäre eigentlich diese Woche dran
+// gewesen, ist aber durch den Reset auf "Woche 1" um mehrere Wochen nach hinten gerutscht).
+// Referenz: Montag 24.08.26 = Schrankerl-Woche 1, durchgehender 4-Wochen-Zyklus danach.
+function getSchrankerlWoche(dateStr){
+  const ref=new Date('2026-08-24T00:00:00');
+  const d=new Date((dateStr||new Date().toISOString().split('T')[0])+'T00:00:00');
+  const day=d.getDay(); // 0=So,1=Mo,...
+  const mondayOffset=(day===0?-6:1-day);
+  d.setDate(d.getDate()+mondayOffset);
+  const diffDays=Math.round((d-ref)/86400000);
+  const weeksSince=Math.floor(diffDays/7);
+  return ((weeksSince%4)+4)%4 + 1;
+}
 function getNextFriday(){
   const d=new Date();
   const day=d.getDay(); // 0=So...5=Fr...6=Sa
@@ -6695,7 +6727,7 @@ function getNextFriday(){
 }
 async function renderSchrankerlTab(){
   await getZutatenMaster();
-  const woche=CURRENT_MENU_WOCHE;
+  const woche=getSchrankerlWoche();
   const lieferdatum=getNextFriday();
   const [menu, prod] = await Promise.all([
     api(`schrankerl_menu?woche=eq.${woche}&select=*`).catch(()=>[]),
@@ -13088,6 +13120,7 @@ async function renderTransporterBeilagenHtml(){
   // bleiben alte Forecast-Zeilen aus einer vergangenen Epoche (z.B. Sommer-Gerichte) sichtbar,
   // obwohl sie längst nicht mehr aktuell sind. Bug gefunden 07.09.26, erster Herbst/Winter-Tag.
   const _validDishNamesToday=new Set((typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(WEEKDAY_STR[weekdayNum],today):[]);
+  _validDishNamesToday.add(REIS_DISH_NAME); // Reis ist kein Menü-Gericht im engeren Sinn (kein MENU_DATA-Eintrag), zählt aber trotzdem als gültig
   const dishNamesToday=[...new Set((fcToday||[]).filter(f=>f.qty>0 && _validDishNamesToday.has(f.dish_name)).map(f=>f.dish_name))];
   let dishHtml='';
   if(dishNamesToday.length){
