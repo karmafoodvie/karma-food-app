@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.32';
+const APP_VERSION = '6.99.35';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3465,7 +3465,7 @@ async function renderHome(){
     ${messeBewertungHtml}
     <div id="broadcast-banner-widget"></div>
     ${monthlyCleaningHtml}
-    ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle'?`
+    ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles)?`
 
     <!-- START BUTTON -->
     <div class="kf-start" onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
@@ -3577,7 +3577,13 @@ async function renderHome(){
     `:''}
     ${currentStore?.id==='kitchen' && !window._homeHideRoles?`
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
-    <div class="card" style="margin-bottom:6px;overflow:hidden;">
+    <div>
+      <button class="role-btn-color" onclick="goTo('teamFeedback')" style="background:#EC4899;">
+        <span class="role-btn-role">😋 Feedback</span>
+        <span class="role-btn-name">Essen</span>
+      </button>
+    </div>
+    <div class="card" style="margin-bottom:6px;margin-top:8px;overflow:hidden;">
       <div onclick="goTo('grundreinigung')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:0.5px solid var(--border);">
         <span style="font-size:18px;">🧹</span>
         <div style="flex:1;"><div style="font-size:12.5px;font-weight:600;">Grundreinigung</div><div style="font-size:10px;color:var(--muted);">Fällige Stores & Checkliste eintragen</div></div>
@@ -12998,6 +13004,14 @@ async function renderTransporterInfoTabHtml(){
   const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
   let html='';
 
+  // Feedback-Schnelllink (08.09.26, Wunsch Tini: Michi soll das schneller finden statt erst über
+  // die untere Leiste suchen zu müssen).
+  html+=`<div class="home-card" onclick="goTo('teamFeedback')" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 12px;">
+    <span style="font-size:18px;">😋</span>
+    <div style="flex:1;"><div style="font-size:12.5px;font-weight:600;">Feedback</div><div style="font-size:10px;color:var(--muted);">Eigene Bewertung zu den Gerichten abgeben</div></div>
+    <span style="color:var(--muted);">→</span>
+  </div>`;
+
   // Direkter Schnell-Eintrag für Organisation — kein Umweg über Management nötig.
   // Vorne immer wählbar: für welche Filiale das gilt (oder allgemein/Organisation).
   if(currentStore?.id==='zentrale'){
@@ -13062,10 +13076,13 @@ async function renderTransporterInfoTabHtml(){
   return html;
 }
 
-function dismissTransporterBroadcast(id){
-  const dismissed=JSON.parse(localStorage.getItem('kf_transporter_bc_dismissed')||'[]');
-  if(!dismissed.includes(id)) dismissed.push(id);
-  localStorage.setItem('kf_transporter_bc_dismissed', JSON.stringify(dismissed));
+// Vorher nur localStorage — bei geteiltem Login (Kitchen 3400, mehrere Geräte) tauchte eine
+// "ausgeblendete" Nachricht auf jedem anderen Gerät trotzdem wieder auf (Fall Tini, 08.09.26).
+// Jetzt wird die Nachricht wirklich gelöscht — passt zum Zweck (einmalige Durchsage, erledigt = weg).
+async function dismissTransporterBroadcast(id){
+  try{
+    await api(`org_broadcasts?id=eq.${id}`,{method:'DELETE'});
+  }catch(e){ console.error(e); }
   renderPack();
 }
 window.dismissTransporterBroadcast=dismissTransporterBroadcast;
@@ -15149,7 +15166,8 @@ async function renderTeamFeedback(){
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   let html=backToHomeHtml();
   html+=pageHeaderHtml('😋','Crew Food-Feedback','Standort-Crew + Adi/Tini/Ines gesammelt','#EC4899');
-  html+=`<button onclick="goTo('teamRating')" style="width:100%;display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">😋 Eigene Bewertung abgeben</button>`;
+  html+=`<button onclick="goTo('waehrend')" style="width:100%;display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">😋 Eigene Bewertung abgeben</button>`;
+  html+=`<div style="font-size:11px;color:var(--muted);text-align:center;margin:-8px 0 14px;">Anonym — der Name muss nirgends stehen, mehrere Bewertungen pro Person sind kein Problem.</div>`;
 
   const [teamRows, linkRows, stores] = await Promise.all([
     api('essen_feedback?select=*&order=submitted_at.desc&limit=150').catch(()=>[]),
@@ -15164,59 +15182,73 @@ async function renderTeamFeedback(){
     el.innerHTML=html; translateEl(el); return;
   }
 
-  // Freies Feedback aus beiden Quellen zusammen — App-Feedback (allgemein) + Kommentare vom
-  // geteilten Link (gerichtsgebunden). Das war der eigentlich vermisste Teil (20.08.26).
-  const freieAusTeam=(teamRows||[]).filter(r=>r.feedback_frei && r.feedback_frei.trim())
-    .map(r=>({name:r.name||'Anonym', store:r.store_id, date:r.datum, text:r.feedback_frei, dish:null}));
-  const freieAusLink=(linkRows||[]).filter(r=>r.kommentar && r.kommentar.trim())
-    .map(r=>({name:null, store:r.store_id, date:(r.submitted_at||'').split('T')[0], text:r.kommentar, dish:r.dish_name}));
-  const alleFreien=[...freieAusTeam, ...freieAusLink];
+  const todayStr=new Date().toISOString().split('T')[0];
 
-  html+=`<div class="section-lbl">💬 Freies Feedback</div>`;
-  if(!alleFreien.length){
-    html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Noch kein freies Feedback abgegeben.</div>`;
-  }
-  alleFreien.forEach(f=>{
-    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#FAF5FF;border-color:#DDD6FE;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <strong style="font-size:13px;">${f.name||'Per Link'}</strong>
-        <span style="font-size:10px;color:var(--muted);">${f.store?(storeNameMap[f.store]||f.store):'ohne Filiale'}${f.date?' · '+new Date(f.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</span>
-      </div>
-      ${f.dish?`<div style="font-size:10.5px;color:#9333EA;margin-top:2px;">zu: ${f.dish}</div>`:''}
-      <div style="font-size:12.5px;color:#4C1D95;margin-top:6px;white-space:pre-wrap;">${f.text}</div>
-    </div>`;
-  });
-
-  // Gerichte-Auswertung — beide Quellen zusammengezählt, schlechtester Schnitt zuerst.
-  const byDish={};
+  // Alles nach GERICHT bündeln — heutige Bewertung + Verlauf (bisheriger Schnitt) + zugehörige
+  // Kommentare direkt beieinander, statt einer separaten losen Kommentar-Wand oben drüber
+  // (Wunsch Tini 08.09.26: "besser gebündelt, schnelle Ableitungen treffen können"). Namen werden
+  // nirgends mehr angezeigt — nur Filiale + Datum, bleibt anonym.
+  const byDish={}; // name -> {todayVals:[], historyVals:[], comments:[{store,date,text}]}
+  function ensure(name){ return byDish[name]=byDish[name]||{todayVals:[], historyVals:[], comments:[]}; }
   (teamRows||[]).forEach(r=>{
     Object.entries(r.ratings||{}).forEach(([dish,rec])=>{
       const val=(rec && typeof rec==='object')?rec.v:rec;
-      if(val==null) return;
-      (byDish[dish]=byDish[dish]||[]).push(val);
+      const note=(rec && typeof rec==='object')?rec.note:null;
+      const improve=(rec && typeof rec==='object')?rec.improve:null;
+      if(val==null && !note && !improve) return;
+      const d=ensure(dish);
+      if(val!=null) (r.datum===todayStr?d.todayVals:d.historyVals).push(val);
+      if(note) d.comments.push({store:r.store_id, date:r.datum, text:note});
+      if(improve) d.comments.push({store:r.store_id, date:r.datum, text:'→ Für 5/5: '+improve});
     });
   });
   (linkRows||[]).forEach(r=>{
-    if(r.dish_name && r.rating!=null) (byDish[r.dish_name]=byDish[r.dish_name]||[]).push(r.rating);
+    if(!r.dish_name) return;
+    const d=ensure(r.dish_name);
+    const date=(r.submitted_at||'').split('T')[0];
+    if(r.rating!=null) (date===todayStr?d.todayVals:d.historyVals).push(r.rating);
+    if(r.kommentar) d.comments.push({store:r.store_id, date, text:r.kommentar});
   });
-  const dishStats=Object.entries(byDish).map(([name,vals])=>({name, count:vals.length, avg:vals.reduce((a,b)=>a+b,0)/vals.length})).sort((a,b)=>a.avg-b.avg);
-  if(dishStats.length){
-    html+=`<div class="section-lbl" style="margin-top:16px;">📊 Nach Gericht</div>`;
-    dishStats.forEach(d=>{
-      const scale=FEEDBACK_SCALE.find(s=>s.v===Math.round(d.avg));
-      const barColor=d.avg<3?'#DC2626':d.avg<4?'#EA580C':'#16A34A';
-      html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div style="font-size:13px;font-weight:600;flex:1;">${d.name}</div>
-          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <span style="font-size:18px;">${scale?scale.emoji:'–'}</span>
-            <span style="font-size:15px;font-weight:800;color:${barColor};">${d.avg.toFixed(1)}</span>
-          </div>
+
+  const dishNames=Object.keys(byDish).sort((a,b)=>{
+    const avgA=byDish[a].todayVals.length?byDish[a].todayVals.reduce((s,v)=>s+v,0)/byDish[a].todayVals.length:(byDish[a].historyVals.reduce((s,v)=>s+v,0)/(byDish[a].historyVals.length||1));
+    const avgB=byDish[b].todayVals.length?byDish[b].todayVals.reduce((s,v)=>s+v,0)/byDish[b].todayVals.length:(byDish[b].historyVals.reduce((s,v)=>s+v,0)/(byDish[b].historyVals.length||1));
+    return avgA-avgB;
+  });
+
+  html+=`<div class="section-lbl">📊 Gerichte im Überblick</div>`;
+  dishNames.forEach(name=>{
+    const d=byDish[name];
+    const todayAvg=d.todayVals.length?d.todayVals.reduce((s,v)=>s+v,0)/d.todayVals.length:null;
+    const historyAvg=d.historyVals.length?d.historyVals.reduce((s,v)=>s+v,0)/d.historyVals.length:null;
+    const scaleFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
+    const colorFor=(v)=>v<3?'#DC2626':v<4?'#EA580C':'#16A34A';
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">${name}</div>
+      <div style="display:flex;gap:8px;">
+        <div style="flex:1;background:${todayAvg!=null?'#FDF2F8':'var(--surface-1)'};border-radius:8px;padding:8px 10px;text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:${todayAvg!=null?'#9D2463':'var(--muted)'};letter-spacing:.04em;">📅 HEUTE</div>
+          ${todayAvg!=null?`<div style="font-size:16px;">${scaleFor(todayAvg)}</div><div style="font-size:13px;font-weight:800;color:${colorFor(todayAvg)};">${todayAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${d.todayVals.length}×</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:8px;">–</div>`}
         </div>
-        <div style="height:4px;background:#F3F4F6;border-radius:2px;margin-top:6px;overflow:hidden;">
-          <div style="height:100%;width:${(d.avg/5*100).toFixed(0)}%;background:${barColor};"></div>
+        <div style="flex:1;background:var(--surface-1);border-radius:8px;padding:8px 10px;text-align:center;">
+          <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.04em;">🕐 BISHER</div>
+          ${historyAvg!=null?`<div style="font-size:16px;">${scaleFor(historyAvg)}</div><div style="font-size:13px;font-weight:800;color:${colorFor(historyAvg)};">${historyAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${d.historyVals.length}×</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:8px;">–</div>`}
         </div>
-        <div style="font-size:10.5px;color:var(--muted);margin-top:5px;">${d.count}× bewertet</div>
+      </div>
+      ${d.comments.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">`+d.comments.slice(0,6).map(c=>`<div style="font-size:11.5px;color:var(--sub);margin-bottom:5px;">„${c.text}"<span style="font-size:9.5px;color:var(--muted);"> — ${c.store?(storeNameMap[c.store]||c.store):'ohne Filiale'}${c.date?' · '+new Date(c.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</span></div>`).join('')+`</div>`:''}
+    </div>`;
+  });
+
+  // Freies, nicht an ein Gericht gebundenes Feedback (allgemeine App-/sonstige Anmerkungen) —
+  // bleibt als eigener, kleinerer Block ganz unten, ebenfalls anonym.
+  const freieAllgemein=(teamRows||[]).filter(r=>r.feedback_frei && r.feedback_frei.trim())
+    .map(r=>({store:r.store_id, date:r.datum, text:r.feedback_frei}));
+  if(freieAllgemein.length){
+    html+=`<div class="section-lbl" style="margin-top:16px;">💬 Sonstiges Feedback</div>`;
+    freieAllgemein.forEach(f=>{
+      html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#FAF5FF;border-color:#DDD6FE;">
+        <div style="font-size:12.5px;color:#4C1D95;white-space:pre-wrap;">${f.text}</div>
+        <div style="font-size:9.5px;color:var(--muted);margin-top:5px;">${f.store?(storeNameMap[f.store]||f.store):'ohne Filiale'}${f.date?' · '+new Date(f.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</div>
       </div>`;
     });
   }
@@ -15226,7 +15258,7 @@ async function renderTeamFeedback(){
   </div>
   <div id="tf-org-alle" style="display:none;">`;
 
-  // Team-Einträge (mehrere Gerichte pro Zeile)
+  // Team-Einträge (mehrere Gerichte pro Zeile) — anonym, nur Filiale + Zeitpunkt
   (teamRows||[]).forEach(r=>{
     const ratingRows=Object.entries(r.ratings||{}).map(([dish,rec])=>{
       const val=(rec && typeof rec==='object')?rec.v:rec;
@@ -15236,10 +15268,7 @@ async function renderTeamFeedback(){
       return `<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0;"><span style="color:var(--sub);">${dish}</span><span>${scale?scale.emoji:'– nicht probiert'}${tagsHtml}</span></div>`;
     }).join('');
     html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <strong style="font-size:13px;">${r.name||'Anonym'}</strong>
-        <span style="font-size:10px;color:var(--muted);">${storeNameMap[r.store_id]||r.store_id} · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
-      </div>
+      <div style="font-size:10px;color:var(--muted);text-align:right;">${storeNameMap[r.store_id]||r.store_id||'ohne Filiale'} · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
       <div style="margin-top:4px;">${ratingRows}</div>
       ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${r.kommentar}"</div>`:''}
       ${r.feedback_frei?`<div style="font-size:11.5px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;">💬 ${r.feedback_frei}</div>`:''}
@@ -15252,7 +15281,7 @@ async function renderTeamFeedback(){
     html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
         <span style="font-size:20px;">${scale?scale.emoji:'–'}</span>
-        <span style="font-size:10px;color:var(--muted);">Per Link · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+        <span style="font-size:10px;color:var(--muted);">${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div style="font-size:11.5px;color:var(--sub);margin-top:3px;">${r.store_id?(storeNameMap[r.store_id]||r.store_id):'Filiale nicht angegeben'}${r.dish_name?' · '+r.dish_name:''}</div>
       ${tagsHtml?`<div style="margin-top:6px;">${tagsHtml}</div>`:''}
