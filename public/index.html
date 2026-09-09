@@ -448,6 +448,12 @@ const ZUTAT_KAT_ORDER_UP=ZUTAT_KAT_ORDER.map(k=>k.toUpperCase());
 // Findet den passenden Eintrag in der Zutaten-Datenbank (falls vorhanden) — wird sowohl für die
 // Kategorie als auch für den einheitlichen Anzeigenamen genutzt (löst uneinheitliche
 // Groß-/Kleinschreibung, da immer der in der Datenbank gepflegte Name angezeigt wird).
+function normGerichtName(s){
+  return (s||'').trim().normalize('NFC').replace(/\s+/g,' ');
+}
+function findOverrideByName(overrideMap, name){
+  return overrideMap[name] || overrideMap[normGerichtName(name)];
+}
 function findZutatMasterMatch(name){
   const n=(name||'').toUpperCase();
   const master=_zutatenMasterCache;
@@ -1053,7 +1059,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.44';
+const APP_VERSION = '6.99.45';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3225,12 +3231,12 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
   todayMenu.forEach((d,i)=>{
     const cat=mapDishNameToCategory(d.name, d.slot);
     const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
-    const mainCodes=(zKeyHome && allergenOverrideMap[zKeyHome])||allergenOverrideMap[d.name]||d.allergene?.main||[];
+    const mainCodes=(zKeyHome && allergenOverrideMap[zKeyHome])||allergenOverrideMap[d.name]||allergenOverrideMap[normGerichtName(d.name)]||d.allergene?.main||[];
     const dressingCodes=d.allergene?.dressing||[];
     const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
     const namesDressing=dressingCodes.map(c=>(ALLERGEN_NAMES[c]||c)+' (Dressing)');
     const allNames=[...namesMain,...namesDressing];
-    const zutatenMerged=(zKeyHome && zutatenOverrideMap[zKeyHome])||zutatenOverrideMap[d.name]||d.zutaten;
+    const zutatenMerged=(zKeyHome && zutatenOverrideMap[zKeyHome])||zutatenOverrideMap[d.name]||zutatenOverrideMap[normGerichtName(d.name)]||d.zutaten;
     const dishVisual=`<div style="font-size:28px;line-height:1;">${getDishEmoji(d.name)}</div>`;
     cardsHtml+=`<div style="flex:1;min-width:110px;max-width:160px;display:flex;flex-direction:column;">
       <div onclick="toggleDishAllergeneCard('${idPrefix}${i}')" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
@@ -3259,7 +3265,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
   const samosaEntry={name:'Samosa', slot:'samosa', allergene:{main:['A'],dressing:[]}, zutaten:'WEIZENMEHL, Kartoffeln, Erbsen, Kreuzkümmel, Koriandersamen, Kasoori Methi (Bockshornklee), Salz, Chiliflocken, Ajwain, Öl\n\nMANGO CHUTNEY:\nZucker, geschälte Mangoscheiben, Rohrzucker, Salz, Chilipulver, Ingwerpulver, Knoblauchpulver'};
   [reisEntry, samosaEntry].forEach(d=>{
     const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
-    const zutatenMerged=(zKeyHome && zutatenOverrideMap[zKeyHome])||zutatenOverrideMap[d.name]||d.zutaten;
+    const zutatenMerged=(zKeyHome && zutatenOverrideMap[zKeyHome])||zutatenOverrideMap[d.name]||zutatenOverrideMap[normGerichtName(d.name)]||d.zutaten;
     panelsHtml+=`<div id="dish-allergen-${idPrefix}${d.slot}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
       <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
@@ -3291,8 +3297,8 @@ async function fetchZutatenAllergenOverrideMaps(){
   const raw=await api('allergene_rezepturen?select=gericht,zutaten,zkey,allergene_codes').catch(()=>[]);
   const zutatenMap={}, allergenMap={};
   (raw||[]).forEach(r=>{
-    if(r.zutaten){ zutatenMap[r.gericht]=r.zutaten; if(r.zkey) zutatenMap[r.zkey]=r.zutaten; }
-    if(r.allergene_codes?.length){ allergenMap[r.gericht]=r.allergene_codes; if(r.zkey) allergenMap[r.zkey]=r.allergene_codes; }
+    if(r.zutaten){ zutatenMap[r.gericht]=r.zutaten; zutatenMap[normGerichtName(r.gericht)]=r.zutaten; if(r.zkey) zutatenMap[r.zkey]=r.zutaten; }
+    if(r.allergene_codes?.length){ allergenMap[r.gericht]=r.allergene_codes; allergenMap[normGerichtName(r.gericht)]=r.allergene_codes; if(r.zkey) allergenMap[r.zkey]=r.allergene_codes; }
   });
   return {zutatenMap, allergenMap};
 }
@@ -13976,6 +13982,7 @@ async function renderKitchen(){
     const overrideMap = {};
     (overrides||[]).forEach(e=>{
       overrideMap[e.gericht]=e; // Fallback für Altbestand
+      overrideMap[normGerichtName(e.gericht)]=e; // robust gegen Unicode-/Whitespace-Feinunterschiede
       if(e.zkey) overrideMap[e.zkey]=e; // stabiler Schlüssel hat Vorrang
     });
 
@@ -14009,7 +14016,7 @@ async function renderKitchen(){
       } else {
         validDishes.forEach((dish,i)=>{
           const zKey=zutatenKey(selectedWoche, day, dish.slot);
-          const override = (zKey && overrideMap[zKey]) || overrideMap[dish.name];
+          const override = (zKey && overrideMap[zKey]) || overrideMap[dish.name] || overrideMap[normGerichtName(dish.name)];
           const zutatenRaw = (override?.zutaten||dish.zutaten||'').trim();
           const zutaten = zutatenRaw.replace(/\n/g,' ').trim();
           const allergenMain = dish.allergene?.main||[];
@@ -14523,6 +14530,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const overrideMap = {};
   (overrides||[]).forEach(e=>{
     overrideMap[e.gericht]=e; // Fallback für Altbestand
+    overrideMap[normGerichtName(e.gericht)]=e; // robust gegen Unicode-/Whitespace-Feinunterschiede
     if(e.zkey) overrideMap[e.zkey]=e; // stabiler Schlüssel hat Vorrang
   });
   // Load structured rezept_zutaten if available
@@ -14707,7 +14715,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
     const zKey=zutatenKey(_cookWoche, tomorrowWd, dishObj.slot);
-    const override = (zKey && overrideMap[zKey]) || overrideMap[dish];
+    const override = (zKey && overrideMap[zKey]) || overrideMap[dish] || overrideMap[normGerichtName(dish)];
     const zutatenRaw = (override?.zutaten||dishObj.zutaten||'').trim();
     const detailId = `morgen_zut_${dIdx}`;
     const fbId=`morgen_fb_${dIdx}`;
@@ -14823,7 +14831,7 @@ async function renderMenuWoche(el, tabHtml){
 
   const overrides = await api('allergene_rezepturen?select=*').catch(()=>[]);
   const overrideMap = {};
-  (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; });
+  (overrides||[]).forEach(e=>{ overrideMap[e.gericht]=e; overrideMap[normGerichtName(e.gericht)]=e; });
   // Load structured rezept_zutaten if available
   const rezeptZutatenRaw = await api('rezept_zutaten?select=gericht,menge,notiz,zutaten_master(id,name,kategorie,allergene_codes)').catch(()=>[]);
   const rezeptZutaten = {};
@@ -14842,7 +14850,7 @@ async function renderMenuWoche(el, tabHtml){
     const isToday = day===todayWd;
     html += `<div style="font-size:12px;font-weight:700;color:${isToday?'var(--green)':'var(--sub)'};letter-spacing:.04em;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid ${isToday?'var(--green)':'var(--border)'};">${DAYS_DE[day]}${isToday?' 👈 HEUTE':''}</div>`;
     dishes.filter(d=>d.name&&!d.name.startsWith('ÖL')).forEach(dish=>{
-      const override = overrideMap[dish.name];
+      const override = overrideMap[dish.name] || overrideMap[normGerichtName(dish.name)];
       const zutaten = (override?.zutaten||dish.zutaten||'').split('\n').filter(l=>!/^[^,]{1,30}:$/.test(l.trim())).join(' ').replace(/\s+/g,' ').trim();
       const allergene = override?.allergene_codes||[];
       const allergenStr = dish.allergene?.main?.length ? dish.allergene.main.join(', ') : (allergene.join(', ')||'');
