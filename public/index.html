@@ -203,6 +203,7 @@ summary::marker{content:'';}
     <div id="v-org" class="view"></div>
     <div id="v-management" class="view"></div>
     <div id="v-hygieneauswertung" class="view"></div>
+    <div id="v-zutatenkontrolle" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -470,7 +471,12 @@ function getEffectiveKat(name){
 }
 function getEffectiveName(name){
   const hit=findZutatMasterMatch(name);
-  return (hit ? hit.name : name).toUpperCase();
+  if(!hit) return name.toUpperCase();
+  if(hit.base_zutat_id){
+    const base=(_zutatenMasterCache||[]).find(m=>m.id===hit.base_zutat_id);
+    if(base) return base.name.toUpperCase();
+  }
+  return hit.name.toUpperCase();
 }
 const ALLERGEN_BOLD=['sesam','käse','joghurt','butter','teigblätter','soja','tofu','sellerie','senf','weizen','mehl','gluten','milch','laktose','nuss','mandel','erdnuss','cashew','ebly'];
 const ZUTAT_KATEGORIEN=['Gemüse','Obst','Hülsenfrüchte','Kräuter','Getreide/Reis','Milchprodukte','Eier','Nüsse/Samen','Öle/Fette','Gewürze','Toppings','Sonstiges'];
@@ -1047,7 +1053,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.43';
+const APP_VERSION = '6.99.44';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1754,7 +1760,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -3592,6 +3598,14 @@ async function renderHome(){
       <span id="org-shop-picker-arrow" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#fff;font-size:16px;pointer-events:none;">→</span>
     </div>
     <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:-2px 0 8px;"></div>
+    <div onclick="goTo('zutatenkontrolle')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
+      <span style="font-size:18px;">✅</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#166534;">Zutaten-Kontrolle</div>
+        <div style="font-size:10.5px;color:#15803D;">Welche Gerichte haben schon echte Zutaten hinterlegt</div>
+      </div>
+      <span style="color:#15803D;">→</span>
+    </div>
     <div onclick="goTo('hygieneauswertung')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🌡️</span>
       <div style="flex:1;">
@@ -6423,6 +6437,73 @@ async function renderHygieneAuswertung(){
   translateEl(el);
 }
 window.renderHygieneAuswertung=renderHygieneAuswertung;
+
+// Zutaten-Kontrolle (09.09.26, Wunsch Tini) — Übersicht für Organisation: welche Gerichte haben
+// schon eine ECHTE, individuelle Zutatenliste (nicht nur die generische Basis oder gar nichts) und
+// welche brauchen noch Nacharbeit von der Küche. Grün = Override vorhanden UND ausreichend lang
+// (>40 Zeichen, reine Basis-Gewürze allein sind meist kürzer als ein vollständiges Rezept mit
+// Gemüse), sonst Rot/Orange.
+async function renderZutatenKontrolle(){
+  const el=document.getElementById('v-zutatenkontrolle');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('✅','Zutaten-Kontrolle','Status je Gericht — aktuelle Herbst/Winter-Karte','#16A34A');
+
+  const overrides=await api('allergene_rezepturen?select=gericht,zutaten,allergene_codes').catch(()=>[]);
+  const overrideMap={}; (overrides||[]).forEach(o=>{ overrideMap[o.gericht]=o; });
+
+  // Alle Gerichte aus allen 4 Wochen der aktuell laufenden Epoche sammeln, ohne Duplikate.
+  const era=getMenuEraForDate();
+  const seen=new Set();
+  const dishes=[];
+  ['mo','di','mi','do','fr'].forEach(day=>{
+    for(let w=1; w<=4; w++){
+      const entries=(era.data && era.data[`w${w}_${day}`])||[];
+      entries.forEach(d=>{
+        if(!d.name || d.name.startsWith('ÖL') || d.name.startsWith('ZUTATEN')) return;
+        if(seen.has(d.name)) return;
+        seen.add(d.name);
+        dishes.push(d.name);
+      });
+    }
+  });
+  dishes.sort((a,b)=>a.localeCompare(b,'de'));
+
+  const rows=dishes.map(name=>{
+    const o=overrideMap[name];
+    const hasReal = o && o.zutaten && o.zutaten.trim().length>40;
+    const hasAllergenCheck = o && o.allergene_codes!=null; // auch [] zählt als "geprüft"
+    return {name, hasReal, hasAllergenCheck};
+  });
+  const doneCount=rows.filter(r=>r.hasReal).length;
+
+  html+=`<div style="font-size:12px;color:var(--sub);background:var(--surface-1);border-radius:10px;padding:10px 12px;margin-bottom:14px;">
+    <strong>${doneCount} von ${rows.length}</strong> Gerichten haben eine vollständige, individuelle Zutatenliste.
+    Grün = fertig · Orange = nur Basis-Zutaten (Gewürze), Gemüse/Spezielles fehlt noch · Rot = noch gar nichts hinterlegt.
+  </div>`;
+
+  html+=`<div class="card" style="overflow:hidden;">`;
+  rows.forEach((r,i)=>{
+    const color = r.hasReal ? '#16A34A' : (overrideMap[r.name] ? '#F59E0B' : '#DC2626');
+    const label = r.hasReal ? '✅ Fertig' : (overrideMap[r.name] ? '🟠 Nur Basis' : '🔴 Offen');
+    html+=`<div onclick="openZutatenEditorFromKontrolle('${r.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;cursor:pointer;${i<rows.length-1?'border-bottom:0.5px solid var(--border);':''}">
+      <span data-no-translate style="font-size:13px;font-weight:500;">${r.name}</span>
+      <span style="font-size:11px;font-weight:700;color:${color};flex-shrink:0;margin-left:8px;">${label}</span>
+    </div>`;
+  });
+  html+='</div>';
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderZutatenKontrolle=renderZutatenKontrolle;
+
+async function openZutatenEditorFromKontrolle(dishName){
+  const overrides=await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}&select=zutaten`).catch(()=>[]);
+  const currentText=overrides?.[0]?.zutaten||'';
+  openZutatenEditor(dishName, currentText, null, null, null);
+}
+window.openZutatenEditorFromKontrolle=openZutatenEditorFromKontrolle;
 
 async function renderManagement(){
   const el=document.getElementById('v-management');
