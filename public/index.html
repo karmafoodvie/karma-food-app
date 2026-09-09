@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.35';
+const APP_VERSION = '6.99.37';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6900,9 +6900,28 @@ async function saveSchrankerlMenge(lieferdatum, slot){
     await api(`schrankerl_production?lieferdatum=eq.${lieferdatum}&slot=eq.${slot}`,{method:'DELETE'}).catch(()=>{});
     await api('schrankerl_production',{method:'POST',body:JSON.stringify([{lieferdatum,slot,menge,eingetragen_von:currentStore?.name||'Küche'}])});
     showToast('✓ Gespeichert');
+    // TEST (09.09.26, Wunsch Tini): NUR bei Dessert — Küchenlager-Bestand von Früchtebecher +
+    // Deckel automatisch reduzieren, sobald eine neue Schrankerl-Produktionsmenge gespeichert wird.
+    // Abzug: produzierte Menge minus 20 Stk Puffer (Schwund/Testproduktion). Curry/Salat bewusst
+    // NICHT angefasst — nur dieser eine Slot, isoliert testen wie gewünscht.
+    if(slot==='dessert') await reduceFruechtebecherBestand(menge);
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveSchrankerlMenge=saveSchrankerlMenge;
+
+async function reduceFruechtebecherBestand(produzierteMenge){
+  const verbrauch=Math.max(0, Math.round(produzierteMenge) - 20);
+  if(!verbrauch) return;
+  try{
+    const artikel=await api('articles?id=in.(132,133)&select=id,name,kuechenlager_bestand').catch(()=>[]);
+    for(const a of (artikel||[])){
+      const neu=Math.max(0, (a.kuechenlager_bestand||0) - verbrauch);
+      await api(`articles?id=eq.${a.id}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:neu})});
+    }
+    showToast(`✓ Küchenlager: ${verbrauch} Früchtebecher/Deckel abgezogen`);
+  }catch(e){ console.error(e); }
+}
+window.reduceFruechtebecherBestand=reduceFruechtebecherBestand;
 
 // ══════════════════════════════════════════════════════════════════════════
 // ZUTATEN ZUSAMMENFÜHREN — findet Schreibvarianten/Dubletten, die in den Gerichten stehen, aber
@@ -11882,7 +11901,12 @@ async function kuechenlagerBodyHtml(){
       const stabil=!!a.bestand_stabil;
       const stabilDatum=a.bestand_stabil_am?new Date(a.bestand_stabil_am).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
       html+=`<tr style="${stabil?'background:#F0FDF4;':(niedrig?'background:#FEF2F2;':'')}">
-        <td style="font-size:12px;">${a.name} <span style="color:var(--muted);">(${a.unit||''})</span></td>
+        <td style="font-size:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;border:0.5px solid var(--border);">`:`<div style="width:32px;height:32px;border-radius:6px;background:var(--surface-1);flex-shrink:0;"></div>`}
+            <div>${a.name} <span style="color:var(--muted);">(${a.unit||''})</span></div>
+          </div>
+        </td>
         <td>${stabil
           ? `<div style="font-size:10px;color:var(--green);white-space:nowrap;">✓ reicht${stabilDatum?`<div style="font-size:8.5px;color:var(--muted);">seit ${stabilDatum}</div>`:''}</div>`
           : `<input type="number" step="1" value="${bestand??''}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:56px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};">`}
