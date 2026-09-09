@@ -1047,7 +1047,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.41';
+const APP_VERSION = '6.99.42';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13929,7 +13929,8 @@ async function renderKitchen(){
         validDishes.forEach((dish,i)=>{
           const zKey=zutatenKey(selectedWoche, day, dish.slot);
           const override = (zKey && overrideMap[zKey]) || overrideMap[dish.name];
-          const zutaten = (override?.zutaten||dish.zutaten||'').replace(/\n/g,' ').trim();
+          const zutatenRaw = (override?.zutaten||dish.zutaten||'').trim();
+          const zutaten = zutatenRaw.replace(/\n/g,' ').trim();
           const allergenMain = dish.allergene?.main||[];
           const allergenDressing = dish.allergene?.dressing||[];
           const hasZutaten = zutaten.length>0;
@@ -13953,8 +13954,8 @@ async function renderKitchen(){
               <span style="color:var(--muted);font-size:14px;">›</span>
             </div>
             <div id="${detailId}" style="display:none;background:#FAFAFA;border-top:0.5px solid var(--border);">
-              ${renderZutatenReadOnly(zutaten)}
-              <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${selectedWoche}, '${day}', '${dish.slot||''}')" data-dish="${dish.name}" data-zutaten="${zutaten.replace(/"/g,'&quot;')}" style="margin-top:8px;width:100%;padding:7px;border:1px dashed rgba(29,94,58,0.3);border-radius:8px;font-size:11px;color:var(--green);background:var(--green-light);cursor:pointer;">✏️ Zutaten bearbeiten</button>
+              ${renderZutatenReadOnly(zutatenRaw)}
+              <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${selectedWoche}, '${day}', '${dish.slot||''}')" data-dish="${dish.name}" data-zutaten="${zutatenRaw.replace(/"/g,'&quot;')}" style="margin-top:8px;width:100%;padding:7px;border:1px dashed rgba(29,94,58,0.3);border-radius:8px;font-size:11px;color:var(--green);background:var(--green-light);cursor:pointer;">✏️ Zutaten bearbeiten</button>
             </div>
           </div>`;
         });
