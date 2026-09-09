@@ -202,6 +202,7 @@ summary::marker{content:'';}
     <div id="v-pack" class="view"></div>
     <div id="v-org" class="view"></div>
     <div id="v-management" class="view"></div>
+    <div id="v-hygieneauswertung" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -1046,7 +1047,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.39';
+const APP_VERSION = '6.99.41';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1753,7 +1754,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -2657,6 +2658,24 @@ async function zdSaveLocal(dishName, text, woche, tag, slot){
 
 
 // Open full-screen zutaten editor modal
+function switchZdTab(which){
+  const mainEl=document.getElementById('zd-tab-main'), extraEl=document.getElementById('zd-tab-extra');
+  const mainBtn=document.getElementById('zd-tab-btn-main'), extraBtn=document.getElementById('zd-tab-btn-extra');
+  if(!mainEl||!extraEl) return;
+  const activeStyle='flex:1;padding:9px 0;font-size:12px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:var(--green);color:#fff;';
+  const inactiveStyle='flex:1;padding:9px 0;font-size:12px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:var(--surface-1);color:var(--sub);';
+  if(which==='extra'){
+    mainEl.style.display='none'; extraEl.style.display='block';
+    if(mainBtn) mainBtn.setAttribute('style', inactiveStyle);
+    if(extraBtn) extraBtn.setAttribute('style', activeStyle);
+  } else {
+    mainEl.style.display='block'; extraEl.style.display='none';
+    if(mainBtn) mainBtn.setAttribute('style', activeStyle);
+    if(extraBtn) extraBtn.setAttribute('style', inactiveStyle);
+  }
+}
+window.switchZdTab=switchZdTab;
+
 function openZutatenEditor(dishName, currentText, woche, tag, slot){
   const prev=document.getElementById('zd-editor-modal');
   if(prev) prev.remove();
@@ -2680,18 +2699,25 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   sheet.appendChild(hdr);
 
   // Body with editable list — Haupt-Gericht und benannter Extra-Teil (Dip/Sauce/Toppings/Raita/...)
-  // getrennt editierbar (seit v6.99.13), damit die Trennung beim Bearbeiten erhalten bleibt statt
-  // beim Speichern wieder zu einer flachen Liste zu verschmelzen.
+  // getrennt editierbar (seit v6.99.13), und seit heute als Tab-Umschalter (2 Spalten nebeneinander)
+  // dargestellt — exakt dieselbe Optik wie die Filialen sie beim Anschauen später sehen (Wunsch
+  // Tini 09.09.26: Küche soll dieselbe Struktur wie Stores haben, sonst bleibt's ein Chaos).
   const {main:zdMainText, extra:zdExtraText}=splitZutatenMainExtra(currentText);
   const body=document.createElement('div');
   body.style.padding='14px 16px';
-  body.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🧂 Gericht</div>'
-    +renderZutatenEditable(zdMainText, safeKey+'_main')
-    +'<div id="zd-extra-wrap" style="margin-top:14px;">'
-    +(zdExtraText
-      ? '<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🥗 Dip / Sauce / Toppings</div>'+renderZutatenEditable(zdExtraText, safeKey+'_extra')
-      : '<button id="zd-add-extra-btn" style="font-size:12px;color:var(--green);background:var(--green-light);border:1px dashed rgba(29,94,58,0.3);border-radius:8px;padding:8px 12px;cursor:pointer;width:100%;">+ Dip / Sauce / Toppings hinzufügen</button>')
-    +'</div>';
+  const zdHasExtra=!!zdExtraText;
+  body.innerHTML=`<div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button id="zd-tab-btn-main" onclick="switchZdTab('main')" style="flex:1;padding:9px 0;font-size:12px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:var(--green);color:#fff;">🧂 GERICHT</button>
+      <button id="zd-tab-btn-extra" onclick="switchZdTab('extra')" style="flex:1;padding:9px 0;font-size:12px;font-weight:700;border:none;border-radius:8px;cursor:pointer;background:var(--surface-1);color:var(--sub);">🥗 DIP/SAUCE/TOPPINGS</button>
+    </div>
+    <div id="zd-tab-main" style="display:block;">${renderZutatenEditable(zdMainText, safeKey+'_main')}</div>
+    <div id="zd-tab-extra" style="display:none;">
+      <div id="zd-extra-wrap">
+      ${zdHasExtra
+        ? renderZutatenEditable(zdExtraText, safeKey+'_extra')
+        : `<button id="zd-add-extra-btn" style="font-size:12px;color:var(--green);background:var(--green-light);border:1px dashed rgba(29,94,58,0.3);border-radius:8px;padding:8px 12px;cursor:pointer;width:100%;">+ Dip / Sauce / Toppings hinzufügen</button>`}
+      </div>
+    </div>`;
   sheet.appendChild(body);
 
   // Footer buttons
@@ -2713,10 +2739,10 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   if(addExtraBtn){
     addExtraBtn.addEventListener('click', ()=>{
       const wrap=document.getElementById('zd-extra-wrap');
-      wrap.innerHTML='<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">🥗 Dip / Sauce / Toppings</div>'
-        +renderZutatenEditable('', safeKey+'_extra');
+      wrap.innerHTML=renderZutatenEditable('', safeKey+'_extra');
       const newExtraEditor=wrap.querySelector('.zd-editor');
       zdAttach(newExtraEditor);
+      switchZdTab('extra');
     });
   }
 
@@ -3566,6 +3592,14 @@ async function renderHome(){
       <span id="org-shop-picker-arrow" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#fff;font-size:16px;pointer-events:none;">→</span>
     </div>
     <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:-2px 0 8px;"></div>
+    <div onclick="goTo('hygieneauswertung')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
+      <span style="font-size:18px;">🌡️</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#991B1B;">Hygiene-Auswertung</div>
+        <div style="font-size:10.5px;color:#B91C1C;">Kühlschrank- & Wareneingangs-Temperaturen je Filiale</div>
+      </div>
+      <span style="color:#B91C1C;">→</span>
+    </div>
     <div onclick="goTo('management')" style="display:flex;align-items:center;gap:10px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🧭</span>
       <div style="flex:1;">
@@ -6326,6 +6360,70 @@ async function toggleCl(templateId){
 }
 
 // ---- ORGANISATION VIEW (PIN 9999) ----
+// Hygiene-Auswertung (09.09.26, Wunsch Tini) — eigener Button statt automatischem Pop-up. Zeigt
+// tabellarisch den jeweils aktuellsten eingetragenen Wert je Filiale, rot markiert nur wenn
+// außerhalb des Richtwerts (Kühlschrank klein=Speisen 4–6°C, groß=Getränke 7–10°C; Wareneingang
+// ≥65°C) — sonst ganz normal in Schwarz stehen gelassen, wie gewünscht.
+async function renderHygieneAuswertung(){
+  const el=document.getElementById('v-hygieneauswertung');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🌡️','Hygiene-Auswertung','Aktuellste Werte je Filiale','#DC2626');
+
+  const [stores, kuehlRows, weRows]=await Promise.all([
+    api('stores?select=id,name&order=id').catch(()=>[]),
+    api('kuehleinrichtungen?select=store_id,datum,temp_klein,temp_gross,temp_vitrine&order=datum.desc&limit=500').catch(()=>[]),
+    api('wareneingang?select=store_id,datum,temperatur&order=datum.desc&limit=500').catch(()=>[])
+  ]);
+  const storeList=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070' && s.id!=='kitchen');
+
+  // Pro Filiale nur den jeweils neuesten Eintrag (Zeilen sind schon nach Datum absteigend sortiert)
+  const latestKuehl={}; (kuehlRows||[]).forEach(k=>{ if(!latestKuehl[k.store_id]) latestKuehl[k.store_id]=k; });
+  const latestWe={}; (weRows||[]).forEach(w=>{ if(!latestWe[w.store_id]) latestWe[w.store_id]=w; });
+
+  const dateFmt=d=>d?new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'–';
+  const cellStyle=(bad)=>`padding:8px 6px;text-align:center;font-size:13px;${bad?'color:#DC2626;font-weight:700;':'color:#1a1a18;'}`;
+
+  html+=`<div style="font-size:11px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:8px 10px;margin-bottom:14px;">ℹ️ Richtwerte: Kleiner Kühlschrank (Speisen) 4–6°C · Großer Kühlschrank (Getränke) 7–10°C · Wareneingang ≥65°C</div>`;
+
+  html+=`<div class="section-lbl">🧊 Kühlschrank</div>`;
+  html+=`<div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Filiale</th><th>Kleiner<br>Kühlschrank</th><th>Großer<br>Kühlschrank</th><th>Vitrine</th><th>Zuletzt</th>
+  </tr></thead><tbody>`;
+  storeList.forEach(s=>{
+    const k=latestKuehl[s.id];
+    const kleinBad=k && k.temp_klein!=null && (k.temp_klein<4||k.temp_klein>6);
+    const grossBad=k && k.temp_gross!=null && (k.temp_gross<7||k.temp_gross>10);
+    html+=`<tr>
+      <td data-no-translate style="padding:8px 6px;font-size:12.5px;font-weight:500;">${s.name}</td>
+      <td style="${cellStyle(kleinBad)}">${k&&k.temp_klein!=null?k.temp_klein+'°C':'–'}</td>
+      <td style="${cellStyle(grossBad)}">${k&&k.temp_gross!=null?k.temp_gross+'°C':'–'}</td>
+      <td style="${cellStyle(false)}">${k&&k.temp_vitrine!=null?k.temp_vitrine+'°C':'–'}</td>
+      <td style="padding:8px 6px;text-align:center;font-size:11px;color:var(--muted);">${k?dateFmt(k.datum):'–'}</td>
+    </tr>`;
+  });
+  html+='</tbody></table></div>';
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">🚚 Wareneingang</div>`;
+  html+=`<div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    <th style="text-align:left;">Filiale</th><th>Temperatur</th><th>Zuletzt</th>
+  </tr></thead><tbody>`;
+  storeList.forEach(s=>{
+    const w=latestWe[s.id];
+    const bad=w && w.temperatur!=null && w.temperatur<65;
+    html+=`<tr>
+      <td data-no-translate style="padding:8px 6px;font-size:12.5px;font-weight:500;">${s.name}</td>
+      <td style="${cellStyle(bad)}">${w&&w.temperatur!=null?w.temperatur+'°C':'–'}</td>
+      <td style="padding:8px 6px;text-align:center;font-size:11px;color:var(--muted);">${w?dateFmt(w.datum):'–'}</td>
+    </tr>`;
+  });
+  html+='</tbody></table></div>';
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderHygieneAuswertung=renderHygieneAuswertung;
+
 async function renderManagement(){
   const el=document.getElementById('v-management');
   const maengelOffen=await api(`maengel?status=neq.behoben&select=id,status`).catch(()=>[]);
@@ -7102,35 +7200,9 @@ async function loadOrgDashboard(){
     const dotNeutral=`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#D9D9D6;" title="Heute nicht gefordert (nur Di & Do)"></span>`;
     const realWeekdayDash=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
     const isKCDayDash=realWeekdayDash===2||realWeekdayDash===4; // Shop-Produkte nur Dienstag & Donnerstag
-    // Hygiene-Alarm (09.09.26, Wunsch Tini): Wareneingang wiederholt unter 65°C oder Kühlschrank
-    // wiederholt über 6°C in den letzten 7 Tagen — Grenzwerte identisch zu "Schicht starten".
-    // Schwelle: 3+ Vorfälle pro Filiale in 7 Tagen (nicht schon bei einem einzelnen Ausrutscher,
-    // der ohnehin sofort eine Maßnahme braucht) — kann bei Bedarf angepasst werden.
-    const sevenDaysAgoStr=(()=>{ const d=new Date(); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
-    const [weRecent, kuehlRecent]=await Promise.all([
-      api(`wareneingang?datum=gte.${sevenDaysAgoStr}&select=store_id,datum,temperatur`).catch(()=>[]),
-      api(`kuehleinrichtungen?datum=gte.${sevenDaysAgoStr}&select=store_id,datum,temp_klein,temp_gross`).catch(()=>[])
-    ]);
-    const weViolCounts={};
-    (weRecent||[]).forEach(w=>{ if(w.temperatur!=null && w.temperatur<65) weViolCounts[w.store_id]=(weViolCounts[w.store_id]||0)+1; });
-    const kuehlViolCounts={};
-    (kuehlRecent||[]).forEach(k=>{
-      const bad=(k.temp_klein!=null && (k.temp_klein<4||k.temp_klein>6)) || (k.temp_gross!=null && (k.temp_gross<7||k.temp_gross>10));
-      if(bad) kuehlViolCounts[k.store_id]=(kuehlViolCounts[k.store_id]||0)+1;
-    });
-    const weAlerts=Object.entries(weViolCounts).filter(([,c])=>c>=3);
-    const kuehlAlerts=Object.entries(kuehlViolCounts).filter(([,c])=>c>=3);
-    let hygieneHtml='';
-    if(weAlerts.length||kuehlAlerts.length){
-      const storeNameOf=id=>(storeList.find(s=>s.id===id)||{}).name||id;
-      hygieneHtml=`<div style="background:#FEF2F2;border:2px solid #EF4444;border-radius:12px;padding:12px 14px;margin-bottom:14px;">
-        <div style="font-size:13px;font-weight:700;color:#991B1B;margin-bottom:6px;">🌡️ Hygiene-Warnung — wiederholt außerhalb der Grenzwerte (letzte 7 Tage)</div>
-        ${weAlerts.map(([sid,c])=>`<div data-no-translate style="font-size:11.5px;color:#B91C1C;">🚚 ${storeNameOf(sid)}: ${c}× Wareneingang unter 65°C</div>`).join('')}
-        ${kuehlAlerts.map(([sid,c])=>`<div data-no-translate style="font-size:11.5px;color:#B91C1C;">🧊 ${storeNameOf(sid)}: ${c}× Kühlschrank außerhalb Grenzwert (Speisen 4–6°/Getränke 7–10°)</div>`).join('')}
-      </div>`;
-    }
-
-    let html=hygieneHtml+reminderHtml;
+    // Hygiene-Auswertung jetzt als eigener Button + Tabellen-Ansicht statt automatischem Pop-up
+    // (Wunsch Tini 09.09.26, siehe goTo('hygieneauswertung')) — kein Banner mehr hier.
+    let html=reminderHtml;
     html+=`<div class="section-lbl">📦 Bestellstatus heute</div><div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Filiale</th><th>Shop${isKCDayDash?'':'<br><span style="font-size:8px;font-weight:400;">(heute nicht nötig)</span>'}</th><th>Forecast<br>morgen</th><th>Transporter</th><th>Sweets</th><th>Entsorgung</th>
     </tr></thead><tbody>`;
