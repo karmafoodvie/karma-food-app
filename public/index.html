@@ -1059,7 +1059,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.45';
+const APP_VERSION = '6.99.46';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2657,7 +2657,7 @@ async function zdSaveLocal(dishName, text, woche, tag, slot){
     }
     const autoCodes=await computeAllergensFromZutatenText(text);
     const mergedCodes=[...new Set([...(ex?.allergene_codes||[]), ...autoCodes])];
-    const payload={gericht:dishName, zutaten:text, allergene_codes:mergedCodes, aktualisiert_am:new Date().toISOString()};
+    const payload={gericht:dishName, zutaten:text, allergene_codes:mergedCodes, crew_bestaetigt:true, aktualisiert_am:new Date().toISOString()};
     if(key) payload.zkey=key;
     if(ex){
       await api('allergene_rezepturen?id=eq.'+ex.id,{method:'PATCH',body:JSON.stringify(payload)});
@@ -6455,7 +6455,7 @@ async function renderZutatenKontrolle(){
   let html=backToHomeHtml();
   html+=pageHeaderHtml('✅','Zutaten-Kontrolle','Status je Gericht — aktuelle Herbst/Winter-Karte','#16A34A');
 
-  const overrides=await api('allergene_rezepturen?select=gericht,zutaten,allergene_codes').catch(()=>[]);
+  const overrides=await api('allergene_rezepturen?select=gericht,zutaten,allergene_codes,crew_bestaetigt').catch(()=>[]);
   const overrideMap={}; (overrides||[]).forEach(o=>{ overrideMap[o.gericht]=o; });
 
   // Alle Gerichte aus allen 4 Wochen der aktuell laufenden Epoche sammeln, ohne Duplikate.
@@ -6477,15 +6477,14 @@ async function renderZutatenKontrolle(){
 
   const rows=dishes.map(name=>{
     const o=overrideMap[name];
-    const hasReal = o && o.zutaten && o.zutaten.trim().length>40;
-    const hasAllergenCheck = o && o.allergene_codes!=null; // auch [] zählt als "geprüft"
-    return {name, hasReal, hasAllergenCheck};
+    const hasReal = o && o.zutaten && o.zutaten.trim().length>40 && o.crew_bestaetigt;
+    return {name, hasReal};
   });
   const doneCount=rows.filter(r=>r.hasReal).length;
 
   html+=`<div style="font-size:12px;color:var(--sub);background:var(--surface-1);border-radius:10px;padding:10px 12px;margin-bottom:14px;">
-    <strong>${doneCount} von ${rows.length}</strong> Gerichten haben eine vollständige, individuelle Zutatenliste.
-    Grün = fertig · Orange = nur Basis-Zutaten (Gewürze), Gemüse/Spezielles fehlt noch · Rot = noch gar nichts hinterlegt.
+    <strong>${doneCount} von ${rows.length}</strong> Gerichten sind von der Küche bestätigt.
+    Grün = von der Küche geprüft/bestätigt · Orange = Grundlage (Gewürze + Standard-Basis) hinterlegt, aber noch nicht gegenkontrolliert · Rot = noch gar nichts hinterlegt.
   </div>`;
 
   html+=`<div class="card" style="overflow:hidden;">`;
