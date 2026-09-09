@@ -1046,7 +1046,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.38';
+const APP_VERSION = '6.99.39';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7115,7 +7115,7 @@ async function loadOrgDashboard(){
     (weRecent||[]).forEach(w=>{ if(w.temperatur!=null && w.temperatur<65) weViolCounts[w.store_id]=(weViolCounts[w.store_id]||0)+1; });
     const kuehlViolCounts={};
     (kuehlRecent||[]).forEach(k=>{
-      const bad=(k.temp_klein!=null && k.temp_klein>6) || (k.temp_gross!=null && k.temp_gross>6);
+      const bad=(k.temp_klein!=null && (k.temp_klein<4||k.temp_klein>6)) || (k.temp_gross!=null && (k.temp_gross<7||k.temp_gross>10));
       if(bad) kuehlViolCounts[k.store_id]=(kuehlViolCounts[k.store_id]||0)+1;
     });
     const weAlerts=Object.entries(weViolCounts).filter(([,c])=>c>=3);
@@ -7126,7 +7126,7 @@ async function loadOrgDashboard(){
       hygieneHtml=`<div style="background:#FEF2F2;border:2px solid #EF4444;border-radius:12px;padding:12px 14px;margin-bottom:14px;">
         <div style="font-size:13px;font-weight:700;color:#991B1B;margin-bottom:6px;">🌡️ Hygiene-Warnung — wiederholt außerhalb der Grenzwerte (letzte 7 Tage)</div>
         ${weAlerts.map(([sid,c])=>`<div data-no-translate style="font-size:11.5px;color:#B91C1C;">🚚 ${storeNameOf(sid)}: ${c}× Wareneingang unter 65°C</div>`).join('')}
-        ${kuehlAlerts.map(([sid,c])=>`<div data-no-translate style="font-size:11.5px;color:#B91C1C;">🧊 ${storeNameOf(sid)}: ${c}× Kühlschrank über 6°C</div>`).join('')}
+        ${kuehlAlerts.map(([sid,c])=>`<div data-no-translate style="font-size:11.5px;color:#B91C1C;">🧊 ${storeNameOf(sid)}: ${c}× Kühlschrank außerhalb Grenzwert (Speisen 4–6°/Getränke 7–10°)</div>`).join('')}
       </div>`;
     }
 
@@ -10050,7 +10050,7 @@ function renderDcTabContent(){
     html+=`</tbody></table></div></div>`;
   } else {
     html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Datum</th><th style="text-align:left;">Filiale</th><th>Klein</th><th>Groß</th></tr></thead><tbody>`;
-    html+=(kuehl||[]).map(k=>`<tr><td>${new Date(k.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[k.store_id]||k.store_id}</td><td><span class="badge ${k.temp_klein<=6?'badge-ok':'badge-warn'}">${k.temp_klein}°C</span></td><td><span class="badge ${k.temp_gross<=6?'badge-ok':'badge-warn'}">${k.temp_gross}°C</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
+    html+=(kuehl||[]).map(k=>`<tr><td>${new Date(k.datum).toLocaleDateString('de-AT')}</td><td data-no-translate>${storeMap[k.store_id]||k.store_id}</td><td><span class="badge ${(k.temp_klein>=4&&k.temp_klein<=6)?'badge-ok':'badge-warn'}">${k.temp_klein}°C</span></td><td><span class="badge ${(k.temp_gross>=7&&k.temp_gross<=10)?'badge-ok':'badge-warn'}">${k.temp_gross}°C</span></td></tr>`).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);">Noch keine Einträge</td></tr>`;
     html+=`</tbody></table></div></div>`;
   }
   el.innerHTML=html;
@@ -10128,6 +10128,10 @@ async function renderDailyCheck(){
   const tempDefault = wek?.temperatur ?? wekPrev?.temperatur ?? '';
   const kleinDefault = kuehl?.temp_klein ?? kuehlPrev?.temp_klein ?? '';
   const grossDefault = kuehl?.temp_gross ?? kuehlPrev?.temp_gross ?? '';
+  const vitrineDefault = kuehl?.temp_vitrine ?? kuehlPrev?.temp_vitrine ?? '';
+  // Vitrinen gibt's aktuell nur bei Börse und Laurenzerberg (09.09.26, Wunsch Tini) — Feld deshalb
+  // nur für diese zwei Filialen einblenden, sonst bleibt's für alle anderen wie bisher.
+  const hatVitrine = currentStore?.id==='boerse' || currentStore?.id==='lb';
   el.innerHTML = backToHomeHtml()+`
     <div style="display:flex;gap:5px;margin-bottom:10px;">
       <div style="flex:1;height:6px;border-radius:4px;background:var(--green);"></div>
@@ -10197,6 +10201,10 @@ async function renderDailyCheck(){
         <div class="item-name">🧊 Großer Kühlschrank</div>
         <input id="kuehl-gross" type="number" step="0.1" value="${grossDefault}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>
+      ${hatVitrine?`<div class="item-row">
+        <div class="item-name">🧊 Vitrine</div>
+        <input id="kuehl-vitrine" type="number" step="0.1" value="${vitrineDefault}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+      </div>`:''}
     </div>
 
     <button class="submit-btn" style="margin-top:16px;font-size:15px;padding:14px;" onclick="saveDailyCheckAll()">
@@ -10237,6 +10245,9 @@ async function saveDailyCheckAll(){
   const klein=parseFloat(document.getElementById('kuehl-klein')?.value);
   const gross=parseFloat(document.getElementById('kuehl-gross')?.value);
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Kühltemperaturen eintragen'); return; }
+  const vitrineEl=document.getElementById('kuehl-vitrine');
+  const vitrine=vitrineEl?parseFloat(vitrineEl.value):NaN;
+  if(vitrineEl && isNaN(vitrine)){ showToast('Bitte auch die Vitrinen-Temperatur eintragen'); return; }
   const ware=getSelectedWaren()||'';
   const wareOk=document.getElementById('wek-ware-ok-box')?.dataset.value==='1';
   try{
@@ -10247,7 +10258,7 @@ async function saveDailyCheckAll(){
       })(),
       (async()=>{
         await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
-        await api('kuehleinrichtungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,temp_klein:klein,temp_gross:gross,mitarbeiter:currentStore.name}])});
+        await api('kuehleinrichtungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,temp_klein:klein,temp_gross:gross,temp_vitrine:vitrineEl?vitrine:null,mitarbeiter:currentStore.name}])});
       })()
     ]);
     showToast('✔ Daily Check-up gespeichert!');
