@@ -1047,7 +1047,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.42';
+const APP_VERSION = '6.99.43';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -14105,7 +14105,7 @@ async function renderKitchen(){
             const dObj=dayDishObjs.find(d=>d.name===name);
             if(!dObj) return '';
             const override=nwOverrideMap[name];
-            const zutaten=(override?.zutaten||dObj.zutaten||'').replace(/\n/g,' ').trim();
+            const zutaten=(override?.zutaten||dObj.zutaten||'').trim();
             const allergenCodes=(override?.allergene_codes||dObj.allergene?.main||[]);
             const {gemuese, rest, getreide}=splitZutaten(zutaten);
             const allergenMain=dObj.allergene?.main||[];
@@ -14627,11 +14627,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const dish=dishObj.name;
     const zKey=zutatenKey(_cookWoche, tomorrowWd, dishObj.slot);
     const override = (zKey && overrideMap[zKey]) || overrideMap[dish];
-    const zutaten = (override?.zutaten||dishObj.zutaten||'').replace(/\n/g,' ').trim();
+    const zutatenRaw = (override?.zutaten||dishObj.zutaten||'').trim();
     const detailId = `morgen_zut_${dIdx}`;
     const fbId=`morgen_fb_${dIdx}`;
     html+=`<div id="${detailId}" class="card" style="display:none;position:relative;margin-top:-4px;margin-bottom:8px;padding:12px 14px;background:#fff;border:1px solid var(--border);border-radius:12px;">
-      <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${_cookWoche}, '${tomorrowWd}', '${dishObj.slot||''}')" data-dish="${dish}" data-zutaten="${zutaten.replace(/"/g,'&quot;')}"
+      <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${_cookWoche}, '${tomorrowWd}', '${dishObj.slot||''}')" data-dish="${dish}" data-zutaten="${zutatenRaw.replace(/"/g,'&quot;')}"
         title="Zutaten bearbeiten"
         style="position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;border:none;background:var(--green-light);color:var(--green);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✏️</button>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-right:36px;">
@@ -14641,7 +14641,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">💬 FEEDBACK</div>
       <div id="${fbId}" style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);">Wird geladen…</div></div>
       <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:4px;">🧂 ZUTATEN</div>
-      <div style="font-size:11px;line-height:1.6;">${renderZutatenReadOnly(zutaten)}</div>
+      <div style="font-size:11px;line-height:1.6;">${renderZutatenReadOnly(zutatenRaw)}</div>
     </div>`;
   });
 
@@ -14762,7 +14762,7 @@ async function renderMenuWoche(el, tabHtml){
     html += `<div style="font-size:12px;font-weight:700;color:${isToday?'var(--green)':'var(--sub)'};letter-spacing:.04em;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid ${isToday?'var(--green)':'var(--border)'};">${DAYS_DE[day]}${isToday?' 👈 HEUTE':''}</div>`;
     dishes.filter(d=>d.name&&!d.name.startsWith('ÖL')).forEach(dish=>{
       const override = overrideMap[dish.name];
-      const zutaten = (override?.zutaten||dish.zutaten||'').replace(/\n/g,' ').trim();
+      const zutaten = (override?.zutaten||dish.zutaten||'').split('\n').filter(l=>!/^[^,]{1,30}:$/.test(l.trim())).join(' ').replace(/\s+/g,' ').trim();
       const allergene = override?.allergene_codes||[];
       const allergenStr = dish.allergene?.main?.length ? dish.allergene.main.join(', ') : (allergene.join(', ')||'');
       const dressingStr = dish.allergene?.dressing?.length ? dish.allergene.dressing.join(', ') : '';
