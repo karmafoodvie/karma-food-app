@@ -1066,7 +1066,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.49';
+const APP_VERSION = '6.99.50';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1238,6 +1238,9 @@ async function api(path, opts={}) {
   const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...opts,
     mode:'cors',
+    cache:'no-store', // 10.09.26: erzwingt immer eine frische Antwort — verhindert, dass nach einer
+    // Änderung (z.B. "eingepackt" antippen) beim direkt folgenden Neu-Laden eine alte, zwischen-
+    // gespeicherte Antwort angezeigt wird, obwohl die Datenbank längst aktuell ist.
     headers: {'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
   }, 10000); // 10s Timeout — verhindert unendliches Hängenbleiben bei Netzwerkproblemen/Stoßzeit
   if (!res.ok) throw new Error(await res.text());
