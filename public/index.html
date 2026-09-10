@@ -319,8 +319,15 @@ summary::marker{content:'';}
       <span style="font-weight:600;font-size:15px;color:#0EA5E9;">Nachricht von der Organisation</span>
     </div>
     <div id="bc-modal-message" style="font-size:14px;color:#1a1a18;background:#F0F9FF;border-radius:10px;padding:12px;margin-bottom:14px;white-space:pre-wrap;"></div>
+    <div id="bc-modal-rating" style="display:none;gap:6px;margin-bottom:12px;">
+      <button type="button" class="bc-rating-btn" data-v="1" onclick="setBcRating(1)" style="flex:1;padding:10px 0;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;">😖</button>
+      <button type="button" class="bc-rating-btn" data-v="2" onclick="setBcRating(2)" style="flex:1;padding:10px 0;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;">😐</button>
+      <button type="button" class="bc-rating-btn" data-v="3" onclick="setBcRating(3)" style="flex:1;padding:10px 0;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;">🙂</button>
+      <button type="button" class="bc-rating-btn" data-v="4" onclick="setBcRating(4)" style="flex:1;padding:10px 0;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;">😋</button>
+      <button type="button" class="bc-rating-btn" data-v="5" onclick="setBcRating(5)" style="flex:1;padding:10px 0;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;">🤩</button>
+    </div>
     <textarea id="bc-modal-reply" placeholder="Antwort (optional)..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;min-height:70px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
-    <button class="submit-btn" onclick="replyToBroadcast()" style="margin-bottom:8px;">✔ Antworten & schließen</button>
+    <button id="bc-modal-reply-btn" class="submit-btn" onclick="replyToBroadcast()" style="margin-bottom:8px;">✔ Antworten & schließen</button>
     <button onclick="dismissBroadcast()" style="width:100%;background:none;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:13px;color:var(--muted);cursor:pointer;">Nur schließen</button>
   </div>
 </div>
@@ -1059,7 +1066,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.46';
+const APP_VERSION = '6.99.49';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8855,6 +8862,13 @@ async function renderBroadcast(){
       <option value="transporter">🚚 Transporter</option>
       ${storeList.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
     </select>
+    <div style="font-weight:500;margin-bottom:8px;">Was sollen sie zurückgeben?</div>
+    <select id="bc-antwort-typ" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+      <option value="freitext">💬 Freitext-Antwort (wie bisher)</option>
+      <option value="bewertung">⭐ Bewertung (Emoji-Skala 1-5)</option>
+      <option value="beides">⭐💬 Bewertung + Freitext</option>
+      <option value="nachricht">📢 Nur Info, keine Antwort nötig</option>
+    </select>
     <div style="font-weight:500;margin-bottom:8px;">Nachricht</div>
     <textarea id="bc-message" placeholder="z.B. Bitte morgen extra Servietten mitbestellen..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
     <div style="font-weight:500;margin-bottom:6px;">Dein Name</div>
@@ -8879,9 +8893,10 @@ async function sendBroadcast(){
   const message=document.getElementById('bc-message').value.trim();
   const name=document.getElementById('bc-name')?.value.trim()||currentStore?.name||'Organisation';
   const showUntil=document.getElementById('bc-until')?.value||null;
+  const antwortTyp=document.getElementById('bc-antwort-typ')?.value||'freitext';
   if(!message){ showToast('Bitte Nachricht eingeben'); return; }
   try{
-    await api('org_broadcasts',{method:'POST',body:JSON.stringify([{message, target_store_id:target, created_by:name, show_until:showUntil}])});
+    await api('org_broadcasts',{method:'POST',body:JSON.stringify([{message, target_store_id:target, created_by:name, show_until:showUntil, antwort_typ:antwortTyp}])});
     showToast('✔ Nachricht gesendet');
     renderBroadcast();
   }catch(e){console.error(e);showToast('Fehler beim Senden');}
@@ -8912,7 +8927,11 @@ async function loadBroadcastHistory(storeList){
       <div style="font-size:13px;color:#1a1a18;margin-top:4px;">${b.message}</div>
       ${isTransporter?'':`<div style="font-size:10.5px;color:var(--muted);margin-top:6px;">👁️ Gelesen: ${readCount}/${targetStores.length}</div>`}
       ${myReplies.length?`<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:6px;">
-        ${myReplies.map(r=>`<div style="font-size:12px;color:var(--sub);margin-top:4px;"><strong data-no-translate>${storeMap[r.store_id]||r.store_id}:</strong> ${r.reply}</div>`).join('')}
+        ${myReplies.map(r=>{
+          const scale=[null,'😖','😐','🙂','😋','🤩'];
+          const ratingHtml=r.rating?`<span style="font-size:15px;margin-right:4px;">${scale[r.rating]}</span>`:'';
+          return `<div style="font-size:12px;color:var(--sub);margin-top:4px;">${ratingHtml}<strong data-no-translate>${storeMap[r.store_id]||r.store_id}:</strong> ${r.reply||''}</div>`;
+        }).join('')}
       </div>`:''}
     </div>`;
   }).join('');
@@ -9133,7 +9152,7 @@ let broadcastQueue=[];
 async function checkForBroadcasts(){
   if(!currentStore || currentStore.id==='zentrale') return;
   try{
-    const all=await api(`org_broadcasts?or=(target_store_id.is.null,target_store_id.eq.${currentStore.id})&order=created_at.asc&select=id,message,created_at`).catch(()=>[]);
+    const all=await api(`org_broadcasts?or=(target_store_id.is.null,target_store_id.eq.${currentStore.id})&order=created_at.asc&select=id,message,created_at,antwort_typ`).catch(()=>[]);
     const reads=await api(`org_broadcast_reads?store_id=eq.${currentStore.id}&select=broadcast_id`).catch(()=>[]);
     const readIds=new Set((reads||[]).map(r=>r.broadcast_id));
     broadcastQueue=(all||[]).filter(b=>!readIds.has(b.id));
@@ -9160,12 +9179,31 @@ async function loadActiveBroadcastBanner(){
       </div>`).join('');
   }catch(e){console.error(e);}
 }
+let bcSelectedRating=null;
+function setBcRating(v){
+  bcSelectedRating=v;
+  document.querySelectorAll('.bc-rating-btn').forEach(b=>{
+    const active=parseInt(b.dataset.v,10)===v;
+    b.style.background=active?'#D4FF3F':'#fff';
+    b.style.borderColor=active?'#D4FF3F':'var(--border)';
+  });
+}
+window.setBcRating=setBcRating;
+
 function showNextBroadcast(){
   const overlay=document.getElementById('bc-modal-overlay');
   if(!broadcastQueue.length){ overlay.style.display='none'; return; }
   const b=broadcastQueue[0];
   document.getElementById('bc-modal-message').textContent=b.message;
   document.getElementById('bc-modal-reply').value='';
+  bcSelectedRating=null;
+  document.querySelectorAll('.bc-rating-btn').forEach(btn=>{btn.style.background='#fff';btn.style.borderColor='var(--border)';});
+  const typ=b.antwort_typ||'freitext';
+  document.getElementById('bc-modal-rating').style.display=(typ==='bewertung'||typ==='beides')?'flex':'none';
+  document.getElementById('bc-modal-reply').style.display=(typ==='freitext'||typ==='beides')?'block':'none';
+  const replyBtn=document.getElementById('bc-modal-reply-btn');
+  replyBtn.style.display=(typ==='nachricht')?'none':'block';
+  replyBtn.textContent=(typ==='bewertung')?'✔ Bewerten & schließen':'✔ Antworten & schließen';
   overlay.style.display='flex';
 }
 async function markCurrentBroadcastRead(){
@@ -9178,11 +9216,11 @@ async function replyToBroadcast(){
   const b=broadcastQueue[0];
   if(!b) return;
   const reply=document.getElementById('bc-modal-reply').value.trim();
-  if(reply){
-    try{ await api('org_broadcast_replies',{method:'POST',body:JSON.stringify([{broadcast_id:b.id, store_id:currentStore.id, reply}])}); }catch(e){console.error(e);}
+  if(reply || bcSelectedRating!=null){
+    try{ await api('org_broadcast_replies',{method:'POST',body:JSON.stringify([{broadcast_id:b.id, store_id:currentStore.id, reply:reply||null, rating:bcSelectedRating}])}); }catch(e){console.error(e);}
   }
   await markCurrentBroadcastRead();
-  showToast(reply?'✔ Antwort gesendet':'✔ Geschlossen');
+  showToast((reply||bcSelectedRating!=null)?'✔ Antwort gesendet':'✔ Geschlossen');
   showNextBroadcast();
 }
 window.replyToBroadcast=replyToBroadcast;
@@ -12401,13 +12439,23 @@ async function toggleKcPacked(articleId, storeId, soll){
   // "Eingepackt" heißt: die Filiale hat nach der Lieferung wieder SOLL-Bestand — wir schreiben das
   // direkt in den IST-Bestand, statt den Bedarf nur zu verstecken. Der Bedarf verschwindet dadurch
   // ganz natürlich aus der Berechnung (SOLL − IST = 0), keine separate Versteck-Logik nötig.
+  console.log('toggleKcPacked aufgerufen:', {articleId, storeId, soll});
+  if(articleId==null || !storeId || soll==null){
+    showToast('Fehler: fehlende Daten beim Einpacken — bitte Seite neu laden', true);
+    console.error('toggleKcPacked: ungültige Parameter', {articleId, storeId, soll});
+    return;
+  }
   const today=new Date().toISOString().split('T')[0];
   try{
-    await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
-    await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:storeId,article_id:articleId,ist_bestand:soll,updated_date:today}])});
+    const delRes=await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
+    const postRes=await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:storeId,article_id:articleId,ist_bestand:soll,updated_date:today}])});
+    console.log('toggleKcPacked Ergebnis:', {delRes, postRes});
     showToast('✔ Eingepackt — IST-Bestand auf SOLL gesetzt');
     renderPack();
-  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+  }catch(e){
+    console.error('toggleKcPacked Fehler:', e);
+    showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,150),true);
+  }
 }
 window.toggleKcPacked=toggleKcPacked;
 
@@ -12435,7 +12483,7 @@ async function renderKCOverview(el, tabHtml, storeList){
 
   // Gleicher Tabellenaufbau wie bei Transporter: Artikel | Filialen | ∑ — für einheitliche Optik
   const renderHeader=()=>{
-    let h=`<th style="text-align:left;">Artikel</th>`;
+    let h=`<th style="text-align:left;position:sticky;left:0;background:#fff;z-index:2;">Artikel</th>`;
     storeList.forEach(s=>h+=`<th style="color:${STORE_COLORS[s.id]||'#888'};" data-no-translate>${s.name.split(' ')[0]}</th>`);
     h+=`<th style="color:${activeColor};">∑</th>`;
     return h;
@@ -12445,7 +12493,7 @@ async function renderKCOverview(el, tabHtml, storeList){
     const soll=a.min_stock||0;
     const verfuegbar=a.verfuegbar!==false;
     let totalBedarf=0;
-    let r=`<tr><td><div style="display:flex;align-items:center;gap:6px;">
+    let r=`<tr><td style="position:sticky;left:0;background:#fff;z-index:1;"><div style="display:flex;align-items:center;gap:6px;">
       <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
       ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
       <span>${a.name}</span>
