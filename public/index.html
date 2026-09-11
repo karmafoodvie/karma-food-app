@@ -205,6 +205,7 @@ summary::marker{content:'';}
     <div id="v-hygieneauswertung" class="view"></div>
     <div id="v-zutatenkontrolle" class="view"></div>
     <div id="v-freitagCheckliste" class="view"></div>
+    <div id="v-epochenCheck" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -1067,7 +1068,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.51';
+const APP_VERSION = '6.99.54';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1777,7 +1778,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -3568,6 +3569,11 @@ async function renderHome(){
         <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Entsorgung</div>
         <div style="font-size:9.5px;color:${disposalDone?'var(--green)':'var(--muted)'};margin-top:1px;">${disposalDone?'✓ erledigt':'Restmengen'}</div>
       </div>
+      ${currentStore?.id==='kitchen'?`<div class="home-card" onclick="goToReminder('order','forecast')" style="flex:1;padding:9px 8px;text-align:center;">
+        <div style="font-size:20px;line-height:1;">📅</div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Forecast</div>
+        <div style="font-size:9.5px;color:var(--muted);margin-top:1px;">Nächste Woche</div>
+      </div>`:''}
     </div>
     <div class="home-card" onclick="goTo('rabattcodes')" style="margin-bottom:6px;padding:8px 10px;">
       <div style="font-size:13px;font-weight:500;">🎟️ Rabattcodes</div>
@@ -3622,6 +3628,14 @@ async function renderHome(){
       <span id="org-shop-picker-arrow" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#fff;font-size:16px;pointer-events:none;">→</span>
     </div>
     <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:-2px 0 8px;"></div>
+    <div onclick="goTo('epochenCheck')" style="display:flex;align-items:center;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
+      <span style="font-size:18px;">🔄</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#1E3A8A;">Epochen-Check</div>
+        <div style="font-size:10.5px;color:#1D4ED8;">Alte Menü-Reste in Forecast & Zutaten aufspüren</div>
+      </div>
+      <span style="color:#1D4ED8;">→</span>
+    </div>
     <div onclick="goTo('zutatenkontrolle')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">✅</span>
       <div style="flex:1;">
@@ -6537,6 +6551,7 @@ const FREITAG_CHECKLISTE_ITEMS=[
   {k:'mhd_check', label:'Datum von Produkten checken — abgelaufen? Gewürze bitte retour schicken, nicht entsorgen'},
   {k:'kuehlschrank', label:'Kühlschränke rauswischen, desinfizieren, wenn möglich enteisen'},
   {k:'glasvitrine', label:'Glasvitrine mit Glasreiniger säubern'},
+  {k:'wc', label:'WC checken/putzen'},
   {k:'oberflaechen', label:'Oberflächen auch im Essbereich gut reinigen'},
   {k:'entsorgen_lager', label:'Was entsorgen oder ins Lager zurückschicken? (falsche Säckchen, Ungebrauchtes)'},
   {k:'kochkurs_zettel', label:'Alte Kochkurs-Zettel/Promo-Aktionen entsorgen'},
@@ -6587,6 +6602,122 @@ async function toggleFreitagItem(key){
   }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
 }
 window.toggleFreitagItem=toggleFreitagItem;
+
+// Epochen-Check (11.09.26, Wunsch Tini) — Werkzeug gegen genau die Fehlerklasse, die sich am
+// 07.09. (erster Herbst/Winter-Tag) durch extrem viele Einzelfälle gezogen hat: alte Gerichte aus
+// der vorherigen Menü-Epoche, die als Forecast-Karteileichen oder als Zeitstempel-Kollision bei den
+// Zutaten in die neue Epoche reinragen. Statt jeden Einzelfall zufällig zu entdecken (wie heute),
+// einmal auf Knopfdruck alles durchsuchen — besonders wichtig direkt nach jedem künftigen Menüwechsel.
+async function renderEpochenCheck(){
+  const el=document.getElementById('v-epochenCheck');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen — kann ein paar Sekunden dauern…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🔄','Epochen-Check','Alte Menü-Reste in Forecast & Zutaten aufspüren','#1D4ED8');
+  html+=`<div style="font-size:11px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:8px 10px;margin-bottom:14px;">ℹ️ Prüft die nächsten 60 Tage gegen den aktuell laufenden Menüplan. Am wichtigsten direkt nach jedem Menüwechsel einmal laufen lassen.</div>`;
+
+  const today=new Date();
+  const todayStr=today.toISOString().split('T')[0];
+  const fromDate=dateMinusDays(todayStr, 14);
+  const toDate=(()=>{ const d=new Date(today); d.setDate(d.getDate()+60); return d.toISOString().split('T')[0]; })();
+
+  // 1) Gültige Gerichtsnamen pro Tag im geprüften Zeitraum sammeln (aktueller Menüplan, epochen-bewusst)
+  const validByDate={};
+  for(let d=new Date(fromDate+'T00:00:00'); d<=new Date(toDate+'T00:00:00'); d.setDate(d.getDate()+1)){
+    const ds=d.toISOString().split('T')[0];
+    const wd=WEEKDAY_STR[d.getDay()];
+    if(!wd) continue; // Wochenende
+    const names=getMenuDishNamesForDay(wd, ds);
+    validByDate[ds]=new Set([...names, REIS_DISH_NAME, 'Samosas', 'Samosa']);
+  }
+
+  // 2) Forecast-Karteileichen: Zeilen mit Gerichtsnamen, die am jeweiligen Tag laut aktuellem
+  // Menüplan gar nicht existieren.
+  const fcRows=await apiAllPages(`forecast_qty?forecast_date=gte.${fromDate}&forecast_date=lte.${toDate}&select=id,forecast_date,store_id,dish_name,qty`).catch(()=>[]);
+  const staleFc=(fcRows||[]).filter(f=>{
+    const valid=validByDate[f.forecast_date];
+    return valid && f.dish_name && !valid.has(f.dish_name) && !f.dish_name.startsWith('⚠️');
+  });
+  // Nach Gericht gruppieren für übersichtliche Anzeige
+  const staleFcByDish={};
+  staleFc.forEach(f=>{ (staleFcByDish[f.dish_name]=staleFcByDish[f.dish_name]||[]).push(f); });
+
+  html+=`<div class="section-lbl">📋 Forecast-Karteileichen</div>`;
+  if(!staleFc.length){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:#16A34A;font-size:13px;">✅ Keine gefunden — Forecast-Daten sind sauber.</div>`;
+  } else {
+    html+=`<div style="font-size:11.5px;color:var(--sub);margin-bottom:8px;">${staleFc.length} Zeilen mit Gerichten, die am jeweiligen Tag laut aktuellem Menüplan gar nicht vorkommen — wahrscheinlich aus der letzten Epoche übrig geblieben.</div>`;
+    Object.entries(staleFcByDish).forEach(([dish,rows])=>{
+      html+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;">
+        <div style="font-size:12.5px;font-weight:600;" data-no-translate>${dish}</div>
+        <div style="font-size:10.5px;color:var(--muted);">${rows.length}× — ${[...new Set(rows.map(r=>r.forecast_date))].slice(0,5).join(', ')}${rows.length>5?' …':''}</div>
+      </div>`;
+    });
+    html+=`<button onclick="cleanupStaleFc()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px;">🗑️ Alle ${staleFc.length} Karteileichen löschen</button>`;
+  }
+
+  // 3) Zeitstempel-Kollisionen: allergene_rezepturen-Zeilen mit zkey, deren Gericht am zugeordneten
+  // Tag/Slot laut aktuellem Menüplan gar nicht (mehr) dort steht.
+  const rezepte=await api('allergene_rezepturen?zkey=not.is.null&select=id,gericht,zkey').catch(()=>[]);
+  const wdMap={mo:1,di:2,mi:3,do:4,fr:5};
+  const collisions=(rezepte||[]).filter(r=>{
+    const m=r.zkey?.match(/^(\d+)_(mo|di|mi|do|fr)_/);
+    if(!m) return false;
+    // Nächstes Vorkommen dieses Wochentags ab heute suchen, um den aktuellen Menüplan an dieser
+    // Woche/Tag-Kombination zu prüfen (Wochennummer läuft ja kontinuierlich weiter).
+    const targetWoche=parseInt(m[1],10);
+    let checkDate=null;
+    for(let i=0;i<28;i++){
+      const d=new Date(today); d.setDate(d.getDate()+i);
+      const ds=d.toISOString().split('T')[0];
+      if(WEEKDAY_STR[d.getDay()]===m[2] && getMenuWocheForDate(ds)===targetWoche){ checkDate=ds; break; }
+    }
+    if(!checkDate) return false;
+    const valid=validByDate[checkDate]||new Set(getMenuDishNamesForDay(m[2],checkDate));
+    return !valid.has(r.gericht);
+  });
+
+  html+=`<div class="section-lbl" style="margin-top:16px;">⏱️ Zeitstempel-Kollisionsrisiko</div>`;
+  if(!collisions.length){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:#16A34A;font-size:13px;">✅ Keine gefunden — alle Zeitstempel passen zum aktuellen Menüplan.</div>`;
+  } else {
+    html+=`<div style="font-size:11.5px;color:var(--sub);margin-bottom:8px;">${collisions.length} Zutaten-Einträge mit einem Zeitstempel, der laut aktuellem Menüplan zu einem ANDEREN Gericht gehört — Kollisionsgefahr wie bei Kürbis-Lasagne/Tofu Tikka Masala. Zeitstempel wird entfernt, das Rezept bleibt als Referenz erhalten.</div>`;
+    collisions.forEach(c=>{
+      html+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+        <div><div style="font-size:12.5px;font-weight:600;" data-no-translate>${c.gericht}</div><div style="font-size:10.5px;color:var(--muted);">Zeitstempel: ${c.zkey}</div></div>
+      </div>`;
+    });
+    html+=`<button onclick="cleanupCollisions()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#EA580C;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px;">⏱️ Bei allen ${collisions.length} den Zeitstempel entfernen</button>`;
+  }
+
+  window._epochenCheckData={staleFcIds:staleFc.map(f=>f.id), collisionIds:collisions.map(c=>c.id)};
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderEpochenCheck=renderEpochenCheck;
+
+async function cleanupStaleFc(){
+  const ids=window._epochenCheckData?.staleFcIds||[];
+  if(!ids.length) return;
+  if(!confirm(`${ids.length} Forecast-Karteileichen wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return;
+  try{
+    await api(`forecast_qty?id=in.(${ids.join(',')})`,{method:'DELETE'});
+    showToast('✔ Karteileichen gelöscht');
+    renderEpochenCheck();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen',true);}
+}
+window.cleanupStaleFc=cleanupStaleFc;
+
+async function cleanupCollisions(){
+  const ids=window._epochenCheckData?.collisionIds||[];
+  if(!ids.length) return;
+  if(!confirm(`Bei ${ids.length} Rezepten den Zeitstempel entfernen? Die Rezepte selbst bleiben erhalten.`)) return;
+  try{
+    await api(`allergene_rezepturen?id=in.(${ids.join(',')})`,{method:'PATCH',body:JSON.stringify({zkey:null})});
+    showToast('✔ Zeitstempel entfernt');
+    renderEpochenCheck();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
+}
+window.cleanupCollisions=cleanupCollisions;
 
 async function renderManagement(){
   const el=document.getElementById('v-management');
