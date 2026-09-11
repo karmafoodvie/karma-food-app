@@ -204,6 +204,7 @@ summary::marker{content:'';}
     <div id="v-management" class="view"></div>
     <div id="v-hygieneauswertung" class="view"></div>
     <div id="v-zutatenkontrolle" class="view"></div>
+    <div id="v-freitagCheckliste" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -1066,7 +1067,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.50';
+const APP_VERSION = '6.99.51';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1776,7 +1777,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -3513,6 +3514,13 @@ async function renderHome(){
     ${messeBewertungHtml}
     <div id="broadcast-banner-widget"></div>
     ${monthlyCleaningHtml}
+    ${currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen' && new Date().getDay()===5?`
+    <div onclick="goTo('freitagCheckliste')" style="background:linear-gradient(135deg,#D4FF3F,#B8E62E);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <div style="font-size:14px;font-weight:800;color:#1a1a18;">🎉 It's Friday — yay!</div>
+      <div style="font-size:12px;color:#3a3a35;margin-top:3px;">Let's get our store prepped for the weekend, woohoo 🧹</div>
+      <div style="font-size:11px;color:#3a3a35;margin-top:6px;text-decoration:underline;">Freitags-Checkliste öffnen →</div>
+    </div>
+    `:''}
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles)?`
 
     <!-- START BUTTON -->
@@ -6519,6 +6527,66 @@ async function openZutatenEditorFromKontrolle(dishName){
   openZutatenEditor(dishName, currentText, null, null, null);
 }
 window.openZutatenEditorFromKontrolle=openZutatenEditorFromKontrolle;
+
+// Freitags-Checkliste (10.09.26, Wunsch Tini) — Filialen sollen freitags Zeit haben, den Store für
+// das Wochenende herzurichten. Kein erzwungenes Pop-up bei Schicht-Start/-Ende, sondern eine
+// auffällige, aber freiwillige Karte auf der Startseite, die den ganzen Freitag über sichtbar bleibt.
+const FREITAG_CHECKLISTE_ITEMS=[
+  {k:'geschirrspueler', label:'Geschirrspüler gut putzen, auch die Ränder'},
+  {k:'pflanzen', label:'Pflanzen checken — gießen, kaputte entfernen'},
+  {k:'mhd_check', label:'Datum von Produkten checken — abgelaufen? Gewürze bitte retour schicken, nicht entsorgen'},
+  {k:'kuehlschrank', label:'Kühlschränke rauswischen, desinfizieren, wenn möglich enteisen'},
+  {k:'glasvitrine', label:'Glasvitrine mit Glasreiniger säubern'},
+  {k:'oberflaechen', label:'Oberflächen auch im Essbereich gut reinigen'},
+  {k:'entsorgen_lager', label:'Was entsorgen oder ins Lager zurückschicken? (falsche Säckchen, Ungebrauchtes)'},
+  {k:'kochkurs_zettel', label:'Alte Kochkurs-Zettel/Promo-Aktionen entsorgen'},
+  {k:'mango_lassi_check', label:'Mango Lassi, Samosas, Beilagen & Saucen — vorhanden? Menge passt/anpassen?'},
+];
+
+async function renderFreitagCheckliste(){
+  const el=document.getElementById('v-freitagCheckliste');
+  const today=new Date().toISOString().split('T')[0];
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=`<div style="background:linear-gradient(135deg,#D4FF3F,#B8E62E);border-radius:14px;padding:16px;margin-bottom:16px;">
+    <div style="font-size:18px;font-weight:800;color:#1a1a18;">🎉 It's Friday — yay!</div>
+    <div style="font-size:13px;color:#3a3a35;margin-top:4px;">Let's get our store prepped for the weekend, woohoo!</div>
+  </div>`;
+
+  const existing=await api(`freitag_checkliste?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]);
+  const rec=existing?.[0];
+  const items=rec?.items||{};
+
+  html+=`<div class="card" style="overflow:hidden;">`;
+  FREITAG_CHECKLISTE_ITEMS.forEach((it,i)=>{
+    const done=!!items[it.k];
+    html+=`<div class="cl-item" onclick="toggleFreitagItem('${it.k}')" style="padding:12px 14px;${i<FREITAG_CHECKLISTE_ITEMS.length-1?'border-bottom:0.5px solid var(--border);':''}">
+      <div class="check-box${done?' done':''}" id="fc-box-${it.k}">${done?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+      <span class="cl-text" style="${done?'text-decoration:line-through;color:var(--muted);':''}">${it.label}</span>
+    </div>`;
+  });
+  html+='</div>';
+
+  const doneCount=FREITAG_CHECKLISTE_ITEMS.filter(it=>items[it.k]).length;
+  html+=`<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:10px;">${doneCount}/${FREITAG_CHECKLISTE_ITEMS.length} erledigt${rec?.erledigt_von?' · zuletzt von '+rec.erledigt_von:''}</div>`;
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderFreitagCheckliste=renderFreitagCheckliste;
+
+async function toggleFreitagItem(key){
+  const today=new Date().toISOString().split('T')[0];
+  const existing=await api(`freitag_checkliste?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]);
+  const items=existing?.[0]?.items||{};
+  items[key]=!items[key];
+  try{
+    await api(`freitag_checkliste?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
+    await api('freitag_checkliste',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,items,erledigt_von:currentStore.name}])});
+    renderFreitagCheckliste();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
+}
+window.toggleFreitagItem=toggleFreitagItem;
 
 async function renderManagement(){
   const el=document.getElementById('v-management');
