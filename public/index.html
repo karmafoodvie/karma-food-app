@@ -1068,7 +1068,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.58';
+const APP_VERSION = '6.99.59';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13273,6 +13273,15 @@ async function renderStoreSamosaTab(el, tabHtml){
     if(wd) lastWeekMap[wd]=d.qty;
   });
 
+  // Sperre prüfen: Tini bestellt freitags 1x für die ganze nächste Woche — sobald diese Woche an
+  // den Produzenten kopiert wurde, dürfen die Filialen sie nicht mehr ändern.
+  const lockRows=await api('samosa_lock?select=locked_until_monday&order=locked_until_monday.desc&limit=1').catch(()=>[]);
+  const lockedUntil=lockRows?.[0]?.locked_until_monday||null;
+  const thisWeekLocked=lockedUntil && weekDates[1]<=lockedUntil;
+  if(thisWeekLocked){
+    html+=`<div style="background:#FEF3C7;border:1px solid #FBBF24;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#78350F;">🔒 Diese Woche wurde schon an den Produzenten bestellt und kann nicht mehr geändert werden. Bitte für die übernächste Woche planen.</div>`;
+  }
+
   [1,2,3,4].forEach(wd=>{
     const b=baseline.find(x=>x.weekday===wd);
     const dateStr=weekDates[wd];
@@ -13289,8 +13298,8 @@ async function renderStoreSamosaTab(el, tabHtml){
           <div style="font-size:10px;color:${uebernommenAusVorwoche?'#2563EB':'var(--muted)'};margin-top:1px;">${adjusted?'✓ für diese Woche bestätigt':uebernommenAusVorwoche?'aus Vorwoche übernommen — bitte prüfen':'noch nie eingetragen'}</div>
         </div>
         <input type="text" inputmode="numeric" value="${val}" data-store="${currentStore.id}" data-weekday="${wd}" data-date="${dateStr}"
-          onchange="updateSamosaQty(this)"
-          style="width:64px;text-align:center;border:2px solid ${adjusted?'#F97316':uebernommenAusVorwoche?'#93C5FD':'var(--border)'};border-radius:10px;font-size:20px;font-weight:700;padding:8px 4px;background:${adjusted?'#FFF7ED':uebernommenAusVorwoche?'#EFF6FF':'#fff'};">
+          onchange="updateSamosaQty(this)" ${thisWeekLocked?'disabled':''}
+          style="width:64px;text-align:center;border:2px solid ${thisWeekLocked?'#D1D5DB':adjusted?'#F97316':uebernommenAusVorwoche?'#93C5FD':'var(--border)'};border-radius:10px;font-size:20px;font-weight:700;padding:8px 4px;background:${thisWeekLocked?'#F3F4F6':adjusted?'#FFF7ED':uebernommenAusVorwoche?'#EFF6FF':'#fff'};color:${thisWeekLocked?'var(--muted)':'inherit'};">
       </div>
     </div>`;
   });
@@ -13410,12 +13419,19 @@ async function renderSamosaTableHtml(){
   return html;
 }
 
-function copySamosaText(){
+async function copySamosaText(){
   const el=document.getElementById('samosa-copy-text');
   if(!el) return;
   navigator.clipboard?.writeText(el.value).then(()=>showToast('✔ In Zwischenablage kopiert')).catch(()=>{
     el.select(); document.execCommand('copy'); showToast('✔ Kopiert');
   });
+  // Sperrt diese Woche für die Filialen (11.09.26, Wunsch Tini): Tini bestellt immer freitags 1x
+  // für die ganze nächste Woche — sobald sie an den Produzenten kopiert, ist diese Woche fix und
+  // die Filialen sollen nur noch die übernächste Woche planen können, nicht mehr rückwirkend ändern.
+  try{
+    const weekDates=getWeekdayDates(_samosaWeekOffset);
+    await api('samosa_lock',{method:'POST',body:JSON.stringify([{locked_until_monday:weekDates[1], locked_von:currentStore?.name||'Organisation'}])});
+  }catch(e){console.error('Samosa-Sperre konnte nicht gesetzt werden:',e);}
 }
 window.copySamosaText=copySamosaText;
 
