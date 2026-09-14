@@ -1068,7 +1068,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.59';
+const APP_VERSION = '6.99.60';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13259,7 +13259,7 @@ async function renderStoreSamosaTab(el, tabHtml){
 
   html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:14px;">
     <button onclick="_samosaWeekOffset=(_samosaWeekOffset||0)-1;renderOrder();" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">← Letzte Woche</button>
-    <div style="flex:1.2;text-align:center;font-size:11.5px;color:var(--muted);">${!_samosaWeekOffset?'Diese Woche':`KW ${kw}`}${_samosaWeekOffset?`<div onclick="_samosaWeekOffset=0;renderOrder();" style="font-size:10px;color:#D97706;cursor:pointer;text-decoration:underline;">zu heute</div>`:''}</div>
+    <div style="flex:1.4;text-align:center;font-size:11.5px;color:var(--muted);">${!_samosaWeekOffset?'Diese Woche':`KW ${kw}`}<div style="font-size:9.5px;color:var(--muted);">${new Date(weekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(weekDates[4]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>${_samosaWeekOffset?`<div onclick="_samosaWeekOffset=0;renderOrder();" style="font-size:10px;color:#D97706;cursor:pointer;text-decoration:underline;">zu heute</div>`:''}</div>
     <button onclick="_samosaWeekOffset=(_samosaWeekOffset||0)+1;renderOrder();" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:#fff;font-size:12.5px;font-weight:600;color:var(--sub);cursor:pointer;">Nächste Woche →</button>
   </div>`;
 
@@ -13277,8 +13277,11 @@ async function renderStoreSamosaTab(el, tabHtml){
   // den Produzenten kopiert wurde, dürfen die Filialen sie nicht mehr ändern.
   const lockRows=await api('samosa_lock?select=locked_until_monday&order=locked_until_monday.desc&limit=1').catch(()=>[]);
   const lockedUntil=lockRows?.[0]?.locked_until_monday||null;
-  const thisWeekLocked=lockedUntil && weekDates[1]<=lockedUntil;
-  if(thisWeekLocked){
+  const isPastWeek=(_samosaWeekOffset||0)<0;
+  const thisWeekLocked=isPastWeek || (lockedUntil && weekDates[1]<=lockedUntil);
+  if(isPastWeek){
+    html+=`<div style="background:#F3F4F6;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--muted);">📅 Vergangene Woche — nur zur Ansicht, keine Änderung mehr möglich.</div>`;
+  } else if(thisWeekLocked){
     html+=`<div style="background:#FEF3C7;border:1px solid #FBBF24;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#78350F;">🔒 Diese Woche wurde schon an den Produzenten bestellt und kann nicht mehr geändert werden. Bitte für die übernächste Woche planen.</div>`;
   }
 
