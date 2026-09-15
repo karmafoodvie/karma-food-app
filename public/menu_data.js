@@ -725,7 +725,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Green Power Pesto Veggie Lasagne",
+   "name": "Veggie Bolognese Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -783,7 +783,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Kürbis Masala Linsen Lasagne",
+   "name": "Green Power Pesto Veggie Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -1015,7 +1015,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Mediterrane Veggie Lasagne",
+   "name": "Veggie Bolognese Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
