@@ -758,15 +758,24 @@ window.deleteOnboardingDay=deleteOnboardingDay;
 
 async function renderRabattcodes(){
   const el=document.getElementById('v-rabattcodes');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🎟️','Rabattcodes','Alle aktuellen Codes auf einen Blick','#C1542C');
-  html+=`<div class="card"><div style="overflow-x:auto;">`;
   const isOrgHilfe=currentStore?.id==='zentrale';
   const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz', '1070':'Neustiftgasse (geschlossen)'};
-  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
+
+  const allCodes=await api('rabatt_codes?select=*&order=sort_order.asc').catch(()=>[]);
+  const visibleCodes=isOrgHilfe?allCodes:(allCodes||[]).filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
+
+  if(isOrgHilfe){
+    html+=`<button onclick="showRabattEditForm(null)" style="width:100%;padding:11px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:12px;">+ Neuen Code hinzufügen</button>
+    <div id="rabatt-edit-form" style="display:none;"></div>`;
+  }
+
+  html+=`<div class="card"><div style="overflow-x:auto;">`;
   if(visibleCodes.length){
     html+=`<table class="pack-table" style="width:100%;"><thead><tr>
-      <th style="text-align:left;">Wofür</th><th style="text-align:left;">Code</th><th style="text-align:right;">Rabatt</th>
+      <th style="text-align:left;">Wofür</th><th style="text-align:left;">Code</th><th style="text-align:right;">Rabatt</th>${isOrgHilfe?'<th></th>':''}
     </tr></thead><tbody>`;
     visibleCodes.forEach(r=>{
       const storeBadges=(r.stores||[]).map(sid=>{
@@ -777,6 +786,7 @@ async function renderRabattcodes(){
         <td style="text-align:left;font-size:12px;color:var(--sub);">${r.bedingung}${storeBadges}</td>
         <td data-no-translate style="text-align:left;font-size:13px;font-weight:700;">${r.code}</td>
         <td style="text-align:right;font-size:13px;font-weight:600;color:var(--green);white-space:nowrap;">${r.wert||'–'}</td>
+        ${isOrgHilfe?`<td><button onclick='showRabattEditForm(${JSON.stringify(r)})' style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">✏️</button></td>`:''}
       </tr>`;
     });
     html+='</tbody></table>';
@@ -784,11 +794,69 @@ async function renderRabattcodes(){
     html+=`<div style="padding:12px;font-size:12.5px;color:var(--muted);">Noch keine Codes hinterlegt.</div>`;
   }
   html+='</div></div>';
-  html+=`<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Aktuelle Codes fehlen? Einfach Tini Bescheid geben.</div>`;
+  html+=isOrgHilfe
+    ? `<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Änderungen sind sofort für alle sichtbar — kein Programmieren mehr nötig.</div>`
+    : `<div style="font-size:10.5px;color:var(--muted);padding:8px 2px;">Aktuelle Codes fehlen? Einfach Tini/Organisation Bescheid geben.</div>`;
   el.innerHTML=html;
   translateEl(el);
 }
 window.renderRabattcodes=renderRabattcodes;
+
+const RABATT_STORE_OPTIONS=[
+  {id:'1020', label:'Ausstellungsstraße'}, {id:'3400', label:'Stadtplatz'},
+  {id:'boerse', label:'Börse'}, {id:'lb', label:'Laurenzerberg'},
+];
+
+function showRabattEditForm(existing){
+  const wrap=document.getElementById('rabatt-edit-form');
+  wrap.style.display='block';
+  const stores=existing?.stores||[];
+  wrap.innerHTML=`<div class="card" style="padding:14px;margin-bottom:12px;">
+    <input type="text" id="rc-code" placeholder="Code (z.B. EB)" value="${existing?.code||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="text" id="rc-wert" placeholder="Rabatt-Wert (z.B. -0,50€, 20%, gratis)" value="${existing?.wert||''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="text" id="rc-bedingung" placeholder="Wofür / Bedingung" value="${(existing?.bedingung||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">Gültig bei (nichts angehakt = alle Filialen):</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+      ${RABATT_STORE_OPTIONS.map(s=>`<label style="display:flex;align-items:center;gap:4px;font-size:12px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;">
+        <input type="checkbox" class="rc-store-cb" value="${s.id}" ${stores.includes(s.id)?'checked':''}> ${s.label}
+      </label>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;">
+      ${existing?.id?`<button onclick="deleteRabattCode(${existing.id})" style="flex:1;padding:9px;border:1px solid #FCA5A5;border-radius:8px;background:#FEF2F2;color:#DC2626;font-size:13px;cursor:pointer;">Löschen</button>`:''}
+      <button onclick="document.getElementById('rabatt-edit-form').style.display='none';" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="saveRabattCode(${existing?.id||'null'})" style="flex:2;padding:9px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
+    </div>
+  </div>`;
+}
+window.showRabattEditForm=showRabattEditForm;
+
+async function saveRabattCode(id){
+  const code=document.getElementById('rc-code').value.trim();
+  const wert=document.getElementById('rc-wert').value.trim();
+  const bedingung=document.getElementById('rc-bedingung').value.trim();
+  const stores=[...document.querySelectorAll('.rc-store-cb:checked')].map(cb=>cb.value);
+  if(!code||!bedingung){ showToast('Bitte Code und Bedingung angeben'); return; }
+  try{
+    if(id){
+      await api(`rabatt_codes?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({code,wert,bedingung,stores,aktualisiert_am:new Date().toISOString()})});
+    }else{
+      await api('rabatt_codes',{method:'POST',body:JSON.stringify([{code,wert,bedingung,stores}])});
+    }
+    showToast('✔ Gespeichert');
+    renderRabattcodes();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
+}
+window.saveRabattCode=saveRabattCode;
+
+async function deleteRabattCode(id){
+  if(!confirm('Diesen Code wirklich löschen?')) return;
+  try{
+    await api(`rabatt_codes?id=eq.${id}`,{method:'DELETE'});
+    showToast('✔ Gelöscht');
+    renderRabattcodes();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen',true);}
+}
+window.deleteRabattCode=deleteRabattCode;
 
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
@@ -831,7 +899,8 @@ async function renderHilfe(){
   html+=`<div class="section-lbl" style="margin-top:14px;">🎟️ Rabattcodes</div><div class="card"><div style="overflow-x:auto;">`;
   const isOrgHilfe=currentStore?.id==='zentrale';
   const storeLabelMap={lb:'Laurenzerberg', boerse:'Börse', '1020':'Ausstellungsstraße', '3400':'Stadtplatz', '1070':'Neustiftgasse (geschlossen)'};
-  const visibleCodes=isOrgHilfe?RABATT_CODES:RABATT_CODES.filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
+  const allCodesHilfe=await api('rabatt_codes?select=*&order=sort_order.asc').catch(()=>[]);
+  const visibleCodes=isOrgHilfe?allCodesHilfe:(allCodesHilfe||[]).filter(r=>!r.stores?.length||r.stores.includes(currentStore?.id));
   if(visibleCodes.length){
     html+=`<table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Wofür</th><th style="text-align:left;">Code</th><th style="text-align:right;">Rabatt</th>
@@ -1069,7 +1138,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.62';
+const APP_VERSION = '6.99.63';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
