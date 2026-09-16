@@ -206,6 +206,7 @@ summary::marker{content:'';}
     <div id="v-zutatenkontrolle" class="view"></div>
     <div id="v-freitagCheckliste" class="view"></div>
     <div id="v-epochenCheck" class="view"></div>
+    <div id="v-wochenFeedback" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -1138,7 +1139,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.63';
+const APP_VERSION = '6.99.66';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1848,7 +1849,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,wochenFeedback:renderWochenFeedback,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -3592,6 +3593,13 @@ async function renderHome(){
     </div>
     `:''; })()}
     ${monthlyCleaningHtml}
+    ${currentStore?.id==='kitchen' && new Date().getDay()===1?`
+    <div onclick="goTo('wochenFeedback')" style="background:linear-gradient(135deg,#FBCFE8,#F9A8D4);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <div style="font-size:14px;font-weight:800;color:#831843;">😋 Wochen-Feedback zum Abarbeiten</div>
+      <div style="font-size:12px;color:#831843;margin-top:3px;">Kommentare der letzten Woche + wo die Kategorien gerade stehen</div>
+      <div style="font-size:11px;color:#831843;margin-top:6px;text-decoration:underline;">Jetzt ansehen →</div>
+    </div>
+    `:''}
     ${currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen' && new Date().getDay()===5?`
     <div onclick="goTo('freitagCheckliste')" style="background:linear-gradient(135deg,#D4FF3F,#B8E62E);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
       <div style="font-size:14px;font-weight:800;color:#1a1a18;">🎉 It's Friday — yay!</div>
@@ -10857,41 +10865,26 @@ async function renderWaehrend(){
       </div>`;
     });
 
-    // Sweets & Samosas — Zutaten (26.08.26, Wunsch Tini) — direkt unter den 3 Hauptgerichten,
-    // genau hier fragen Kund:innen am häufigsten nach, deshalb näher oben statt ganz unten.
-    html+=`<div class="section-lbl" style="margin-top:14px;">🍰 Sweets — Zutaten</div>
-    <div class="card" style="padding:4px 14px;margin-bottom:14px;">`;
-    SWEETS_ZUTATEN.forEach((s,i)=>{
-      html+=`<div style="border-bottom:${i<SWEETS_ZUTATEN.length-1?'0.5px solid var(--border)':'none'};">
-        <div onclick="const b=document.getElementById('sw-zut-${i}');b.style.display=b.style.display==='none'?'block':'none';" style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;cursor:pointer;">
-          <div>
-            <div style="font-size:13px;font-weight:500;">${s.name}</div>
-            <div style="font-size:10px;color:var(--muted);">${s.info}</div>
-          </div>
-          <span style="color:var(--muted);">→</span>
-        </div>
-        <div id="sw-zut-${i}" style="display:none;padding-bottom:12px;">
-          <div style="font-size:11px;line-height:1.6;color:var(--sub);">${s.zutaten}</div>
-          ${s.allergene?`<div style="font-size:10.5px;color:#B45309;margin-top:6px;">⚠️ ${s.allergene}</div>`:''}
-        </div>
-      </div>`;
-    });
-    html+=`</div>`;
-
     // Team-Feedback direkt hier statt separat bei Schicht beenden (20.08.26, Wunsch Simone —
-    // Schichtende ist ohnehin oft stressig genug). Name + optional Kommentare, Bewertungen oben
-    // pro Gericht per Emoji-Reihe direkt in der Karte. Nicht zeigen, wenn direkt über den
-    // "Sweets"-Link auf der Startseite aufgerufen (Wunsch Tini 07.09.26).
+    // Schichtende ist ohnehin oft stressig genug). Seit 16.09.26 (Wunsch Tini) in zwei komplett
+    // getrennte Blöcke aufgeteilt: Küche-Feedback (Gerichte-Bewertung) und App-Feedback an Tini,
+    // jeweils mit eigenem Abschicken-Button, damit man das eine ohne das andere machen kann.
+    // Nicht zeigen, wenn direkt über den "Sweets"-Link auf der Startseite aufgerufen (Wunsch Tini 07.09.26).
     if(!_hideFeedbackThisTime){
-    html+=`<div class="section-lbl" style="margin-top:14px;">😋 Food-Feedback</div>`;
+    html+=`<div class="section-lbl" style="margin-top:14px;">😋 Feedback an die Küche</div>`;
     html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier Namen eintragen & abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
-    html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
+    html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
       <input id="feedback-name" type="text" placeholder="Dein Name" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-size:13.5px;">
-      <div style="font-size:11px;font-weight:600;color:#7B3FE4;margin-bottom:4px;">💬 App-Feedback — egal worum's geht, wenn Lust und Laune (optional)</div>
-      <textarea id="feedback-frei" placeholder="Ideen, Anliegen, was auch immer…" style="width:100%;padding:9px;border:1px solid #DDD6FE;border-radius:8px;min-height:50px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;background:#FAF5FF;"></textarea>
-      <button onclick="submitFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">Feedback abschicken ✓</button>
+      <button onclick="submitKuecheFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">Feedback an Küche abschicken ✓</button>
     </div>`;
     html+=`<div id="feedback-existing-list"></div>`;
+
+    html+=`<div class="section-lbl" style="margin-top:14px;">💬 Feedback an Tini</div>`;
+    html+=`<div style="font-size:11.5px;color:#7B3FE4;background:#FAF5FF;border:0.5px solid #DDD6FE;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Egal worum's geht, wenn Lust und Laune — unabhängig vom Küche-Feedback oben.</div>`;
+    html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
+      <textarea id="feedback-frei" placeholder="Ideen, Anliegen, was auch immer…" style="width:100%;padding:9px;border:1px solid #DDD6FE;border-radius:8px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;background:#FAF5FF;"></textarea>
+      <button onclick="submitAppFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#7B3FE4;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">An Tini abschicken ✓</button>
+    </div>`;
     }
   }
 
@@ -11625,6 +11618,9 @@ window.renderEssenFeedback=renderEssenFeedback;
 function renderFeedbackExistingList(existing, todayMenu){
   const wrap=document.getElementById('feedback-existing-list');
   if(!wrap) return;
+  // App-Feedback-Einträge (eigener, unabhängiger Bereich seit 16.09.26) hier ausblenden — diese
+  // Liste zeigt nur noch echte Küche-Bewertungen.
+  existing=(existing||[]).filter(e=>e.ratings && Object.keys(e.ratings).length>0);
   if(!existing || !existing.length){
     wrap.innerHTML=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Noch keine Bewertung heute — sei die/der Erste!</div>`;
     return;
@@ -11755,6 +11751,31 @@ function setFeedbackImprove(input){
   _feedbackDraft[dish].improve=input.value.trim()||null;
 }
 window.setFeedbackImprove=setFeedbackImprove;
+
+async function submitKuecheFeedback(){
+  const name=document.getElementById('feedback-name')?.value?.trim();
+  if(!name){ showToast('Bitte einen Namen eingeben', true); return; }
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name,ratings:_feedbackDraft}])});
+    showToast('✓ Danke für dein Feedback!');
+    if(currentView==='waehrend') renderWaehrend();
+    else { cancelFeedbackForm(); renderEssenFeedback(); }
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern', true); }
+}
+window.submitKuecheFeedback=submitKuecheFeedback;
+
+async function submitAppFeedback(){
+  const feedbackFrei=document.getElementById('feedback-frei')?.value?.trim();
+  if(!feedbackFrei){ showToast('Bitte etwas eintragen', true); return; }
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name:'App-Feedback',ratings:{},feedback_frei:feedbackFrei}])});
+    showToast('✓ Danke, kommt bei Tini an!');
+    document.getElementById('feedback-frei').value='';
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern', true); }
+}
+window.submitAppFeedback=submitAppFeedback;
 
 async function submitFeedback(){
   const name=document.getElementById('feedback-name')?.value?.trim();
@@ -15784,6 +15805,159 @@ window.renderKundenfeedback=renderKundenfeedback;
 // War bisher NIRGENDS für Organisation einsehbar (essen_feedback landete nur pro Store/Tag in der
 // DB) — das ist der eigentliche Fehler, den Tini gefunden hat: das App-Feedback (freier Text) war
 // komplett unsichtbar für sie.
+// Wochen-Feedback (16.09.26, Wunsch Tini) — jeden Montag für die Küche: was ist aus der letzten
+// Woche offen zum Abarbeiten, und wo stehen die Gerichts-Kategorien gerade auf der Skala.
+async function renderWochenFeedback(){
+  const el=document.getElementById('v-wochenFeedback');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('😋','Wochen-Feedback','Zum Abarbeiten + Kategorie-Überblick','#DB2777');
+
+  const sevenDaysAgo=(()=>{ const d=new Date(); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
+  const [teamRows, linkRows, erkenntnisRows]=await Promise.all([
+    api(`essen_feedback?datum=gte.${sevenDaysAgo}&select=*&order=datum.desc`).catch(()=>[]),
+    fetch(`${SUPABASE_URL}/functions/v1/kunden-feedback-read?limit=150`, {headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}}).then(r=>r.json()).catch(()=>[]),
+    api('wochen_erkenntnisse?select=*&order=erstellt_am.desc&limit=1').catch(()=>[])
+  ]);
+  const linkRowsRecent=(linkRows||[]).filter(r=>(r.submitted_at||'').split('T')[0]>=sevenDaysAgo);
+
+  // Erkenntnisse dieser Woche — Freitext, von Organisation gepflegt (tiefere Muster wie
+  // Filial-Inkonsistenz oder Backzeit-Themen lassen sich nicht rein automatisch erkennen).
+  const isOrg=currentStore?.id==='zentrale';
+  const erkenntnis=erkenntnisRows?.[0];
+  html+=`<div class="section-lbl">📌 Erkenntnisse dieser Woche</div>`;
+  if(erkenntnis){
+    html+=`<div class="card" style="padding:14px;margin-bottom:8px;background:#FDF2F8;border-color:#FBCFE8;">
+      <div style="font-size:12.5px;color:#831843;white-space:pre-wrap;line-height:1.6;">${erkenntnis.text}</div>
+      <div style="font-size:10px;color:#BE185D;margin-top:8px;">${erkenntnis.erstellt_von||''} · ${new Date(erkenntnis.erstellt_am).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
+    </div>`;
+  } else if(!isOrg){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Noch keine Erkenntnisse eingetragen.</div>`;
+  }
+  if(isOrg){
+    html+=`<button onclick="showErkenntnisForm(${erkenntnis?`'${erkenntnis.text.replace(/'/g,"\\'").replace(/\n/g,'\\n')}'`:'null'})" style="width:100%;padding:9px;border:1px dashed #DB2777;border-radius:8px;background:#FDF2F8;color:#BE185D;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:14px;">✏️ ${erkenntnis?'Bearbeiten':'Erkenntnisse eintragen'}</button>
+    <div id="erkenntnis-form" style="display:none;"></div>`;
+  }
+
+  // Kategorie-Skala: alle Bewertungen der letzten 7 Tage nach Kategorie (Curry/Dal/Lasagne/Biryani/
+  // Bowl/...) zusammenfassen, unabhängig vom genauen Gericht.
+  const catVals={};
+  const catTags={};
+  (teamRows||[]).forEach(r=>{
+    Object.entries(r.ratings||{}).forEach(([dish,rec])=>{
+      const val=(rec && typeof rec==='object')?rec.v:rec;
+      const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
+      const cat=mapDishNameToCategory(dish)||'Sonstiges';
+      if(val!=null) (catVals[cat]=catVals[cat]||[]).push(val);
+      tags.forEach(t=>{ catTags[cat]=catTags[cat]||{}; catTags[cat][t]=(catTags[cat][t]||0)+1; });
+    });
+  });
+  linkRowsRecent.forEach(r=>{
+    if(r.dish_name && r.rating!=null){
+      const cat=mapDishNameToCategory(r.dish_name)||'Sonstiges';
+      (catVals[cat]=catVals[cat]||[]).push(r.rating);
+    }
+  });
+
+  html+=`<div class="section-lbl">📊 Kategorien — letzte 7 Tage</div>`;
+  const catOrder=['Curry','Dal','Lasagne','Biryani','Salat','Sonstiges'];
+  const sortedCats=Object.keys(catVals).sort((a,b)=>catOrder.indexOf(a)-catOrder.indexOf(b));
+  if(!sortedCats.length){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Noch keine Bewertungen in den letzten 7 Tagen.</div>`;
+  }
+  sortedCats.forEach(cat=>{
+    const vals=catVals[cat];
+    const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+    const color=avg<3?'#DC2626':avg<4?'#EA580C':'#16A34A';
+    const topTags=Object.entries(catTags[cat]||{}).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:13px;font-weight:600;">${cat==='Salat'?'Bowl/Salat':cat}</div>
+        <div style="display:flex;align-items:center;gap:6px;"><span style="font-size:16px;font-weight:800;color:${color};">${avg.toFixed(1)}</span><span style="font-size:10.5px;color:var(--muted);">(${vals.length}×)</span></div>
+      </div>
+      <div style="height:5px;background:#F3F4F6;border-radius:3px;margin-top:6px;overflow:hidden;">
+        <div style="height:100%;width:${(avg/5*100).toFixed(0)}%;background:${color};"></div>
+      </div>
+      ${topTags.length?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:5px;">${topTags.map(([t,n])=>{
+        const tagDef=KF_TAGS.find(x=>x.k===t);
+        return `<span style="font-size:10.5px;background:${tagDef?.neg?'#FEE2E2':'#DCFCE7'};color:${tagDef?.neg?'#B91C1C':'#166534'};border-radius:12px;padding:2px 8px;">${tagDef?tagDef.label:t} ${n}×</span>`;
+      }).join('')}</div>`:''}
+    </div>`;
+  });
+
+  // Abzuarbeitende Kommentare — alles mit Text aus essen_feedback, das noch nicht als "bearbeitet"
+  // markiert wurde, plus (zur Info, ohne Abhaken) Kommentare vom Gäste-Link.
+  html+=`<div class="section-lbl" style="margin-top:16px;">📋 Zum Abarbeiten</div>`;
+  const offeneKommentare=[];
+  (teamRows||[]).forEach(r=>{
+    if(r.bearbeitet) return;
+    Object.entries(r.ratings||{}).forEach(([dish,rec])=>{
+      const note=(rec && typeof rec==='object')?rec.note:null;
+      if(note) offeneKommentare.push({feedbackId:r.id, dish, note, datum:r.datum, store:r.store_id});
+    });
+  });
+  if(!offeneKommentare.length){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:#16A34A;font-size:12.5px;">✅ Alles abgearbeitet — keine offenen Kommentare.</div>`;
+  }
+  offeneKommentare.forEach(k=>{
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;">
+      <div class="check-box" onclick="markFeedbackBearbeitet(${k.feedbackId},this)" style="flex-shrink:0;margin-top:2px;cursor:pointer;"></div>
+      <div>
+        <div style="font-size:12.5px;font-weight:600;" data-no-translate>${k.dish}</div>
+        <div style="font-size:12px;color:var(--sub);margin-top:2px;">„${k.note}"</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;">${new Date(k.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
+      </div>
+    </div>`;
+  });
+
+  if(linkRowsRecent.some(r=>r.kommentar)){
+    html+=`<div class="section-lbl" style="margin-top:16px;">💬 Weitere Gäste-Kommentare (zur Info)</div>`;
+    linkRowsRecent.filter(r=>r.kommentar).forEach(r=>{
+      html+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;background:#FAF5FF;border-color:#DDD6FE;">
+        <div style="font-size:11.5px;color:#4C1D95;">„${r.kommentar}"${r.dish_name?` — <span data-no-translate>${r.dish_name}</span>`:''}</div>
+      </div>`;
+    });
+  }
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderWochenFeedback=renderWochenFeedback;
+
+function showErkenntnisForm(currentText){
+  const wrap=document.getElementById('erkenntnis-form');
+  wrap.style.display='block';
+  wrap.innerHTML=`<div class="card" style="padding:12px;margin-bottom:14px;">
+    <textarea id="erkenntnis-text" placeholder="Wiederkehrende Muster, Beobachtungen..." style="width:100%;min-height:140px;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12.5px;resize:vertical;box-sizing:border-box;margin-bottom:10px;">${currentText||''}</textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('erkenntnis-form').style.display='none';" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="saveErkenntnis()" style="flex:2;padding:9px;border:none;border-radius:8px;background:#DB2777;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern</button>
+    </div>
+  </div>`;
+}
+window.showErkenntnisForm=showErkenntnisForm;
+
+async function saveErkenntnis(){
+  const text=document.getElementById('erkenntnis-text').value.trim();
+  if(!text){ showToast('Bitte Text eingeben'); return; }
+  try{
+    await api('wochen_erkenntnisse',{method:'POST',body:JSON.stringify([{text, erstellt_von:currentStore?.name||'Organisation'}])});
+    showToast('✔ Gespeichert');
+    renderWochenFeedback();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
+}
+window.saveErkenntnis=saveErkenntnis;
+
+async function markFeedbackBearbeitet(feedbackId, el){
+  try{
+    await api(`essen_feedback?id=eq.${feedbackId}`,{method:'PATCH',body:JSON.stringify({bearbeitet:true})});
+    el.closest('.card').style.opacity='0.4';
+    el.closest('.card').style.pointerEvents='none';
+    showToast('✓ Erledigt');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
+}
+window.markFeedbackBearbeitet=markFeedbackBearbeitet;
+
 async function renderTeamFeedback(){
   const el=document.getElementById('v-teamFeedback');
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
