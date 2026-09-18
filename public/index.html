@@ -1139,7 +1139,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.67';
+const APP_VERSION = '6.99.68';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5037,10 +5037,14 @@ function mapDishNameToCategory(dishName, slot){
 
 
 function isLasagneLocked(dateStr){
-  // Kein hartes Sperren mehr (05.08.26) — ab 14:00 Uhr am Vortag wird nur noch gewarnt, dass eine
-  // Änderung jetzt eventuell eine Nachbestellung bei der Küche braucht, das Feld bleibt aber editierbar.
-  const cutoff=new Date(dateStr+'T14:00:00');
-  cutoff.setDate(cutoff.getDate()-1); // Vortag, 14:00 Uhr
+  // 18.09.26 (Wunsch Tini): WIEDER eine echte, harte Sperre — die weiche Warnung von 05.08.26 hat
+  // dazu geführt, dass Stores nach der Vorbereitungszeit noch Mengen ändern konnten, während die
+  // Küche schon auf Basis der alten Zahl vorbereitet hatte → Abweichung zwischen Küche und
+  // Transporter. Cutoff: 11:00 Uhr am Vortag, danach ist das Feld nicht mehr editierbar — überall,
+  // nicht nur im Store-Forecast, sondern auch bei Transporter (siehe isLasagneLockedForTransporter-
+  // Aufrufe an den Bestellliste-Stellen).
+  const cutoff=new Date(dateStr+'T11:00:00');
+  cutoff.setDate(cutoff.getDate()-1); // Vortag, 11:00 Uhr
   return new Date()>cutoff;
 }
 // Liest die tatsächlichen Hauptgerichte (ohne Salat) für einen Wochentag aus dem rotierenden Menü,
@@ -5909,7 +5913,7 @@ async function renderForecastOrderTab(el, tabHtml){
     }
     // Immer alle 3 Größen fix anzeigen — Grid statt Flex, damit Label-Spalte und Eingabefeld-Spalte
     // exakt untereinander ausgerichtet sind, unabhängig von der Textlänge des Labels.
-    let h=lockedNote?`<div style="font-size:8px;color:#C2410C;font-weight:600;margin-bottom:2px;" title="${escAttr(lockedNote)}">⚠️ ${lockedNote}</div>`:'';
+    let h=lockedNote?`<div style="font-size:8px;color:#C2410C;font-weight:600;margin-bottom:2px;" title="${escAttr(lockedNote)}">🔒 ${lockedNote}</div>`:'';
     h+='<div style="display:grid;grid-template-columns:52px 40px;gap:4px 4px;align-items:center;">';
     LASAGNE_SIZES.forEach(sz=>{
       const rec=records.find(r=>r.groesse===sz.k);
@@ -5917,13 +5921,13 @@ async function renderForecastOrderTab(el, tabHtml){
       const isSugg=sz.k==='gross' && !rec && autoVal!=null;
       const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
       const isOrgSet=rec?.source==='org';
-      const manualColor=lockedNote?'#F97316':(isOrgSet?'#2B3A67':'#F97316');
-      const manualBg=lockedNote?'#FFF7ED':(isOrgSet?'#EEF1F8':'#FFF7ED');
+      const manualColor=lockedNote?'#9CA3AF':(isOrgSet?'#2B3A67':'#F97316');
+      const manualBg=lockedNote?'#F3F4F6':(isOrgSet?'#EEF1F8':'#FFF7ED');
       h+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LABELS[sz.k]}</span>
-        <input type="text" inputmode="decimal" step="1" value="${val}" placeholder="–"
+        <input type="text" inputmode="decimal" step="1" value="${val}" placeholder="–" ${lockedNote?'disabled':''}
           data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}" data-original="${val}"
           oninput="markForecastDirty(this)" onchange="autoSaveForecastCell(this)"
-          style="width:40px;text-align:center;border:1.5px solid ${lockedNote?'#F97316':(manual?manualColor:(isSugg?'#0EA5E9':'var(--border)'))};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual||lockedNote?manualBg:(isSugg?'#F0F9FF':'#fff')};">`;
+          style="width:40px;text-align:center;border:1.5px solid ${lockedNote?'#D1D5DB':(manual?manualColor:(isSugg?'#0EA5E9':'var(--border)'))};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual||lockedNote?manualBg:(isSugg?'#F0F9FF':'#fff')};color:${lockedNote?'var(--muted)':'inherit'};">`;
     });
     h+='</div>';
     return h;
@@ -6015,13 +6019,13 @@ async function renderForecastOrderTab(el, tabHtml){
       </td>
       ${storeIsHerbstWeek?'':`<td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">${cellWrap(dishLabel(salatName), cellInput(dateStr, salatName))}</td>`}
       <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g2?cellWrap(dishLabel(g2), cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Nach 14 Uhr geändert — ggf. bei der Küche nachbestellen':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
+        ${g2?cellWrap(dishLabel(g2), cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet, bei Bedarf direkt bei der Küche melden':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
       </td>
       <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g3?cellWrap(dishLabel(g3), cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Nach 14 Uhr geändert — ggf. bei der Küche nachbestellen':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
+        ${g3?cellWrap(dishLabel(g3), cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet, bei Bedarf direkt bei der Küche melden':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
       </td>
       ${storeIsHerbstWeek?`<td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g4?cellWrap(dishLabel(g4), cellInput(dateStr, g4, (g4.includes('Lasagne')&&isLasagneLocked(dateStr))?'Nach 14 Uhr geändert — ggf. bei der Küche nachbestellen':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
+        ${g4?cellWrap(dishLabel(g4), cellInput(dateStr, g4, (g4.includes('Lasagne')&&isLasagneLocked(dateStr))?'Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet, bei Bedarf direkt bei der Küche melden':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
       </td>`:''}
       <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}">${cellWrap('', reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>')}</td>
     </tr>`;
@@ -6036,7 +6040,7 @@ async function renderForecastOrderTab(el, tabHtml){
   // Beilagen/Saucen immer direkt sichtbar unter den Gerichten, nicht mehr hinter einem Tab
   // versteckt (16.09.26, Wunsch Tini: genau das wurde übersehen — z.B. fehlender Lasagne-Dressing
   // ist niemandem aufgefallen, weil man aktiv auf den Beilagen-Tab klicken musste).
-  html+=`<div class="section-lbl" style="margin-top:16px;">🥗 Beilagen</div>`;
+  html+=`<div style="margin-top:16px;"></div>`;
   html+=await renderStoreBeilagenMiniMatrixHtml(weekDates, forecastWeekOffset===0, tab.color);
 
   // Freitags-Hinweis auf die Samosa-Bestellung — die läuft ja separat, wird aber leicht vergessen,
@@ -8716,6 +8720,7 @@ async function renderOrgForecast(){
           const LBLS_ORG={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
           const storeLocked=isLasagneLocked(dateStr);
           let lasHtml='<td style="min-width:110px;padding:4px 3px;">';
+          if(storeLocked) lasHtml+='<div style="font-size:8px;color:#C2410C;font-weight:600;margin-bottom:2px;" title="Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet">🔒 gesperrt</div>';
           lasHtml+='<div style="display:grid;grid-template-columns:52px 40px;gap:3px 4px;align-items:center;">';
           sizes.forEach(sz=>{
             const rec=dateRecs.find(f=>(f.groesse||'gross')===sz.k);
@@ -8723,18 +8728,18 @@ async function renderOrgForecast(){
               const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org'||rec?.source==='copied';
               const isOrgSet=rec?.source==='org';
               const isCopiedSet=rec?.source==='copied';
-              const manualColorLas=isOrgSet?'#2B3A67':(isCopiedSet?'#0D9488':'#F97316');
-              const manualBgLas=isOrgSet?'#EEF1F8':(isCopiedSet?'#F0FDFA':'#FFF7ED');
+              const manualColorLas=storeLocked?'#9CA3AF':(isOrgSet?'#2B3A67':(isCopiedSet?'#0D9488':'#F97316'));
+              const manualBgLas=storeLocked?'#F3F4F6':(isOrgSet?'#EEF1F8':(isCopiedSet?'#F0FDFA':'#FFF7ED'));
               const lasSugg=!rec ? computeOrgSuggestion(s.id, dish, dateStr, sz.k) : null;
               const lasVal=rec?.qty??lasSugg?.qty??'';
               const lasIsSugg=!rec && lasSugg!=null;
               const LBLS={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
               lasHtml+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBLS[sz.k]||sz.l}</span>
-                <input type="text" inputmode="decimal" step="1" value="${lasVal}" placeholder="–"
+                <input type="text" inputmode="decimal" step="1" value="${lasVal}" placeholder="–" ${storeLocked?'disabled':''}
                   data-store="${s.id}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
                   oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
-                  title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':''))}"
-                  style="width:40px;text-align:center;border:1.5px solid ${manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)')};border-radius:6px;font-size:11px;padding:3px 1px;background:${manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff')};">`;
+                  title="${escAttr((lasSugg?.reason||'')+(isOrgSet?' · bereits von Operations gesetzt':'')+(isCopiedSet?' · von Vorwoche übertragen':'')+(storeLocked?' · Ab 11 Uhr Vortag gesperrt':''))}"
+                  style="width:40px;text-align:center;border:1.5px solid ${storeLocked?'#D1D5DB':(manual?manualColorLas:(lasIsSugg?'#0EA5E9':'var(--border)'))};border-radius:6px;font-size:11px;padding:3px 1px;background:${storeLocked?manualBgLas:(manual?manualBgLas:(lasIsSugg?'#F0F9FF':'#fff'))};color:${storeLocked?'var(--muted)':'inherit'};">`;
           });
           // Alle 3 Größen fix — keine + Buttons mehr nötig
           lasHtml+='</div></td>';
@@ -13420,11 +13425,23 @@ async function renderStoreSamosaTab(el, tabHtml){
   const lockRows=await api('samosa_lock?select=locked_until_monday&order=locked_until_monday.desc&limit=1').catch(()=>[]);
   const lockedUntil=lockRows?.[0]?.locked_until_monday||null;
   const isPastWeek=(_samosaWeekOffset||0)<0;
-  const thisWeekLocked=isPastWeek || (lockedUntil && weekDates[1]<=lockedUntil);
+  const copyLocked=lockedUntil && weekDates[1]<=lockedUntil;
+
+  // 18.09.26 (Wunsch Tini): Samosas können GRUNDSÄTZLICH nur freitags bestellt werden, und zwar
+  // ausschließlich für die jeweils kommende Woche (offset 1 relativ zu "heute"). Unter der Woche
+  // (Mo–Do) und für alle anderen Wochen bleibt das Feld gesperrt — auch wenn die Produzenten-Kopie
+  // (oben) noch nicht ausgelöst wurde, damit niemand versehentlich mitten in der Woche was ändert.
+  const isFriday=new Date().getDay()===5;
+  const isTheOneEditableWeek=(_samosaWeekOffset||0)===1;
+  const notFridayWindow=!isFriday || !isTheOneEditableWeek;
+  const thisWeekLocked=isPastWeek || copyLocked || notFridayWindow;
+
   if(isPastWeek){
     html+=`<div style="background:#F3F4F6;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--muted);">📅 Vergangene Woche — nur zur Ansicht, keine Änderung mehr möglich.</div>`;
-  } else if(thisWeekLocked){
+  } else if(copyLocked){
     html+=`<div style="background:#FEF3C7;border:1px solid #FBBF24;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#78350F;">🔒 Diese Woche wurde schon an den Produzenten bestellt und kann nicht mehr geändert werden. Bitte für die übernächste Woche planen.</div>`;
+  } else if(notFridayWindow){
+    html+=`<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1E3A8A;">🗓️ Samosas können nur <strong>freitags</strong> für die <strong>kommende Woche</strong> bestellt werden. ${isFriday?'Bitte bei "Nächste Woche" eintragen.':'Komm am Freitag wieder vorbei, um für nächste Woche zu bestellen.'}</div>`;
   }
 
   [1,2,3,4].forEach(wd=>{
