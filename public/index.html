@@ -1139,7 +1139,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.70';
+const APP_VERSION = '6.99.71';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4562,8 +4562,7 @@ async function renderStoreBeilagenMiniMatrixHtml(weekDates, isCurrentWeek, accen
   const weekVals=await api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=supply_date,article_name,qty,is_adjusted`).catch(()=>[]);
   const valMap={};
   (weekVals||[]).forEach(d=>{if(!valMap[d.supply_date])valMap[d.supply_date]={};valMap[d.supply_date][d.article_name]=d;});
-  const displayDays=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
-  if(!displayDays.length) return '';
+  const displayDays=[1,2,3,4,5];
   const articleNames=[...new Set(baseline.map(b=>b.article_name))];
   let html=`<div class="section-lbl" style="margin-top:14px;">🥗 Beilagen & Saucen dazu</div>
   <div class="card" id="beilagen-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
@@ -4583,12 +4582,14 @@ async function renderStoreBeilagenMiniMatrixHtml(weekDates, isCurrentWeek, accen
       const dateStr=weekDates[wd];
       const rec=(valMap[dateStr]||{})[name];
       const val=rec ? rec.qty : (b ? b.base_qty : null);
-      if(val==null) return `<td style="color:var(--border);font-size:12px;padding:6px 3px;text-align:center;">–</td>`;
+      // 18.09.26 (Wunsch Tini): auch Tage ohne fixe Grundmenge sollen ein leeres, editierbares Feld
+      // zeigen (statt nur "–"), damit Filialen bei Bedarf auch außerplanmäßig etwas dazubestellen
+      // können, nicht nur an den fest hinterlegten Tagen.
       const adjusted=rec?.is_adjusted;
       return `<td style="text-align:center;padding:4px 2px;">
-        <input type="text" inputmode="decimal" step="0.25" value="${val}" data-artikel="${escAttr(name)}" data-date="${dateStr}" data-original="${val}"
+        <input type="text" inputmode="decimal" step="0.25" value="${val??''}" placeholder="–" data-artikel="${escAttr(name)}" data-date="${dateStr}" data-original="${val??''}"
           oninput="markBeilageDirty(this)" onchange="autoSaveBeilageCell(this)"
-          style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':'var(--border)'};border-radius:6px;font-size:12px;padding:4px 1px;background:${adjusted?'#FFF7ED':'#fff'};color:${adjusted?'#F97316':'#1a1a18'};font-weight:${adjusted?'700':'500'};">
+          style="width:44px;text-align:center;border:1.5px solid ${adjusted?'#F97316':(val==null?'#E5E7EB':'var(--border)')};border-radius:6px;font-size:12px;padding:4px 1px;background:${adjusted?'#FFF7ED':'#fff'};color:${adjusted?'#F97316':'#1a1a18'};font-weight:${adjusted?'700':'500'};">
       </td>`;
     }).join('');
     html+=`<tr>
