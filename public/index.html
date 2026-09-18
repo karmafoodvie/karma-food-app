@@ -1139,7 +1139,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.68';
+const APP_VERSION = '6.99.70';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6707,7 +6707,8 @@ async function renderEpochenCheck(){
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen — kann ein paar Sekunden dauern…</div>';
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🔄','Epochen-Check','Alte Menü-Reste in Forecast & Zutaten aufspüren','#1D4ED8');
-  html+=`<div style="font-size:11px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:8px 10px;margin-bottom:14px;">ℹ️ Prüft die nächsten 60 Tage gegen den aktuell laufenden Menüplan. Am wichtigsten direkt nach jedem Menüwechsel einmal laufen lassen.</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:8px 10px;margin-bottom:10px;">ℹ️ Prüft die nächsten 60 Tage gegen den aktuell laufenden Menüplan. Am wichtigsten direkt nach jedem Menüwechsel einmal laufen lassen.</div>`;
+  html+=`<div style="font-size:11px;color:#7C2D12;background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 10px;margin-bottom:14px;">🎨 <strong>Nicht vergessen:</strong> Die App ist die Quelle der Wahrheit — nach jeder Menü-Änderung hier auch das Canva-Menü-PDF gegenchecken und von Hand nachziehen (kein Auto-Sync). Am einfachsten: Claude bitten, den Canva-Link gegen die App zu prüfen.</div>`;
 
   const today=new Date();
   const todayStr=today.toISOString().split('T')[0];
@@ -8029,8 +8030,9 @@ async function renderOrgStoreForecast(){
   // oben, nicht nur eine zusammengefasste Zahl") — parallel zu catIndex, aber pro Größe summiert.
   const catIndexBySize={};
   (fcRows||[]).forEach(f=>{
-    if(mapDishNameToCategory(f.dish_name)!=='Lasagne') return;
-    const ck=f.forecast_date+'|Lasagne|'+(f.groesse||'gross');
+    const fcat=mapDishNameToCategory(f.dish_name);
+    if(fcat!=='Lasagne' && fcat!=='Meatballs') return;
+    const ck=f.forecast_date+'|'+fcat+'|'+(f.groesse||'gross');
     catIndexBySize[ck]=(catIndexBySize[ck]||0)+(Number(f.qty)||0);
   });
   const dispByDateCat={};
@@ -8105,6 +8107,7 @@ async function renderOrgStoreForecast(){
       // Kategorie-Vergleich existiert schon separat und korrekt benannt in Tab 2 ("Alle Wochentage").
       const hist=[];
       const catIsLasagne=cat==='Lasagne';
+      const catIsMeatballs=cat==='Meatballs';
       for(const wBack of [1,2,3,4,8,12,16,20]){
         const td=dateMinusDays(dateStr, wBack*7);
         const dp=dispByDateCat[td+'|'+cat];
@@ -8117,6 +8120,8 @@ async function renderOrgStoreForecast(){
         let sizes=null;
         if(catIsLasagne){
           sizes=LASAGNE_SIZES.map(sz=>({l:sz.l, qty:qtyBySize[td+'|'+dish+'|'+sz.k]?.qty})).filter(s=>s.qty);
+        } else if(catIsMeatballs){
+          sizes=MEATBALLS_TEILE.map(t=>({l:t.l, qty:qtyBySize[td+'|'+dish+'|'+t.k]?.qty})).filter(s=>s.qty);
         }
         hist.push({date:td, qty:q, sizes, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
       }
@@ -8132,6 +8137,8 @@ async function renderOrgStoreForecast(){
         let sizes=null;
         if(catIsLasagne && q!=null){
           sizes=LASAGNE_SIZES.map(sz=>({l:sz.l, qty:catIndexBySize[td+'|Lasagne|'+sz.k]})).filter(s=>s.qty);
+        } else if(catIsMeatballs && q!=null){
+          sizes=MEATBALLS_TEILE.map(t=>({l:t.l, qty:catIndexBySize[td+'|Meatballs|'+t.k]})).filter(s=>s.qty);
         }
         if(dp||q!=null) histWeekday.push({date:td, qty:q, sizes, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
       }
