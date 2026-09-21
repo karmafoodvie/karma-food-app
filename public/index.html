@@ -1150,7 +1150,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.80';
+const APP_VERSION = '6.99.83';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3729,6 +3729,12 @@ async function renderHome(){
       <span id="org-shop-picker-arrow" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#fff;font-size:16px;pointer-events:none;">→</span>
     </div>
     <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:-2px 0 8px;"></div>
+    ${new Date().toISOString().split('T')[0]==='2026-09-21' && new Date().getHours()>=13?`
+    <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:14px;padding:14px 16px;margin-bottom:14px;">
+      <div style="font-size:14px;font-weight:800;color:#78350F;">🗓️ Erinnerung: Feiertags-Logik</div>
+      <div style="font-size:12.5px;color:#78350F;margin-top:3px;">Heute Nachmittag gemeinsam Schritt für Schritt erarbeiten, wie Feiertage/Ferien die Mengen-Schätzung beeinflussen sollen — mit deinem Input, nicht automatisch geraten.</div>
+    </div>
+    `:''}
     <div onclick="goTo('forecastAmpel')" style="display:flex;align-items:center;gap:10px;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🚦</span>
       <div style="flex:1;">
@@ -6006,7 +6012,7 @@ async function renderForecastOrderTab(el, tabHtml){
     const rec=(fMap[dateStr]||{})[dish];
     const manual=rec?.source==='manual'||rec?.source==='store'||rec?.source==='org';
     const isOrgSet=rec?.source==='org';
-    const isCopied=rec?.source==='copied';
+    const isCopied=rec?.source==='copied'||rec?.source==='fallback_lastweek';
     const manualColor=isOrgSet?'#2B3A67':'#F97316';
     const manualBg=isOrgSet?'#EEF1F8':'#FFF7ED';
     const autoSuggestion=FORECAST_SUGGESTIONS_ENABLED?(suggestionMap[dateStr]||{})[dish]:null;
@@ -8356,7 +8362,7 @@ async function renderOrgStoreForecast(){
       const isOrgSet=src==='org';
       const bCol=isStore?'#F97316':(isOrgSet?'#2B3A67':'var(--border)');
       const bBg=isStore?'#FFF7ED':'#fff';
-      const srcLbl=isStore?`<div style="font-size:8px;color:#F97316;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:''));
+      const srcLbl=isStore?`<div style="font-size:8px;color:#F97316;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:(src==='fallback_lastweek'?`<div style="font-size:8px;color:#0D9488;font-weight:600;">⚠️ automatisch (Vorwoche)</div>`:'')));
       const dishLabelHtml=`<div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>`;
 
       // LASAGNE: drei Größenfelder (Groß 18 / Mittel 12 / Klein 8) statt eines einzelnen Feldes —
@@ -15168,15 +15174,18 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     if(currentView==='kitchen' && kitchenTab==='morgen') renderKitchen();
     else clearInterval(window._morgenKochRefreshTimer);
   }, 60000);
-  // dayOffset: null = auto (heute, außer Wochenende -> nächster Montag), 0 = heute, 1 = morgen etc.
-  // (07.09.26: zurückgestellt von "morgen" auf "heute" als Standard, Wunsch Tini — war früher schon
-  // mal so eingestellt.)
+  // dayOffset: null = auto, 0 = heute, 1 = morgen etc.
+  // 21.09.26 (Wunsch Tini, war früher schon mal so): im Auto-Modus zeigt die Ansicht bis 09:00 Uhr
+  // den heutigen Tag, und schaltet dann automatisch auf den NÄCHSTEN Tag um — damit die Köche schon
+  // vormittags sehen, dass für morgen (bzw. bei Freitag ab 9 Uhr: für Montag) schon Mengen
+  // hinterlegt sind, statt immer nur tagesaktuell zu denken. Wochenenden werden dabei übersprungen.
   if(window._morgenDayOffset===undefined) window._morgenDayOffset=null;
   const _offset = dayOffset!==null ? dayOffset : (window._morgenDayOffset!==null ? window._morgenDayOffset : null);
   const tomorrow = new Date();
   if(_offset!==null){
     tomorrow.setDate(tomorrow.getDate()+_offset);
   } else {
+    if(tomorrow.getHours()>=9) tomorrow.setDate(tomorrow.getDate()+1);
     while([0,6].includes(tomorrow.getDay())){ tomorrow.setDate(tomorrow.getDate()+1); }
   }
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
