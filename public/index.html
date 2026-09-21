@@ -1150,7 +1150,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.79';
+const APP_VERSION = '6.99.80';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8365,12 +8365,14 @@ async function renderOrgStoreForecast(){
         const LBL={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
         const lasTeilSugg={};
         LASAGNE_SIZES.forEach(sz=>{
-          const occs=hist.filter(h=>h.sizes?.some(s=>s.l===LBL[sz.k] && s.qty!=null));
+          const occs=hist.filter(h=>h.sizes?.some(s=>s.l===LBL[sz.k] && s.qty!=null)).slice(0,3);
           if(!occs.length) return;
-          const last=occs[0];
-          const lastVal=last.sizes.find(s=>s.l===LBL[sz.k]).qty;
-          let sv=lastVal, reason='letzter Wert';
-          if(last.soldOutTime){ sv=lastVal+1; reason=`ausverkauft letztes Mal (${last.soldOutTime})`; }
+          const vals=occs.map(o=>o.sizes.find(s=>s.l===LBL[sz.k]).qty);
+          const avgVal=vals.reduce((a,b)=>a+b,0)/vals.length;
+          const soldOutN=occs.filter(o=>o.soldOutTime).length;
+          let sv=Math.round(avgVal), reason=`Ø letzte ${occs.length}`;
+          if(soldOutN>=2){ sv=Math.round(avgVal)+1; reason=`${soldOutN}/${occs.length}× ausverkauft (Ø letzte ${occs.length})`; }
+          else if(soldOutN===1){ sv=Math.round(avgVal+0.5); reason=`1× ausverkauft (Ø letzte ${occs.length})`; }
           lasTeilSugg[sz.k]={qty:sv, reason};
         });
         let lh=`<td style="padding:5px 3px;vertical-align:top;min-width:112px;">${dishLabelHtml}
@@ -8401,19 +8403,16 @@ async function renderOrgStoreForecast(){
         // in Folge ausverkauft war (wie bei LB seit Januar), wird der Aufschlag deutlicher.
         const teilSugg={};
         MEATBALLS_TEILE.forEach(t=>{
-          const occs=hist.filter(h=>h.sizes?.some(s=>s.l===MLBL[t.k] && s.qty!=null));
+          const occs=hist.filter(h=>h.sizes?.some(s=>s.l===MLBL[t.k] && s.qty!=null)).slice(0,3);
           if(!occs.length) return;
-          const last=occs[0];
-          const lastVal=last.sizes.find(s=>s.l===MLBL[t.k]).qty;
-          const soldOutCount=occs.slice(0,3).filter(o=>o.soldOutTime).length;
-          let factor=1, reason='letzter Wert';
-          if(last.soldOutTime){
-            const [hh,mm]=last.soldOutTime.split(':').map(Number);
-            const early=hh<13;
-            if(soldOutCount>=2){ factor=early?1.25:1.15; reason=`mehrfach in Folge ausverkauft (${last.soldOutTime})`; }
-            else { factor=early?1.2:1.1; reason=`zuletzt ausverkauft (${last.soldOutTime})`; }
-          }
-          teilSugg[t.k]={qty:Math.round(lastVal*factor/5)*5, reason};
+          const vals=occs.map(o=>o.sizes.find(s=>s.l===MLBL[t.k]).qty);
+          const avgVal=vals.reduce((a,b)=>a+b,0)/vals.length;
+          const soldOutN=occs.filter(o=>o.soldOutTime).length;
+          const earlyN=occs.filter(o=>o.soldOutTime && Number(o.soldOutTime.split(':')[0])<13).length;
+          let factor=1, reason=`Ø letzte ${occs.length}`;
+          if(soldOutN>=2){ factor=earlyN>=2?1.25:1.15; reason=`${soldOutN}/${occs.length}× ausverkauft (Ø letzte ${occs.length})`; }
+          else if(soldOutN===1){ factor=earlyN?1.2:1.1; reason=`1× ausverkauft (Ø letzte ${occs.length})`; }
+          teilSugg[t.k]={qty:Math.round(avgVal*factor/5)*5, reason};
         });
         let mh=`<td style="padding:5px 3px;vertical-align:top;min-width:112px;">${dishLabelHtml}
           <div style="display:grid;grid-template-columns:62px 44px;gap:3px 4px;align-items:center;">`;
@@ -8436,15 +8435,20 @@ async function renderOrgStoreForecast(){
 
       // Eigene, lokale Schätzung fürs Platzhalter-Feld (21.09.26, Wunsch Tini: direkt grau IM Feld
       // statt als Extra-Zeile) — nutzt die "hist"-Historie, die hier ohnehin schon für die
-      // Detailansicht geladen wird, bewusst simpler als die große computeOrgSuggestion-Logik
-      // (die woanders läuft und eigene Wetter-/Ferien-Daten braucht, die es hier nicht gibt).
-      const lastOccReg=hist.find(h=>h.qty!=null);
+      // Detailansicht geladen wird. 21.09.26 überarbeitet: Durchschnitt der letzten 3 Termine statt
+      // nur des letzten (Tinis eigentliche Logik), Entsorgung/Sold-out über alle 3 gewichtet.
+      const last3Reg=hist.filter(h=>h.qty!=null).slice(0,3);
       let suggRegQty=null, suggRegReason='';
-      if(lastOccReg){
-        suggRegQty=lastOccReg.qty;
-        if(lastOccReg.soldOutTime){ suggRegQty=Math.round((suggRegQty+0.25)*4)/4; suggRegReason=`ausverkauft letztes Mal (${lastOccReg.soldOutTime})`; }
-        else if((lastOccReg.leftover||0)>4){ suggRegQty=Math.max(0.25,Math.round((suggRegQty-0.25)*4)/4); suggRegReason=`${formatQty(lastOccReg.leftover)} übrig letztes Mal`; }
-        else suggRegReason='wie letztes Mal';
+      if(last3Reg.length){
+        const avgQty=last3Reg.reduce((a,h)=>a+h.qty,0)/last3Reg.length;
+        const soldOutN=last3Reg.filter(h=>h.soldOutTime).length;
+        const highLeftoverN=last3Reg.filter(h=>(h.leftover||0)>4).length;
+        suggRegQty=avgQty;
+        if(soldOutN>=2){ suggRegQty=Math.round((avgQty+0.5)*4)/4; suggRegReason=`${soldOutN}/${last3Reg.length}× ausverkauft (Ø letzte ${last3Reg.length})`; }
+        else if(soldOutN===1){ suggRegQty=Math.round((avgQty+0.25)*4)/4; suggRegReason=`1× ausverkauft (Ø letzte ${last3Reg.length})`; }
+        else if(highLeftoverN>=2){ suggRegQty=Math.max(0.25,Math.round((avgQty-0.5)*4)/4); suggRegReason=`meist viel übrig (Ø letzte ${last3Reg.length})`; }
+        else if(highLeftoverN===1){ suggRegQty=Math.max(0.25,Math.round((avgQty-0.25)*4)/4); suggRegReason=`teils viel übrig (Ø letzte ${last3Reg.length})`; }
+        else { suggRegQty=Math.round(avgQty*4)/4; suggRegReason=`Ø letzte ${last3Reg.length} Termine`; }
       }
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         ${dishLabelHtml}
