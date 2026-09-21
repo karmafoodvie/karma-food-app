@@ -207,6 +207,7 @@ summary::marker{content:'';}
     <div id="v-freitagCheckliste" class="view"></div>
     <div id="v-epochenCheck" class="view"></div>
     <div id="v-wochenFeedback" class="view"></div>
+    <div id="v-forecastAmpel" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -1139,7 +1140,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.73';
+const APP_VERSION = '6.99.75';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1849,7 +1850,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,wochenFeedback:renderWochenFeedback,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -3428,9 +3429,14 @@ async function renderHome(){
       dcStatus.reinCount=r?(r.reinigung_erledigt?1:0)+(r.desinfektion_erledigt?1:0):0;
       dcStatus.kuehl=(kuehlToday||[]).length>0;
       if(isWeekday) computeAndSaveScore(currentStore.id).catch(()=>{});
-    // Entsorgung heute Status
-    const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=id`).catch(()=>[]);
-    disposalDone=(disposalToday||[]).length>0;
+    // Entsorgung heute Status — 21.09.26 (Wunsch Tini): darf erst "erledigt" zählen, wenn WIRKLICH
+    // alle Gerichte des Tages einen Eintrag haben (Restbestand ODER Sold-out-Zeit), nicht schon bei
+    // irgendeinem einzelnen Eintrag — sonst wird der Button grün, obwohl z.B. nur 1 von 3 erfasst ist.
+    const disposalToday=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${todayDate}&select=dish_name`).catch(()=>[]);
+    const todayWdStr=WEEKDAY_STR[(new Date().getDay())];
+    const expectedDishesToday=todayWdStr?getMenuDishNamesForDay(todayWdStr, todayDate):[];
+    const disposedNames=new Set((disposalToday||[]).map(d=>d.dish_name));
+    disposalDone=expectedDishesToday.length>0 && expectedDishesToday.every(n=>disposedNames.has(n));
     // Team-Feedback heute Status (20.08.26)
     const feedbackTodayHome=await api(`essen_feedback?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=id&limit=1`).catch(()=>[]);
     feedbackDoneHome=(feedbackTodayHome||[]).length>0;
@@ -3713,6 +3719,14 @@ async function renderHome(){
       <span id="org-shop-picker-arrow" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#fff;font-size:16px;pointer-events:none;">→</span>
     </div>
     <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:-2px 0 8px;"></div>
+    <div onclick="goTo('forecastAmpel')" style="display:flex;align-items:center;gap:10px;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
+      <span style="font-size:18px;">🚦</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#5B21B6;">Forecast-Kontrolle</div>
+        <div style="font-size:10.5px;color:#7C3AED;">Ist nächste Woche wirklich bei jeder Filiale vollständig geplant?</div>
+      </div>
+      <span style="color:#7C3AED;">→</span>
+    </div>
     <div onclick="goTo('epochenCheck')" style="display:flex;align-items:center;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🔄</span>
       <div style="flex:1;">
@@ -6930,6 +6944,67 @@ async function cleanupCollisions(){
 }
 window.cleanupCollisions=cleanupCollisions;
 
+// Forecast-Kontrolle / Ampel (21.09.26, Wunsch Tini) — die alte Erinnerung prüfte nur "existiert
+// IRGENDEIN Eintrag für nächste Woche" und übersah dadurch genau den Fall, dass Laurenzerberg nur für
+// Montag geplant war, Di-Fr aber komplett leer blieben. Hier wird jetzt für jede Filiale und jeden
+// Tag der kommenden Woche echt geprüft: sind ALLE an dem Tag laut Menüplan vorkommenden Gerichte
+// (inkl. Reis) mit einer Menge befüllt?
+async function renderForecastAmpel(){
+  const el=document.getElementById('v-forecastAmpel');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🚦','Forecast-Kontrolle','Ist nächste Woche bei jeder Filiale vollständig geplant?','#7C3AED');
+
+  const nextWeek=getWeekdayDates(1);
+  const nwFrom=nextWeek[1], nwTo=nextWeek[5];
+  const fcRows=await apiAllPages(`forecast_qty?forecast_date=gte.${nwFrom}&forecast_date=lte.${nwTo}&select=store_id,forecast_date,dish_name`).catch(()=>[]);
+  const filledSet=new Set((fcRows||[]).map(f=>f.store_id+'|'+f.forecast_date+'|'+f.dish_name));
+
+  const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
+  const storeListA=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='kitchen' && s.id!=='1070');
+  const wdKeys=[1,2,3,4,5];
+
+  storeListA.forEach(s=>{
+    let totalExpected=0, totalFilled=0;
+    const dayStatus=[];
+    wdKeys.forEach(wdNum=>{
+      const ds=nextWeek[wdNum];
+      const wd=WEEKDAY_STR[wdNum];
+      const names=getMenuDishNamesForDay(wd, ds);
+      const expected=[...names, REIS_DISH_NAME];
+      let filled=0;
+      expected.forEach(n=>{ if(filledSet.has(s.id+'|'+ds+'|'+n)) filled++; });
+      totalExpected+=expected.length; totalFilled+=filled;
+      dayStatus.push({wd, ds, filled, expected: expected.length});
+    });
+    const pct=totalExpected?Math.round(totalFilled/totalExpected*100):100;
+    const ampel=pct===100?'🟢':pct===0?'🔴':'🟡';
+    const color=pct===100?'#16A34A':pct===0?'#DC2626':'#D97706';
+    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:13px;font-weight:700;">${ampel} ${s.name}</div>
+        <div style="font-size:12px;color:${color};font-weight:700;">${totalFilled}/${totalExpected}</div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:8px;">
+        ${dayStatus.map(d=>{
+          const dpct=d.expected?d.filled/d.expected:1;
+          const dcol=dpct>=1?'#16A34A':dpct>0?'#D97706':'#DC2626';
+          return `<div style="flex:1;text-align:center;">
+            <div style="font-size:9px;color:var(--muted);">${d.wd.toUpperCase()}</div>
+            <div style="height:5px;background:#F3F4F6;border-radius:3px;margin-top:2px;overflow:hidden;"><div style="height:100%;width:${Math.round(dpct*100)}%;background:${dcol};"></div></div>
+            <div style="font-size:8.5px;color:${dcol};margin-top:2px;">${d.filled}/${d.expected}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+
+  html+=`<button onclick="goTo('orgForecast')" style="width:100%;padding:11px;border:none;border-radius:10px;background:#7C3AED;color:#fff;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px;">Zum Forecast →</button>`;
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderForecastAmpel=renderForecastAmpel;
+
 async function renderManagement(){
   const el=document.getElementById('v-management');
   const maengelOffen=await api(`maengel?status=neq.behoben&select=id,status`).catch(()=>[]);
@@ -8619,11 +8694,14 @@ async function renderOrgForecast(){
     return res;
   }
 
-  function computeOrgSuggestion(storeId, dish, dateStr, groesse){
+  function computeOrgSuggestion(storeId, dish, dateStr, groesse, force){
     // Komplett abgeschaltet (Anfrage Tini 03.09.): Forecast wird täglich frisch eingetragen, nichts
     // soll automatisch aus Vorwochen übernommen/vorgeschlagen werden. Zentral hier an der Quelle
     // deaktiviert, nicht nur beim Anzeigen — betrifft alle Aufrufer dieser Funktion gleichermaßen.
-    if(!FORECAST_SUGGESTIONS_ENABLED) return null;
+    // AUSNAHME (18.09.26, Wunsch Tini): force=true umgeht das gezielt für die reine Graufeld-
+    // Anzeige in der Organisation-Ansicht (KI-Schätzung zum Gegenkontrollieren) — füllt aber
+    // NIRGENDS ein Eingabefeld automatisch aus, das bleibt bei den Stores weiterhin deaktiviert.
+    if(!FORECAST_SUGGESTIONS_ENABLED && !force) return null;
     // Einfache, nachvollziehbare Logik — baut ab dieser Woche eigene Historie auf:
     // 1. Vorwoche bestätigte Menge als Basis (1:1 übernehmen)
     // 2. Falls Entsorgung eingetragen → anpassen
@@ -8874,7 +8952,7 @@ async function renderOrgForecast(){
           const isCopiedSet=rec?.source==='copied';
           const manualColor=isOrgSet?'#2B3A67':(isCopiedSet?'#0D9488':'#F97316');
           const manualBg=isOrgSet?'#EEF1F8':(isCopiedSet?'#F0FDFA':'#FFF7ED');
-          const sugg=computeOrgSuggestion(s.id, dish, dateStr, 'gross');
+          const sugg=computeOrgSuggestion(s.id, dish, dateStr, 'gross', true);
           // Leere Felder werden mit dem Vorschlag GRAU vorbelegt, damit nie ein Feld leer bleibt.
           // Grau = nur Vorschlag, noch nicht gespeichert (die Küche sieht ihn also noch nicht) —
           // erst "Speichern" macht daraus eine verbindliche Menge. Getippte Werte werden farbig.
@@ -8952,7 +9030,12 @@ async function renderOrgForecast(){
                 oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
                 style="width:50px;text-align:center;border:1.5px solid ${bColor};border-radius:6px;font-size:14px;font-weight:${st?'700':'400'};padding:6px 1px;background:${bBg};color:${bText};">
             </div>
-            ${sugg?`<div style="font-size:8.5px;color:#94A3B8;text-align:center;margin-top:2px;">KI ${formatQty(sugg.qty)}</div>`:''}
+            ${sugg?(()=>{
+              const actualVal=parseFloat(String(displayVal).replace(',','.'));
+              const deviates=!isNaN(actualVal) && Math.abs(actualVal-sugg.qty)>=0.25;
+              const reasonText=sugg.reason||'';
+              return `<div title="${escAttr(reasonText)}" style="font-size:8.5px;color:${deviates?'#B45309':'#94A3B8'};text-align:center;margin-top:2px;${deviates?'font-weight:600;':''}">🤖 ${formatQty(sugg.qty)}${deviates?' ⚠️':''}</div>${deviates?`<div style="font-size:7.5px;color:#B45309;text-align:center;line-height:1.2;">${reasonText}</div>`:''}`;
+            })():''}
           </td>`;
         }
       });
