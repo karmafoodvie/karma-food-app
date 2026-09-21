@@ -1150,7 +1150,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.78';
+const APP_VERSION = '6.99.79';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8363,13 +8363,24 @@ async function renderOrgStoreForecast(){
       // beim Umbau der Operations-Ansicht war das zunächst verlorengegangen.
       if(mapDishNameToCategory(dish)==='Lasagne'){
         const LBL={gross:'Groß (18)',mittel:'Mit. (12)',klein:'Kl. (8)'};
+        const lasTeilSugg={};
+        LASAGNE_SIZES.forEach(sz=>{
+          const occs=hist.filter(h=>h.sizes?.some(s=>s.l===LBL[sz.k] && s.qty!=null));
+          if(!occs.length) return;
+          const last=occs[0];
+          const lastVal=last.sizes.find(s=>s.l===LBL[sz.k]).qty;
+          let sv=lastVal, reason='letzter Wert';
+          if(last.soldOutTime){ sv=lastVal+1; reason=`ausverkauft letztes Mal (${last.soldOutTime})`; }
+          lasTeilSugg[sz.k]={qty:sv, reason};
+        });
         let lh=`<td style="padding:5px 3px;vertical-align:top;min-width:112px;">${dishLabelHtml}
           <div style="display:grid;grid-template-columns:52px 44px;gap:3px 4px;align-items:center;">`;
         LASAGNE_SIZES.forEach(sz=>{
           const rec=qtyBySize[key+'|'+sz.k];
           const v=rec?rec.qty:'';
+          const ts=lasTeilSugg[sz.k];
           lh+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${LBL[sz.k]}</span>
-            <input type="text" inputmode="decimal" step="1" value="${v}" placeholder="–"
+            <input type="text" inputmode="decimal" step="1" value="${v}" placeholder="${ts?ts.qty:'–'}" title="${ts?escAttr('KI-Schätzung: '+ts.qty+' ('+ts.reason+')'):''}"
               data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${sz.k}"
               data-orig-source="${src||''}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
@@ -8409,27 +8420,35 @@ async function renderOrgStoreForecast(){
         MEATBALLS_TEILE.forEach(t=>{
           const rec=qtyBySize[key+'|'+t.k];
           const v=rec?rec.qty:'';
+          const ts=teilSugg[t.k];
           mh+=`<span style="font-size:8px;color:var(--muted);white-space:nowrap;">${MLBL[t.k]}</span>
-            <input type="text" inputmode="decimal" step="1" value="${v}" placeholder="–"
+            <input type="text" inputmode="decimal" step="1" value="${v}" placeholder="${ts?ts.qty:'–'}" title="${ts?escAttr('KI-Schätzung: '+ts.qty+' ('+ts.reason+')'):''}"
               data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-groesse="${t.k}"
               data-orig-source="${src||''}"
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
               style="width:44px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:12px;font-weight:${isStore?'700':'400'};padding:4px 1px;background:${bBg};">`;
         });
         mh+='</div>';
-        Object.entries(teilSugg).forEach(([tk,ts])=>{
-          const actualVal=parseFloat(String((qtyBySize[key+'|'+tk]||{}).qty??''));
-          const deviates=!isNaN(actualVal) && Math.abs(actualVal-ts.qty)/ts.qty>=0.1;
-          mh+=`<div title="${escAttr(ts.reason)}" style="font-size:8px;color:${deviates?'#B45309':'#94A3B8'};margin-top:1px;">🤖 ${MLBL[tk]}: ${ts.qty}${deviates?' ⚠️':''}</div>`;
-        });
         mh+=`${srcLbl}${dispLine}</td>`;
         html+=mh;
         return;
       }
 
+      // Eigene, lokale Schätzung fürs Platzhalter-Feld (21.09.26, Wunsch Tini: direkt grau IM Feld
+      // statt als Extra-Zeile) — nutzt die "hist"-Historie, die hier ohnehin schon für die
+      // Detailansicht geladen wird, bewusst simpler als die große computeOrgSuggestion-Logik
+      // (die woanders läuft und eigene Wetter-/Ferien-Daten braucht, die es hier nicht gibt).
+      const lastOccReg=hist.find(h=>h.qty!=null);
+      let suggRegQty=null, suggRegReason='';
+      if(lastOccReg){
+        suggRegQty=lastOccReg.qty;
+        if(lastOccReg.soldOutTime){ suggRegQty=Math.round((suggRegQty+0.25)*4)/4; suggRegReason=`ausverkauft letztes Mal (${lastOccReg.soldOutTime})`; }
+        else if((lastOccReg.leftover||0)>4){ suggRegQty=Math.max(0.25,Math.round((suggRegQty-0.25)*4)/4); suggRegReason=`${formatQty(lastOccReg.leftover)} übrig letztes Mal`; }
+        else suggRegReason='wie letztes Mal';
+      }
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         ${dishLabelHtml}
-        <input type="text" inputmode="decimal" step="0.25" value="${cur!=null?cur:''}" placeholder="–"
+        <input type="text" inputmode="decimal" step="0.25" value="${cur!=null?cur:''}" placeholder="${suggRegQty!=null?formatQty(suggRegQty):'–'}" title="${suggRegQty!=null?escAttr('KI-Schätzung: '+formatQty(suggRegQty)+' ('+suggRegReason+')'):''}"
           data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg=""
           data-orig-source="${src||''}"
           oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
