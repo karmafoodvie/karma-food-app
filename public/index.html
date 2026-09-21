@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.86';
+const APP_VERSION = '6.99.87';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2898,6 +2898,42 @@ function splitZutaten(text){
   return {gemuese, rest, getreide};
 }
 
+// 21.09.26 (Wunsch Tini, gesetzliche Kennzeichnungspflicht AT): berechnet ALLE 14 Allergene eines
+// Gerichts automatisch aus seiner Zutatenliste, statt sie manuell pro Gericht zu pflegen — ändert
+// sich die Zutatenliste, ändert sich die Allergen-Anzeige automatisch mit. Braucht die zutaten_master-
+// Datenbank (_zutatenMasterCache), die an mehreren Stellen der App ohnehin schon vorgeladen wird.
+function computeDishAllergeneFromZutaten(zutatenText){
+  if(!zutatenText || !_zutatenMasterCache) return null;
+  const items=zutatenText.split(/[,\n]/)
+    .map(s=>s.replace(/^(DIP\/SAUCE\/TOPPINGS|RAITA)\s*:?/i,'').trim())
+    .filter(Boolean);
+  const codes=new Set();
+  let ungeprueft=false, anyMatched=false;
+  items.forEach(item=>{
+    const hit=findZutatMasterMatch(item);
+    if(hit){
+      anyMatched=true;
+      (hit.allergene||[]).forEach(c=>codes.add(c));
+      if(hit.allergene_ungeprueft) ungeprueft=true;
+    }
+  });
+  if(!anyMatched) return null;
+  return {codes:[...codes], ungeprueft};
+}
+const ALLERGEN_NAMES_FULL={A:'Gluten',B:'Krebstiere',C:'Eier',D:'Fisch',E:'Erdnüsse',F:'Soja',G:'Milch',H:'Schalenfrüchte',L:'Sellerie',M:'Senf',N:'Sesam',O:'Sulfite',P:'Lupinen',R:'Weichtiere'};
+function allergenChipsHtml(zutatenText){
+  const res=computeDishAllergeneFromZutaten(zutatenText);
+  if(!res) return '';
+  let h='';
+  if(res.codes.length){
+    h+=`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${res.codes.map(c=>ALLERGEN_NAMES_FULL[c]||c).join(', ')}</span>`;
+  }
+  if(res.ungeprueft){
+    h+=`<span title="Enthält eine Fertigmischung/ein Fertigprodukt, dessen genaue Zutaten wir noch nicht geprüft haben (z.B. Gewürzmischung, Sauce) — bitte Verpackung checken." style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ Allergene nicht vollständig geprüft</span>`;
+  }
+  return h;
+}
+
 function isVegan(allergenMain){
   // Vegan = no Milch (G) and no Eier (C) and no Fisch (D) and no Krebstiere (B)
   // 21.09.26: gleicher Sicherheitsfix wie bei isGlutenfrei — bei leeren Daten nicht mehr automatisch
@@ -2920,7 +2956,23 @@ function getVeganToppingAusnahme(dishName){
 }
 // Liefert fertiges Badge-HTML fürs Vegan-Zeichen — berücksichtigt die Topping-Ausnahme, damit an
 // allen Stellen (Während der Schicht, Kochplan, ...) derselbe Hinweis erscheint.
-function veganBadgeHtml(dishName, allergenMain){
+function veganBadgeHtml(dishName, allergenMain, zutatenText){
+  // Echte Zutaten-Erkennung hat Vorrang (21.09.26) — Milch(G)/Eier(C)/Fisch(D)/Krebstiere(B)/
+  // Weichtiere(R) aus der berechneten Zutatenliste prüfen, statt dem (meist leeren) Array zu vertrauen.
+  const computed=computeDishAllergeneFromZutaten(zutatenText);
+  if(computed){
+    const hatTierisch=computed.codes.some(c=>['G','C','D','B','R'].includes(c));
+    if(!hatTierisch && !computed.ungeprueft){
+      return '<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;">🌱 Vegan</span>';
+    }
+    if(hatTierisch){
+      const exc=getVeganToppingAusnahme(dishName);
+      if(exc) return `<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;" title="Ohne ${exc.topping} ist das Gericht vegan">🌱 Vegan ohne ${exc.topping}</span>`;
+      return '';
+    }
+    // ungeprüfte Fertigzutat enthalten -> weder bestätigt noch verneint, kein Badge
+    return '';
+  }
   if(isVegan(allergenMain)){
     return '<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;">🌱 Vegan</span>';
   }
@@ -3375,10 +3427,16 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
         ${dishVisual}
         <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
         <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes, zutatenMerged)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}</div>
       </div>
       <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
-        <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
+        <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${(()=>{
+          if(allNames.length) return allNames.join(', ');
+          const computed=computeDishAllergeneFromZutaten(zutatenMerged);
+          if(computed && computed.codes.length) return computed.codes.map(c=>ALLERGEN_NAMES_FULL[c]||c).join(', ')+(computed.ungeprueft?' · ⚠️ nicht vollständig geprüft':'');
+          if(computed && computed.ungeprueft) return '⚠️ enthält ungeprüfte Fertigzutat';
+          return zutatenMerged?'keine Allergene erkannt':'Zutaten noch nicht hinterlegt';
+        })()}</div>
       </div>
     </div>`;
     // Zutaten-Panel bewusst NICHT in der schmalen Gericht-Spalte, sondern als eigener,
@@ -14840,8 +14898,8 @@ async function renderKitchen(){
               <div style="flex:1;">
                 <div style="font-size:14px;font-weight:600;color:#1a1a18;">${dish.name}</div>
                 <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
-                  ${allergenMain.length?`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}${allergenDressing.length?` · Dressing: ${allergenDressing.join(', ')}`:''}</span>`:''}
-                  ${veganBadgeHtml(dish.name, allergenMain)}
+                  ${allergenMain.length?`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}${allergenDressing.length?` · Dressing: ${allergenDressing.join(', ')}`:''}</span>`:allergenChipsHtml(zutaten)}
+                  ${veganBadgeHtml(dish.name, allergenMain, zutaten)}
                   ${glutenfreiBadgeHtml(dish.name, allergenMain, zutaten)}
                 </div>
               </div>
