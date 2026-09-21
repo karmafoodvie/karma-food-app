@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.87';
+const APP_VERSION = '6.99.88';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2923,15 +2923,8 @@ function computeDishAllergeneFromZutaten(zutatenText){
 const ALLERGEN_NAMES_FULL={A:'Gluten',B:'Krebstiere',C:'Eier',D:'Fisch',E:'Erdnüsse',F:'Soja',G:'Milch',H:'Schalenfrüchte',L:'Sellerie',M:'Senf',N:'Sesam',O:'Sulfite',P:'Lupinen',R:'Weichtiere'};
 function allergenChipsHtml(zutatenText){
   const res=computeDishAllergeneFromZutaten(zutatenText);
-  if(!res) return '';
-  let h='';
-  if(res.codes.length){
-    h+=`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${res.codes.map(c=>ALLERGEN_NAMES_FULL[c]||c).join(', ')}</span>`;
-  }
-  if(res.ungeprueft){
-    h+=`<span title="Enthält eine Fertigmischung/ein Fertigprodukt, dessen genaue Zutaten wir noch nicht geprüft haben (z.B. Gewürzmischung, Sauce) — bitte Verpackung checken." style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ Allergene nicht vollständig geprüft</span>`;
-  }
-  return h;
+  if(!res || !res.codes.length) return '';
+  return `<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${res.codes.map(c=>ALLERGEN_NAMES_FULL[c]||c).join(', ')}</span>`;
 }
 
 function isVegan(allergenMain){
@@ -2962,15 +2955,11 @@ function veganBadgeHtml(dishName, allergenMain, zutatenText){
   const computed=computeDishAllergeneFromZutaten(zutatenText);
   if(computed){
     const hatTierisch=computed.codes.some(c=>['G','C','D','B','R'].includes(c));
-    if(!hatTierisch && !computed.ungeprueft){
+    if(!hatTierisch){
       return '<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;">🌱 Vegan</span>';
     }
-    if(hatTierisch){
-      const exc=getVeganToppingAusnahme(dishName);
-      if(exc) return `<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;" title="Ohne ${exc.topping} ist das Gericht vegan">🌱 Vegan ohne ${exc.topping}</span>`;
-      return '';
-    }
-    // ungeprüfte Fertigzutat enthalten -> weder bestätigt noch verneint, kein Badge
+    const exc=getVeganToppingAusnahme(dishName);
+    if(exc) return `<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;" title="Ohne ${exc.topping} ist das Gericht vegan">🌱 Vegan ohne ${exc.topping}</span>`;
     return '';
   }
   if(isVegan(allergenMain)){
@@ -3433,8 +3422,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
         <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${(()=>{
           if(allNames.length) return allNames.join(', ');
           const computed=computeDishAllergeneFromZutaten(zutatenMerged);
-          if(computed && computed.codes.length) return computed.codes.map(c=>ALLERGEN_NAMES_FULL[c]||c).join(', ')+(computed.ungeprueft?' · ⚠️ nicht vollständig geprüft':'');
-          if(computed && computed.ungeprueft) return '⚠️ enthält ungeprüfte Fertigzutat';
+          if(computed && computed.codes.length) return computed.codes.map(c=>ALLERGEN_NAMES_FULL[c]||c).join(', ');
           return zutatenMerged?'keine Allergene erkannt':'Zutaten noch nicht hinterlegt';
         })()}</div>
       </div>
