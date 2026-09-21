@@ -1140,7 +1140,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.75';
+const APP_VERSION = '6.99.76';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8374,6 +8374,26 @@ async function renderOrgStoreForecast(){
       // ×6-Umrechner war der Küche zu ungenau, Wunsch Tini 02.09.).
       if(mapDishNameToCategory(dish)==='Meatballs'){
         const MLBL={behaelter:'Sauce (Beh.)',baellchen:'Bällchen'};
+        // Kluge Schätzung pro Teil (18.09.26, Wunsch Tini): die generische Formel (+0,25 fix) passt
+        // nicht für Stückzahlen wie Bällchen — hier stattdessen: letzter Wert dieses Teils als Basis,
+        // plus prozentualer Aufschlag, wenn zuletzt (früh) ausverkauft war. Wenn das Gericht mehrfach
+        // in Folge ausverkauft war (wie bei LB seit Januar), wird der Aufschlag deutlicher.
+        const teilSugg={};
+        MEATBALLS_TEILE.forEach(t=>{
+          const occs=hist.filter(h=>h.sizes?.some(s=>s.l===MLBL[t.k] && s.qty!=null));
+          if(!occs.length) return;
+          const last=occs[0];
+          const lastVal=last.sizes.find(s=>s.l===MLBL[t.k]).qty;
+          const soldOutCount=occs.slice(0,3).filter(o=>o.soldOutTime).length;
+          let factor=1, reason='letzter Wert';
+          if(last.soldOutTime){
+            const [hh,mm]=last.soldOutTime.split(':').map(Number);
+            const early=hh<13;
+            if(soldOutCount>=2){ factor=early?1.25:1.15; reason=`mehrfach in Folge ausverkauft (${last.soldOutTime})`; }
+            else { factor=early?1.2:1.1; reason=`zuletzt ausverkauft (${last.soldOutTime})`; }
+          }
+          teilSugg[t.k]={qty:Math.round(lastVal*factor/5)*5, reason};
+        });
         let mh=`<td style="padding:5px 3px;vertical-align:top;min-width:112px;">${dishLabelHtml}
           <div style="display:grid;grid-template-columns:62px 44px;gap:3px 4px;align-items:center;">`;
         MEATBALLS_TEILE.forEach(t=>{
@@ -8386,11 +8406,18 @@ async function renderOrgStoreForecast(){
               oninput="debounceFieldSave(this,()=>updateForecastQtyOrgGroesse(this))" onchange="updateForecastQtyOrgGroesse(this)"
               style="width:44px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:12px;font-weight:${isStore?'700':'400'};padding:4px 1px;background:${bBg};">`;
         });
-        mh+=`</div>${srcLbl}${dispLine}</td>`;
+        mh+='</div>';
+        Object.entries(teilSugg).forEach(([tk,ts])=>{
+          const actualVal=parseFloat(String((qtyBySize[key+'|'+tk]||{}).qty??''));
+          const deviates=!isNaN(actualVal) && Math.abs(actualVal-ts.qty)/ts.qty>=0.1;
+          mh+=`<div title="${escAttr(ts.reason)}" style="font-size:8px;color:${deviates?'#B45309':'#94A3B8'};margin-top:1px;">🤖 ${MLBL[tk]}: ${ts.qty}${deviates?' ⚠️':''}</div>`;
+        });
+        mh+=`${srcLbl}${dispLine}</td>`;
         html+=mh;
         return;
       }
 
+      const suggReg=computeOrgSuggestion(orgPlanStore, dish, dateStr, 'gross', true);
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         ${dishLabelHtml}
         <input type="text" inputmode="decimal" step="0.25" value="${cur!=null?cur:''}" placeholder="–"
@@ -8398,7 +8425,11 @@ async function renderOrgStoreForecast(){
           data-orig-source="${src||''}"
           oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
           style="width:52px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:13.5px;font-weight:${isStore?'700':'400'};padding:5px 2px;background:${bBg};">
-        ${srcLbl}
+        ${suggReg?(()=>{
+          const actualVal=parseFloat(String(cur??''));
+          const deviates=!isNaN(actualVal) && Math.abs(actualVal-suggReg.qty)>=0.25;
+          return `<div title="${escAttr(suggReg.reason||'')}" style="font-size:8px;color:${deviates?'#B45309':'#94A3B8'};text-align:center;margin-top:2px;">🤖 ${formatQty(suggReg.qty)}${deviates?' ⚠️':''}</div>`;
+        })():''}${srcLbl}
         ${dispLine}
       </td>`;
       return;
