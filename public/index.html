@@ -208,6 +208,7 @@ summary::marker{content:'';}
     <div id="v-epochenCheck" class="view"></div>
     <div id="v-wochenFeedback" class="view"></div>
     <div id="v-forecastAmpel" class="view"></div>
+    <div id="v-nutzungsstatistik" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -1150,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.83';
+const APP_VERSION = '6.99.86';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1826,6 +1827,11 @@ async function loadAll(){
 // ---- NAV ----
 function goTo(v, noPush=false){
   currentView=v;
+  // 21.09.26 (Wunsch Tini): leichtes Seitenaufruf-Tracking, um später datenbasiert zu sehen, was
+  // wirklich oft genutzt wird — bewusst "fire and forget" (kein await), damit Navigation nicht
+  // langsamer wird, und nur fürs eigentliche App-Personal (nicht bei jedem Tastendruck, nur bei
+  // Seitenwechsel).
+  try{ fetch(`${SUPABASE_URL}/rest/v1/page_views`, {method:'POST', headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'}, body:JSON.stringify([{view_name:v, store_id:currentStore?.id||null}])}).catch(()=>{}); }catch(e){}
   if(v==='sweets') sweetsDateOffset=0; // immer heute beim frischen Öffnen
   localStorage.setItem('kf_view', v);
   if(!noPush) history.pushState({view:v, storeId:currentStore?.id}, '', location.pathname);
@@ -1860,7 +1866,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -2894,7 +2900,9 @@ function splitZutaten(text){
 
 function isVegan(allergenMain){
   // Vegan = no Milch (G) and no Eier (C) and no Fisch (D) and no Krebstiere (B)
-  if(!allergenMain||!allergenMain.length) return true;
+  // 21.09.26: gleicher Sicherheitsfix wie bei isGlutenfrei — bei leeren Daten nicht mehr automatisch
+  // "vegan" annehmen (z.B. Parmesan bei Meatballs wäre sonst übersehen worden).
+  if(!allergenMain||!allergenMain.length) return false;
   return !allergenMain.some(c=>['G','C','D','B','R'].includes(c.toUpperCase()));
 }
 
@@ -2923,8 +2931,29 @@ function veganBadgeHtml(dishName, allergenMain){
   return '';
 }
 
+// 21.09.26 (ernster Fund, Wunsch Tini): Die alte isGlutenfrei-Logik verließ sich auf ein
+// allergene.main-Array, das für JEDES Herbst/Winter-Gericht leer ist ([]) — und bei leer wurde
+// automatisch "glutenfrei" angenommen. Dadurch wurde z.B. die Lasagne (mit Lasagneteigblättern aus
+// Weizen) fälschlich als glutenfrei markiert. Neue, verlässlichere Basis: direkt aus dem echten
+// Zutaten-Text ableiten, den wir für alle Gerichte gepflegt haben.
+const GLUTEN_ZUTATEN_KEYWORDS = [
+  'lasagneteigblätter','lasagneblätter','lasagne blätter','teig blatte',
+  'weizen','weizenmehl','dinkel','roggen','gerste','grieß','couscous','bulgur',
+  'paniermehl','semmelbrösel','panko','nudeln','pasta','teigwaren',
+  'sojasauce','soja sauce','malzextrakt','bierhefe'
+];
+function zutatenEnthaeltGluten(zutatenText){
+  if(!zutatenText) return null; // keine Zutaten hinterlegt -> unbekannt, nicht automatisch glutenfrei
+  const n=zutatenText.toLowerCase();
+  return GLUTEN_ZUTATEN_KEYWORDS.some(kw=>n.includes(kw));
+}
+
 function isGlutenfrei(allergenMain){
-  if(!allergenMain||!allergenMain.length) return true;
+  // 21.09.26: SICHERHEITSFIX — bei fehlenden/leeren Allergen-Daten NICHT mehr automatisch als
+  // glutenfrei gelten (das war der Kern des Bugs: jedes Gericht ohne befülltes Array wurde
+  // fälschlich als glutenfrei angezeigt, auch Weizen-haltige wie Lasagne). Lieber kein Badge zeigen
+  // als ein falsches Sicherheitsversprechen.
+  if(!allergenMain||!allergenMain.length) return false;
   return !allergenMain.some(c=>c.toUpperCase()==='A');
 }
 
@@ -2940,7 +2969,16 @@ function getGlutenToppingAusnahme(dishName){
   const n = dishName.toUpperCase();
   return GLUTEN_TOPPING_AUSNAHMEN.find(e => e.match.test(n)) || null;
 }
-function glutenfreiBadgeHtml(dishName, allergenMain){
+function glutenfreiBadgeHtml(dishName, allergenMain, zutatenText){
+  // Echte Zutaten-Erkennung hat Vorrang (21.09.26) — nur wenn gar keine Zutaten hinterlegt sind,
+  // auf das (meist leere) allergenMain-Array zurückfallen, NIE automatisch "glutenfrei" annehmen,
+  // wenn Gluten-Zutaten im Text stehen.
+  const glutenAusZutaten=zutatenEnthaeltGluten(zutatenText);
+  if(glutenAusZutaten===true) return ''; // enthält Gluten -> kein Glutenfrei-Badge
+  if(glutenAusZutaten===false){
+    return '<span style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;">🟣 Glutenfrei</span>';
+  }
+  // Keine Zutaten hinterlegt -> alter Weg als letzter Rückfall
   if(isGlutenfrei(allergenMain)){
     return '<span style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;">🟣 Glutenfrei</span>';
   }
@@ -3337,7 +3375,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
         ${dishVisual}
         <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
         <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes)}${glutenfreiBadgeHtml(d.name, mainCodes)}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}</div>
       </div>
       <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
         <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${allNames.length?allNames.join(', '):'keine Allergene angegeben'}</div>
@@ -3743,6 +3781,11 @@ async function renderHome(){
       </div>
       <span style="color:#7C3AED;">→</span>
     </div>
+    <div onclick="const b=document.getElementById('org-weitere-tools');const a=document.getElementById('org-weitere-arrow');const open=b.style.display!=='none';b.style.display=open?'none':'block';a.textContent=open?'▸':'▾';" style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;cursor:pointer;margin-bottom:4px;">
+      <span style="font-size:11.5px;font-weight:600;color:var(--muted);">Weitere Werkzeuge (selten genutzt)</span>
+      <span id="org-weitere-arrow" style="color:var(--muted);font-size:12px;">▸</span>
+    </div>
+    <div id="org-weitere-tools" style="display:none;">
     <div onclick="goTo('epochenCheck')" style="display:flex;align-items:center;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🔄</span>
       <div style="flex:1;">
@@ -3766,6 +3809,15 @@ async function renderHome(){
         <div style="font-size:10.5px;color:#B91C1C;">Kühlschrank- & Wareneingangs-Temperaturen je Filiale</div>
       </div>
       <span style="color:#B91C1C;">→</span>
+    </div>
+    <div onclick="goTo('nutzungsstatistik')" style="display:flex;align-items:center;gap:10px;background:#F0FDFA;border:1px solid #99F6E4;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
+      <span style="font-size:18px;">📈</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#115E59;">Nutzungsstatistik</div>
+        <div style="font-size:10.5px;color:#0D9488;">Was wird wirklich am häufigsten genutzt</div>
+      </div>
+      <span style="color:#0D9488;">→</span>
+    </div>
     </div>
     <div onclick="goTo('management')" style="display:flex;align-items:center;gap:10px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🧭</span>
@@ -7020,6 +7072,48 @@ async function renderForecastAmpel(){
   translateEl(el);
 }
 window.renderForecastAmpel=renderForecastAmpel;
+
+// Nutzungsstatistik (21.09.26, Wunsch Tini) — zeigt, welche Bereiche der Organisation-Ansicht
+// wirklich am häufigsten genutzt werden, damit künftige UX-Entscheidungen datenbasiert statt nur
+// geschätzt getroffen werden können. Sammelt erst ab jetzt (v6.99.84) Daten, also anfangs noch dünn.
+const VIEW_LABELS={home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Team-Feedback',samosas:'Samosas'};
+
+async function renderNutzungsstatistik(){
+  const el=document.getElementById('v-nutzungsstatistik');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('📈','Nutzungsstatistik','Was wird wirklich am häufigsten genutzt?','#0D9488');
+
+  const since30=(()=>{ const d=new Date(); d.setDate(d.getDate()-30); return d.toISOString(); })();
+  const rows=await apiAllPages(`page_views?created_at=gte.${since30}&select=view_name`).catch(()=>[]);
+
+  if(!rows||rows.length<20){
+    html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px;">Noch nicht genug Daten gesammelt (seit 21.09.26) — komm in ein paar Tagen/Wochen wieder vorbei, dann wird's aussagekräftig.</div>`;
+    el.innerHTML=html;
+    return;
+  }
+
+  const counts={};
+  rows.forEach(r=>{ counts[r.view_name]=(counts[r.view_name]||0)+1; });
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const maxCount=sorted[0]?.[1]||1;
+
+  html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Letzte 30 Tage, alle Nutzer:innen zusammen</div>`;
+  sorted.forEach(([view,count])=>{
+    const label=VIEW_LABELS[view]||view;
+    const pct=Math.round(count/maxCount*100);
+    html+=`<div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px;">
+        <span style="font-weight:600;">${label}</span><span style="color:var(--muted);">${count}×</span>
+      </div>
+      <div style="height:8px;background:#F3F4F6;border-radius:4px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#0D9488;"></div></div>
+    </div>`;
+  });
+
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderNutzungsstatistik=renderNutzungsstatistik;
 
 async function renderManagement(){
   const el=document.getElementById('v-management');
@@ -13374,7 +13468,7 @@ async function renderDisposalOverviewHtml(){
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekDisp=await api(`disposal?disposal_date=gte.${fromDate}&disposal_date=lte.${toDate}&select=store_id,disposal_date,slot,dish_name,sold_out_time,leftover_qty`).catch(()=>[]);
 
-  const SLOT_ORDER=['salat','gericht2','gericht3','reis'];
+  const SLOT_ORDER=['gericht1','gericht2','gericht3','reis'];
   let html=weekTabsHtml+legendHtml;
   const DAY_NAMES={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
   const todayStr=new Date().toISOString().split('T')[0];
@@ -14748,7 +14842,7 @@ async function renderKitchen(){
                 <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
                   ${allergenMain.length?`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}${allergenDressing.length?` · Dressing: ${allergenDressing.join(', ')}`:''}</span>`:''}
                   ${veganBadgeHtml(dish.name, allergenMain)}
-                  ${glutenfreiBadgeHtml(dish.name, allergenMain)}
+                  ${glutenfreiBadgeHtml(dish.name, allergenMain, zutaten)}
                 </div>
               </div>
               <span style="color:var(--muted);font-size:14px;">›</span>
