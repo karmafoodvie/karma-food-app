@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.89';
+const APP_VERSION = '6.99.90';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -15539,7 +15539,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const isNewSinceLastSeen=recs.some(r=>r.changed_at && r.changed_at>_lastSeenBefore);
       const activeRecs=recs.filter(r=>r.qty>0);
       const useShort=activeRecs.length>1; // mehrere Größen gleichzeitig -> abkürzen, sonst ausschreiben
-      const MLBL_MK={behaelter:'Sauce',baellchen:meatballsPieceLabel(dish)};
+      const MLBL_MK={behaelter:'S',baellchen:meatballsPieceLabel(dish).charAt(0)};
       const sizeLabel=(isLasagne&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:${useShort?'8px':'8.5px'};font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)}× ${useShort?(SIZE_SHORT_MK[r.groesse]||'G')+' ('+(SIZE_PORTIONS_MK[r.groesse]||18)+')':(SIZE_FULL_MK[r.groesse]||'Groß')}</span>`).join('')}</div>`
         :(isMeatballsCat&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:8.5px;font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)} ${MLBL_MK[r.groesse]||r.groesse}</span>`).join('')}</div>`:'';
       const dispRec=(disposalBySlotStore[dishObj.slot]||{})[s.id];
@@ -15556,7 +15556,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       if(!isLasagne && !isMeatballsCat) return total>0?formatQty(total):'–';
       const entries=Object.entries(totalByGroesse).filter(([,v])=>v>0);
       if(!entries.length) return '–';
-      const LBL_SUM=isLasagne?SIZE_SHORT_MK:{behaelter:'Sauce',baellchen:meatballsPieceLabel(dish)};
+      const LBL_SUM=isLasagne?SIZE_SHORT_MK:{behaelter:'S',baellchen:meatballsPieceLabel(dish).charAt(0)};
       return entries.map(([g,v])=>`<div style="white-space:nowrap;">${formatQty(v)} ${LBL_SUM[g]||g}</div>`).join('');
     })();
     html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});loadDishFeedbackInto('morgen_fb_${dIdx}',this.dataset.dishname,'${tomorrowStr}');}" data-dishname="${escAttr(dish)}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
