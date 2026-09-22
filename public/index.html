@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.88';
+const APP_VERSION = '6.99.89';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -15505,8 +15505,23 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const cat=mapDishNameToCategory(dish, dishObj.slot);
     const storeData = (Object.keys(fMap[dish]||{}).length ? fMap[dish] : (fMapByCat[cat]||{}));
     const isLasagne=dish.includes('Lasagne');
-    const total = storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
-    const hasData = total>0;
+    const isMeatballsCat=mapDishNameToCategory(dish, dishObj.slot)==='Meatballs';
+    // 21.09.26 (Wunsch Tini): bei Meatballs/Köfte NIE Sauce-Behälter und Bällchen/Köfte-Stückzahl
+    // zusammenzählen (führte zu Unsinns-Summen wie "181" aus 1 Behälter + 180 Bällchen) — analog zur
+    // Lasagne-Größen-Trennung getrennt nach groesse ('behaelter'/'baellchen') summieren.
+    const total = isLasagne||isMeatballsCat
+      ? null // wird unten pro Teil/Größe separat berechnet, kein blindes Gesamt-Σ
+      : storeList.reduce((sum,s)=>sum+((storeData[s.id]||[]).reduce((a,r)=>a+(r.qty||0),0)),0);
+    const totalByGroesse={};
+    if(isLasagne||isMeatballsCat){
+      storeList.forEach(s=>{
+        (storeData[s.id]||[]).forEach(r=>{
+          const g=r.groesse||'gross';
+          totalByGroesse[g]=(totalByGroesse[g]||0)+(r.qty||0);
+        });
+      });
+    }
+    const hasData = isLasagne||isMeatballsCat ? Object.values(totalByGroesse).some(v=>v>0) : total>0;
     const detailId = `morgen_zut_${dIdx}`;
     // Bei Lasagne lieber "1x Groß"/"1x Klein" ausgeschrieben zeigen (Version 1) — nur wenn das bei
     // mehreren Größen gleichzeitig nicht mehr passt, auf "1x G (18)"/"1x K (12)" abkürzen.
@@ -15524,7 +15539,9 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const isNewSinceLastSeen=recs.some(r=>r.changed_at && r.changed_at>_lastSeenBefore);
       const activeRecs=recs.filter(r=>r.qty>0);
       const useShort=activeRecs.length>1; // mehrere Größen gleichzeitig -> abkürzen, sonst ausschreiben
-      const sizeLabel=(isLasagne&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:${useShort?'8px':'8.5px'};font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)}× ${useShort?(SIZE_SHORT_MK[r.groesse]||'G')+' ('+(SIZE_PORTIONS_MK[r.groesse]||18)+')':(SIZE_FULL_MK[r.groesse]||'Groß')}</span>`).join('')}</div>`:'';
+      const MLBL_MK={behaelter:'Sauce',baellchen:meatballsPieceLabel(dish)};
+      const sizeLabel=(isLasagne&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:${useShort?'8px':'8.5px'};font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)}× ${useShort?(SIZE_SHORT_MK[r.groesse]||'G')+' ('+(SIZE_PORTIONS_MK[r.groesse]||18)+')':(SIZE_FULL_MK[r.groesse]||'Groß')}</span>`).join('')}</div>`
+        :(isMeatballsCat&&activeRecs.length)?`<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;align-items:center;">${activeRecs.map(r=>`<span style="font-size:8.5px;font-weight:700;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:4px;padding:0px 3px;white-space:nowrap;line-height:1.5;">${formatQty(r.qty)} ${MLBL_MK[r.groesse]||r.groesse}</span>`).join('')}</div>`:'';
       const dispRec=(disposalBySlotStore[dishObj.slot]||{})[s.id];
       let ampelBadge='';
       if(dispRec && dispRec.leftover_qty!=null){
@@ -15532,13 +15549,20 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
         ampelBadge=`<div style="font-size:9.5px;font-weight:700;color:${a.color};margin-top:1px;">${a.icon} ${dispRec.leftover_qty}</div>`;
       }
       const neuBadge=isNewSinceLastSeen?`<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#EF4444;margin-left:3px;vertical-align:middle;" title="Seit deinem letzten Blick geändert"></span>`:'';
-      const qtyBlock=(!isLasagne && qty)?`<div>${formatQty(qty)}</div>`:(!isLasagne?'–':'');
+      const qtyBlock=(!isLasagne && !isMeatballsCat && qty)?`<div>${formatQty(qty)}</div>`:(!isLasagne && !isMeatballsCat?'–':'');
       return `<td style="padding:6px 2px;font-size:12px;font-weight:${changed?'700':'400'};color:${changed?changedColor:(qty?'#1a1a18':'var(--border)')};border-bottom:1px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}${isNewSinceLastSeen?'background:#FEF2F2;':''}">${qtyBlock}${sizeLabel}${ampelBadge}${neuBadge}</td>`;
     }).join('');
+    const sumCellHtml=(()=>{
+      if(!isLasagne && !isMeatballsCat) return total>0?formatQty(total):'–';
+      const entries=Object.entries(totalByGroesse).filter(([,v])=>v>0);
+      if(!entries.length) return '–';
+      const LBL_SUM=isLasagne?SIZE_SHORT_MK:{behaelter:'Sauce',baellchen:meatballsPieceLabel(dish)};
+      return entries.map(([g,v])=>`<div style="white-space:nowrap;">${formatQty(v)} ${LBL_SUM[g]||g}</div>`).join('');
+    })();
     html+=`<tr onclick="document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>{if(p.id!=='${detailId}')p.style.display='none';});const _p=document.getElementById('${detailId}');const _wasOpen=_p.style.display==='block';document.querySelectorAll('[id^=morgen_zut_]').forEach(p=>p.style.display='none');if(!_wasOpen){_p.style.display='block';_p.scrollIntoView({behavior:'smooth',block:'center'});loadDishFeedbackInto('morgen_fb_${dIdx}',this.dataset.dishname,'${tomorrowStr}');}" data-dishname="${escAttr(dish)}" style="cursor:pointer;background:${hasData?'var(--green-light)':''};">
       <td style="text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);word-break:break-word;"><span style="display:flex;align-items:center;gap:4px;"><span style="flex-shrink:0;">${dishImgHtml(dish, 16)}</span><span style="font-weight:600;font-size:11px;line-height:1.25;">${dish}</span></span></td>
       ${cells}
-      <td style="font-weight:700;font-size:12px;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${total>0?formatQty(total):'–'}</td>
+      <td style="font-weight:700;font-size:12px;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${sumCellHtml}</td>
     </tr>`;
   });
   html+='</tbody></table></div></div>';
