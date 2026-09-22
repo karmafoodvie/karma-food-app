@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.90';
+const APP_VERSION = '6.99.91';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -14224,7 +14224,9 @@ async function renderTransporterBeilagenHtml(){
       </tr></thead><tbody>`;
     dishNamesToday.forEach(name=>{
       const isLasagneRow=name.toLowerCase().includes('lasagne');
+      const isMeatballsRow=mapDishNameToCategory(name)==='Meatballs';
       const SIZE_FULL_KUE={mittel:'Mittel (12)',klein:'Klein (8)',gross:'Groß (18)'};
+      const MLBL_KUE={behaelter:'S',baellchen:meatballsPieceLabel(name).charAt(0)};
       const cells=storeList.map(st=>{
         const recs=(fcToday||[]).filter(f=>f.store_id===st.id && f.dish_name===name);
         if(!recs.length) return `<td style="text-align:center;color:var(--border);padding:8px 4px;">–</td>`;
@@ -14232,11 +14234,14 @@ async function renderTransporterBeilagenHtml(){
         const packed=recs.every(r=>r.eingepackt);
         // Bei Lasagne die Größen einzeln zeigen (Groß/Mittel/Klein) — vorher stand hier nur die
         // Gesamtsumme, ohne die für die Küche entscheidende Blech-Aufteilung.
-        const sizeBadges=(isLasagneRow&&recs.length)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 5px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL_KUE[r.groesse]||'Groß (18)'}</span>`).join('')}</div>`:'';
+        // 22.09.26 (Wunsch Tini): dieselbe Trennung jetzt auch für Meatballs/Köfte — Sauce-Behälter
+        // und Bällchen/Köfte-Stückzahl NIE blind zusammenzählen und NIE als eine Zahl zeigen.
+        const sizeBadges=(isLasagneRow&&recs.length)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 5px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL_KUE[r.groesse]||'Groß (18)'}</span>`).join('')}</div>`
+          :(isMeatballsRow&&recs.length)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 5px;white-space:nowrap;">${formatQty(r.qty)} ${MLBL_KUE[r.groesse]||r.groesse}</span>`).join('')}</div>`:'';
         return `<td style="text-align:center;padding:6px 4px;vertical-align:top;">
           <div onclick="toggleForecastEingepackt('${st.id}','${escAttr(name)}','${today}',${packed})"
             style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
-            <span style="font-size:13px;font-weight:600;color:${packed?'var(--green)':'#1a1a18'};">${formatQty(qty)}</span>
+            <span style="font-size:13px;font-weight:600;color:${packed?'var(--green)':'#1a1a18'};">${isMeatballsRow?(packed?'✓':'○'):formatQty(qty)}</span>
             <span style="font-size:10px;color:${packed?'var(--green)':'var(--muted)'};">${packed?'✓ ok':'○'}</span>
           </div>
           ${sizeBadges}
@@ -15005,16 +15010,22 @@ async function renderKitchen(){
         const cells=allDishes.map(dish=>{
           const recs=(fMap[dateStr]?.[st.id]||{})[dish];
           if(!recs||!recs.length) return '<td style="color:var(--border);">·</td>';
-          const total=recs.reduce((a,r)=>a+(r.qty||0),0);
           // Nur Filial-Änderungen hervorheben — Operations-Anpassungen sehen aus wie jeder andere Wert,
           // auf Wunsch von Tini (keine Sonderkennzeichnung mehr für "von Operations gesetzt").
           const storeAdjusted=recs.some(r=>r.source==='manual'||r.source==='store');
           const isLasagneDish=dish.includes('Lasagne');
+          const isMeatballsDish=mapDishNameToCategory(dish)==='Meatballs';
+          const total=isMeatballsDish?null:recs.reduce((a,r)=>a+(r.qty||0),0);
           // Klare, ausgeschriebene Größen-Badges statt kryptischer "1×G+1×K"-Kette — jede Zeile für
           // sich verständlich, ohne dass man erst die Legende oben nachschlagen muss. Leere Größen
           // (0 Stück) werden ausgeblendet statt als "0×K" mitgeschleppt.
-          const breakdown=(isLasagneDish && recs.length>1)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;align-items:center;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 6px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL[r.groesse]||'Groß'}</span>`).join('')}</div>`:'';
-          return `<td style="font-weight:${storeAdjusted?'700':'400'};color:${storeAdjusted?'#F97316':'#1a1a18'};font-size:12px;">${formatQty(total)}${storeAdjusted?'*':''}${breakdown}</td>`;
+          // 22.09.26 (Wunsch Tini): dieselbe Trennung wie bei Lasagne jetzt auch für Meatballs/Köfte —
+          // Sauce-Behälter und Bällchen/Köfte-Stückzahl NIE blind zusammenzählen (führte zu
+          // Unsinns-Summen wie "181" aus 1 Behälter + 180 Bällchen).
+          const MLBL_WK={behaelter:'S',baellchen:meatballsPieceLabel(dish).charAt(0)};
+          const breakdown=(isLasagneDish && recs.length>1)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;align-items:center;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 6px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL[r.groesse]||'Groß'}</span>`).join('')}</div>`
+            :isMeatballsDish?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:2px;align-items:center;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 6px;white-space:nowrap;">${formatQty(r.qty)} ${MLBL_WK[r.groesse]||r.groesse}</span>`).join('')}</div>`:'';
+          return `<td style="font-weight:${storeAdjusted?'700':'400'};color:${storeAdjusted?'#F97316':'#1a1a18'};font-size:12px;">${isMeatballsDish?'':formatQty(total)}${storeAdjusted&&!isMeatballsDish?'*':''}${breakdown}</td>`;
         }).join('');
         html+=`<tr>
           <td data-no-translate style="color:${STORE_COLORS[st.id]||'#888'};font-size:12px;">${st.name.split(' ')[0]}</td>
