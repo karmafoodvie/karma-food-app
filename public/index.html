@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.91';
+const APP_VERSION = '6.99.93';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -12550,7 +12550,7 @@ async function meldeNachschub(articleId){
     }])});
     closeNachschubModal();
     await ladeNachschubOffen();
-    renderPack();
+    if(currentView==='sweets') renderSweets(); else renderPack();
     showToast('🛒 Für Nachbestellung vermerkt');
   }catch(e){ console.error(e); showToast('Fehler beim Melden: '+(e?.message||String(e)).slice(0,120),true); }
 }
@@ -16043,28 +16043,36 @@ async function submitKitchenKC(){
 }
 window.submitKitchenKC=submitKitchenKC;
 
+// 22.09.26 (Wunsch Tini): Nachschub-Anfrage aus der Küche fließt jetzt ins selbe Sammelbecken wie
+// die "Fast aus"-Meldungen vom Transporter (nachschub_meldungen) — die werden ja ohnehin täglich um
+// 15:00 zu EINER Asana-Bestellung an Simone gebündelt. Keine separate E-Mail an Tini mehr, die
+// brauchte sie nicht mehr. Nur falls das eingetippte Produkt zu keinem bekannten Artikel passt
+// (Freitext ohne Zuordnung), geht weiterhin eine eigenständige Asana-Meldung raus, statt die
+// Anfrage kommentarlos zu verlieren.
 async function submitNachschub(){
   const produkt=document.getElementById('nachschub-produkt')?.value?.trim()||'';
   const filialen=document.getElementById('nachschub-filialen')?.value?.trim()||'';
   const notiz=document.getElementById('nachschub-notiz')?.value?.trim()||'';
   if(!produkt){ showToast('Bitte ein Produkt angeben'); return; }
-  const empfaenger=NACHSCHUB_EMAIL||'tini@karmafood.at'; // Fallback bis echte Bestelladresse eingetragen ist
   try{
-    await emailjs.send('service_xla195w','template_9uiq1wf',{
-      subject:'⚠️ Nachschub benötigt: '+produkt,
-      message:`Nachschub-Anfrage aus der Küche:\n\nProdukt: ${produkt}\nFür Filialen: ${filialen||'—'}\nAnmerkung: ${notiz||'—'}\n\n`+new Date().toLocaleString('de-AT'),
-      to_email:empfaenger
-    });
-    // Zusätzlich zu Simone in Asana — läuft parallel, nicht als Ersatz für die E-Mail.
-    // Bewusst kein "await" vorm Fehler-Handling der E-Mail blockieren: eigener try/catch,
-    // damit ein Asana-Problem die (schon erfolgreich gesendete) E-Mail nicht als Fehler zeigt.
-    try{
+    const produktLower=produkt.toLowerCase();
+    const match=(articles||[]).find(a=>a.name.toLowerCase().includes(produktLower)||produktLower.includes(a.name.toLowerCase()));
+    if(match){
+      // Gleiches Muster wie meldeNachschub: erst evtl. vorhandene offene Meldung löschen, dann neu
+      // anlegen, damit's genau eine offene Meldung pro Artikel bleibt.
+      const gemeldetVon=`Küche${filialen?' (für '+filialen+')':''}`;
+      await api(`nachschub_meldungen?article_id=eq.${match.id}&status=eq.offen`,{method:'DELETE'}).catch(()=>{});
+      await api('nachschub_meldungen',{method:'POST',body:JSON.stringify([{
+        article_id:match.id, restmenge:null, gemeldet_von:gemeldetVon, status:'offen'
+      }])});
+    } else {
+      // Kein passender Artikel gefunden -> eigenständige Asana-Meldung, damit nichts verloren geht.
       await fetch(`${SUPABASE_URL}/functions/v1/asana-nachschub-anfrage`,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({produkt, filialen, notiz})
-      });
-    }catch(asanaErr){ console.error('Asana-Nachschub-Task fehlgeschlagen (E-Mail wurde trotzdem versendet):', asanaErr); }
+      }).catch(e=>console.error('Asana-Nachschub-Task fehlgeschlagen:',e));
+    }
     showToast('✓ Nachschub-Anfrage gesendet!');
     ['nachschub-produkt','nachschub-filialen','nachschub-notiz'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen',true);}
@@ -16581,6 +16589,7 @@ window.renderTeamRating=renderTeamRating;
 
 async function renderSweets(){
   const el=document.getElementById('v-sweets');
+  await ladeNachschubOffen();
   const TEAMTAB_COLORS={sweets:'#EC4899', supply:'#22C55E', produktion:'#0EA5E9', bestellen:'#A855F7', nachschub:'#EA580C', stadtgemeinde:'#059669', grundreinigung:'#0F766E'};
   const ttab=(key,label)=>{
     const active=teamTab===key;
@@ -16700,21 +16709,26 @@ async function renderSweets(){
     return;
   }
 
-  if(currentStore?.id==='zentrale'){
-    html+=`<div class="section-lbl" style="margin-top:10px;">🚫 Verfügbarkeit</div>
+  if(currentStore?.id==='zentrale' || currentStore?.id==='kitchen'){
+    const isOrgHere=currentStore?.id==='zentrale';
+    html+=`<div class="section-lbl" style="margin-top:10px;">${isOrgHere?'🚫 Verfügbarkeit':'🛒 Nachbestellen'}</div>
     <div class="card" style="padding:4px 0;">
       ${sweetsItems.map(a=>{
         const verf=a.verfuegbar!==false;
-        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:8px;">
+        const schonGemeldet=!!nachschubOffen[a.id];
+        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;">
             ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
-            <span style="font-size:13px;">${a.name}</span>
+            <span style="font-size:13px;" data-no-translate>${a.name}</span>
           </div>
-          <button onclick="toggleArticleVerfuegbar(${a.id},${verf})" style="background:${verf?'var(--green-light)':'#FEE2E2'};color:${verf?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;">${verf?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <button onclick="showNachschubModal(${a.id})" title="Nachbestellen" style="background:${schonGemeldet?'#FEF3C7':'var(--surface-1)'};color:${schonGemeldet?'#92400E':'var(--sub)'};border:none;border-radius:8px;padding:7px 9px;font-size:13px;cursor:pointer;">${schonGemeldet?'🛒 ✓':'🛒'}</button>
+            ${isOrgHere?`<button onclick="toggleArticleVerfuegbar(${a.id},${verf})" style="background:${verf?'var(--green-light)':'#FEE2E2'};color:${verf?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verf?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>`:''}
+          </div>
         </div>`;
       }).join('')}
     </div>
-    <div style="font-size:10.5px;color:var(--muted);padding:6px 2px 2px;">"Nicht lieferbar" markiert = Stores können diesen Artikel nicht mehr bestellen</div>`;
+    <div style="font-size:10.5px;color:var(--muted);padding:6px 2px 2px;">${isOrgHere?'"Nicht lieferbar" markiert = Stores können diesen Artikel nicht mehr bestellen · ':''}🛒 = direkt nachbestellen, landet gesammelt bei Simone in Asana</div>`;
   }
 
   html+=`<div class="card" style="padding:8px 10px;margin:10px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
