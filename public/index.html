@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.102';
+const APP_VERSION = '6.99.103';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7908,6 +7908,50 @@ async function saveSchrankerlMenge(lieferdatum, slot){
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.saveSchrankerlMenge=saveSchrankerlMenge;
+
+// 29.09.26 (Wunsch Tini) — WOCHENBESTELLUNG TRANSGOURMET, Testversion.
+// Bewusst getrennt vom bestehenden Küchenlager (FOODPACK/INVOLO/...), eigene Tabelle tg_artikel,
+// weil Tini das ausdrücklich als eigenständigen Bereich haben wollte, nicht vermischt mit dem
+// Verbrauchsmaterial-Lager. Reines IST-Bestand-Zählen (kein SOLL, keine automatische Bestellmenge)
+// — genau wie es der Chefkoch bisher händisch am Zettel/Excel gemacht hat. Weiterleitung an Simone
+// ist bewusst noch NICHT gebaut (erst mal nur schauen, wie sich das Formular aufbaut).
+async function renderTgBestellungHtml(){
+  const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
+  let html=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">
+    <div style="font-size:12px;font-weight:700;color:#F97316;">🚛 Wochenbestellung — Transgourmet</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px;">Testversion — Bestand zählen und eintragen. Geht noch NICHT automatisch an Simone, muss aktuell noch manuell weitergegeben werden.</div>
+  </div>`;
+
+  const kategorien=[...new Set((items||[]).map(a=>a.kategorie))];
+  if(!kategorien.length){
+    html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Artikel angelegt.</div>`;
+    return html;
+  }
+
+  kategorien.forEach(kat=>{
+    const katItems=(items||[]).filter(a=>a.kategorie===kat);
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">${kat.toUpperCase()}</div>
+    <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th></tr></thead><tbody>`;
+    katItems.forEach(a=>{
+      html+=`<tr>
+        <td style="font-size:12px;" data-no-translate>${a.name}</td>
+        <td><input type="number" step="0.5" value="${a.bestand??''}" placeholder="Menge" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px;"></td>
+      </tr>`;
+    });
+    html+='</tbody></table></div></div>';
+  });
+  return html;
+}
+window.renderTgBestellungHtml=renderTgBestellungHtml;
+
+async function updateTgBestand(articleId, value){
+  const v=value===''?null:parseFloat(value);
+  try{
+    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestand:v, aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
+    showToast('✓ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.updateTgBestand=updateTgBestand;
 
 async function reduceFruechtebecherBestand(produzierteMenge){
   const verbrauch=Math.max(0, Math.round(produzierteMenge) - 20);
@@ -15007,7 +15051,11 @@ async function renderKitchen(){
   const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style="font-size:10px;font-weight:400;">'+forecastDateRange+'</span>';
   const menuTabLabel='🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche '+CURRENT_MENU_WOCHE+'</span>';
   const morgenTabLabel='🌅 '+nextCookDayLabel+(hasUnseenMorgenChanges?' <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#EF4444;margin-left:2px;vertical-align:middle;"></span>':'');
-  html+=`<div class="cl-tabs">${ktab('morgen',morgenTabLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('entsorgung','🗑️ Entsorgung')}${ktab('monitoring','🌡️ Monitoring')}</div>`;
+  // 29.09.26 (Wunsch Tini, Testversion): "Entsorgung"-Tab hier raus (steht eh rückwirkend schon
+  // unter "Heute"/Morgen-Tab) und durch die neue wöchentliche Transgourmet-Bestellung ersetzt —
+  // Küche trägt IST-Bestand ein (reine Zählung, keine automatische Mengenberechnung), analog zum
+  // bestehenden Küchenlager-Muster. Weiterleitung an Simone ist noch nicht angebunden (folgt später).
+  html+=`<div class="cl-tabs">${ktab('morgen',morgenTabLabel)}${ktab('forecast',forecastTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('tgbestellung','🚛 Wochenbestellung')}${ktab('monitoring','🌡️ Monitoring')}</div>`;
 
   if(kitchenTab==='daily'){
     // Daily Business — Store-Ansicht für Kassenbereich (Während der Schicht)
@@ -15124,6 +15172,13 @@ async function renderKitchen(){
 
   if(kitchenTab==='entsorgung'){
     html+=await renderDisposalOverviewHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
+
+  if(kitchenTab==='tgbestellung'){
+    html+=await renderTgBestellungHtml();
     el.innerHTML=html;
     translateEl(el);
     return;
