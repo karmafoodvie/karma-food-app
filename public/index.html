@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.103';
+const APP_VERSION = '6.99.104';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7910,36 +7910,147 @@ async function saveSchrankerlMenge(lieferdatum, slot){
 window.saveSchrankerlMenge=saveSchrankerlMenge;
 
 // 29.09.26 (Wunsch Tini) — WOCHENBESTELLUNG TRANSGOURMET, Testversion.
-// Bewusst getrennt vom bestehenden Küchenlager (FOODPACK/INVOLO/...), eigene Tabelle tg_artikel,
-// weil Tini das ausdrücklich als eigenständigen Bereich haben wollte, nicht vermischt mit dem
-// Verbrauchsmaterial-Lager. Reines IST-Bestand-Zählen (kein SOLL, keine automatische Bestellmenge)
-// — genau wie es der Chefkoch bisher händisch am Zettel/Excel gemacht hat. Weiterleitung an Simone
-// ist bewusst noch NICHT gebaut (erst mal nur schauen, wie sich das Formular aufbaut).
+// v2 (29.09.26, Korrektur Tini): Die Zutaten für "Shop" und "Schrankerl" kommen jetzt NICHT mehr
+// aus der Excel (die war nur Formatvorlage/Ergänzung), sondern live aus den echten Quellen:
+//   - Shop: allergene_rezepturen (die Zutaten, die der Koch täglich einträgt, Schlüssel Woche+Tag+Slot)
+//     zusammengerechnet über die ganze gewählte Menü-Woche (Mo–Fr, alle 3 Gerichte).
+//   - Schrankerl: schrankerl_menu (Curry/Salat/Dessert der gewählten Schrankerl-Woche). Wo dort noch
+//     "folgt" o.ä. steht bzw. das Zutaten-Feld leer ist, wird das auch hier als offen angezeigt,
+//     NICHT erfunden.
+// Beide haben eine EIGENE, unabhängige 4-Wochen-Zählung (bewusst getrennte Umschalter).
+// Die ursprüngliche Excel-Artikelliste (Getränke, Kuchen, Reinigung-artige Posten) bleibt als dritter,
+// nicht rezeptgebundener Block "Sonstiges" bestehen — dort jetzt auch mit Freitextfeld, um spontan
+// etwas hinzuzufügen, das auf keiner Liste steht.
+// Alle drei Blöcke landen technisch weiter in derselben Tabelle tg_artikel (eigene, von FOODPACK/
+// INVOLO/... getrennte Tabelle), nur mit unterschiedlichem "quelle"-Feld — reines IST-Bestand-Zählen,
+// keine automatische Bestellmenge. Weiterleitung an Simone ist weiterhin NICHT gebaut.
+window.tgShopWoche = window.tgShopWoche || null;
+window.tgSchrankerlWoche = window.tgSchrankerlWoche || null;
+
+// Für einen Zutaten-Text (mehrere Gerichte, mit Komma verbunden) eine sortierte, deduplizierte
+// Liste einzelner Zutaten liefern — nutzt dieselbe Kategorisierung wie überall sonst in der App.
+function flatZutatenList(combinedText){
+  if(!combinedText || !combinedText.trim()) return [];
+  const byKat=parseZutatenText(combinedText);
+  const all=[];
+  Object.keys(byKat).forEach(k=>byKat[k].forEach(item=>{ if(!all.includes(item)) all.push(item); }));
+  return all.sort((a,b)=>a.localeCompare(b,'de'));
+}
+
+// Stellt sicher, dass für jede benötigte Zutat (quelle='shop'|'schrankerl') eine tg_artikel-Zeile
+// existiert (Name-Match, ohne Groß/Klein), legt fehlende neu an. Der Bestand bleibt dabei ein
+// laufender, realer Lagerwert — ändert sich nicht, nur weil sich das Menü nächste Woche ändert.
+async function ensureTgArtikelFor(names, quelle, existingItems){
+  const have=new Map(existingItems.filter(a=>a.quelle===quelle).map(a=>[a.name.trim().toLowerCase(), a]));
+  const missing=names.filter(n=>!have.has(n.trim().toLowerCase()));
+  if(missing.length){
+    const rows=missing.map((n,i)=>({kategorie:quelle==='shop'?'Zutaten (Shop)':'Zutaten (Schrankerl)', name:n, quelle, sort_order:i}));
+    const inserted=await api('tg_artikel',{method:'POST',body:JSON.stringify(rows), headers:{'Prefer':'return=representation'}}).catch(()=>[]);
+    (inserted||[]).forEach(a=>have.set(a.name.trim().toLowerCase(), a));
+  }
+  return names.map(n=>have.get(n.trim().toLowerCase())).filter(Boolean);
+}
+
+function tgArtikelRowHtml(a, extraLabel){
+  return `<tr>
+    <td style="font-size:12px;" data-no-translate>${a.name}${extraLabel||''}</td>
+    <td><input type="number" step="0.5" value="${a.bestand??''}" placeholder="Menge" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px;"></td>
+    ${a.manuell_hinzugefuegt?`<td><button onclick="deleteTgArtikel(${a.id})" style="background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;padding:2px 6px;">🗑</button></td>`:'<td></td>'}
+  </tr>`;
+}
+
 async function renderTgBestellungHtml(){
-  const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
+  await getZutatenMaster();
+  const shopWoche = window.tgShopWoche || CURRENT_MENU_WOCHE;
+  const schrankerlWoche = window.tgSchrankerlWoche || getSchrankerlWoche();
+  const DAYS_ORDER=['mo','di','mi','do','fr'];
+  const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
+
+  let items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
+
   let html=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">
     <div style="font-size:12px;font-weight:700;color:#F97316;">🚛 Wochenbestellung — Transgourmet</div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px;">Testversion — Bestand zählen und eintragen. Geht noch NICHT automatisch an Simone, muss aktuell noch manuell weitergegeben werden.</div>
   </div>`;
 
-  const kategorien=[...new Set((items||[]).map(a=>a.kategorie))];
-  if(!kategorien.length){
-    html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Artikel angelegt.</div>`;
-    return html;
+  // ---- Block 1: Shop-Wochenmenü — Zutaten live aus allergene_rezepturen ----
+  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">🏬 FÜR SHOP-WOCHENMENÜ</div>`;
+  html+=`<div style="display:flex;gap:6px;margin-bottom:10px;">`;
+  for(let w=1;w<=4;w++){
+    const active=shopWoche===w; const col=WOCHE_COLORS[w];
+    html+=`<button onclick="window.tgShopWoche=${w};renderKitchen()" style="flex:1;padding:7px 4px;border-radius:9px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;">Woche ${w}</button>`;
+  }
+  html+=`</div>`;
+
+  const overrides = await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
+  const overrideMap={};
+  (overrides||[]).forEach(e=>{
+    if(e.zutaten){ overrideMap[e.gericht]=e.zutaten; overrideMap[normGerichtName(e.gericht)]=e.zutaten; if(e.zkey) overrideMap[e.zkey]=e.zutaten; }
+  });
+  const menuData=getMenuDataForDate();
+  let shopZutatenTexts=[];
+  DAYS_ORDER.forEach(tag=>{
+    const dishes=menuData[`w${shopWoche}_${tag}`]||[];
+    dishes.forEach(dish=>{
+      const zKey=zutatenKey(shopWoche, tag, dish.slot);
+      const zutaten=(zKey && overrideMap[zKey]) || overrideMap[dish.name] || overrideMap[normGerichtName(dish.name)] || dish.zutaten || '';
+      if(zutaten.trim()) shopZutatenTexts.push(zutaten);
+    });
+  });
+  const shopNames=flatZutatenList(shopZutatenTexts.join(', '));
+  if(!shopNames.length){
+    html+=`<div class="card" style="padding:14px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:12.5px;">Für Woche ${shopWoche} sind noch keine Zutaten eingetragen (Koch trägt sie morgens beim jeweiligen Gericht ein).</div>`;
+  } else {
+    const shopItems=await ensureTgArtikelFor(shopNames, 'shop', items);
+    items=items.filter(a=>!shopItems.some(s=>s.id===a.id)).concat(shopItems); // Cache aktuell halten
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Zutat</th><th>Bestand</th><th></th></tr></thead><tbody>`;
+    shopItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
+    html+='</tbody></table></div></div>';
   }
 
-  kategorien.forEach(kat=>{
-    const katItems=(items||[]).filter(a=>a.kategorie===kat);
-    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">${kat.toUpperCase()}</div>
-    <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th></tr></thead><tbody>`;
-    katItems.forEach(a=>{
-      html+=`<tr>
-        <td style="font-size:12px;" data-no-translate>${a.name}</td>
-        <td><input type="number" step="0.5" value="${a.bestand??''}" placeholder="Menge" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px;"></td>
-      </tr>`;
-    });
+  // ---- Block 2: Schrankerl — Zutaten aus schrankerl_menu (eigene, unabhängige 4-Wochen-Zählung) ----
+  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:18px 2px 6px;">🥡 FÜR SCHRANKERL</div>`;
+  html+=`<div style="display:flex;gap:6px;margin-bottom:10px;">`;
+  for(let w=1;w<=4;w++){
+    const active=schrankerlWoche===w; const col='#C1542C';
+    html+=`<button onclick="window.tgSchrankerlWoche=${w};renderKitchen()" style="flex:1;padding:7px 4px;border-radius:9px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;">Woche ${w}</button>`;
+  }
+  html+=`</div>`;
+
+  const skMenu=await api(`schrankerl_menu?woche=eq.${schrankerlWoche}&select=*`).catch(()=>[]);
+  const skZutatenTexts=(skMenu||[]).filter(m=>m.zutaten && m.zutaten.trim()).map(m=>m.zutaten);
+  const skFehlend=(skMenu||[]).filter(m=>!m.zutaten || !m.zutaten.trim());
+  const skNames=flatZutatenList(skZutatenTexts.join(', '));
+  if(skFehlend.length){
+    html+=`<div class="card" style="padding:10px 14px;margin-bottom:10px;font-size:12px;color:#92400E;background:#FEF3C7;">Noch offen/nicht final: ${skFehlend.map(m=>m.name).join(', ')}</div>`;
+  }
+  if(!skNames.length){
+    if(!skFehlend.length) html+=`<div class="card" style="padding:14px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:12.5px;">Für Woche ${schrankerlWoche} sind noch keine Schrankerl-Gerichte hinterlegt.</div>`;
+  } else {
+    const skItems=await ensureTgArtikelFor(skNames, 'schrankerl', items);
+    items=items.filter(a=>!skItems.some(s=>s.id===a.id)).concat(skItems);
+    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Zutat</th><th>Bestand</th><th></th></tr></thead><tbody>`;
+    skItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
+    html+='</tbody></table></div></div>';
+  }
+
+  // ---- Block 3: Sonstiges — nicht rezeptgebunden (Getränke, Kuchen, ...), aus der Excel-Vorlage
+  // übernommen, plus Freitextfeld für spontan hinzukommende Artikel ----
+  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:18px 2px 6px;">➕ SONSTIGES (NICHT REZEPTGEBUNDEN)</div>`;
+  const sonstItems=items.filter(a=>!a.quelle);
+  const sonstKategorien=[...new Set(sonstItems.map(a=>a.kategorie))];
+  sonstKategorien.forEach(kat=>{
+    const katItems=sonstItems.filter(a=>a.kategorie===kat);
+    html+=`<div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin:10px 2px 4px;">${kat.toUpperCase()}</div>
+    <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th><th></th></tr></thead><tbody>`;
+    katItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
     html+='</tbody></table></div></div>';
   });
+  html+=`<div class="card" style="padding:10px 14px;margin-top:8px;display:flex;gap:8px;">
+    <input id="tg-extra-input" type="text" placeholder="Zutat/Artikel, die auf keiner Liste steht..." style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;">
+    <button onclick="addTgExtraArtikel()" style="padding:8px 14px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">+ Hinzufügen</button>
+  </div>`;
+
   return html;
 }
 window.renderTgBestellungHtml=renderTgBestellungHtml;
@@ -7952,6 +8063,27 @@ async function updateTgBestand(articleId, value){
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateTgBestand=updateTgBestand;
+
+async function addTgExtraArtikel(){
+  const inp=document.getElementById('tg-extra-input');
+  const name=(inp?.value||'').trim();
+  if(!name) return;
+  try{
+    await api('tg_artikel',{method:'POST',body:JSON.stringify([{kategorie:'Sonstiges', name, sort_order:999, manuell_hinzugefuegt:true}])});
+    showToast('✓ Hinzugefügt');
+    renderKitchen();
+  }catch(e){console.error(e);showToast('Fehler beim Speichern', true);}
+}
+window.addTgExtraArtikel=addTgExtraArtikel;
+
+async function deleteTgArtikel(articleId){
+  try{
+    await api(`tg_artikel?id=eq.${articleId}`,{method:'DELETE'});
+    showToast('✓ Entfernt');
+    renderKitchen();
+  }catch(e){console.error(e);showToast('Fehler beim Löschen', true);}
+}
+window.deleteTgArtikel=deleteTgArtikel;
 
 async function reduceFruechtebecherBestand(produzierteMenge){
   const verbrauch=Math.max(0, Math.round(produzierteMenge) - 20);
