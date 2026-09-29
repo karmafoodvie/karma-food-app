@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.95';
+const APP_VERSION = '6.99.100';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1205,12 +1205,28 @@ function navBestellDate(delta){
 function navBestellToday(){ transporterBestellDateOffset=0; renderPack(); }
 window.navBestellDate=navBestellDate;
 window.navBestellToday=navBestellToday;
+// 29.09.26 (Wunsch Tini): Michi sah bei "Beilagen & Essen" immer nur den heutigen Tag — sie
+// braucht das Weiterklicken auf andere Tage, um als Gegenkontrolle zu prüfen, ob die Mengen
+// über mehrere Tage hinweg stimmen. Gleiches Offset-Muster wie bei der Bestellliste.
+let transporterBeilagenDateOffset = 0; // 0=heute, -1=gestern, +1=morgen, ...
+function navBeilagenDate(delta){
+  transporterBeilagenDateOffset+=delta;
+  let d=new Date(); d.setDate(d.getDate()+transporterBeilagenDateOffset);
+  while([0,6].includes(d.getDay())){
+    transporterBeilagenDateOffset+=(delta>=0?1:-1);
+    d=new Date(); d.setDate(d.getDate()+transporterBeilagenDateOffset);
+  }
+  renderPack();
+}
+function navBeilagenToday(){ transporterBeilagenDateOffset=0; renderPack(); }
+window.navBeilagenDate=navBeilagenDate;
+window.navBeilagenToday=navBeilagenToday;
 let sweetsDateOffset = 0; // 0=heute, -1=gestern, ... für Sweets-Verlauf
 function navSweetsDate(delta){ sweetsDateOffset+=delta; renderSweets(); }
 function navSweetsToday(){ sweetsDateOffset=0; renderSweets(); }
 window.navSweetsDate=navSweetsDate;
 window.navSweetsToday=navSweetsToday;
-function switchTransporterSubTab(t){ transporterSubTab=t; renderPack(); }
+function switchTransporterSubTab(t){ transporterSubTab=t; if(t==='beilagen') transporterBeilagenDateOffset=0; renderPack(); }
 window.switchTransporterSubTab=switchTransporterSubTab;
 function goToPackTab(tab){
   activePackTab=tab;
@@ -14297,14 +14313,17 @@ async function saveTransporterTaskInline(){
 window.saveTransporterTaskInline=saveTransporterTaskInline;
 
 async function renderTransporterBeilagenHtml(){
-  // Zeigt HEUTE — das ist Michis eigene Ansicht: er packt heute früh für die heutige Auslieferung,
-  // braucht also die heutigen Mengen, nicht morgen. (Kurzzeitig auf "morgen" umgestellt gewesen,
-  // das war ein Missverständnis — zurückgesetzt auf "heute", 13.08.26.)
+  // 29.09.26 (Wunsch Tini): früher fix "heute" — Michi braucht aber auch das Weiterklicken auf
+  // andere Tage, um als Gegenkontrolle zu prüfen, ob Küche/Transporter über mehrere Tage hinweg
+  // übereinstimmen. Datum kommt jetzt aus transporterBeilagenDateOffset (0=heute, wie überall
+  // sonst in dieser App — siehe navBestellDate für dasselbe Muster).
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
-  const today=new Date().toISOString().split('T')[0];
-  const todayWd=new Date().getDay(); // 0=So..6=Sa
+  const viewDate=new Date(); viewDate.setDate(viewDate.getDate()+transporterBeilagenDateOffset);
+  const today=viewDate.toISOString().split('T')[0];
+  const todayWd=viewDate.getDay(); // 0=So..6=Sa
   const weekdayNum=todayWd===0?7:todayWd; // 1=Mo..7=So
+  const isBeilagenToday=transporterBeilagenDateOffset===0;
 
   const baseline=await api(`kitchen_supply_baseline?weekday=eq.${weekdayNum}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
   // Gleiche Logik wie in der Küche-Matrix: Parmesan nur einblenden, wenn laut Menü-Rotation HEUTE
@@ -14316,7 +14335,13 @@ async function renderTransporterBeilagenHtml(){
       storeList.forEach(st=>{ baseline.push({store_id:st.id, article_name:'Parmesan', unit:'Becher', base_qty:0.5}); });
     }
   }
-  const weekDates=getWeekdayDates();
+  // weekOffset in Kalenderwochen relativ zu HEUTE (nicht zum angezeigten Tag) berechnen, damit
+  // getWeekdayDates die richtige Woche liefert, auch wenn der angezeigte Tag in einer anderen
+  // Kalenderwoche liegt (z.B. Freitag -> Montag drüber).
+  const _nowRef=new Date(); const _nowDow=_nowRef.getDay(); const _nowMonday=new Date(_nowRef); _nowMonday.setDate(_nowRef.getDate()+(_nowDow===0?-6:1-_nowDow));
+  const _viewMonday=new Date(viewDate); _viewMonday.setDate(viewDate.getDate()+(todayWd===0?-6:1-todayWd));
+  const weekOffset=Math.round((_viewMonday-_nowMonday)/(7*86400000));
+  const weekDates=getWeekdayDates(weekOffset);
   const fromDate=weekDates[1], toDate=weekDates[5];
   const weekVals=await api(`kitchen_supply_today?supply_date=gte.${fromDate}&supply_date=lte.${toDate}&select=store_id,supply_date,article_name,qty,is_adjusted,eingepackt`).catch(()=>[]);
   const valMap={};
@@ -14332,9 +14357,34 @@ async function renderTransporterBeilagenHtml(){
   // Nur Gerichte zeigen, die WIRKLICH auf dem heutigen (epochen-bewussten) Menü stehen — sonst
   // bleiben alte Forecast-Zeilen aus einer vergangenen Epoche (z.B. Sommer-Gerichte) sichtbar,
   // obwohl sie längst nicht mehr aktuell sind. Bug gefunden 07.09.26, erster Herbst/Winter-Tag.
-  const _validDishNamesToday=new Set((typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(WEEKDAY_STR[weekdayNum],today):[]);
-  _validDishNamesToday.add(REIS_DISH_NAME); // Reis ist kein Menü-Gericht im engeren Sinn (kein MENU_DATA-Eintrag), zählt aber trotzdem als gültig
-  const dishNamesToday=[...new Set((fcToday||[]).filter(f=>f.qty>0 && _validDishNamesToday.has(f.dish_name)).map(f=>f.dish_name))];
+  // 29.09.26 (Bugfix, Wunsch Tini): Im aktuellen Herbst/Winter-Menü gibt es keinen eigenen
+  // "Salat"-Slot mehr (nur noch gericht1/2/3 — Salat war nur in der alten Sommer-Epoche ein
+  // eigener Slot). getMenuDishNamesForDay liefert bereits gericht1/2/3 in der richtigen,
+  // festen Menü-Reihenfolge. Der eigentliche Fehler war, dass Michis Zeilenreihenfolge bisher
+  // aus der Datenbank-Rückgabereihenfolge von forecast_qty kam (praktisch zufällig), statt aus
+  // dieser festen Menü-Reihenfolge, die die Küchen-Tabelle (renderMorgenKoch) verwendet —
+  // dadurch stimmte die Reihenfolge zwischen Michi und Küche nicht überein. Jetzt beide gleich.
+  const _canonicalDishOrder=[...((typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(WEEKDAY_STR[weekdayNum],today):[]), REIS_DISH_NAME].filter(Boolean);
+  const _validDishNamesToday=new Set(_canonicalDishOrder);
+  const _dishesWithData=new Set((fcToday||[]).filter(f=>f.qty>0 && _validDishNamesToday.has(f.dish_name)).map(f=>f.dish_name));
+  const dishNamesToday=_canonicalDishOrder.filter(n=>_dishesWithData.has(n));
+
+  // Tages-Navigation — gleiches Muster wie bei der Bestellliste (navBestellDate), damit Michi
+  // hier genauso vor/zurück blättern kann. Werktage-only, Wochenenden werden übersprungen
+  // (siehe navBeilagenDate).
+  const _navLabel=viewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+  let navHtml=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+    <button onclick="navBeilagenDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
+    <div style="text-align:center;">
+      <div style="font-size:12.5px;font-weight:600;">${_navLabel}${isBeilagenToday?' · heute':''}</div>
+      ${!isBeilagenToday?`<div onclick="navBeilagenToday()" style="font-size:10px;color:#F97316;cursor:pointer;text-decoration:underline;">zu heute zurück</div>`:''}
+    </div>
+    <button onclick="navBeilagenDate(1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">Nächster →</button>
+  </div>`;
+  if(!isBeilagenToday){
+    navHtml+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#9A3412;">📋 Ansicht eines anderen Tages — nur zur Kontrolle, "eingepackt" kann hier nicht geändert werden.</div>`;
+  }
+
   let dishHtml='';
   if(dishNamesToday.length){
     dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte</div>
@@ -14360,8 +14410,8 @@ async function renderTransporterBeilagenHtml(){
         const sizeBadges=(isLasagneRow&&recs.length)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 5px;white-space:nowrap;">${formatQty(r.qty)}× ${SIZE_FULL_KUE[r.groesse]||'Groß (18)'}</span>`).join('')}</div>`
           :(isMeatballsRow&&recs.length)?`<div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">${recs.filter(r=>r.qty>0).map(r=>`<span style="font-size:9px;font-weight:600;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:1px 5px;white-space:nowrap;">${formatQty(r.qty)} ${MLBL_KUE[r.groesse]||r.groesse}</span>`).join('')}</div>`:'';
         return `<td style="text-align:center;padding:6px 4px;vertical-align:top;">
-          <div onclick="toggleForecastEingepackt('${st.id}','${escAttr(name)}','${today}',${packed})"
-            style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
+          <div ${isBeilagenToday?`onclick="toggleForecastEingepackt('${st.id}','${escAttr(name)}','${today}',${packed})"`:''}
+            style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;${isBeilagenToday?'cursor:pointer;':''}padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
             <span style="font-size:13px;font-weight:600;color:${packed?'var(--green)':'#1a1a18'};">${isMeatballsRow?(packed?'✓':'○'):formatQty(qty)}</span>
             <span style="font-size:10px;color:${packed?'var(--green)':'var(--muted)'};">${packed?'✓ ok':'○'}</span>
           </div>
@@ -14385,11 +14435,11 @@ async function renderTransporterBeilagenHtml(){
   const articleSetToday=new Set(baseline.map(b=>b.article_name));
   (weekVals||[]).forEach(d=>{ if(d.supply_date===weekDates[weekdayNum<=5?weekdayNum:1]) articleSetToday.add(d.article_name); });
   const allArticles=[...articleSetToday];
-  if(!allArticles.length && !dishNamesToday.length) return '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Gerichte oder Beilagen für heute hinterlegt.</div>';
-  if(!allArticles.length) return dishHtml;
+  if(!allArticles.length && !dishNamesToday.length) return navHtml+`<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Gerichte oder Beilagen für ${isBeilagenToday?'heute':'diesen Tag'} hinterlegt.</div>`;
+  if(!allArticles.length) return navHtml+dishHtml;
 
   // Tabelle: Beilage | Store1 | Store2 | Store3 | Store4
-  let html=dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+  let html=navHtml+dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
     <thead><tr style="border-bottom:1.5px solid var(--border);">
       <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Beilage</th>
       ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
@@ -14408,8 +14458,8 @@ async function renderTransporterBeilagenHtml(){
       const adjusted=!!rec?.is_adjusted;
       if(val==null) return `<td style="text-align:center;color:var(--border);padding:8px 4px;">–</td>`;
       return `<td style="text-align:center;padding:6px 4px;">
-        <div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(name)}','${today}',${val},${packed})"
-          style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
+        <div ${isBeilagenToday?`onclick="toggleKuecheEingepackt('${st.id}','${escAttr(name)}','${today}',${val},${packed})"`:''}
+          style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;${isBeilagenToday?'cursor:pointer;':''}padding:4px 8px;border-radius:8px;background:${packed?'var(--green-light)':'var(--surface-1)'};border:1.5px solid ${packed?'var(--green)':'var(--border)'};">
           <span style="font-size:13px;font-weight:${adjusted?'700':'600'};color:${adjusted?'#C2410C':(packed?'var(--green)':'#1a1a18')};">${val%1===0?val:val}</span>
           <span style="font-size:10px;color:${packed?'var(--green)':'var(--muted)'};">${packed?'✓ ok':'○'}</span>
         </div>
@@ -15468,7 +15518,13 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const isToday = tomorrowStr===todayStr;
 
   const stores = await api('stores?select=id,name&order=id').catch(()=>[]);
-  const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070');
+  // 29.09.26 (Bugfix): 'kitchen' fehlte hier als einzige Stelle in der ganzen App in dieser
+  // Filterliste (überall sonst ~15x ausgeschlossen). Dadurch stand Kitchen 3400 als eigene
+  // Spalte inkl. eigenem Fallback-Wert in dieser Tabelle UND floss in die Σ-Summe ein — obwohl
+  // Kitchen kein Store mit eigenem Forecast ist. Genau das hat dazu geführt, dass die Zahlen,
+  // die die Küche hier sieht (inkl. Σ), nicht mit denen übereingestimmt haben, die Michi im
+  // Transporter-Tab oder Organisation sehen (die 'kitchen' korrekt ausschließen).
+  const storeList = (stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
 
   const forecasts = await api(`forecast_qty?forecast_date=eq.${tomorrowStr}&select=store_id,dish_name,qty,source,changed_at,groesse`).catch(()=>[]);
 
