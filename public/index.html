@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.100';
+const APP_VERSION = '6.99.102';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3501,14 +3501,34 @@ async function fetchZutatenAllergenOverrideMaps(){
 // extremem Rush schnell mehr Essen braucht. Bewusst als eigener, auffälliger Mechanismus gebaut
 // (nicht als normale Nachricht), weil er auch bei Chaos garantiert bemerkt werden muss: Ton +
 // große rote Vollbild-Meldung + Browser-Tab-Badge, nicht nur ein Text irgendwo in der App.
+// 29.09.26 (Wunsch Tini): statt nur "Ja, jetzt senden" jetzt auswählbar, WELCHE(S) Gericht(e)
+// gebraucht werden — Tagesgerichte anklickbar (Mehrfachauswahl), damit die empfangende Filiale
+// sofort weiß, was genau sie rüberbringen soll, statt nur "irgendwas".
+let _essenNotrufSelectedDishes=[];
+function toggleEssenNotrufDish(name){
+  const i=_essenNotrufSelectedDishes.indexOf(name);
+  if(i>-1) _essenNotrufSelectedDishes.splice(i,1); else _essenNotrufSelectedDishes.push(name);
+  showEssenNotrufConfirm();
+}
+window.toggleEssenNotrufDish=toggleEssenNotrufDish;
+
 function showEssenNotrufConfirm(){
   const wrap=document.getElementById('essen-notruf-confirm');
   if(!wrap) return;
+  const todayDate=new Date().toISOString().split('T')[0];
+  const todayWdStr=WEEKDAY_STR[new Date().getDay()];
+  const dishNames=[...((todayWdStr&&typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(todayWdStr,todayDate):[]), REIS_DISH_NAME].filter(Boolean);
+  const dishChips=dishNames.map(name=>{
+    const sel=_essenNotrufSelectedDishes.includes(name);
+    return `<button type="button" onclick="toggleEssenNotrufDish('${escAttr(name)}')" data-no-translate style="padding:8px 12px;border-radius:20px;border:1.5px solid ${sel?'#DC2626':'var(--border)'};background:${sel?'#FEE2E2':'#fff'};color:${sel?'#991B1B':'var(--sub)'};font-size:12.5px;font-weight:${sel?'700':'500'};cursor:pointer;">${sel?'✓ ':''}${name}</button>`;
+  }).join('');
   wrap.innerHTML=`<div class="card" style="padding:14px;margin-bottom:14px;border:1.5px solid #DC2626;">
     <div style="font-size:13px;font-weight:700;color:#991B1B;margin-bottom:8px;">🆘 Wirklich Notruf senden?</div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:12px;">Geht sofort mit Ton an Laurenzerberg & Ausstellungsstraße (Küche/Hauptverteilung).</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Geht sofort mit Ton an Laurenzerberg & Ausstellungsstraße (Küche/Hauptverteilung).</div>
+    ${dishNames.length?`<div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">Was fehlt? (optional, mehrere möglich)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${dishChips}</div>`:''}
     <div style="display:flex;gap:8px;">
-      <button onclick="document.getElementById('essen-notruf-confirm').innerHTML='';" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="_essenNotrufSelectedDishes=[];document.getElementById('essen-notruf-confirm').innerHTML='';" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
       <button onclick="sendEssenNotruf()" style="flex:2;padding:10px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🆘 Ja, jetzt senden</button>
     </div>
   </div>`;
@@ -3518,8 +3538,10 @@ window.showEssenNotrufConfirm=showEssenNotrufConfirm;
 async function sendEssenNotruf(){
   const targets=['lb','1020'].filter(id=>id!==currentStore?.id);
   try{
-    await api('essen_notruf',{method:'POST',body:JSON.stringify([{von_store:currentStore.id, an_stores:targets}])});
-    document.getElementById('essen-notruf-confirm').innerHTML=`<div style="background:#F0FDF4;border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:var(--green);text-align:center;">✓ Notruf gesendet — es wird bei Laurenzerberg & Ausstellungsstraße alarmiert.</div>`;
+    await api('essen_notruf',{method:'POST',body:JSON.stringify([{von_store:currentStore.id, an_stores:targets, gerichte:_essenNotrufSelectedDishes.length?_essenNotrufSelectedDishes:null}])});
+    const gerichteLabel=_essenNotrufSelectedDishes.length?` (${_essenNotrufSelectedDishes.join(', ')})`:'';
+    document.getElementById('essen-notruf-confirm').innerHTML=`<div style="background:#F0FDF4;border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:var(--green);text-align:center;">✓ Notruf gesendet${gerichteLabel} — es wird bei Laurenzerberg & Ausstellungsstraße alarmiert.</div>`;
+    _essenNotrufSelectedDishes=[];
   }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen',true);}
 }
 window.sendEssenNotruf=sendEssenNotruf;
@@ -3554,9 +3576,14 @@ function showEssenNotrufAlarm(relevant){
   }
   const notrufStoreNamen={lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstraße','3400':'Stadtplatz',kitchen:'Kitchen'};
   const namen=[...new Set(relevant.map(r=>notrufStoreNamen[r.von_store]||r.von_store))].join(', ');
+  // 29.09.26 (Wunsch Tini): zeigt jetzt an, welche(s) Gericht(e) konkret gebraucht werden (falls
+  // beim Senden ausgewählt) — sonst weiß die empfangende Filiale nur "irgendwas fehlt".
+  const alleGerichte=[...new Set(relevant.flatMap(r=>r.gerichte||[]))];
+  const gerichteHtml=alleGerichte.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:20px;">${alleGerichte.map(g=>`<span data-no-translate style="background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.6);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;">${g}</span>`).join('')}</div>`:'';
   el.innerHTML=`<div style="font-size:56px;margin-bottom:16px;">🆘</div>
     <div style="font-size:22px;font-weight:800;margin-bottom:8px;">Hey, habt ihr noch Essen?</div>
-    <div style="font-size:15px;margin-bottom:28px;opacity:0.95;">${namen} braucht dringend Nachschub — starker Rush!</div>
+    <div style="font-size:15px;margin-bottom:${alleGerichte.length?'14px':'28px'};opacity:0.95;">${namen} braucht dringend Nachschub — starker Rush!</div>
+    ${gerichteHtml}
     <button onclick="resolveEssenNotruf()" style="background:#fff;color:#DC2626;border:none;border-radius:12px;padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;">✓ Gesehen, kümmere mich drum</button>`;
   // Ton versuchen (kann von Browsern ohne vorherige Nutzer-Interaktion blockiert werden — dann
   // bleibt wenigstens die große rote Meldung + Badge als Hinweis). Per Web Audio API erzeugt,
@@ -7686,9 +7713,10 @@ window.deleteZutatenMaster=deleteZutatenMaster;
 // EIGENE Wochenzählung statt CURRENT_MENU_WOCHE, sonst reißt der Rhythmus bei jedem Menü-Epochen-
 // Wechsel ab (genau das ist am 07.09. passiert: Massaman/Woche 3 wäre eigentlich diese Woche dran
 // gewesen, ist aber durch den Reset auf "Woche 1" um mehrere Wochen nach hinten gerutscht).
-// Referenz: Montag 24.08.26 = Schrankerl-Woche 1, durchgehender 4-Wochen-Zyklus danach.
+// 29.09.26 (Wunsch Tini): Schrankerl hat ein komplett neues Menü — neue Periode, neuer Zyklus.
+// Referenz: Montag 28.09.26 = Schrankerl-Woche 1 der neuen Periode, durchgehender 4-Wochen-Zyklus danach.
 function getSchrankerlWoche(dateStr){
-  const ref=new Date('2026-08-24T00:00:00');
+  const ref=new Date('2026-09-28T00:00:00');
   const d=new Date((dateStr||new Date().toISOString().split('T')[0])+'T00:00:00');
   const day=d.getDay(); // 0=So,1=Mo,...
   const mondayOffset=(day===0?-6:1-day);
