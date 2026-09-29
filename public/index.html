@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.104';
+const APP_VERSION = '6.99.105';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -7973,14 +7973,26 @@ async function renderTgBestellungHtml(){
     <div style="font-size:11px;color:var(--muted);margin-top:2px;">Testversion — Bestand zählen und eintragen. Geht noch NICHT automatisch an Simone, muss aktuell noch manuell weitergegeben werden.</div>
   </div>`;
 
-  // ---- Block 1: Shop-Wochenmenü — Zutaten live aus allergene_rezepturen ----
-  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:14px 2px 6px;">🏬 FÜR SHOP-WOCHENMENÜ</div>`;
-  html+=`<div style="display:flex;gap:6px;margin-bottom:10px;">`;
-  for(let w=1;w<=4;w++){
-    const active=shopWoche===w; const col=WOCHE_COLORS[w];
-    html+=`<button onclick="window.tgShopWoche=${w};renderKitchen()" style="flex:1;padding:7px 4px;border-radius:9px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;">Woche ${w}</button>`;
-  }
-  html+=`</div>`;
+  // ---- Wochen-Umschalter: Shop und Schrankerl bleiben zwei getrennte Zähler (eigene, unabhängige
+  // 4-Wochen-Zyklen), aber die Zutaten daraus werden unten in EINER gemeinsamen Liste gebündelt
+  // (Wunsch Tini 29.09.26: "überladen" mit zwei getrennten Tabellen — wenn z.B. Kichererbsen bei
+  // Shop UND Schrankerl vorkommen, soll das eine gemeinsame Zeile sein, nicht zwei). ----
+  html+=`<div style="display:flex;gap:14px;margin-bottom:4px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:140px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🏬 SHOP-WOCHE</div>
+      <div style="display:flex;gap:4px;">${[1,2,3,4].map(w=>{
+        const active=shopWoche===w; const col=WOCHE_COLORS[w];
+        return `<button onclick="window.tgShopWoche=${w};renderKitchen()" style="flex:1;padding:6px 2px;border-radius:8px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${w}</button>`;
+      }).join('')}</div>
+    </div>
+    <div style="flex:1;min-width:140px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🥡 SCHRANKERL-WOCHE</div>
+      <div style="display:flex;gap:4px;">${[1,2,3,4].map(w=>{
+        const active=schrankerlWoche===w;
+        return `<button onclick="window.tgSchrankerlWoche=${w};renderKitchen()" style="flex:1;padding:6px 2px;border-radius:8px;border:${active?'2px solid #C1542C':'1.5px solid var(--border)'};background:${active?'#C1542C20':'var(--card)'};color:${active?'#C1542C':'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${w}</button>`;
+      }).join('')}</div>
+    </div>
+  </div>`;
 
   const overrides = await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
   const overrideMap={};
@@ -7997,41 +8009,43 @@ async function renderTgBestellungHtml(){
       if(zutaten.trim()) shopZutatenTexts.push(zutaten);
     });
   });
-  const shopNames=flatZutatenList(shopZutatenTexts.join(', '));
-  if(!shopNames.length){
-    html+=`<div class="card" style="padding:14px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:12.5px;">Für Woche ${shopWoche} sind noch keine Zutaten eingetragen (Koch trägt sie morgens beim jeweiligen Gericht ein).</div>`;
-  } else {
-    const shopItems=await ensureTgArtikelFor(shopNames, 'shop', items);
-    items=items.filter(a=>!shopItems.some(s=>s.id===a.id)).concat(shopItems); // Cache aktuell halten
-    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Zutat</th><th>Bestand</th><th></th></tr></thead><tbody>`;
-    shopItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
-    html+='</tbody></table></div></div>';
-  }
-
-  // ---- Block 2: Schrankerl — Zutaten aus schrankerl_menu (eigene, unabhängige 4-Wochen-Zählung) ----
-  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:18px 2px 6px;">🥡 FÜR SCHRANKERL</div>`;
-  html+=`<div style="display:flex;gap:6px;margin-bottom:10px;">`;
-  for(let w=1;w<=4;w++){
-    const active=schrankerlWoche===w; const col='#C1542C';
-    html+=`<button onclick="window.tgSchrankerlWoche=${w};renderKitchen()" style="flex:1;padding:7px 4px;border-radius:9px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-size:12.5px;font-weight:600;cursor:pointer;">Woche ${w}</button>`;
-  }
-  html+=`</div>`;
 
   const skMenu=await api(`schrankerl_menu?woche=eq.${schrankerlWoche}&select=*`).catch(()=>[]);
   const skZutatenTexts=(skMenu||[]).filter(m=>m.zutaten && m.zutaten.trim()).map(m=>m.zutaten);
   const skFehlend=(skMenu||[]).filter(m=>!m.zutaten || !m.zutaten.trim());
-  const skNames=flatZutatenList(skZutatenTexts.join(', '));
+
+  // ---- EINE gemeinsame, gebündelte Zutatenliste (Shop-Woche + Schrankerl-Woche zusammen) ----
+  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:16px 2px 6px;">🧺 ZUTATEN (SHOP + SCHRANKERL ZUSAMMEN)</div>`;
   if(skFehlend.length){
-    html+=`<div class="card" style="padding:10px 14px;margin-bottom:10px;font-size:12px;color:#92400E;background:#FEF3C7;">Noch offen/nicht final: ${skFehlend.map(m=>m.name).join(', ')}</div>`;
+    html+=`<div class="card" style="padding:10px 14px;margin-bottom:10px;font-size:12px;color:#92400E;background:#FEF3C7;">Bei Schrankerl noch offen/nicht final: ${skFehlend.map(m=>m.name).join(', ')} — fehlt deshalb unten noch in der Liste.</div>`;
   }
-  if(!skNames.length){
-    if(!skFehlend.length) html+=`<div class="card" style="padding:14px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:12.5px;">Für Woche ${schrankerlWoche} sind noch keine Schrankerl-Gerichte hinterlegt.</div>`;
+  const combinedNames=flatZutatenList([...shopZutatenTexts, ...skZutatenTexts].join(', '));
+  if(!combinedNames.length){
+    html+=`<div class="card" style="padding:14px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:12.5px;">Für die gewählten Wochen sind noch keine Zutaten eingetragen.</div>`;
   } else {
-    const skItems=await ensureTgArtikelFor(skNames, 'schrankerl', items);
-    items=items.filter(a=>!skItems.some(s=>s.id===a.id)).concat(skItems);
+    const zutatenItems=await ensureTgArtikelFor(combinedNames, 'zutaten', items);
+    items=items.filter(a=>!zutatenItems.some(s=>s.id===a.id)).concat(zutatenItems); // Cache aktuell halten
     html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Zutat</th><th>Bestand</th><th></th></tr></thead><tbody>`;
-    skItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
+    zutatenItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
     html+='</tbody></table></div></div>';
+  }
+
+  // ---- Rezept-Referenz NUR für Schrankerl (Wunsch Tini: bei den anderen Gerichten nicht nötig,
+  // da reicht die reine Liste oben — bei Schrankerl ist das Gericht+Zutaten-Zuordnung aber wichtig,
+  // z.B. für Etiketten/Allergene) ----
+  if((skMenu||[]).length){
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:18px 2px 6px;">🥡 SCHRANKERL-REZEPTE (WOCHE ${schrankerlWoche})</div>`;
+    const SLOT_LABEL={curry:'Curry',salat:'Salat',dessert:'Dessert'};
+    ['curry','salat','dessert'].forEach(slot=>{
+      const item=(skMenu||[]).find(m=>m.slot===slot);
+      if(!item) return;
+      const hatZutaten=item.zutaten && item.zutaten.trim();
+      html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">${SLOT_LABEL[slot]}</div>
+        <div style="font-size:13.5px;font-weight:700;margin-bottom:4px;" data-no-translate>${item.name}</div>
+        ${hatZutaten?`<div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(item.zutaten)}</div>`:`<div style="font-size:11px;color:#92400E;">noch offen / nicht final</div>`}
+      </div>`;
+    });
   }
 
   // ---- Block 3: Sonstiges — nicht rezeptgebunden (Getränke, Kuchen, ...), aus der Excel-Vorlage
