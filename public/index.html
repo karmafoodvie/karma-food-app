@@ -1151,7 +1151,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.105';
+const APP_VERSION = '6.99.107';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6772,19 +6772,26 @@ async function submitOrder(){
       submissionMarkerFailed=true;
       submissionErrorDetail=(e?.message||String(e)).slice(0,140);
     }
+    // 30.09.26 (Fix Krisi: "manchmal lädt es ur lang und dann ist die Bestellung nicht durchgegangen"):
+    // Vorher wurde hier JEDER Artikel einzeln gelöscht (bis zu 3 Versuche pro Artikel) — beim
+    // Transporter-Tab allein 56 Artikel, also im schlechtesten Fall über 150 einzelne Netzwerk-
+    // Anfragen NACHEINANDER. Bei schwachem Netz im Store summiert sich das auf mehrere Minuten und
+    // wirkt wie "hängt". Jetzt: EINE Lösch-Anfrage für alle Artikel dieses Tabs auf einmal
+    // (article_id=in.(...)), mit bis zu 3 Versuchen für diese eine Anfrage statt pro Artikel.
     const failedDeletes=[];
-    for(const aid of tabArticleIds){
+    if(tabArticleIds.size){
+      const idList=[...tabArticleIds].join(',');
       let ok=false;
       for(let attempt=0; attempt<3 && !ok; attempt++){
         try{
-          await api(`orders?store_id=eq.${currentStore.id}&article_id=eq.${aid}&order_date=eq.${today}`,{method:'DELETE'});
+          await api(`orders?store_id=eq.${currentStore.id}&article_id=in.(${idList})&order_date=eq.${today}`,{method:'DELETE'});
           ok=true;
         }catch(e){
-          console.error(`orders delete failed for article ${aid} (Versuch ${attempt+1}/3):`,e);
+          console.error(`orders bulk delete failed (Versuch ${attempt+1}/3):`,e);
           if(attempt<2) await new Promise(r=>setTimeout(r,400));
         }
       }
-      if(!ok) failedDeletes.push(aid);
+      if(!ok) failedDeletes.push(...tabArticleIds);
     }
     // Zusätzlich als Upsert (nicht reines Insert): falls trotz obigem Löschen doch noch eine alte
     // Zeile übrig sein sollte, wird sie aktualisiert statt einen Konflikt zu werfen.
@@ -7910,46 +7917,23 @@ async function saveSchrankerlMenge(lieferdatum, slot){
 window.saveSchrankerlMenge=saveSchrankerlMenge;
 
 // 29.09.26 (Wunsch Tini) — WOCHENBESTELLUNG TRANSGOURMET, Testversion.
-// v2 (29.09.26, Korrektur Tini): Die Zutaten für "Shop" und "Schrankerl" kommen jetzt NICHT mehr
-// aus der Excel (die war nur Formatvorlage/Ergänzung), sondern live aus den echten Quellen:
-//   - Shop: allergene_rezepturen (die Zutaten, die der Koch täglich einträgt, Schlüssel Woche+Tag+Slot)
-//     zusammengerechnet über die ganze gewählte Menü-Woche (Mo–Fr, alle 3 Gerichte).
-//   - Schrankerl: schrankerl_menu (Curry/Salat/Dessert der gewählten Schrankerl-Woche). Wo dort noch
-//     "folgt" o.ä. steht bzw. das Zutaten-Feld leer ist, wird das auch hier als offen angezeigt,
-//     NICHT erfunden.
-// Beide haben eine EIGENE, unabhängige 4-Wochen-Zählung (bewusst getrennte Umschalter).
-// Die ursprüngliche Excel-Artikelliste (Getränke, Kuchen, Reinigung-artige Posten) bleibt als dritter,
-// nicht rezeptgebundener Block "Sonstiges" bestehen — dort jetzt auch mit Freitextfeld, um spontan
-// etwas hinzuzufügen, das auf keiner Liste steht.
-// Alle drei Blöcke landen technisch weiter in derselben Tabelle tg_artikel (eigene, von FOODPACK/
-// INVOLO/... getrennte Tabelle), nur mit unterschiedlichem "quelle"-Feld — reines IST-Bestand-Zählen,
-// keine automatische Bestellmenge. Weiterleitung an Simone ist weiterhin NICHT gebaut.
+// v4 (29.09.26, Korrektur Tini: "es ist überladen, soll ausschauen wie in der Excel-Liste"):
+// Zurück auf die einfache Excel-Struktur — EINE fixe Artikelliste nach Kategorien (genau wie
+// "Artikel | Menge auf Lager" in der Transgourmet-Excel), reines IST-Bestand-Zählen, keine
+// automatisch aus den Rezepten abgeleiteten/gebündelten Zutaten-Zeilen mehr (das hatte durch
+// Schreibvarianten in den täglich eingetragenen Zutaten zu >100 Mini-Zeilen wie "Karotte"/
+// "Karotten"/"Öl"/"Zwiebel" geführt — genau das war "überladen").
+// Die zwei Wochenmenüs (Shop + Schrankerl, eigene unabhängige 4-Wochen-Zyklen) bleiben als reine
+// READ-ONLY Referenz daneben/darunter stehen — exakt wie in der Excel: rechts das Wochenmenü
+// Mo–Fr, darunter die Schrankerl-Tabelle Gericht | Zutaten | Allergene | Grammatur. Wo dort noch
+// "folgt" steht bzw. das Zutaten-Feld leer ist, wird das auch hier als offen angezeigt, NICHT erfunden.
+// "Sonstiges" (Getränke, Kuchen, ...) bleibt eigene Kategorie in derselben Artikelliste, mit
+// Freitextfeld um spontan etwas hinzuzufügen, das auf keiner Liste steht.
+// Weiterleitung an Simone ist weiterhin NICHT gebaut.
 window.tgShopWoche = window.tgShopWoche || null;
 window.tgSchrankerlWoche = window.tgSchrankerlWoche || null;
 
-// Für einen Zutaten-Text (mehrere Gerichte, mit Komma verbunden) eine sortierte, deduplizierte
-// Liste einzelner Zutaten liefern — nutzt dieselbe Kategorisierung wie überall sonst in der App.
-function flatZutatenList(combinedText){
-  if(!combinedText || !combinedText.trim()) return [];
-  const byKat=parseZutatenText(combinedText);
-  const all=[];
-  Object.keys(byKat).forEach(k=>byKat[k].forEach(item=>{ if(!all.includes(item)) all.push(item); }));
-  return all.sort((a,b)=>a.localeCompare(b,'de'));
-}
-
-// Stellt sicher, dass für jede benötigte Zutat (quelle='shop'|'schrankerl') eine tg_artikel-Zeile
-// existiert (Name-Match, ohne Groß/Klein), legt fehlende neu an. Der Bestand bleibt dabei ein
-// laufender, realer Lagerwert — ändert sich nicht, nur weil sich das Menü nächste Woche ändert.
-async function ensureTgArtikelFor(names, quelle, existingItems){
-  const have=new Map(existingItems.filter(a=>a.quelle===quelle).map(a=>[a.name.trim().toLowerCase(), a]));
-  const missing=names.filter(n=>!have.has(n.trim().toLowerCase()));
-  if(missing.length){
-    const rows=missing.map((n,i)=>({kategorie:quelle==='shop'?'Zutaten (Shop)':'Zutaten (Schrankerl)', name:n, quelle, sort_order:i}));
-    const inserted=await api('tg_artikel',{method:'POST',body:JSON.stringify(rows), headers:{'Prefer':'return=representation'}}).catch(()=>[]);
-    (inserted||[]).forEach(a=>have.set(a.name.trim().toLowerCase(), a));
-  }
-  return names.map(n=>have.get(n.trim().toLowerCase())).filter(Boolean);
-}
+const TG_KATEGORIE_ORDER=['Milchprodukte/Käse','Tiefkühlprodukte','Hülsenfrüchte','Dosen','Nüsse/Trockenfrüchte','Öle/Essig/Salz','Lasagne','Getränke','Kuchen','Sonstiges'];
 
 function tgArtikelRowHtml(a, extraLabel){
   return `<tr>
@@ -7960,24 +7944,38 @@ function tgArtikelRowHtml(a, extraLabel){
 }
 
 async function renderTgBestellungHtml(){
-  await getZutatenMaster();
   const shopWoche = window.tgShopWoche || CURRENT_MENU_WOCHE;
   const schrankerlWoche = window.tgSchrankerlWoche || getSchrankerlWoche();
   const DAYS_ORDER=['mo','di','mi','do','fr'];
+  const DAY_LABEL={mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
   const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
 
-  let items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
+  const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
 
   let html=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">
     <div style="font-size:12px;font-weight:700;color:#F97316;">🚛 Wochenbestellung — Transgourmet</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:2px;">Testversion — Bestand zählen und eintragen. Geht noch NICHT automatisch an Simone, muss aktuell noch manuell weitergegeben werden.</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px;">Testversion — Bestand zählen und eintragen, wie bei der Inventur. Geht noch NICHT automatisch an Simone, muss aktuell noch manuell weitergegeben werden.</div>
   </div>`;
 
-  // ---- Wochen-Umschalter: Shop und Schrankerl bleiben zwei getrennte Zähler (eigene, unabhängige
-  // 4-Wochen-Zyklen), aber die Zutaten daraus werden unten in EINER gemeinsamen Liste gebündelt
-  // (Wunsch Tini 29.09.26: "überladen" mit zwei getrennten Tabellen — wenn z.B. Kichererbsen bei
-  // Shop UND Schrankerl vorkommen, soll das eine gemeinsame Zeile sein, nicht zwei). ----
-  html+=`<div style="display:flex;gap:14px;margin-bottom:4px;flex-wrap:wrap;">
+  // ---- Artikelliste — 1:1 wie die Transgourmet-Excel: fixe Kategorien, Artikel + Bestand ----
+  const katsInData=[...new Set(items.map(a=>a.kategorie))];
+  const katOrder=[...TG_KATEGORIE_ORDER.filter(k=>katsInData.includes(k)), ...katsInData.filter(k=>!TG_KATEGORIE_ORDER.includes(k))];
+  katOrder.forEach(kat=>{
+    const katItems=items.filter(a=>a.kategorie===kat);
+    if(!katItems.length) return;
+    html+=`<div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin:12px 2px 4px;">${kat.toUpperCase()}</div>
+    <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Menge auf Lager</th><th></th></tr></thead><tbody>`;
+    katItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
+    html+='</tbody></table></div></div>';
+  });
+  html+=`<div class="card" style="padding:10px 14px;margin-top:8px;display:flex;gap:8px;">
+    <input id="tg-extra-input" type="text" placeholder="Artikel, der auf keiner Liste steht..." style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;">
+    <button onclick="addTgExtraArtikel()" style="padding:8px 14px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">+ Hinzufügen</button>
+  </div>`;
+
+  // ---- Referenz (read-only, wie rechte Seite der Excel): Wochenmenü + Schrankerl-Tabelle ----
+  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:22px 2px 6px;">📋 REFERENZ — WOCHENMENÜ</div>`;
+  html+=`<div style="display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
     <div style="flex:1;min-width:140px;">
       <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🏬 SHOP-WOCHE</div>
       <div style="display:flex;gap:4px;">${[1,2,3,4].map(w=>{
@@ -7994,76 +7992,35 @@ async function renderTgBestellungHtml(){
     </div>
   </div>`;
 
-  const overrides = await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
-  const overrideMap={};
-  (overrides||[]).forEach(e=>{
-    if(e.zutaten){ overrideMap[e.gericht]=e.zutaten; overrideMap[normGerichtName(e.gericht)]=e.zutaten; if(e.zkey) overrideMap[e.zkey]=e.zutaten; }
-  });
   const menuData=getMenuDataForDate();
-  let shopZutatenTexts=[];
+  html+=`<div class="card" style="padding:10px 14px;margin-bottom:14px;">
+    <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Shop-Menü Woche ${shopWoche}</div>`;
   DAYS_ORDER.forEach(tag=>{
-    const dishes=menuData[`w${shopWoche}_${tag}`]||[];
-    dishes.forEach(dish=>{
-      const zKey=zutatenKey(shopWoche, tag, dish.slot);
-      const zutaten=(zKey && overrideMap[zKey]) || overrideMap[dish.name] || overrideMap[normGerichtName(dish.name)] || dish.zutaten || '';
-      if(zutaten.trim()) shopZutatenTexts.push(zutaten);
-    });
+    const dishes=(menuData[`w${shopWoche}_${tag}`]||[]);
+    if(!dishes.length) return;
+    html+=`<div style="font-size:11px;margin-bottom:5px;"><b>${DAY_LABEL[tag]}:</b> <span data-no-translate>${dishes.map(d=>d.name).join(' / ')}</span></div>`;
   });
+  html+='</div>';
 
   const skMenu=await api(`schrankerl_menu?woche=eq.${schrankerlWoche}&select=*`).catch(()=>[]);
-  const skZutatenTexts=(skMenu||[]).filter(m=>m.zutaten && m.zutaten.trim()).map(m=>m.zutaten);
-  const skFehlend=(skMenu||[]).filter(m=>!m.zutaten || !m.zutaten.trim());
-
-  // ---- EINE gemeinsame, gebündelte Zutatenliste (Shop-Woche + Schrankerl-Woche zusammen) ----
-  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:16px 2px 6px;">🧺 ZUTATEN (SHOP + SCHRANKERL ZUSAMMEN)</div>`;
-  if(skFehlend.length){
-    html+=`<div class="card" style="padding:10px 14px;margin-bottom:10px;font-size:12px;color:#92400E;background:#FEF3C7;">Bei Schrankerl noch offen/nicht final: ${skFehlend.map(m=>m.name).join(', ')} — fehlt deshalb unten noch in der Liste.</div>`;
-  }
-  const combinedNames=flatZutatenList([...shopZutatenTexts, ...skZutatenTexts].join(', '));
-  if(!combinedNames.length){
-    html+=`<div class="card" style="padding:14px;margin-bottom:10px;text-align:center;color:var(--muted);font-size:12.5px;">Für die gewählten Wochen sind noch keine Zutaten eingetragen.</div>`;
-  } else {
-    const zutatenItems=await ensureTgArtikelFor(combinedNames, 'zutaten', items);
-    items=items.filter(a=>!zutatenItems.some(s=>s.id===a.id)).concat(zutatenItems); // Cache aktuell halten
-    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Zutat</th><th>Bestand</th><th></th></tr></thead><tbody>`;
-    zutatenItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
-    html+='</tbody></table></div></div>';
-  }
-
-  // ---- Rezept-Referenz NUR für Schrankerl (Wunsch Tini: bei den anderen Gerichten nicht nötig,
-  // da reicht die reine Liste oben — bei Schrankerl ist das Gericht+Zutaten-Zuordnung aber wichtig,
-  // z.B. für Etiketten/Allergene) ----
   if((skMenu||[]).length){
-    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:18px 2px 6px;">🥡 SCHRANKERL-REZEPTE (WOCHE ${schrankerlWoche})</div>`;
+    html+=`<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px;">
+      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);padding:10px 14px 0;">Schrankerl-Lieferung Woche ${schrankerlWoche}</div>
+      <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Gericht</th><th style="text-align:left;">Zutaten</th><th>Allergene</th><th>Gramm.</th></tr></thead><tbody>`;
     const SLOT_LABEL={curry:'Curry',salat:'Salat',dessert:'Dessert'};
     ['curry','salat','dessert'].forEach(slot=>{
       const item=(skMenu||[]).find(m=>m.slot===slot);
       if(!item) return;
       const hatZutaten=item.zutaten && item.zutaten.trim();
-      html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
-        <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">${SLOT_LABEL[slot]}</div>
-        <div style="font-size:13.5px;font-weight:700;margin-bottom:4px;" data-no-translate>${item.name}</div>
-        ${hatZutaten?`<div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(item.zutaten)}</div>`:`<div style="font-size:11px;color:#92400E;">noch offen / nicht final</div>`}
-      </div>`;
+      html+=`<tr>
+        <td style="font-size:11.5px;" data-no-translate><b>${SLOT_LABEL[slot]}</b><br>${item.name}</td>
+        <td style="font-size:10.5px;">${hatZutaten?renderZutatenReadOnly(item.zutaten):'<span style="color:#92400E;">noch offen / nicht final</span>'}</td>
+        <td style="font-size:10.5px;text-align:center;">${item.allergene_codes ? (Array.isArray(item.allergene_codes)?item.allergene_codes.join(', '):item.allergene_codes) : '-'}</td>
+        <td style="font-size:10.5px;text-align:center;">${item.grammatur||'-'}</td>
+      </tr>`;
     });
-  }
-
-  // ---- Block 3: Sonstiges — nicht rezeptgebunden (Getränke, Kuchen, ...), aus der Excel-Vorlage
-  // übernommen, plus Freitextfeld für spontan hinzukommende Artikel ----
-  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:18px 2px 6px;">➕ SONSTIGES (NICHT REZEPTGEBUNDEN)</div>`;
-  const sonstItems=items.filter(a=>!a.quelle);
-  const sonstKategorien=[...new Set(sonstItems.map(a=>a.kategorie))];
-  sonstKategorien.forEach(kat=>{
-    const katItems=sonstItems.filter(a=>a.kategorie===kat);
-    html+=`<div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin:10px 2px 4px;">${kat.toUpperCase()}</div>
-    <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Bestand</th><th></th></tr></thead><tbody>`;
-    katItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
     html+='</tbody></table></div></div>';
-  });
-  html+=`<div class="card" style="padding:10px 14px;margin-top:8px;display:flex;gap:8px;">
-    <input id="tg-extra-input" type="text" placeholder="Zutat/Artikel, die auf keiner Liste steht..." style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;">
-    <button onclick="addTgExtraArtikel()" style="padding:8px 14px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">+ Hinzufügen</button>
-  </div>`;
+  }
 
   return html;
 }
