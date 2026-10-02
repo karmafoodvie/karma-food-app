@@ -6912,6 +6912,7 @@ function renderClBody(){
     });
   });
   html+='</div>';
+  if(activeCl==='abschluss') html+=schichtendeWeiterHtml();
   el.innerHTML=html;
   translateEl(el);
 }
@@ -11333,12 +11334,34 @@ function renderDcTabContent(){
   el.innerHTML=html;
 }
 
+// 02.10.26 (Wunsch Tini — UX beim Schichtende): War vorher immer "Zurück zur Übersicht" → Home,
+// egal woher man kam. Wer von "Schicht abschließen" aus einen einzelnen Punkt (Daily Check-up,
+// Entsorgung, Feedback, Checkliste, Bestellungen) geöffnet hat, musste danach erst wieder über
+// Home zurück zu "Schicht abschließen" navigieren, um den nächsten offenen Punkt zu sehen — bei
+// 5-8 Punkten viel unnötiges Hin- und Herklicken. Ist schichtendeReturnFlag gesetzt (siehe
+// renderSchichtende), führt der Zurück-Pfeil stattdessen direkt wieder dorthin.
 function backToHomeHtml(){
+  if(schichtendeReturnFlag){
+    return `<div onclick="schichtendeReturnFlag=false;goTo('schichtende')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
+      <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Zurück zur Schicht-Checkliste
+    </div>`;
+  }
   return `<div onclick="goTo('home')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
     <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     Zurück zur Übersicht
   </div>`;
 }
+
+// Expliziter "fertig, zurück"-Button für Seiten ohne einen einzelnen Speichern-Moment (z.B.
+// Entsorgung, Checklisten — dort wird laufend pro Feld automatisch gespeichert). Erscheint nur,
+// wenn man von "Schicht abschließen" hierher kam, damit man nicht erst hochscrollen muss, um
+// über den Zurück-Pfeil oben wieder zurückzukommen.
+function schichtendeWeiterHtml(){
+  if(!schichtendeReturnFlag) return '';
+  return `<button onclick="schichtendeReturnFlag=false;goTo('schichtende')" class="submit-btn" style="margin-top:10px;">✓ Fertig — zurück zur Schicht-Checkliste</button>`;
+}
+window.schichtendeWeiterHtml=schichtendeWeiterHtml;
 
 // Einheitlicher großer Kopfbereich für Hauptseiten — überall dieselbe Optik (Icon, große Überschrift,
 // Untertitel), statt dass jede Seite ihr eigenes Intro-Design hat.
@@ -11540,7 +11563,10 @@ async function saveDailyCheckAll(){
     ]);
     showToast('✔ Daily Check-up gespeichert!');
     window._waehrendHideFeedback=false;
-    goTo('waehrend');
+    // 02.10.26: War vorher immer goTo('waehrend'), egal woher man kam. Von "Schicht abschließen"
+    // aus soll man sofort wieder dort landen und den nächsten offenen Punkt sehen, statt über
+    // "Während der Schicht" erst wieder manuell zurückfinden zu müssen.
+    if(schichtendeReturnFlag){ schichtendeReturnFlag=false; goTo('schichtende'); } else { goTo('waehrend'); }
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
@@ -12528,6 +12554,9 @@ async function submitFeedback(){
   try{
     await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name,ratings:_feedbackDraft,kommentar,feedback_frei:feedbackFrei}])});
     showToast('✓ Danke für dein Feedback!');
+    // 02.10.26: Kam man von "Schicht abschließen" her, direkt wieder dorthin statt auf der
+    // Feedback-Seite stehen zu bleiben — sonst wieder manuelles Zurücknavigieren nötig.
+    if(schichtendeReturnFlag){ schichtendeReturnFlag=false; goTo('schichtende'); return; }
     // Primärer Ort ist jetzt "Während der Schicht" (20.08.26 verschoben, Schichtende ist oft
     // stressig genug) — die alte Standalone-Seite bleibt als Fallback erreichbar.
     if(currentView==='waehrend') renderWaehrend();
@@ -12640,9 +12669,13 @@ async function renderSchichtende(){
       html+=`<div class="section-lbl" style="margin-top:10px;">${GROUP_LABELS[g]}</div>`;
       groupSteps.forEach(s=>{
         const m=SCHRITT_META[s.id];
-        const returnableTabs=['sweets','transporter','kc'];
-        const setFlag=(m.orderTab && returnableTabs.includes(m.orderTab))?'schichtendeReturnFlag=true;':'';
-        const linkFn=m.orderTab?`${setFlag}goToReminder('order','${m.orderTab}')`:m.link?`goTo('${m.link}')`:null;
+        // 02.10.26: Vorher bekamen nur sweets/transporter/kc das Rückkehr-Flag — bei allen anderen
+        // Punkten (Daily Check-up, Entsorgung, Feedback, Forecast, Beilagen, Checkliste) landete man
+        // nach dem Speichern irgendwo anders (meist Home) und musste manuell zurück zu "Schicht
+        // abschließen" navigieren. Jetzt bekommt JEDER Punkt von hier aus das Flag, egal ob er über
+        // einen Bestell-Tab (orderTab) oder eine eigene Seite (link) geöffnet wird.
+        const setFlag='schichtendeReturnFlag=true;';
+        const linkFn=m.orderTab?`${setFlag}goToReminder('order','${m.orderTab}')`:m.link?`${setFlag}goTo('${m.link}')`:null;
         const isReinigung=s.id==='reinigung_protokoll';
         html+=`<div class="card" style="padding:14px;margin-bottom:8px;border:1.5px solid var(--border);${s.id==='uebergabe'?'border-color:#BA7517;':''}">
           <div style="display:flex;align-items:center;gap:12px;">
@@ -13975,6 +14008,7 @@ async function renderDisposal(dateStr){
   });
   html+='</tbody></table></div>';
   html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px;">Uhrzeit antippen, um sie zu setzen oder nachträglich zu korrigieren. Restmenge in Portionen — bei Bedarf Umrechnungstabelle (i) nutzen. Notiz für Sonderfälle (z.B. Reste über mehrere Tage verteilt).${!isToday?' <strong>Du trägst gerade einen vergangenen Tag nach.</strong>':''}</div>`;
+  html+=schichtendeWeiterHtml();
 
   el.innerHTML=html;
   translateEl(el);
