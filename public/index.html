@@ -11634,25 +11634,18 @@ async function renderWaehrend(){
     });
 
     // Team-Feedback direkt hier statt separat bei Schicht beenden (20.08.26, Wunsch Simone —
-    // Schichtende ist ohnehin oft stressig genug). Seit 16.09.26 (Wunsch Tini) in zwei komplett
-    // getrennte Blöcke aufgeteilt: Küche-Feedback (Gerichte-Bewertung) und App-Feedback an Tini,
-    // jeweils mit eigenem Abschicken-Button, damit man das eine ohne das andere machen kann.
+    // Schichtende ist ohnehin oft stressig genug).
+    // 02.10.26 (Wunsch Tini): Name nicht mehr nötig — soll so wenig Hürde wie möglich sein. Der
+    // separate "Feedback an Tini"-Freitext-Block ist raus (lief nicht rund, Leute melden sich eh
+    // über WhatsApp bei ihr) — siehe submitKuecheFeedback weiter unten.
     // Nicht zeigen, wenn direkt über den "Sweets"-Link auf der Startseite aufgerufen (Wunsch Tini 07.09.26).
     if(!_hideFeedbackThisTime){
     html+=`<div class="section-lbl" style="margin-top:14px;">😋 Feedback an die Küche</div>`;
-    html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier Namen eintragen & abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
+    html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
     html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
-      <input id="feedback-name" type="text" placeholder="Dein Name" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;box-sizing:border-box;font-size:13.5px;">
       <button onclick="submitKuecheFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">Feedback an Küche abschicken ✓</button>
     </div>`;
     html+=`<div id="feedback-existing-list"></div>`;
-
-    html+=`<div class="section-lbl" style="margin-top:14px;">💬 Feedback an Tini</div>`;
-    html+=`<div style="font-size:11.5px;color:#7B3FE4;background:#FAF5FF;border:0.5px solid #DDD6FE;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Egal worum's geht, wenn Lust und Laune — unabhängig vom Küche-Feedback oben.</div>`;
-    html+=`<div class="card" style="padding:14px;margin-bottom:10px;">
-      <textarea id="feedback-frei" placeholder="Ideen, Anliegen, was auch immer…" style="width:100%;padding:9px;border:1px solid #DDD6FE;border-radius:8px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;background:#FAF5FF;"></textarea>
-      <button onclick="submitAppFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#7B3FE4;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">An Tini abschicken ✓</button>
-    </div>`;
     }
   }
 
@@ -12429,8 +12422,7 @@ function showFeedbackForm(){
   _feedbackDraft={};
   const wrap=document.getElementById('feedback-form-wrap');
   document.getElementById('feedback-add-btn').style.display='none';
-  let html=`<div class="card" style="padding:14px;">
-    <input id="feedback-name" type="text" placeholder="Dein Name" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;font-size:13.5px;">`;
+  let html=`<div class="card" style="padding:14px;">`;
   todayMenu.forEach(d=>{
     html+=`<div style="margin-bottom:12px;">
       <div style="font-size:12.5px;font-weight:600;margin-bottom:6px;">${d.name}</div>
@@ -12441,8 +12433,6 @@ function showFeedbackForm(){
     </div>`;
   });
   html+=`<textarea id="feedback-kommentar" placeholder="Kommentar zum Essen (optional)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;min-height:50px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;"></textarea>
-    <div style="font-size:11px;font-weight:600;color:#7B3FE4;margin-bottom:4px;">💬 App-Feedback — egal worum's geht, wenn Lust und Laune (optional)</div>
-    <textarea id="feedback-frei" placeholder="Ideen, Anliegen, was auch immer…" style="width:100%;padding:9px;border:1px solid #DDD6FE;border-radius:8px;min-height:60px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;background:#FAF5FF;"></textarea>
     <div style="display:flex;gap:8px;">
       <button onclick="cancelFeedbackForm()" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
       <button onclick="submitFeedback()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern ✓</button>
@@ -12521,11 +12511,11 @@ function setFeedbackImprove(input){
 window.setFeedbackImprove=setFeedbackImprove;
 
 async function submitKuecheFeedback(){
-  const name=document.getElementById('feedback-name')?.value?.trim();
-  if(!name){ showToast('Bitte einen Namen eingeben', true); return; }
+  // 02.10.26 (Wunsch Tini): Name nicht mehr Pflicht — soll möglichst niedrigschwellig sein,
+  // Feedback bleibt anonym (Anzeige zeigt ohnehin schon "Anonym" wenn kein Name da ist).
   const today=new Date().toISOString().split('T')[0];
   try{
-    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name,ratings:_feedbackDraft}])});
+    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name:null,ratings:_feedbackDraft}])});
     showToast('✓ Danke für dein Feedback!');
     if(currentView==='waehrend') renderWaehrend();
     else { cancelFeedbackForm(); renderEssenFeedback(); }
@@ -12533,26 +12523,13 @@ async function submitKuecheFeedback(){
 }
 window.submitKuecheFeedback=submitKuecheFeedback;
 
-async function submitAppFeedback(){
-  const feedbackFrei=document.getElementById('feedback-frei')?.value?.trim();
-  if(!feedbackFrei){ showToast('Bitte etwas eintragen', true); return; }
-  const today=new Date().toISOString().split('T')[0];
-  try{
-    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name:'App-Feedback',ratings:{},feedback_frei:feedbackFrei}])});
-    showToast('✓ Danke, kommt bei Tini an!');
-    document.getElementById('feedback-frei').value='';
-  }catch(e){ console.error(e); showToast('Fehler beim Speichern', true); }
-}
-window.submitAppFeedback=submitAppFeedback;
-
 async function submitFeedback(){
-  const name=document.getElementById('feedback-name')?.value?.trim();
+  // 02.10.26 (Wunsch Tini): Name nicht mehr Pflicht, "App-Feedback"-Freitext (feedback_frei) raus —
+  // bleibt anonym, nur noch Bewertung + optionaler Kommentar zum Essen.
   const kommentar=document.getElementById('feedback-kommentar')?.value?.trim()||null;
-  const feedbackFrei=document.getElementById('feedback-frei')?.value?.trim()||null;
-  if(!name){ showToast('Bitte einen Namen eingeben', true); return; }
   const today=new Date().toISOString().split('T')[0];
   try{
-    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name,ratings:_feedbackDraft,kommentar,feedback_frei:feedbackFrei}])});
+    await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name:null,ratings:_feedbackDraft,kommentar}])});
     showToast('✓ Danke für dein Feedback!');
     // 02.10.26: Kam man von "Schicht abschließen" her, direkt wieder dorthin statt auf der
     // Feedback-Seite stehen zu bleiben — sonst wieder manuelles Zurücknavigieren nötig.
