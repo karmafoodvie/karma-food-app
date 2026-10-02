@@ -490,8 +490,17 @@ function findZutatMasterMatch(name){
   if(exact) return exact;
   const candidates=master.filter(m=>{ const mn=m.name.toUpperCase(); return n.includes(mn) || mn.includes(n); });
   if(!candidates.length) return null;
-  candidates.sort((a,b)=>b.name.length-a.name.length);
-  return candidates[0];
+  // 02.10.26: Reine "längster Teilstring gewinnt"-Logik matcht bei deutschen Komposita manchmal
+  // das falsche Wortglied — z.B. "ZUCKERMAIS" enthält sowohl "MAIS" (Gemüse, das eigentliche
+  // Grundwort am Wortende) als auch zufällig "ZUCKER" (Gewürze) als Präfix, und "ZUCKER" ist länger
+  // als "MAIS" und hätte ohne diese Regel gewonnen → falsche Kategorie. Im Deutschen bestimmt bei
+  // Komposita das LETZTE Wortglied die Bedeutung ("Grundwort"), nicht ein zufälliger Anfangs-Teil.
+  // Deshalb: Treffer, die n (oder umgekehrt) als Suffix matchen, haben Vorrang vor reinen Präfix-/
+  // Infix-Treffern; erst innerhalb dieser Vorrangsgruppe entscheidet wieder die Länge.
+  const suffixCandidates=candidates.filter(m=>{ const mn=m.name.toUpperCase(); return n.endsWith(mn) || mn.endsWith(n); });
+  const pool=suffixCandidates.length?suffixCandidates:candidates;
+  pool.sort((a,b)=>b.name.length-a.name.length);
+  return pool[0];
 }
 function getEffectiveKat(name){
   const hit=findZutatMasterMatch(name);
