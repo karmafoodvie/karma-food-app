@@ -16145,9 +16145,18 @@ async function saveMenuDish(dishName, editKey){
   const allergenStr = document.getElementById(`all-${editKey}`)?.value?.trim()||'';
   const codes = allergenStr.split(/[,\s]+/).map(c=>c.trim().toUpperCase()).filter(c=>c);
   try{
-    // Delete existing entry for this dish name, then re-insert
-    await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}`,{method:'DELETE'});
-    await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht:dishName,zutaten,allergene_codes:codes,verantwortlich:'Küchenchef',aktualisiert_am:new Date().toISOString()}])});
+    // 02.10.26: War vorher DELETE-dann-POST — bei Netzwerkfehler/Timeout zwischen den beiden
+    // Requests (z.B. schlechtes WLAN in der Küche) war der alte Eintrag schon gelöscht, aber der
+    // neue kam nie an → Zutatenliste für das Gericht komplett leer, kein Hinweis außer dem Fehler-
+    // Toast. Jetzt wie zdSaveLocal: erst prüfen ob ein Eintrag existiert, dann PATCH (ändert nur,
+    // nichts geht verloren) oder POST (legt neu an) — nie löschen.
+    const ex=(await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}&select=id`).catch(()=>[]))[0];
+    const payload={gericht:dishName,zutaten,allergene_codes:codes,verantwortlich:'Küchenchef',crew_bestaetigt:true,aktualisiert_am:new Date().toISOString()};
+    if(ex){
+      await api(`allergene_rezepturen?id=eq.${ex.id}`,{method:'PATCH',body:JSON.stringify(payload)});
+    } else {
+      await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([payload])});
+    }
     showToast(`✔ ${dishName} gespeichert`);
     // Refresh the view
     renderKitchen();
