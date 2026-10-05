@@ -1102,7 +1102,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Khadi mit (Veggie Köfte)",
+   "name": "Kadhi Veggie Curry",
    "zutaten": "",
    "allergene": {
     "main": [],
