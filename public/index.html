@@ -1191,6 +1191,7 @@ function qtyStateClass(id){
 }
 let orderEingepackt = {}; // article_id -> true, wenn Organisation es fuer heute bereits eingepackt hat (Artikel verschwindet dann aus der Store-Bestellliste)
 let activeCl = 'oeffnung';
+let schichtendeWizard = null; // {ids:[...], i:n} = geführter Durchlauf "Schicht beenden" (05.10.26, Wunsch Tini)
 let schichtendeReturnFlag = false; // true = Nutzer kam von "Schicht abschließen" her, nach dem Speichern soll's dahin zurückgehen
 let guideJumpTarget = null; // Titel-Stichwort, zu dem im Guide direkt gesprungen werden soll
 function goToGuideEntry(keyword){ guideJumpTarget=keyword; goTo('guide'); }
@@ -1870,6 +1871,7 @@ async function loadAll(){
 // ---- NAV ----
 function goTo(v, noPush=false){
   currentView=v;
+  setTimeout(()=>{ try{ updateSchichtendeBar(); }catch(e){} },0);
   // 21.09.26 (Wunsch Tini): leichtes Seitenaufruf-Tracking, um später datenbasiert zu sehen, was
   // wirklich oft genutzt wird — bewusst "fire and forget" (kein await), damit Navigation nicht
   // langsamer wird, und nur fürs eigentliche App-Personal (nicht bei jedem Tastendruck, nur bei
@@ -4809,7 +4811,7 @@ async function submitKCNote(){
       await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,note,order_date:today}])});
     }
     showToast('✓ Shop Produkte gespeichert!');
-    if(schichtendeReturnFlag){ schichtendeReturnFlag=false; goTo('schichtende'); } else { goTo('home'); }
+    if(schichtendeReturnFlag){ schichtendeContinue(); } else { goTo('home'); }
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
 }
 window.submitKCNote=submitKCNote;
@@ -5159,6 +5161,7 @@ async function saveBeilagenChanges(){
       await autoSaveBeilageCell(inp);
     }
     showToast('✓ Änderungen gespeichert');
+    if(schichtendeWizard && schichtendeReturnFlag){ schichtendeContinue(); return; }
   }catch(e){
     console.error(e);
     showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
@@ -6824,6 +6827,7 @@ async function saveForecastChanges(){
       }
     }
     showToast('✓ Änderungen gespeichert — Küche wird informiert');
+    if(schichtendeWizard && schichtendeReturnFlag){ schichtendeContinue(); return; }
     renderOrder();
   }catch(e){
     console.error(e);
@@ -7034,14 +7038,14 @@ async function submitOrder(){
       showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!', submissionMarkerFailed);
     }
     const goBackToSchichtende=schichtendeReturnFlag;
-    schichtendeReturnFlag=false;
+    const _afterOrder=()=>{ if(goBackToSchichtende) schichtendeContinue(); else goTo('home'); };
     // Stadtplatz bekommt zusätzlich eine genaue Mengen-Quittung, die aktiv weggeklickt werden muss
     // (kein Auto-Verschwinden) — auf Wunsch, da dort wiederholt Mengen "verschwunden" sind und
     // sofort sichtbar sein soll, was WIRKLICH abgeschickt wurde.
     if(currentStore?.id==='3400'){
-      showOrderReceipt(rows, tab.title, ()=>goTo(goBackToSchichtende?'schichtende':'home'));
+      showOrderReceipt(rows, tab.title, _afterOrder);
     }else{
-      setTimeout(()=>goTo(goBackToSchichtende?'schichtende':'home'), 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
+      setTimeout(_afterOrder, 700); // kurze Verzögerung, damit die Bestätigung wirklich gesehen wird
     }
   }catch(e){
     console.error(e);
@@ -11723,7 +11727,7 @@ function renderDcTabContent(){
 // renderSchichtende), führt der Zurück-Pfeil stattdessen direkt wieder dorthin.
 function backToHomeHtml(){
   if(schichtendeReturnFlag){
-    return `<div onclick="schichtendeReturnFlag=false;goTo('schichtende')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
+    return `<div onclick="schichtendeWizard=null;schichtendeReturnFlag=false;goTo('schichtende')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
       <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       Zurück zur Schicht-Checkliste
     </div>`;
@@ -11738,9 +11742,84 @@ function backToHomeHtml(){
 // Entsorgung, Checklisten — dort wird laufend pro Feld automatisch gespeichert). Erscheint nur,
 // wenn man von "Schicht abschließen" hierher kam, damit man nicht erst hochscrollen muss, um
 // über den Zurück-Pfeil oben wieder zurückzukommen.
+
+// ═══ Geführter Schicht-Abschluss (05.10.26, Wunsch Tini) ═══
+// Statt Hub → Punkt → zurück → nächster Punkt: einmal "Schritt für Schritt starten" tippen, dann leitet
+// eine feste Leiste unten ("← Zurück | Schritt 3 von 7 | Weiter →") durch alle offenen Punkte; nach dem
+// Speichern (Bestellung, Forecast, Feedback …) geht's automatisch zum nächsten Schritt. Am Ende landet man
+// wieder in der Schicht-Checkliste (Reinigung, Übergabe-Notiz, Abschließen).
+const SCHICHTENDE_WIZARD_STEPS={
+  dailycheck:{label:'Daily Check-up', link:'dailycheck'},
+  entsorgung:{label:'Entsorgung', link:'disposal'},
+  feedback:{label:'Food-Feedback', link:'waehrend'},
+  forecast_menge:{label:'Portionen für morgen', link:'order', orderTab:'forecast'},
+  beilagen_anpassen:{label:'Saucen, Limetten & Dressings', link:'order', orderTab:'kueche'},
+  sweets:{label:'Sweets bestellen', link:'order', orderTab:'sweets'},
+  transporter:{label:'Transporter bestellen', link:'order', orderTab:'transporter'},
+  kc:{label:'Shop Produkte', link:'order', orderTab:'kc'}
+};
+function schichtendeOpenStep(i){
+  const w=schichtendeWizard; if(!w) return;
+  const m=SCHICHTENDE_WIZARD_STEPS[w.ids[i]]; if(!m){ schichtendeWizard=null; schichtendeReturnFlag=false; goTo('schichtende'); return; }
+  w.i=i; schichtendeReturnFlag=true;
+  if(m.orderTab) activeOrderTab=m.orderTab;
+  goTo(m.link);
+  window.scrollTo({top:0});
+}
+function schichtendeStart(ids){
+  const list=(ids||[]).filter(id=>SCHICHTENDE_WIZARD_STEPS[id]);
+  if(!list.length){ goTo('schichtende'); return; }
+  schichtendeWizard={ids:list,i:0};
+  schichtendeOpenStep(0);
+}
+window.schichtendeStart=schichtendeStart;
+function schichtendeContinue(){
+  const w=schichtendeWizard;
+  schichtendeReturnFlag=false;
+  if(w && w.i+1<w.ids.length){ schichtendeOpenStep(w.i+1); return; }
+  const wasWizard=!!w;
+  schichtendeWizard=null;
+  goTo('schichtende');
+  if(wasWizard) showToast('✓ Alle Schritte durch — jetzt noch Reinigung/Übergabe und abschließen');
+}
+window.schichtendeContinue=schichtendeContinue;
+function schichtendeBack(){
+  const w=schichtendeWizard;
+  if(w && w.i>0){ schichtendeOpenStep(w.i-1); return; }
+  schichtendeWizard=null; schichtendeReturnFlag=false; goTo('schichtende');
+}
+window.schichtendeBack=schichtendeBack;
+function schichtendeNextClick(){
+  // Ungespeicherte Forecast-Änderungen nicht stillschweigend verwerfen
+  if(currentView==='order' && activeOrderTab==='forecast'){
+    const dirty=[...document.querySelectorAll('#forecast-table-wrap input[data-dish]')].some(i=>i.value!==i.dataset.original);
+    if(dirty && !confirm('Du hast Änderungen noch nicht gespeichert. Trotzdem weiter?')) return;
+  }
+  schichtendeContinue();
+}
+window.schichtendeNextClick=schichtendeNextClick;
+function updateSchichtendeBar(){
+  let bar=document.getElementById('schichtende-bar');
+  const w=schichtendeWizard;
+  const show=!!(w && schichtendeReturnFlag && currentView!=='schichtende' && currentView!=='home');
+  if(!show){ if(bar) bar.remove(); document.body.style.paddingBottom=''; return; }
+  if(!bar){
+    bar=document.createElement('div'); bar.id='schichtende-bar';
+    bar.style.cssText='position:fixed;left:0;right:0;bottom:62px;z-index:900;display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1a1a18;color:#fff;box-shadow:0 -2px 10px rgba(0,0,0,.25);';
+    document.body.appendChild(bar);
+  }
+  const m=SCHICHTENDE_WIZARD_STEPS[w.ids[w.i]]||{label:''};
+  const last=w.i===w.ids.length-1;
+  bar.innerHTML=`<button onclick="schichtendeBack()" style="flex:0 0 auto;background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600;cursor:pointer;">←</button>
+    <div style="flex:1;min-width:0;text-align:center;line-height:1.25;"><div style="font-size:10.5px;opacity:.7;">Schicht beenden · Schritt ${w.i+1} von ${w.ids.length}</div><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.label}</div></div>
+    <button onclick="schichtendeNextClick()" style="flex:0 0 auto;background:#D4FF3F;color:#1a1a18;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:800;cursor:pointer;">${last?'Fertig ✓':'Weiter →'}</button>`;
+  document.body.style.paddingBottom='70px';
+}
+window.updateSchichtendeBar=updateSchichtendeBar;
+
 function schichtendeWeiterHtml(){
   if(!schichtendeReturnFlag) return '';
-  return `<button onclick="schichtendeReturnFlag=false;goTo('schichtende')" class="submit-btn" style="margin-top:10px;">✓ Fertig — zurück zur Schicht-Checkliste</button>`;
+  return `<button onclick="schichtendeNextClick()" class="submit-btn" style="margin-top:10px;">${schichtendeWizard?'Weiter →':'✓ Fertig — zurück zur Schicht-Checkliste'}</button>`;
 }
 window.schichtendeWeiterHtml=schichtendeWeiterHtml;
 
@@ -11947,7 +12026,7 @@ async function saveDailyCheckAll(){
     // 02.10.26: War vorher immer goTo('waehrend'), egal woher man kam. Von "Schicht abschließen"
     // aus soll man sofort wieder dort landen und den nächsten offenen Punkt sehen, statt über
     // "Während der Schicht" erst wieder manuell zurückfinden zu müssen.
-    if(schichtendeReturnFlag){ schichtendeReturnFlag=false; goTo('schichtende'); } else { goTo('waehrend'); }
+    if(schichtendeReturnFlag){ schichtendeContinue(); } else { goTo('waehrend'); }
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 
@@ -12914,7 +12993,7 @@ async function submitFeedback(){
     showToast('✓ Danke für dein Feedback!');
     // 02.10.26: Kam man von "Schicht abschließen" her, direkt wieder dorthin statt auf der
     // Feedback-Seite stehen zu bleiben — sonst wieder manuelles Zurücknavigieren nötig.
-    if(schichtendeReturnFlag){ schichtendeReturnFlag=false; goTo('schichtende'); return; }
+    if(schichtendeReturnFlag){ schichtendeContinue(); return; }
     // Primärer Ort ist jetzt "Während der Schicht" (20.08.26 verschoben, Schichtende ist oft
     // stressig genug) — die alte Standalone-Seite bleibt als Fallback erreichbar.
     if(currentView==='waehrend') renderWaehrend();
@@ -13018,6 +13097,10 @@ async function renderSchichtende(){
   // OFFENE SCHRITTE — nach Themen gruppiert, damit es nicht wie eine riesige Liste wirkt
   if(open.length>0){
     if(requiredOpen.length>0){
+      const wizIds=requiredOpen.filter(x=>SCHICHTENDE_WIZARD_STEPS[x.id]).map(x=>x.id);
+      if(wizIds.length && !alreadySubmitted){
+        html+=`<button class="submit-btn" style="margin:0 0 12px;font-size:15px;padding:14px;background:#1a1a18;color:#D4FF3F;" onclick="schichtendeStart(${escAttr(JSON.stringify(wizIds))})">▶ Schritt für Schritt durchführen (${wizIds.length})</button>`;
+      }
       html+=`<div style="font-size:12px;font-weight:600;color:var(--sub);margin:2px 0 2px;">🔓 Das fehlt noch (${requiredOpen.length}):</div>`;
     }
     const GROUP_ORDER=['kueche','bestellungen','sonstiges'];
