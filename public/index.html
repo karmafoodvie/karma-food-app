@@ -3206,10 +3206,14 @@ async function loadGamificationWidget(storeId){
   const monday=new Date(); monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
   const mondayStr=monday.toISOString().split('T')[0];
   try{
+    // 05.10.26: Eigene Tageswerte vor dem Anzeigen frisch aus der Entsorgung berechnen — vorher kam die
+    // Anzeige aus dem zuletzt gespeicherten Stand (der nur beim Öffnen der Startseite aktualisiert wurde),
+    // dadurch standen korrigierte/gelöschte Restmengen ("5 Port.") noch in der Rangliste.
+    if((new Date().getDay()+6)%7<5) await computeAndSaveScore(storeId).catch(()=>{});
     const [myScores, allStores, allScoresWeek] = await Promise.all([
       api(`store_scores?store_id=eq.${storeId}&datum=gte.${mondayStr}&order=datum.desc&select=*`).catch(()=>[]),
       api('stores?select=id,name&order=id').catch(()=>[]),
-      api(`store_scores?datum=gte.${mondayStr}&select=store_id,waste_total,bestellt_total,streak_haccp`).catch(()=>[])
+      api(`store_scores?datum=gte.${mondayStr}&select=id,datum,store_id,waste_total,bestellt_total,streak_haccp&order=id.asc`).catch(()=>[])
     ]);
     const todayScore=(myScores||[]).find(s=>s.datum===today);
     const streak=todayScore?.streak_haccp||0;
@@ -3218,7 +3222,9 @@ async function loadGamificationWidget(storeId){
     // Waste-Rangliste diese Woche — als % der bestellten Menge, nicht als nackte Zahl. Sonst wirkt
     // eine kleine Filiale (wenig Reste, aber auch wenig bestellt) unfair besser als sie eigentlich ist.
     const wasteByStore={}, bestelltByStore={};
-    (allScoresWeek||[]).forEach(s=>{
+    // Doppelte Zeilen je Filiale+Tag (z.B. bei gleichzeitigem Neuberechnen) nur einmal zählen — die neueste gewinnt.
+    const latestPerDay={}; (allScoresWeek||[]).forEach(r=>{ latestPerDay[r.store_id+'|'+r.datum]=r; });
+    Object.values(latestPerDay).forEach(s=>{
       wasteByStore[s.store_id]=(wasteByStore[s.store_id]||0)+(s.waste_total||0);
       bestelltByStore[s.store_id]=(bestelltByStore[s.store_id]||0)+(s.bestellt_total||0);
     });
@@ -14453,6 +14459,7 @@ async function updateLeftover(slot, dishName, value){
       await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:soldOut,leftover_qty:v,note}])});
     }
     showToast('✓ Gespeichert');
+    if(today===new Date().toISOString().split('T')[0]) computeAndSaveScore(currentStore.id).catch(()=>{});
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateDisposalNote(slot, dishName, value){
