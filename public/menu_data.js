@@ -870,7 +870,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Veggie Bolognese Lasagne",
+   "name": "Indian Ratatouille Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -928,7 +928,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht2",
-   "name": "Indian Ratatouille Lasagne",
+   "name": "Veggie Bolognese Lasagne",
    "zutaten": "",
    "allergene": {
     "main": [],
@@ -937,7 +937,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
   },
   {
    "slot": "gericht3",
-   "name": "Aloo Matar Veggie Curry",
+   "name": "Karotten Linsen Dal",
    "zutaten": "",
    "allergene": {
     "main": [],
