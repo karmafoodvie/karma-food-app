@@ -1476,7 +1476,23 @@ setInterval(checkForUpdate, 15*60*1000);
 // Stammdaten (Artikel inkl. Verfügbarkeit) beim Zurückkehren zur App neu laden — die wurden bisher
 // nur beim Login geholt. Wer die App tagsüber im Hintergrund hatte, sah Änderungen sonst nie.
 let _lastDataRefresh=Date.now();
+// 05.10.26: Tageswechsel-Absicherung. CURRENT_MENU_WOCHE (und weitere Werte wie die aktive Menü-Epoche)
+// werden nur EINMAL beim Laden berechnet. Blieb die App übers Wochenende im Hintergrund/als Home-Screen-
+// App offen, zeigte sie Montag noch die Menü-Woche von Freitag (Woche 4) — Wochentag kommt frisch aus der
+// Uhr, Woche aber aus dem alten Stand => Montag zeigte w4_mo statt w1_mo (Quinoa Bowl/Tofu Curry statt
+// Melanzani Couscous/Kokos Satay) bei Temperatur messen, Food-Feedback, Menü etc. Ein Reload brachte
+// nichts, solange die App nicht wirklich neu geladen wurde. Jetzt: ist das Datum seit dem Laden ein
+// anderes, lädt die App beim Zurückkehren (und stündlich als Netz) selbst neu. Login (kf_store) und
+// letzte Ansicht (kf_view) liegen im localStorage, man landet also wieder dort, wo man war.
+const _appLoadDay=new Date().toISOString().split('T')[0];
+function reloadIfDayChanged(){
+  if(new Date().toISOString().split('T')[0]!==_appLoadDay){ location.reload(); return true; }
+  return false;
+}
+setInterval(reloadIfDayChanged, 60*60*1000);
+window.addEventListener('pageshow', (e)=>{ if(e.persisted) reloadIfDayChanged(); }); // Wiederherstellung aus dem Seiten-Cache (bfcache)
 document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState==='visible' && reloadIfDayChanged()) return;
   if(document.visibilityState!=='visible' || !currentStore) return;
   checkForUpdate();
   // Nicht bei jedem kurzen Wechsel neu laden — nur wenn länger als 5 Minuten weg.
