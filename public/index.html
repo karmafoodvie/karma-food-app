@@ -3563,7 +3563,7 @@ function showEssenNotrufConfirm(){
   }).join('');
   wrap.innerHTML=`<div class="card" style="padding:14px;margin-bottom:14px;border:1.5px solid #DC2626;">
     <div style="font-size:13px;font-weight:700;color:#991B1B;margin-bottom:8px;">🆘 Wirklich Notruf senden?</div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Geht sofort mit Ton an Laurenzerberg & Ausstellungsstraße (Küche/Hauptverteilung).</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Geht sofort mit Ton an die anderen Wiener Lunch-Locations (Laurenzerberg, Börse, Ausstellungsstraße).</div>
     ${dishNames.length?`<div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">Was fehlt? (optional, mehrere möglich)</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${dishChips}</div>`:''}
     <div style="display:flex;gap:8px;">
@@ -3575,11 +3575,12 @@ function showEssenNotrufConfirm(){
 window.showEssenNotrufConfirm=showEssenNotrufConfirm;
 
 async function sendEssenNotruf(){
-  const targets=['lb','1020'].filter(id=>id!==currentStore?.id);
+  // 05.10.26 (Wunsch Tini): Alarm geht innerhalb Wiens immer an alle drei Wiener Lunch-Locations (außer an den Absender).
+  const targets=['lb','boerse','1020'].filter(id=>id!==currentStore?.id);
   try{
     await api('essen_notruf',{method:'POST',body:JSON.stringify([{von_store:currentStore.id, an_stores:targets, gerichte:_essenNotrufSelectedDishes.length?_essenNotrufSelectedDishes:null}])});
     const gerichteLabel=_essenNotrufSelectedDishes.length?` (${_essenNotrufSelectedDishes.join(', ')})`:'';
-    document.getElementById('essen-notruf-confirm').innerHTML=`<div style="background:#F0FDF4;border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:var(--green);text-align:center;">✓ Notruf gesendet${gerichteLabel} — es wird bei Laurenzerberg & Ausstellungsstraße alarmiert.</div>`;
+    document.getElementById('essen-notruf-confirm').innerHTML=`<div style="background:#F0FDF4;border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:var(--green);text-align:center;">✓ Notruf gesendet${gerichteLabel} — es wird bei den anderen Wiener Lunch-Locations alarmiert.</div>`;
     _essenNotrufSelectedDishes=[];
   }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen',true);}
 }
@@ -3881,7 +3882,7 @@ async function renderHome(){
       <span style="font-size:24px;">🆘</span>
       <div style="text-align:left;flex:1;">
         <div style="font-size:14px;font-weight:800;">Brauchen dringend Essen!</div>
-        <div style="font-size:11px;opacity:0.9;">Sofort-Meldung an Küche/Laurenzerberg bei Rush</div>
+        <div style="font-size:11px;opacity:0.9;">Sofort-Meldung an die anderen Wiener Locations bei Rush</div>
       </div>
     </button>
     <div id="essen-notruf-confirm"></div>
