@@ -3659,7 +3659,7 @@ window.sendEssenNotruf=sendEssenNotruf;
 let _essenNotrufSeen=new Set();
 async function checkEssenNotruf(){
   if(!currentStore) return;
-  if(currentStore.id==='zentrale'){ renderNotrufZentrale(); return; }
+  if(currentStore.id==='zentrale'){ renderNotrufZentrale(); renderNotstandZentrale(); return; }
   try{
     const rows=await api(`essen_notruf?erledigt=eq.false&select=*`).catch(()=>null);
     if(!rows) return;
@@ -3813,6 +3813,77 @@ async function notrufUberBestellt(id){
   renderNotrufZentrale();
 }
 window.notrufUberBestellt=notrufUberBestellt;
+
+// ==== NOTSTAND (05.10.26, Wunsch Tini) ====
+// Wenn etwas WIRKLICH komplett aus ist und man nicht mehr arbeiten kann: eine Meldung direkt an die
+// Zentrale (Widget oben auf deren Startseite, Ton/Toast), unabhängig von der normalen Bestellung.
+function notstandButtonHtml(){
+  if(!currentStore || currentStore.id==='zentrale') return '';
+  return `<button onclick="showNotstandModal()" style="width:100%;margin:0 0 12px;padding:10px;border:1.5px solid #DC2626;border-radius:10px;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;cursor:pointer;">🚨 Notstand — etwas ist aus, wir können nicht weiterarbeiten</button>`;
+}
+function showNotstandModal(){
+  closeNotstandModal();
+  const opts=(articles||[]).filter(a=>!a.archiviert).sort((x,y)=>x.name.localeCompare(y.name,'de')).map(a=>`<option value="${a.id}">${escAttr(a.name)}</option>`).join('');
+  const ov=document.createElement('div');
+  ov.id='notstand-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.25);max-height:90vh;overflow-y:auto;">
+    <div style="font-size:16px;font-weight:800;color:#B91C1C;margin-bottom:4px;">🚨 Notstand melden</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:12px;">Nur wenn etwas wirklich aus ist und ihr nicht mehr arbeiten könnt. Geht sofort an die Organisation.</div>
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Was ist aus?</label>
+    <select id="notstand-artikel" onchange="document.getElementById('notstand-frei').style.display=this.value===''?'block':'none'" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:8px;background:#fff;">
+      <option value="">Anderes (unten eintippen)…</option>${opts}
+    </select>
+    <input id="notstand-frei" type="text" placeholder="z.B. Reis, Kokosmilch, Becher…" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Was geht dadurch nicht mehr? <span>(optional)</span></label>
+    <textarea id="notstand-notiz" placeholder="z.B. Kein Reis mehr — Curry kann nicht ausgegeben werden" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:64px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:14px;"></textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="closeNotstandModal()" style="flex:1;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button id="notstand-send-btn" onclick="sendNotstand()" style="flex:2;background:#DC2626;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">🚨 Notstand senden</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) closeNotstandModal(); });
+  document.body.appendChild(ov);
+}
+function closeNotstandModal(){ const m=document.getElementById('notstand-modal'); if(m) m.remove(); }
+async function sendNotstand(){
+  const aid=document.getElementById('notstand-artikel')?.value||'';
+  const frei=(document.getElementById('notstand-frei')?.value||'').trim();
+  const notiz=(document.getElementById('notstand-notiz')?.value||'').trim();
+  const art=aid?(articles||[]).find(a=>String(a.id)===aid):null;
+  const produkt=art?art.name:frei;
+  if(!produkt){ showToast('Bitte angeben, was aus ist',true); return; }
+  const btn=document.getElementById('notstand-send-btn'); if(btn){ btn.disabled=true; btn.textContent='Wird gesendet…'; }
+  try{
+    await api('notstand_meldungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id, article_id:art?art.id:null, produkt, notiz:notiz||null, gemeldet_von:currentStore.name||currentStore.id, status:'offen'}])});
+    closeNotstandModal();
+    showToast('🚨 Notstand gemeldet — die Organisation ist informiert');
+  }catch(e){
+    console.error(e);
+    if(btn){ btn.disabled=false; btn.textContent='🚨 Notstand senden'; }
+    showToast('Fehler beim Senden — bitte direkt anrufen: '+(e?.message||String(e)).slice(0,80),true);
+  }
+}
+let _notstandSeen=new Set();
+async function renderNotstandZentrale(){
+  const el=document.getElementById('notstand-zentrale-widget'); if(!el) return;
+  try{
+    const rows=await api(`notstand_meldungen?status=eq.offen&select=*&order=id.asc`).catch(()=>null);
+    if(!rows) return;
+    const neu=rows.filter(r=>!_notstandSeen.has(r.id));
+    if(neu.length){ neu.forEach(r=>_notstandSeen.add(r.id)); showToast('🚨 Notstand: '+neu.map(r=>r.produkt).join(', '),true); }
+    el.innerHTML=rows.map(r=>`<div class="card" style="padding:14px;margin-bottom:12px;border:2px solid #DC2626;background:#FEF2F2;">
+      <div data-no-translate style="font-size:14px;font-weight:800;color:#991B1B;">🚨 Notstand ${NOTRUF_NAMEN[r.store_id]||r.gemeldet_von||r.store_id}: ${escAttr(r.produkt)} ist aus</div>
+      ${r.notiz?`<div data-no-translate style="font-size:12.5px;color:#7F1D1D;margin-top:4px;">${escAttr(r.notiz)}</div>`:''}
+      <div style="font-size:11px;color:#7F1D1D;margin-top:4px;">gemeldet ${new Date(r.created_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Vienna'})} Uhr</div>
+      <button onclick="notstandErledigt(${r.id})" style="margin-top:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">✓ Erledigt / gelöst</button></div>`).join('');
+  }catch(e){console.error(e);}
+}
+async function notstandErledigt(id){
+  await api(`notstand_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}).catch(e=>showToast('Fehler beim Speichern',true));
+  renderNotstandZentrale();
+}
+window.showNotstandModal=showNotstandModal; window.closeNotstandModal=closeNotstandModal; window.sendNotstand=sendNotstand; window.notstandErledigt=notstandErledigt; window.renderNotstandZentrale=renderNotstandZentrale;
 
 // Alle 20 Sekunden prüfen — bewusst häufig, weil's im Ernstfall wirklich schnell gehen muss.
 setInterval(checkEssenNotruf, 20000);
@@ -4150,6 +4221,7 @@ async function renderHome(){
 
     `:''}
     ${currentStore?.id==='zentrale'?`
+    <div id="notstand-zentrale-widget"></div>
     <div id="notruf-zentrale-widget"></div>
     <div id="org-dashboard-widget"></div>
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
@@ -4268,7 +4340,7 @@ async function renderHome(){
   </div>`;
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
-  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); }
+  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); }
   else { loadActiveBroadcastBanner(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
@@ -4475,7 +4547,7 @@ function renderOrderSection(cats, label, color, icon){
         if(gKey){
           if(handledGroups.has(gKey)) return; // Gruppe wurde schon (beim ersten Treffer) komplett gerendert
           handledGroups.add(gKey);
-          const groupItems=items.filter(x=>VARIANT_GROUPS[gKey].match(x.name) && x.verfuegbar!==false);
+          const groupItems=items.filter(x=>VARIANT_GROUPS[gKey].match(x.name));
           html+=renderVariantGroupRow(gKey, groupItems);
           return;
         }
@@ -4496,17 +4568,17 @@ function renderOrderSection(cats, label, color, icon){
             <div class="item-unit">${a.unit}</div>
             ${allergLine}
             ${zutatenInline}
-            ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${verfuegbarLabel(a)}</div>`:''}
+            ${(!isOrg && !verfuegbar)?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ ${verfuegbarLabel(a)} <span style="color:var(--muted);font-weight:400;">· Menge wird vorgemerkt</span></div>`:''}
           </div>
         </div>
         ${isOrg?`
           <button onclick="toggleArticleVerfuegbar(${a.id},${verfuegbar})" style="background:${verfuegbar?'var(--green-light)':'#FEE2E2'};color:${verfuegbar?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verfuegbar?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>
         `:`
-        <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
+        <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.6;filter:grayscale(1);':''}">
           <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
           <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''} ${qtyStateClass(a.id)}" id="q${a.id}" value="${v}" min="0"
             onclick="this.select()" oninput="setQty(${a.id},this.value)" onchange="setQty(${a.id},this.value)"
-            style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
+            style="width:44px;text-align:center;border:1px ${!verfuegbar?'dashed #9CA3AF':'solid var(--border)'};border-radius:8px;padding:6px 2px;font-size:15px;${!verfuegbar?'background:#E5E7EB;':''}">
           <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
         </div>
         `}
@@ -4541,13 +4613,13 @@ function renderVariantGroupRow(groupKey, groupItems){
   }
   const rows=variantRows[groupKey];
   const chosenIds=new Set(rows.map(r=>r.articleId).filter(Boolean));
-  const allUnavailable=groupItems.every(a=>a.verfuegbar===false);
+  const allUnavailable=false; // nicht lieferbare Sorten dürfen vorgemerkt werden (05.10.26)
   const rowsHtml=rows.map((r,i)=>{
     const opts=groupItems.map(a=>{
       const flavor=a.name.replace(g.prefix,'').trim()||a.name;
       const verf=a.verfuegbar!==false;
-      const disabled=(chosenIds.has(a.id)&&a.id!==r.articleId)||!verf;
-      return `<option value="${a.id}" ${a.id===r.articleId?'selected':''} ${disabled?'disabled':''}>${flavor}${!verf?' (nicht lieferbar)':''}</option>`;
+      const disabled=(chosenIds.has(a.id)&&a.id!==r.articleId);
+      return `<option value="${a.id}" ${a.id===r.articleId?'selected':''} ${disabled?'disabled':''}>${flavor}${!verf?' (nicht lieferbar – vormerken)':''}</option>`;
     }).join('');
     const v=r.articleId?(orderQtys[r.articleId]||0):0;
     const selArt=r.articleId?groupItems.find(x=>x.id===r.articleId):null;
@@ -4557,7 +4629,7 @@ function renderVariantGroupRow(groupKey, groupItems){
         <option value="">Sorte wählen…</option>
         ${opts}
       </select>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;${(!r.articleId||!selVerf)?'opacity:0.3;pointer-events:none;':''}">
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;${!r.articleId?'opacity:0.3;pointer-events:none;':(!selVerf?'opacity:0.6;filter:grayscale(1);':'')}">
         <button class="qty-btn" onclick="variantAdj('${groupKey}',${i},-1)">−</button>
         <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''} ${r.articleId?qtyStateClass(r.articleId):''}" id="vq-${groupKey}-${i}" value="${v}" min="0"
           onclick="this.select()" oninput="setVariantQty('${groupKey}',${i},this.value)" onchange="setVariantQty('${groupKey}',${i},this.value)"
@@ -4650,6 +4722,7 @@ function renderOrder(){
   let html=`<div style="display:flex;gap:6px;margin-bottom:12px;">${tabHtml}</div>`;
 
   const tab=ORDER_TABS[activeOrderTab];
+  html+=notstandButtonHtml();
 
   if(activeOrderTab==='kc'){
     renderKCOrderTab(el, html);
@@ -17526,9 +17599,9 @@ async function renderSweets(){
           <div style="display:flex;align-items:center;gap:10px;flex:1;">
             ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
             <div><div class="item-name">${a.name}</div><div class="item-unit">${a.unit}</div>
-            ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ derzeit nicht lieferbar</div>`:''}</div>
+            ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ derzeit nicht lieferbar <span style="color:var(--muted);font-weight:400;">· Menge wird vorgemerkt</span></div>`:''}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.35;pointer-events:none;':''}">
+          <div style="display:flex;align-items:center;gap:6px;${!verfuegbar?'opacity:0.6;filter:grayscale(1);':''}">
             <button class="qty-btn" onclick="adj(${a.id},-1)">−</button>
             <input type="number" inputmode="numeric" class="qty-val${v>0?' has-val':''}" id="q${a.id}" value="${v}" min="0" onclick="this.select()" oninput="setQty(${a.id},this.value)" onchange="setQty(${a.id},this.value)" style="width:44px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:6px 2px;font-size:15px;">
             <button class="qty-btn" onclick="adj(${a.id},1)">+</button>
