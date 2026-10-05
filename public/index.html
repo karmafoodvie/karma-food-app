@@ -3544,12 +3544,33 @@ async function fetchZutatenAllergenOverrideMaps(){
 // gebraucht werden — Tagesgerichte anklickbar (Mehrfachauswahl), damit die empfangende Filiale
 // sofort weiß, was genau sie rüberbringen soll, statt nur "irgendwas".
 let _essenNotrufSelectedDishes=[];
+let _essenNotrufMengen={};
+// 05.10.26 (Wunsch Tini): neuer Ablauf — Anfrage mit Menge → Antwort einer Location ("Ich hab's") →
+// Zentrale bestellt Uber (Zwischenlösung ohne API: Link öffnet Uber mit Adressen) → Anfragende sehen
+// Status + Live-Tracking-Link. Alarm geht nur an die anderen Wiener Lunch-Locations (nie Klosterneuburg).
+const NOTRUF_WIEN=['lb','boerse','1020'];
+const NOTRUF_NAMEN={lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstraße','3400':'Stadtplatz',kitchen:'Kitchen'};
+// Adressen für den Uber-Link — bei Bedarf hier korrigieren (genaue Straße + Hausnummer = genauerer Abholpunkt).
+const NOTRUF_UBER_ADRESSE={lb:'Laurenzerberg, 1010 Wien',boerse:'Börse, 1010 Wien','1020':'Ausstellungsstraße, 1020 Wien'};
+const NOTRUF_MENGEN=['½','1','2'];
+function notrufUberUrl(von,nach){
+  const q=(k,v)=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`;
+  return 'https://m.uber.com/ul/?action=setPickup&'+[q('pickup[formatted_address]',NOTRUF_UBER_ADRESSE[von]||(NOTRUF_NAMEN[von]+', Wien')),q('dropoff[formatted_address]',NOTRUF_UBER_ADRESSE[nach]||(NOTRUF_NAMEN[nach]+', Wien'))].join('&');
+}
+function notrufGerichteText(r){
+  const m=r.mengen||{};
+  const g=(r.gerichte||[]);
+  return g.length?g.map(x=>`${m[x]?m[x]+'× ':''}${x}`).join(', '):'Essen (nicht näher angegeben)';
+}
 function toggleEssenNotrufDish(name){
   const i=_essenNotrufSelectedDishes.indexOf(name);
-  if(i>-1) _essenNotrufSelectedDishes.splice(i,1); else _essenNotrufSelectedDishes.push(name);
+  if(i>-1){ _essenNotrufSelectedDishes.splice(i,1); delete _essenNotrufMengen[name]; }
+  else { _essenNotrufSelectedDishes.push(name); _essenNotrufMengen[name]='1'; }
   showEssenNotrufConfirm();
 }
 window.toggleEssenNotrufDish=toggleEssenNotrufDish;
+function setEssenNotrufMenge(name,m){ _essenNotrufMengen[name]=m; showEssenNotrufConfirm(); }
+window.setEssenNotrufMenge=setEssenNotrufMenge;
 
 function showEssenNotrufConfirm(){
   const wrap=document.getElementById('essen-notruf-confirm');
@@ -3561,13 +3582,19 @@ function showEssenNotrufConfirm(){
     const sel=_essenNotrufSelectedDishes.includes(name);
     return `<button type="button" onclick="toggleEssenNotrufDish('${escAttr(name)}')" data-no-translate style="padding:8px 12px;border-radius:20px;border:1.5px solid ${sel?'#DC2626':'var(--border)'};background:${sel?'#FEE2E2':'#fff'};color:${sel?'#991B1B':'var(--sub)'};font-size:12.5px;font-weight:${sel?'700':'500'};cursor:pointer;">${sel?'✓ ':''}${name}</button>`;
   }).join('');
+  const mengenHtml=_essenNotrufSelectedDishes.length?`<div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">Wie viel? (Gebinde)</div>
+    ${_essenNotrufSelectedDishes.map(name=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+      <div data-no-translate style="flex:1;font-size:12px;font-weight:600;">${name}</div>
+      ${NOTRUF_MENGEN.map(m=>{const a=_essenNotrufMengen[name]===m;return `<button type="button" onclick="setEssenNotrufMenge('${escAttr(name)}','${m}')" style="min-width:40px;padding:7px 10px;border-radius:8px;border:1.5px solid ${a?'#DC2626':'var(--border)'};background:${a?'#DC2626':'#fff'};color:${a?'#fff':'var(--sub)'};font-size:13px;font-weight:700;cursor:pointer;">${m}</button>`;}).join('')}
+    </div>`).join('')}<div style="height:8px;"></div>`:'';
   wrap.innerHTML=`<div class="card" style="padding:14px;margin-bottom:14px;border:1.5px solid #DC2626;">
     <div style="font-size:13px;font-weight:700;color:#991B1B;margin-bottom:8px;">🆘 Wirklich Notruf senden?</div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Geht sofort mit Ton an die anderen Wiener Lunch-Locations (Laurenzerberg, Börse, Ausstellungsstraße).</div>
     ${dishNames.length?`<div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">Was fehlt? (optional, mehrere möglich)</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${dishChips}</div>`:''}
+    ${mengenHtml}
     <div style="display:flex;gap:8px;">
-      <button onclick="_essenNotrufSelectedDishes=[];document.getElementById('essen-notruf-confirm').innerHTML='';" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button onclick="_essenNotrufSelectedDishes=[];_essenNotrufMengen={};document.getElementById('essen-notruf-confirm').innerHTML='';" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
       <button onclick="sendEssenNotruf()" style="flex:2;padding:10px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🆘 Ja, jetzt senden</button>
     </div>
   </div>`;
@@ -3575,59 +3602,69 @@ function showEssenNotrufConfirm(){
 window.showEssenNotrufConfirm=showEssenNotrufConfirm;
 
 async function sendEssenNotruf(){
-  // 05.10.26 (Wunsch Tini): Alarm geht innerhalb Wiens immer an alle drei Wiener Lunch-Locations (außer an den Absender).
-  const targets=['lb','boerse','1020'].filter(id=>id!==currentStore?.id);
+  const targets=NOTRUF_WIEN.filter(id=>id!==currentStore?.id);
   try{
-    await api('essen_notruf',{method:'POST',body:JSON.stringify([{von_store:currentStore.id, an_stores:targets, gerichte:_essenNotrufSelectedDishes.length?_essenNotrufSelectedDishes:null}])});
-    const gerichteLabel=_essenNotrufSelectedDishes.length?` (${_essenNotrufSelectedDishes.join(', ')})`:'';
-    document.getElementById('essen-notruf-confirm').innerHTML=`<div style="background:#F0FDF4;border:1px solid var(--green);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px;color:var(--green);text-align:center;">✓ Notruf gesendet${gerichteLabel} — es wird bei den anderen Wiener Lunch-Locations alarmiert.</div>`;
-    _essenNotrufSelectedDishes=[];
+    const sel=[..._essenNotrufSelectedDishes];
+    const mengen={}; sel.forEach(n=>{ mengen[n]=_essenNotrufMengen[n]||'1'; });
+    await api('essen_notruf',{method:'POST',body:JSON.stringify([{von_store:currentStore.id, an_stores:targets, gerichte:sel.length?sel:null, mengen:sel.length?mengen:null, status:'offen'}])});
+    const w=document.getElementById('essen-notruf-confirm'); if(w) w.innerHTML='';
+    _essenNotrufSelectedDishes=[]; _essenNotrufMengen={};
+    showToast('✓ Notruf gesendet');
+    checkEssenNotruf();
   }catch(e){console.error(e);showToast('Fehler beim Senden — bitte nochmal versuchen',true);}
 }
 window.sendEssenNotruf=sendEssenNotruf;
 
-// Empfangsseite: regelmäßig prüfen, ob ein offener Notruf für diese Filiale ansteht.
+// Empfangsseite + Status der eigenen Anfrage: regelmäßig prüfen.
 let _essenNotrufSeen=new Set();
 async function checkEssenNotruf(){
-  if(!currentStore || currentStore.id==='zentrale') return;
+  if(!currentStore) return;
+  if(currentStore.id==='zentrale'){ renderNotrufZentrale(); return; }
   try{
-    const rows=await api(`essen_notruf?erledigt=eq.false&select=*`).catch(()=>[]);
-    const relevant=(rows||[]).filter(r=>(r.an_stores||[]).includes(currentStore.id));
+    const rows=await api(`essen_notruf?erledigt=eq.false&select=*`).catch(()=>null);
+    if(!rows) return;
+    const me=currentStore.id;
+    const relevant=rows.filter(r=>(r.an_stores||[]).includes(me) && r.status==='offen' && !(r.absagen||[]).includes(me));
     const neu=relevant.filter(r=>!_essenNotrufSeen.has(r.id));
     if(neu.length){
       neu.forEach(r=>_essenNotrufSeen.add(r.id));
       showEssenNotrufAlarm(relevant);
-    } else if(!relevant.length){
+    } else if(relevant.length){
+      showEssenNotrufAlarm(relevant,true); // nur Inhalt aktualisieren, kein erneuter Ton
+    } else {
       const el=document.getElementById('essen-notruf-alarm');
       if(el) el.remove();
       document.title=document.title.replace('🆘 ','');
       try{ navigator.clearAppBadge?.(); }catch(e){}
     }
+    renderNotrufStatus(rows.filter(r=>r.von_store===me || r.zusage_von===me));
   }catch(e){console.error('Notruf-Check fehlgeschlagen:',e);}
 }
 
-function showEssenNotrufAlarm(relevant){
+function showEssenNotrufAlarm(relevant,silent){
   let el=document.getElementById('essen-notruf-alarm');
   if(!el){
     el=document.createElement('div');
     el.id='essen-notruf-alarm';
-    el.style.cssText='position:fixed;inset:0;background:#DC2626;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;color:#fff;';
+    el.style.cssText='position:fixed;inset:0;background:#DC2626;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;color:#fff;overflow-y:auto;';
     document.body.appendChild(el);
   }
-  const notrufStoreNamen={lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstraße','3400':'Stadtplatz',kitchen:'Kitchen'};
-  const namen=[...new Set(relevant.map(r=>notrufStoreNamen[r.von_store]||r.von_store))].join(', ');
-  // 29.09.26 (Wunsch Tini): zeigt jetzt an, welche(s) Gericht(e) konkret gebraucht werden (falls
-  // beim Senden ausgewählt) — sonst weiß die empfangende Filiale nur "irgendwas fehlt".
-  const alleGerichte=[...new Set(relevant.flatMap(r=>r.gerichte||[]))];
-  const gerichteHtml=alleGerichte.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:20px;">${alleGerichte.map(g=>`<span data-no-translate style="background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.6);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;">${g}</span>`).join('')}</div>`:'';
-  el.innerHTML=`<div style="font-size:56px;margin-bottom:16px;">🆘</div>
-    <div style="font-size:22px;font-weight:800;margin-bottom:8px;">Hey, habt ihr noch Essen?</div>
-    <div style="font-size:15px;margin-bottom:${alleGerichte.length?'14px':'28px'};opacity:0.95;">${namen} braucht dringend Nachschub — starker Rush!</div>
-    ${gerichteHtml}
-    <button onclick="resolveEssenNotruf()" style="background:#fff;color:#DC2626;border:none;border-radius:12px;padding:14px 28px;font-size:15px;font-weight:700;cursor:pointer;">✓ Gesehen, kümmere mich drum</button>`;
-  // Ton versuchen (kann von Browsern ohne vorherige Nutzer-Interaktion blockiert werden — dann
-  // bleibt wenigstens die große rote Meldung + Badge als Hinweis). Per Web Audio API erzeugt,
-  // nicht als Audio-Datei — zuverlässiger als eine base64-kodierte Datei, die leicht kaputt sein kann.
+  const blocks=relevant.map(r=>{
+    const von=NOTRUF_NAMEN[r.von_store]||r.von_store;
+    const m=r.mengen||{};
+    const g=(r.gerichte||[]);
+    const gerichteHtml=g.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:8px 0 12px;">${g.map(x=>`<span data-no-translate style="background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.6);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;">${m[x]?m[x]+'× ':''}${x}</span>`).join('')}</div>`:'<div style="height:10px;"></div>';
+    return `<div style="background:rgba(0,0,0,0.15);border-radius:14px;padding:14px;margin-bottom:12px;width:100%;max-width:420px;">
+      <div style="font-size:15px;font-weight:700;">${von} braucht dringend Nachschub — starker Rush!</div>
+      ${gerichteHtml}
+      <div style="font-size:12px;opacity:0.9;margin-bottom:8px;">Ich schicke rüber:</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px;">${NOTRUF_MENGEN.map(x=>`<button onclick="essenNotrufZusage(${r.id},'${x}')" style="flex:1;background:#fff;color:#DC2626;border:none;border-radius:10px;padding:12px 6px;font-size:15px;font-weight:800;cursor:pointer;">✋ ${x} Gebinde</button>`).join('')}</div>
+      <button onclick="essenNotrufAbsage(${r.id})" style="background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,0.7);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">Hab nichts übrig</button>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div style="font-size:48px;margin-bottom:8px;">🆘</div>
+    <div style="font-size:22px;font-weight:800;margin-bottom:14px;">Hey, habt ihr noch Essen?</div>${blocks}`;
+  if(silent) return;
   try{
     const AudioCtx=window.AudioContext||window.webkitAudioContext;
     const ctx=new AudioCtx();
@@ -3640,27 +3677,102 @@ function showEssenNotrufAlarm(relevant){
       osc.start(ctx.currentTime+delay); osc.stop(ctx.currentTime+delay+0.3);
     });
   }catch(e){}
-  // Browser-Tab-Titel blinkt, und Badge am App-Icon (falls installiert & unterstützt) — damit's auch
-  // aus dem Augenwinkel oder bei einer anderen offenen Seite auffällt.
   if(!document.title.startsWith('🆘 ')) document.title='🆘 '+document.title;
   try{ navigator.setAppBadge?.(relevant.length); }catch(e){}
 }
 window.showEssenNotrufAlarm=showEssenNotrufAlarm;
 
-async function resolveEssenNotruf(){
+async function essenNotrufZusage(id,menge){
   try{
-    const rows=await api(`essen_notruf?erledigt=eq.false&select=id,an_stores`).catch(()=>[]);
-    const mine=(rows||[]).filter(r=>(r.an_stores||[]).includes(currentStore.id));
-    for(const r of mine){
-      await api(`essen_notruf?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({erledigt:true, erledigt_am:new Date().toISOString()})}).catch(()=>{});
-    }
-  }catch(e){console.error(e);}
-  const el=document.getElementById('essen-notruf-alarm');
-  if(el) el.remove();
-  document.title=document.title.replace('🆘 ','');
-  try{ navigator.clearAppBadge?.(); }catch(e){}
+    // Nur wenn noch offen — wer zuerst tippt, bekommt's; alle anderen sehen "schon übernommen".
+    const res=await api(`essen_notruf?id=eq.${id}&status=eq.offen`,{method:'PATCH',body:JSON.stringify({status:'zugesagt',zusage_von:currentStore.id,zusage_menge:menge,zusage_am:new Date().toISOString()})});
+    if(!res||!res.length) showToast('Hat schon eine andere Location übernommen 👍');
+    else showToast('✓ Danke! Die Zentrale organisiert den Uber.');
+  }catch(e){console.error(e);showToast('Fehler — bitte nochmal tippen',true);return;}
+  const el=document.getElementById('essen-notruf-alarm'); if(el) el.remove();
+  document.title=document.title.replace('🆘 ',''); try{ navigator.clearAppBadge?.(); }catch(e){}
+  checkEssenNotruf();
 }
-window.resolveEssenNotruf=resolveEssenNotruf;
+window.essenNotrufZusage=essenNotrufZusage;
+
+async function essenNotrufAbsage(id){
+  try{
+    const rows=await api(`essen_notruf?id=eq.${id}&select=absagen`);
+    const cur=(rows&&rows[0]?.absagen)||[];
+    if(!cur.includes(currentStore.id)) await api(`essen_notruf?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({absagen:[...cur,currentStore.id]})});
+  }catch(e){console.error(e);}
+  const el=document.getElementById('essen-notruf-alarm'); if(el) el.remove();
+  document.title=document.title.replace('🆘 ',''); try{ navigator.clearAppBadge?.(); }catch(e){}
+  checkEssenNotruf();
+}
+window.essenNotrufAbsage=essenNotrufAbsage;
+
+async function essenNotrufErledigt(id){
+  await api(`essen_notruf?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({erledigt:true,erledigt_am:new Date().toISOString(),status:'erledigt'})}).catch(()=>{});
+  checkEssenNotruf();
+}
+window.essenNotrufErledigt=essenNotrufErledigt;
+
+// Status-Karte auf der Startseite: für die anfragende Location (wie weit ist die Hilfe?) und für die zusagende.
+function renderNotrufStatus(rows){
+  const el=document.getElementById('essen-notruf-status'); if(!el) return;
+  const me=currentStore.id;
+  el.innerHTML=(rows||[]).map(r=>{
+    const mine=r.von_store===me;
+    const txt=notrufGerichteText(r);
+    const alle=(r.an_stores||[]);
+    const keinerHat=r.status==='offen' && alle.length && alle.every(s=>(r.absagen||[]).includes(s));
+    let head,body='',btn='';
+    if(mine){
+      if(r.status==='offen'){ head=keinerHat?'😕 Niemand hat etwas übrig':'⏳ Notruf gesendet — warte auf Antwort'; body=keinerHat?'Bitte die Zentrale anrufen.':txt; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">Abbrechen</button>`; }
+      else if(r.status==='zugesagt'){ head=`✅ ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von} schickt ${r.zusage_menge||''} Gebinde`; body=`${txt}<br><span style="opacity:.8;">Die Zentrale bestellt den Uber…</span>`; }
+      else { head=`🚗 Uber unterwegs${r.ankunft?' — ca. '+r.ankunft+' Uhr':''}`; body=`${txt} von ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}`; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:9px 14px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Angekommen</button>`; }
+    } else {
+      head=r.status==='zugesagt'?'🤝 Danke — bitte Essen bereit stellen':`🚗 Uber holt ab${r.ankunft?' (ca. '+r.ankunft+' Uhr bei '+(NOTRUF_NAMEN[r.von_store]||'')+')':''}`;
+      body=`${r.zusage_menge||''} Gebinde für ${NOTRUF_NAMEN[r.von_store]||r.von_store}: ${txt}`;
+    }
+    return `<div class="card" style="padding:12px 14px;margin-bottom:14px;border:1.5px solid #F59E0B;background:#FFFBEB;"><div style="font-size:13px;font-weight:800;color:#78350F;">${head}</div><div data-no-translate style="font-size:12px;color:#78350F;margin-top:3px;">${body}</div>${btn}</div>`;
+  }).join('');
+}
+
+// Zentrale: Anfragen mit Zusage → Uber bestellen (Zwischenlösung: Link öffnet Uber mit Adressen).
+let _notrufZentraleSeen=new Set();
+async function renderNotrufZentrale(){
+  const el=document.getElementById('notruf-zentrale-widget'); if(!el) return;
+  try{
+    const rows=await api(`essen_notruf?erledigt=eq.false&select=*&order=id.asc`).catch(()=>null);
+    if(!rows) return;
+    const aktiv=rows.filter(r=>r.status==='zugesagt'||r.status==='uber_bestellt');
+    const neu=aktiv.filter(r=>r.status==='zugesagt' && !_notrufZentraleSeen.has(r.id));
+    if(neu.length){ neu.forEach(r=>_notrufZentraleSeen.add(r.id)); showToast('🚗 Notruf: Uber bestellen!'); }
+    // Eingabefelder nicht überschreiben, wenn gerade getippt wird
+    if(el.contains(document.activeElement) && document.activeElement.tagName==='INPUT') return;
+    el.innerHTML=aktiv.map(r=>{
+      const txt=notrufGerichteText(r);
+      const von=NOTRUF_NAMEN[r.zusage_von]||r.zusage_von, nach=NOTRUF_NAMEN[r.von_store]||r.von_store;
+      const head=`🆘 ${von} → ${nach}: ${r.zusage_menge||''} Gebinde`;
+      if(r.status==='zugesagt') return `<div class="card" style="padding:14px;margin-bottom:12px;border:2px solid #DC2626;background:#FEF2F2;">
+        <div style="font-size:13.5px;font-weight:800;color:#991B1B;">${head}</div>
+        <div data-no-translate style="font-size:12px;color:#7F1D1D;margin:3px 0 10px;">${txt}</div>
+        <a href="${notrufUberUrl(r.zusage_von,r.von_store)}" target="_blank" rel="noopener" style="display:block;text-align:center;background:#000;color:#fff;border-radius:10px;padding:12px;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:10px;">🚗 Uber öffnen (Abholung ${von} → ${nach})</a>
+        <div style="display:flex;gap:6px;margin-bottom:8px;"><input id="nz-ank-${r.id}" type="time" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;"><input id="nz-link-${r.id}" type="text" placeholder="Tracking-Link (optional)" style="flex:2;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;"></div>
+        <button onclick="notrufUberBestellt(${r.id})" style="width:100%;padding:10px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✓ Uber bestellt — an ${nach} melden</button></div>`;
+      return `<div class="card" style="padding:12px 14px;margin-bottom:12px;border:1.5px solid #F59E0B;background:#FFFBEB;">
+        <div style="font-size:13px;font-weight:800;color:#78350F;">🚗 ${head}</div>
+        <div style="font-size:12px;color:#78350F;margin-top:3px;">Ankunft ${r.ankunft||'–'} Uhr${r.uber_link?` · <a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener">Tracking</a>`:''}</div>
+        <button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">Erledigt</button></div>`;
+    }).join('');
+  }catch(e){console.error(e);}
+}
+window.renderNotrufZentrale=renderNotrufZentrale;
+async function notrufUberBestellt(id){
+  const ank=document.getElementById('nz-ank-'+id)?.value||null;
+  const link=(document.getElementById('nz-link-'+id)?.value||'').trim()||null;
+  if(link && !/^https?:\/\//i.test(link)){ showToast('Tracking-Link muss mit https:// beginnen',true); return; }
+  await api(`essen_notruf?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'uber_bestellt',ankunft:ank,uber_link:link,uber_am:new Date().toISOString()})}).catch(e=>showToast('Fehler beim Speichern',true));
+  renderNotrufZentrale();
+}
+window.notrufUberBestellt=notrufUberBestellt;
 
 // Alle 20 Sekunden prüfen — bewusst häufig, weil's im Ernstfall wirklich schnell gehen muss.
 setInterval(checkEssenNotruf, 20000);
@@ -3886,6 +3998,7 @@ async function renderHome(){
       </div>
     </button>
     <div id="essen-notruf-confirm"></div>
+    <div id="essen-notruf-status"></div>
     `:''}
     ${currentStore?.id==='kitchen' && new Date().getDay()===1?`
     <div onclick="goTo('wochenFeedback')" style="background:linear-gradient(135deg,#FBCFE8,#F9A8D4);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
@@ -3997,6 +4110,7 @@ async function renderHome(){
 
     `:''}
     ${currentStore?.id==='zentrale'?`
+    <div id="notruf-zentrale-widget"></div>
     <div id="org-dashboard-widget"></div>
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div style="position:relative;margin-bottom:8px;">
@@ -4114,9 +4228,10 @@ async function renderHome(){
   </div>`;
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
-  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); }
+  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); }
   else { loadActiveBroadcastBanner(); }
+  if(currentStore?.id!=='zentrale') checkEssenNotruf();
 }
 
 async function renderOeffnungHelp(){
