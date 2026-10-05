@@ -774,7 +774,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  "w1_do": [
   {
    "slot": "gericht1",
-   "name": "Ras el Hanout Karotten Quinoa Bowl mit Zitronen Hummus",
+   "name": "Karotten Quinoa Bowl mit Zitronen Hummus",
    "zutaten": "",
    "allergene": {
     "main": [],
