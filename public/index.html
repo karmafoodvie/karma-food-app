@@ -206,6 +206,7 @@ summary::marker{content:'';}
     <div id="v-zutatenkontrolle" class="view"></div>
     <div id="v-freitagCheckliste" class="view"></div>
     <div id="v-epochenCheck" class="view"></div>
+    <div id="v-menuKontrolle" class="view"></div>
     <div id="v-wochenFeedback" class="view"></div>
     <div id="v-forecastAmpel" class="view"></div>
     <div id="v-nutzungsstatistik" class="view"></div>
@@ -1863,6 +1864,7 @@ async function loadAll(){
   const stk=await api('stock?select=article_id,quantity');
   stockData={};
   (stk||[]).forEach(s=>stockData[s.article_id]=s.quantity);
+  await applyMenuOverrides();
 }
 
 // ---- NAV ----
@@ -1898,7 +1900,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase'};
+  const subs={home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1907,7 +1909,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -1994,6 +1996,18 @@ function getMenuEraLabelForDate(dateStr){
 // obwohl schon die neue Epoche aktiv war.
 function getMenuDataForDate(dateStr){
   return getMenuEraForDate(dateStr).data || {};
+}
+// Freigegebene Namensänderungen aus der Menü-Kontrolle (Tabelle menu_overrides) über die statischen
+// Menüdaten legen — so wirkt eine Freigabe in der Organisation sofort, ohne dass menu_data.js neu
+// gepusht werden muss. Idempotent: passt der alte Name nicht mehr (weil menu_data.js inzwischen selbst
+// aktualisiert wurde), passiert einfach nichts.
+async function applyMenuOverrides(){
+  const rows=await api('menu_overrides?select=epoche,woche,tag,alt_name,neu_name').catch(()=>[]);
+  (rows||[]).forEach(o=>{
+    const era=MENU_ERAS.find(e=>e.key===o.epoche); if(!era) return;
+    const list=(era.data||{})[`w${o.woche}_${o.tag}`]; if(!list) return;
+    list.forEach(e=>{ if(e.name===o.alt_name) e.name=o.neu_name; });
+  });
 }
 function getCurrentMenuWoche(){
   return getMenuWocheForDate(new Date().toISOString().split('T')[0]);
@@ -3998,6 +4012,14 @@ async function renderHome(){
       <div style="font-size:12.5px;color:#78350F;margin-top:3px;">Heute Nachmittag gemeinsam Schritt für Schritt erarbeiten, wie Feiertage/Ferien die Mengen-Schätzung beeinflussen sollen — mit deinem Input, nicht automatisch geraten.</div>
     </div>
     `:''}
+    <div onclick="goTo('menuKontrolle')" style="display:flex;align-items:center;gap:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
+      <span style="font-size:18px;">📋</span>
+      <div style="flex:1;">
+        <div style="font-size:12.5px;font-weight:600;color:#9A3412;">Menü-Kontrolle <span id="menu-kontrolle-badge"></span></div>
+        <div style="font-size:10.5px;color:#C2410C;">Leading Sheet gegen die App prüfen & Änderungen freigeben</div>
+      </div>
+      <span style="color:#C2410C;">→</span>
+    </div>
     <div onclick="goTo('forecastAmpel')" style="display:flex;align-items:center;gap:10px;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px;padding:10px 14px;margin:2px 0 6px;cursor:pointer;">
       <span style="font-size:18px;">🚦</span>
       <div style="flex:1;">
@@ -4091,7 +4113,7 @@ async function renderHome(){
   </div>`;
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
-  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); }
+  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); }
   else { loadActiveBroadcastBanner(); }
 }
@@ -7255,6 +7277,181 @@ async function cleanupCollisions(){
 }
 window.cleanupCollisions=cleanupCollisions;
 
+// ══════════════════════════════════════════════════════════════════════════
+// MENÜ-KONTROLLE (05.10.26, Wunsch Tini) — Leading Sheet (Excel in Drive, Tab "Alle Menüs") ist die
+// Quelle der Wahrheit für Gerichtsnamen. Eine geplante Prüfung (Mo–Fr morgens) vergleicht das Sheet mit
+// dem Menü der App und trägt Abweichungen in menu_sheet_diffs ein. Hier in der Organisation werden sie
+// FREIGEGEBEN oder ABGELEHNT — nichts ändert sich ohne diese Freigabe. Freigabe = Eintrag in
+// menu_overrides (wird beim Login über die Menüdaten gelegt, siehe applyMenuOverrides) + Umstellung der
+// vom Namen abhängigen Daten (Forecast, Entsorgung, Feedback) NUR für die betroffenen Tage.
+// ══════════════════════════════════════════════════════════════════════════
+const MK_TAGE={mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
+// Alle Kalendertage ab fromStr, an denen Woche+Wochentag des Menüplans zusammentreffen (UTC-Rechnung,
+// damit die Zeitzone das Datum nicht um einen Tag verschiebt).
+function mkOccurrenceDates(woche, tag, fromStr, days=120){
+  const TAGNUM={mo:1,di:2,mi:3,do:4,fr:5};
+  const [y,m,d]=fromStr.split('-').map(Number);
+  const out=[];
+  for(let i=0;i<days;i++){
+    const dt=new Date(Date.UTC(y,m-1,d+i));
+    if(dt.getUTCDay()!==TAGNUM[tag]) continue;
+    const ds=dt.toISOString().split('T')[0];
+    if(getMenuWocheForDate(ds)===woche) out.push(ds);
+  }
+  return out;
+}
+function mkDateLabel(ds){ const [y,m,d]=ds.split('-'); return `${d}.${m}.`; }
+
+async function loadMenuKontrolleBadge(){
+  const el=document.getElementById('menu-kontrolle-badge');
+  if(!el) return;
+  try{
+    const open=await api('menu_sheet_diffs?status=eq.offen&select=id');
+    el.innerHTML=(open||[]).length?`<span class="badge badge-warn" style="margin-left:4px;">${open.length} offen</span>`:'';
+  }catch(e){ /* Tabelle fehlt oder offline — Kachel bleibt einfach ohne Zähler */ }
+}
+window.loadMenuKontrolleBadge=loadMenuKontrolleBadge;
+
+async function renderMenuKontrolle(){
+  const el=document.getElementById('v-menuKontrolle');
+  el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
+  const todayStr=new Date().toISOString().split('T')[0];
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('📋','Menü-Kontrolle','Leading Sheet gegen die App prüfen & freigeben','#C2410C');
+
+  const [diffs, runs, rezepte]=await Promise.all([
+    api('menu_sheet_diffs?select=*').catch(()=>[]),
+    api('menu_check_runs?select=*&order=geprueft_am.desc&limit=1').catch(()=>[]),
+    api('allergene_rezepturen?select=gericht,zkey,crew_bestaetigt,zutaten').catch(()=>[])
+  ]);
+  window._mkDiffs={}; (diffs||[]).forEach(d=>{window._mkDiffs[d.id]=d;});
+
+  // Lebenszeichen der automatischen Prüfung — damit sichtbar ist, dass sie wirklich läuft.
+  const last=(runs||[])[0];
+  const fmt=(iso)=>iso?new Date(iso).toLocaleString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'–';
+  const ageH=last?(Date.now()-new Date(last.geprueft_am).getTime())/3600000:null;
+  const stale=ageH===null || ageH>30;
+  html+=`<div style="font-size:11.5px;border-radius:10px;padding:9px 12px;margin-bottom:12px;${stale?'background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;':'background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;'}">
+    ${last?`${stale?'⚠️':'✅'} Zuletzt geprüft: <strong>${fmt(last.geprueft_am)}</strong> · Sheet zuletzt geändert: <strong>${fmt(last.sheet_geaendert_am)}</strong>${stale?'<br>Die automatische Prüfung hat sich länger nicht gemeldet.':''}`:'⚠️ Noch keine automatische Prüfung gelaufen.'}
+  </div>`;
+
+  // ── 1) Offene Abweichungen
+  const open=(diffs||[]).filter(d=>d.status==='offen').map(d=>({d, ab:mkOccurrenceDates(d.woche,d.tag,todayStr,60)[0]||'9999'}))
+    .sort((a,b)=>a.ab.localeCompare(b.ab));
+  html+=`<div class="section-lbl">🟠 Offene Abweichungen (${open.length})</div>`;
+  if(!open.length){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:#16A34A;font-size:13px;">✅ Sheet und App stimmen überein.</div>`;
+  }
+  open.forEach(({d,ab})=>{
+    const rename=d.app_name && d.sheet_name;
+    html+=`<div class="card" style="padding:12px;margin-bottom:8px;border-left:3px solid #C2410C;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">${MK_TAGE[d.tag]||d.tag}${ab!=='9999'?' '+mkDateLabel(ab):''} · Menü-Woche ${d.woche}</div>
+      ${d.app_name?`<div style="font-size:12px;"><span style="color:var(--muted);">App:</span> <span data-no-translate style="${rename?'text-decoration:line-through;color:#991B1B;':''}">${escAttr(d.app_name)}</span></div>`:''}
+      ${d.sheet_name?`<div style="font-size:12.5px;margin-top:2px;"><span style="color:var(--muted);">Sheet:</span> <strong data-no-translate style="color:#166534;">${escAttr(d.sheet_name)}</strong></div>`:''}
+      ${d.hinweis?`<div style="font-size:11px;color:#92400E;margin-top:4px;">${escAttr(d.hinweis)} — kann die App nicht selbst ändern, bitte an Claude weitergeben.</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        ${rename?`<button onclick="menuKontrolleFreigeben(${d.id})" style="flex:1;padding:9px;border:none;border-radius:9px;background:#16A34A;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Freigeben</button>
+        <button onclick="menuKontrolleEntscheiden(${d.id},'abgelehnt')" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:9px;background:#fff;color:var(--sub);font-size:12.5px;font-weight:600;cursor:pointer;">✕ App bleibt so</button>`
+        :`<button onclick="menuKontrolleEntscheiden(${d.id},'erledigt')" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:9px;background:#fff;color:var(--sub);font-size:12.5px;font-weight:600;cursor:pointer;">✓ Erledigt / ignorieren</button>`}
+      </div>
+    </div>`;
+  });
+  if(open.some(({d})=>d.app_name&&d.sheet_name)){
+    html+=`<div style="font-size:10.5px;color:var(--muted);margin:2px 2px 12px;">Freigeben = die App übernimmt den Sheet-Namen (für alle Geräte ab dem nächsten Laden), Forecast/Entsorgung/Feedback der betroffenen Tage werden mit umgestellt. Die Zutatenliste an diesem Platz wird als „unbestätigt" markiert, bis die Küche sie geprüft hat.</div>`;
+  }
+
+  // ── 2) Zutatenlisten der nächsten 14 Tage prüfen
+  const byZkey={}, byName={};
+  (rezepte||[]).forEach(r=>{ if(r.zkey) byZkey[r.zkey]=r; byName[normGerichtName(r.gericht)]=r; });
+  const probleme=[];
+  const [y0,m0,d0]=todayStr.split('-').map(Number);
+  for(let i=0;i<14;i++){
+    const dt=new Date(Date.UTC(y0,m0-1,d0+i));
+    const wdn=dt.getUTCDay(); if(wdn<1||wdn>5) continue;
+    const ds=dt.toISOString().split('T')[0], tag=WEEKDAY_STR[wdn], woche=getMenuWocheForDate(ds);
+    const entries=(getMenuDataForDate(ds)[`w${woche}_${tag}`]||[]).filter(e=>e.slot!=='salat'&&e.name);
+    entries.forEach(e=>{
+      const zk=byZkey[zutatenKey(woche,tag,e.slot)], nm=byName[normGerichtName(e.name)];
+      const rec=zk||nm;
+      let problem=null;
+      if(!rec || !(rec.zutaten||'').trim()) problem='❌ keine Zutatenliste';
+      else if(zk && normGerichtName(zk.gericht)!==normGerichtName(e.name) && !nm) problem=`🔀 Liste gehört zu „${zk.gericht}"`;
+      else if(!rec.crew_bestaetigt) problem='⚠️ von der Küche noch nicht bestätigt';
+      if(problem) probleme.push({ds,name:e.name,problem});
+    });
+  }
+  html+=`<div class="section-lbl" style="margin-top:18px;">🧂 Zutatenlisten — nächste 14 Tage (${probleme.length} zu prüfen)</div>`;
+  if(!probleme.length){
+    html+=`<div class="card" style="padding:14px;text-align:center;color:#16A34A;font-size:13px;">✅ Alle Gerichte haben eine bestätigte Zutatenliste.</div>`;
+  } else {
+    html+=`<div class="card" style="padding:4px 12px;">${probleme.map(p=>`<div style="padding:8px 0;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:12.5px;font-weight:600;" data-no-translate>${escAttr(p.name)}</div>
+      <div style="font-size:10.5px;color:var(--muted);">${mkDateLabel(p.ds)} · ${p.problem}</div>
+    </div>`).join('')}</div>`;
+  }
+
+  // ── 3) Zuletzt entschieden
+  const done=(diffs||[]).filter(d=>d.status!=='offen').sort((a,b)=>(b.entschieden_am||'').localeCompare(a.entschieden_am||'')).slice(0,8);
+  if(done.length){
+    html+=`<div class="section-lbl" style="margin-top:18px;">🕘 Zuletzt entschieden</div><div class="card" style="padding:4px 12px;">${done.map(d=>`<div style="padding:7px 0;border-bottom:0.5px solid var(--border);font-size:11.5px;">
+      <span style="color:${d.status==='freigegeben'?'#16A34A':'var(--muted)'};font-weight:700;">${d.status==='freigegeben'?'✓ freigegeben':d.status==='abgelehnt'?'✕ abgelehnt':'erledigt'}</span>
+      · ${MK_TAGE[d.tag]||d.tag} W${d.woche} · <span data-no-translate>${escAttr(d.app_name||'–')} → ${escAttr(d.sheet_name||'–')}</span>
+      <span style="color:var(--muted);"> (${d.entschieden_von||''} ${d.entschieden_am?new Date(d.entschieden_am).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''})</span>
+    </div>`).join('')}</div>`;
+  }
+  el.innerHTML=html;
+  translateEl(el);
+}
+window.renderMenuKontrolle=renderMenuKontrolle;
+
+async function menuKontrolleEntscheiden(id, status){
+  try{
+    await api(`menu_sheet_diffs?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status,entschieden_am:new Date().toISOString(),entschieden_von:currentStore?.name||'Organisation'})});
+    showToast(status==='abgelehnt'?'✔ Abgelehnt — App bleibt wie sie ist':'✔ Erledigt');
+    renderMenuKontrolle();
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.menuKontrolleEntscheiden=menuKontrolleEntscheiden;
+
+async function menuKontrolleFreigeben(id){
+  const d=(window._mkDiffs||{})[id];
+  if(!d || !d.app_name || !d.sheet_name) return;
+  const todayStr=new Date().toISOString().split('T')[0];
+  const dates=mkOccurrenceDates(d.woche,d.tag,todayStr,120);
+  if(!dates.length){ showToast('Kein Termin für diese Menü-Woche gefunden',true); return; }
+  if(!confirm(`„${d.app_name}"\n→ „${d.sheet_name}"\n\nFür ${MK_TAGE[d.tag]} (Woche ${d.woche}) übernehmen? Gilt ab ${mkDateLabel(dates[0])} und stellt Forecast/Entsorgung/Feedback der betroffenen Tage mit um.`)) return;
+  const enc=encodeURIComponent, inList=dates.join(',');
+  try{
+    // 1) Freigabe als Override speichern — wird beim Login über die Menüdaten gelegt
+    await api('menu_overrides?on_conflict=epoche,woche,tag,alt_name',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify([{epoche:d.epoche,woche:d.woche,tag:d.tag,alt_name:d.app_name,neu_name:d.sheet_name,gueltig_ab:dates[0],freigegeben_von:currentStore?.name||'Organisation',diff_id:d.id}])});
+    // 2) Slot des Gerichts merken (für die Zutatenliste), dann in den geladenen Menüdaten sofort umbenennen
+    const era=MENU_ERAS.find(e=>e.key===d.epoche)||MENU_ERAS[MENU_ERAS.length-1];
+    const list=(era.data||{})[`w${d.woche}_${d.tag}`]||[];
+    const slot=list.find(e=>e.name===d.app_name)?.slot;
+    list.forEach(e=>{ if(e.name===d.app_name) e.name=d.sheet_name; });
+    // 3) Vom Namen abhängige Daten — NUR an den Tagen, an denen genau diese Woche/Tag-Kombination gilt
+    //    (derselbe Gerichtname kann an anderen Tagen legitim weiterlaufen, z.B. Lasagne).
+    const patch=JSON.stringify({dish_name:d.sheet_name});
+    await api(`forecast_qty?dish_name=eq.${enc(d.app_name)}&forecast_date=in.(${inList})`,{method:'PATCH',body:patch});
+    await api(`disposal?dish_name=eq.${enc(d.app_name)}&disposal_date=in.(${inList})`,{method:'PATCH',body:patch});
+    const fbRows=await api(`essen_feedback?datum=in.(${inList})&select=id,ratings`).catch(()=>[]);
+    for(const f of (fbRows||[])){
+      if(f.ratings && Object.prototype.hasOwnProperty.call(f.ratings,d.app_name)){
+        const r={...f.ratings}; r[d.sheet_name]=r[d.app_name]; delete r[d.app_name];
+        await api(`essen_feedback?id=eq.${f.id}`,{method:'PATCH',body:JSON.stringify({ratings:r})});
+      }
+    }
+    // 4) Zutatenliste an diesem Platz gehörte zum alten Gericht → bis zur Prüfung durch die Küche "unbestätigt"
+    if(slot) await api(`allergene_rezepturen?zkey=eq.${enc(zutatenKey(d.woche,d.tag,slot))}`,{method:'PATCH',body:JSON.stringify({crew_bestaetigt:false})}).catch(()=>{});
+    // 5) Abweichung abschließen
+    await api(`menu_sheet_diffs?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'freigegeben',entschieden_am:new Date().toISOString(),entschieden_von:currentStore?.name||'Organisation'})});
+    showToast('✔ Freigegeben — Küche bitte die Zutatenliste prüfen');
+    renderMenuKontrolle();
+  }catch(e){ console.error(e); showToast('Fehler bei der Freigabe: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.menuKontrolleFreigeben=menuKontrolleFreigeben;
+
 // Forecast-Kontrolle / Ampel (21.09.26, Wunsch Tini) — die alte Erinnerung prüfte nur "existiert
 // IRGENDEIN Eintrag für nächste Woche" und übersah dadurch genau den Fall, dass Laurenzerberg nur für
 // Montag geplant war, Di-Fr aber komplett leer blieben. Hier wird jetzt für jede Filiale und jeden
@@ -7319,7 +7516,7 @@ window.renderForecastAmpel=renderForecastAmpel;
 // Nutzungsstatistik (21.09.26, Wunsch Tini) — zeigt, welche Bereiche der Organisation-Ansicht
 // wirklich am häufigsten genutzt werden, damit künftige UX-Entscheidungen datenbasiert statt nur
 // geschätzt getroffen werden können. Sammelt erst ab jetzt (v6.99.84) Daten, also anfangs noch dünn.
-const VIEW_LABELS={home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Team-Feedback',samosas:'Samosas'};
+const VIEW_LABELS={home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',menuKontrolle:'Menü-Kontrolle',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Team-Feedback',samosas:'Samosas'};
 
 async function renderNutzungsstatistik(){
   const el=document.getElementById('v-nutzungsstatistik');
