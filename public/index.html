@@ -444,7 +444,7 @@ function updateStueckHint(inputEl){
   if(!hintEl) return;
   const conf=getStueckProPortion(inputEl.dataset.dish||'');
   if(!conf) return;
-  const v=parseFloat(inputEl.value)||0;
+  const v=parseFloat(String(inputEl.value).replace(',','.'))||0;
   hintEl.textContent = v>0 ? `🍖 ${Math.round(v*conf.stueck)} ${conf.label}` : `🍖 × ${conf.stueck} ${conf.label}`;
 }
 function getDishBeilagen(dishName){
@@ -4772,7 +4772,7 @@ async function submitKCNote(){
 window.submitKCNote=submitKCNote;
 async function updateIstBestandStore(articleId, value){
   const today=new Date().toISOString().split('T')[0];
-  const v=value===''?null:parseFloat(value);
+  const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`kc_stock?store_id=eq.${currentStore.id}&article_id=eq.${articleId}`,{method:'DELETE'});
     if(v!==null){
@@ -5129,7 +5129,7 @@ async function updateKuecheQty(input){
   const dateStr=input.dataset.date;
   const articleName=input.dataset.article;
   const baseQty=parseFloat(input.dataset.base);
-  const newQty=parseFloat(input.value);
+  const newQty=parseFloat(String(input.value).replace(',','.'));
   if(isNaN(newQty)){return;}
   const isAdjusted = newQty !== baseQty;
   try{
@@ -6711,7 +6711,7 @@ async function _autoSaveForecastCellInner(inputEl, dateStr, dishName){
         }
       });
     } else {
-      const qty=parseFloat(inputEl.value);
+      const qty=parseFloat(String(inputEl.value).replace(',','.'));
       if(!isNaN(qty) && qty>=0){
         rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
       }
@@ -6758,7 +6758,7 @@ async function saveForecastChanges(){
         // Speichern eine bereits eingetragene Größe verloren.
         const allSizeInputs=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)];
         allSizeInputs.forEach(inp=>{
-          const qty=parseFloat(inp.value);
+          const qty=parseFloat(String(inp.value).replace(',','.'));
           // qty>=0 statt qty>0: eine bewusst eingetragene 0 ("brauche ich heute keinen") muss
           // gespeichert werden, sonst erscheint beim nächsten Öffnen wieder der KI-Vorschlag und
           // wirkt so, als würde sich der Wert von selbst "zurückkorrigieren".
@@ -6768,7 +6768,7 @@ async function saveForecastChanges(){
         });
       } else {
         const inp=[...document.querySelectorAll(`#forecast-table-wrap input[data-dish="${escAttr(dishName)}"][data-date="${dateStr}"]`)][0];
-        const qty=inp?parseFloat(inp.value):NaN;
+        const qty=inp?parseFloat(String(inp.value).replace(',','.')):NaN;
         if(!isNaN(qty) && qty>=0){
           rowsToInsert.push({store_id:currentStore.id,forecast_date:dateStr,dish_name:dishName,qty,groesse:'gross',source:'store',changed_by:currentStore.name,changed_at:new Date().toISOString()});
         }
@@ -6811,8 +6811,8 @@ window.addLasagneSize=addLasagneSize;
 
 async function submitWochensalat(){
   const today=new Date().toISOString().split('T')[0];
-  const rest=parseFloat(document.getElementById('wsalat-rest').value);
-  const needed=parseFloat(document.getElementById('wsalat-needed').value);
+  const rest=parseFloat(String(document.getElementById('wsalat-rest').value).replace(',','.'));
+  const needed=parseFloat(String(document.getElementById('wsalat-needed').value).replace(',','.'));
   try{
     await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}`,{method:'DELETE'});
     await api('wochensalat_restbestand',{method:'POST',body:JSON.stringify([{
@@ -8240,7 +8240,7 @@ window.loadSchrankerlKommentare=loadSchrankerlKommentare;
 window.renderSchrankerlTab=renderSchrankerlTab;
 
 async function saveSchrankerlMenge(lieferdatum, slot){
-  const menge=parseFloat(document.getElementById(`schrankerl-menge-${slot}`).value);
+  const menge=parseFloat(String(document.getElementById(`schrankerl-menge-${slot}`).value).replace(',','.'));
   if(isNaN(menge)){ showToast('Bitte eine Zahl eingeben'); return; }
   try{
     await api(`schrankerl_production?lieferdatum=eq.${lieferdatum}&slot=eq.${slot}`,{method:'DELETE'}).catch(()=>{});
@@ -8366,7 +8366,7 @@ async function renderTgBestellungHtml(){
 window.renderTgBestellungHtml=renderTgBestellungHtml;
 
 async function updateTgBestand(articleId, value){
-  const v=value===''?null:parseFloat(value);
+  const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestand:v, aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
     showToast('✓ Gespeichert');
@@ -8959,7 +8959,7 @@ async function orgSimpleApply(i){
   const t=window._orgSimpleTodos?.[i];
   if(!t) return;
   const inp=document.getElementById('simple-inp-'+i);
-  const qty=parseFloat(inp?.value);
+  const qty=parseFloat(String(inp?.value).replace(',','.'));
   if(isNaN(qty)) return;
   const card=document.getElementById('simple-todo-'+i);
   try{
@@ -10097,7 +10097,7 @@ async function orgFcSaveDay(dateStr){
     const store=inp.dataset.store;
     const dish=inp.dataset.dish;
     const groesse=inp.dataset.groesse||'gross';
-    const qty=inp.value===''?null:parseFloat(inp.value);
+    const qty=inp.value===''?null:parseFloat(String(inp.value).replace(',','.'));
     if(!store||!dish||qty==null) continue;
     const src=inp.dataset.copied==='1'?'copied':'org';
     try{
@@ -10127,7 +10127,7 @@ async function orgFcSaveAll(){
     const dish=inp.dataset.dish;
     const dateStr=inp.dataset.date;
     const groesse=inp.dataset.groesse||'gross';
-    const qty=inp.value===''?null:parseFloat(inp.value);
+    const qty=inp.value===''?null:parseFloat(String(inp.value).replace(',','.'));
     if(!store||!dish||!dateStr||qty==null) continue;
     const src=inp.dataset.copied==='1'?'copied':'org';
     try{
@@ -11853,7 +11853,7 @@ async function saveDailyCheckAll(){
   tempRows.forEach(row=>{
     const input=row.querySelector('input');
     const dish=input?.dataset.dish;
-    const v=parseFloat(input?.value);
+    const v=parseFloat(String(input?.value).replace(',','.'));
     if(isNaN(v)){ anyInvalid=true; return; }
     if(dish) temperaturen[dish]=v;
     // Gerichte mit eigener Regel (z.B. Wochensalat: kalt, max. 6°C) fließen NICHT in die allgemeine
@@ -11871,11 +11871,11 @@ async function saveDailyCheckAll(){
   const massnahme=massnahmeEl?massnahmeEl.value.trim():'';
   if(minTemp<65 && !massnahme){ showToast('Bitte Maßnahme bei Temperatur unter 65° eintragen'); return; }
   if(exceptionBreaches.length && !massnahme){ showToast('Zu warm für: '+exceptionBreaches.join(', ')+' — bitte Maßnahme eintragen'); return; }
-  const klein=parseFloat(document.getElementById('kuehl-klein')?.value);
-  const gross=parseFloat(document.getElementById('kuehl-gross')?.value);
+  const klein=parseFloat(String(document.getElementById('kuehl-klein')?.value).replace(',','.'));
+  const gross=parseFloat(String(document.getElementById('kuehl-gross')?.value).replace(',','.'));
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Kühltemperaturen eintragen'); return; }
   const vitrineEl=document.getElementById('kuehl-vitrine');
-  const vitrine=vitrineEl?parseFloat(vitrineEl.value):NaN;
+  const vitrine=vitrineEl?parseFloat(String(vitrineEl.value).replace(',','.')):NaN;
   if(vitrineEl && isNaN(vitrine)){ showToast('Bitte auch die Vitrinen-Temperatur eintragen'); return; }
   const ware=getSelectedWaren()||'';
   const wareOk=document.getElementById('wek-ware-ok-box')?.dataset.value==='1';
@@ -12037,7 +12037,7 @@ function checkWareneingangTemp(){
   let anyLow=false;
   rows.forEach(row=>{
     if(row.style.display==='none') return;
-    const v=parseFloat(row.querySelector('input')?.value);
+    const v=parseFloat(String(row.querySelector('input')?.value).replace(',','.'));
     if(isNaN(v)) return;
     const maxException=row.dataset.max;
     if(maxException){
@@ -12069,8 +12069,8 @@ async function toggleReinigungField(field, itemEl){
 }
 
 async function saveKuehleinrichtungen(){
-  const klein=parseFloat(document.getElementById('kuehl-klein').value);
-  const gross=parseFloat(document.getElementById('kuehl-gross').value);
+  const klein=parseFloat(String(document.getElementById('kuehl-klein').value).replace(',','.'));
+  const gross=parseFloat(String(document.getElementById('kuehl-gross').value).replace(',','.'));
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Temperaturen eingeben'); return; }
   const today=new Date().toISOString().split('T')[0];
   try{
@@ -12231,7 +12231,7 @@ async function uploadMangelFoto(blob){
 
 // ---- GELDWECHSEL (Wechselgeld-Anfrage an Michi/Transporter) ----
 async function requestGeldwechsel(){
-  const betrag=parseFloat(document.getElementById('geldwechsel-betrag')?.value);
+  const betrag=parseFloat(String(document.getElementById('geldwechsel-betrag')?.value).replace(',','.'));
   const format=document.getElementById('geldwechsel-format')?.value||'Gemischt';
   const detail=document.getElementById('geldwechsel-detail')?.value?.trim()||null;
   if(!betrag || betrag<=0){ showToast('Bitte Betrag eingeben'); return; }
@@ -13264,7 +13264,7 @@ async function renderInventurBlock(storeList){
 
 async function updateIstBestandFuerFiliale(storeId, articleId, value){
   const today=new Date().toISOString().split('T')[0];
-  const v=value===''?null:parseFloat(value);
+  const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
     if(v!==null){
@@ -13621,7 +13621,7 @@ async function renderKuechenlager(){
 window.renderKuechenlager=renderKuechenlager;
 
 async function updateKuechenlagerBestand(articleId, value){
-  const v=value===''?null:parseFloat(value);
+  const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`articles?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:v})});
     const a=articles.find(x=>x.id===articleId);
@@ -14397,7 +14397,7 @@ async function updateSoldOutTime(slot, dishName, value){
 }
 async function updateLeftover(slot, dishName, value){
   const today=_disposalDate || new Date().toISOString().split('T')[0];
-  const v=value===''?null:parseFloat(value);
+  const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time,note`).catch(()=>[]);
     const soldOut=existing?.[0]?.sold_out_time ?? null;
@@ -15442,11 +15442,11 @@ async function submitKitchenMonitoring(){
     lager_kontrolliert: _kmDraft.lager!=null?_kmDraft.lager:(prev.lager_kontrolliert||false),
     reinigung_gemacht: _kmDraft.rein!=null?_kmDraft.rein:(prev.reinigung_gemacht||false),
     wc_gereinigt_von: wcFrei || _kmDraft.wc || prev.wc_gereinigt_von || null,
-    temp_kuehlhaus: document.getElementById('km-temp-kuehlhaus')?.value ? parseFloat(document.getElementById('km-temp-kuehlhaus').value) : null,
-    temp_kuehlschrank_kueche: document.getElementById('km-temp-kkueche')?.value ? parseFloat(document.getElementById('km-temp-kkueche').value) : null,
-    temp_kuehlschrank_shop: document.getElementById('km-temp-kshop')?.value ? parseFloat(document.getElementById('km-temp-kshop').value) : null,
-    temp_tiefkuehler: document.getElementById('km-temp-tiefkuehler')?.value ? parseFloat(document.getElementById('km-temp-tiefkuehler').value) : null,
-    temp_vitrine: document.getElementById('km-temp-vitrine')?.value ? parseFloat(document.getElementById('km-temp-vitrine').value) : null,
+    temp_kuehlhaus: document.getElementById('km-temp-kuehlhaus')?.value ? parseFloat(String(document.getElementById('km-temp-kuehlhaus').value).replace(',','.')) : null,
+    temp_kuehlschrank_kueche: document.getElementById('km-temp-kkueche')?.value ? parseFloat(String(document.getElementById('km-temp-kkueche').value).replace(',','.')) : null,
+    temp_kuehlschrank_shop: document.getElementById('km-temp-kshop')?.value ? parseFloat(String(document.getElementById('km-temp-kshop').value).replace(',','.')) : null,
+    temp_tiefkuehler: document.getElementById('km-temp-tiefkuehler')?.value ? parseFloat(String(document.getElementById('km-temp-tiefkuehler').value).replace(',','.')) : null,
+    temp_vitrine: document.getElementById('km-temp-vitrine')?.value ? parseFloat(String(document.getElementById('km-temp-vitrine').value).replace(',','.')) : null,
     submitted_by: currentStore?.name || 'Kitchen',
   };
   try{
@@ -17614,7 +17614,7 @@ function switchKCTab(t){kcTab=t;renderKCLager();}
 function switchKCStore(id){kcLagerStoreId=id;renderKCLager();}
 async function updateIstBestand(articleId, value){
   const today=new Date().toISOString().split('T')[0];
-  const v=value===''?null:parseFloat(value);
+  const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`kc_stock?store_id=eq.${kcLagerStoreId}&article_id=eq.${articleId}`,{method:'DELETE'});
     if(v!==null){
