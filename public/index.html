@@ -3815,52 +3815,76 @@ async function notrufUberBestellt(id){
 window.notrufUberBestellt=notrufUberBestellt;
 
 // ==== NOTSTAND (05.10.26, Wunsch Tini) ====
-// Wenn etwas WIRKLICH komplett aus ist und man nicht mehr arbeiten kann: eine Meldung direkt an die
+// Wenn etwas aus ist und dringend (meist bis morgen) gebraucht wird: Meldung mit Menge + Termin direkt an die
 // Zentrale (Widget oben auf deren Startseite, Ton/Toast), unabhängig von der normalen Bestellung.
 function notstandButtonHtml(){
   if(!currentStore || currentStore.id==='zentrale') return '';
-  return `<button onclick="showNotstandModal()" style="width:100%;margin:0 0 12px;padding:10px;border:1.5px solid #DC2626;border-radius:10px;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;cursor:pointer;">🚨 Notstand — etwas ist aus, wir können nicht weiterarbeiten</button>`;
+  return `<button onclick="showNotstandModal()" style="width:100%;margin:0 0 12px;padding:10px;border:1.5px solid #DC2626;border-radius:10px;background:#FEF2F2;color:#B91C1C;font-size:13px;font-weight:700;cursor:pointer;">🚨 Notstand — aus, brauchen wir dringend</button>`;
+}
+function notstandDatum(offsetDays){
+  const d=new Date(Date.now()+offsetDays*86400000);
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Vienna'}).format(d); // YYYY-MM-DD
 }
 function showNotstandModal(){
   closeNotstandModal();
-  const opts=(articles||[]).filter(a=>!a.archiviert).sort((x,y)=>x.name.localeCompare(y.name,'de')).map(a=>`<option value="${a.id}">${escAttr(a.name)}</option>`).join('');
+  const opts=(articles||[]).filter(a=>!a.archiviert).sort((x,y)=>x.name.localeCompare(y.name,'de')).map(a=>`<option value="${a.id}" data-unit="${escAttr(a.unit||'')}">${escAttr(a.name)}</option>`).join('');
   const ov=document.createElement('div');
   ov.id='notstand-modal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.25);max-height:90vh;overflow-y:auto;">
-    <div style="font-size:16px;font-weight:800;color:#B91C1C;margin-bottom:4px;">🚨 Notstand melden</div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:12px;">Nur wenn etwas wirklich aus ist und ihr nicht mehr arbeiten könnt. Geht sofort an die Organisation.</div>
-    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Was ist aus?</label>
-    <select id="notstand-artikel" onchange="document.getElementById('notstand-frei').style.display=this.value===''?'block':'none'" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:8px;background:#fff;">
+    <div style="font-size:16px;font-weight:800;color:#B91C1C;margin-bottom:4px;">🚨 Notstand — dringend benötigt</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:12px;">Etwas ist aus und wird dringend gebraucht. Geht sofort an die Organisation, zusätzlich zur normalen Bestellung.</div>
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Was brauchen wir?</label>
+    <select id="notstand-artikel" onchange="notstandArtikelChanged()" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:8px;background:#fff;">
       <option value="">Anderes (unten eintippen)…</option>${opts}
     </select>
     <input id="notstand-frei" type="text" placeholder="z.B. Reis, Kokosmilch, Becher…" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
-    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Was geht dadurch nicht mehr? <span>(optional)</span></label>
-    <textarea id="notstand-notiz" placeholder="z.B. Kein Reis mehr — Curry kann nicht ausgegeben werden" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:64px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:14px;"></textarea>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div style="flex:1;"><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Menge <span id="notstand-unit"></span></label>
+        <input id="notstand-menge" type="text" inputmode="decimal" placeholder="z.B. 2" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;"></div>
+      <div style="flex:1;"><label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Benötigt bis</label>
+        <select id="notstand-bis" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:#fff;box-sizing:border-box;">
+          <option value="${notstandDatum(0)}">Heute noch</option>
+          <option value="${notstandDatum(1)}" selected>Morgen</option>
+          <option value="${notstandDatum(2)}">Übermorgen</option>
+        </select></div>
+    </div>
+    <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Anmerkung <span>(optional)</span></label>
+    <textarea id="notstand-notiz" placeholder="z.B. Komplett aus, ohne geht das Curry nicht" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:56px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:14px;"></textarea>
     <div style="display:flex;gap:8px;">
       <button onclick="closeNotstandModal()" style="flex:1;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:13px;cursor:pointer;">Abbrechen</button>
-      <button id="notstand-send-btn" onclick="sendNotstand()" style="flex:2;background:#DC2626;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">🚨 Notstand senden</button>
+      <button id="notstand-send-btn" onclick="sendNotstand()" style="flex:2;background:#DC2626;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">🚨 Dringend melden</button>
     </div>
   </div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) closeNotstandModal(); });
   document.body.appendChild(ov);
+}
+function notstandArtikelChanged(){
+  const sel=document.getElementById('notstand-artikel'); if(!sel) return;
+  document.getElementById('notstand-frei').style.display=sel.value===''?'block':'none';
+  const u=sel.selectedOptions[0]?.dataset?.unit||'';
+  document.getElementById('notstand-unit').textContent=u?`(${u})`:'';
 }
 function closeNotstandModal(){ const m=document.getElementById('notstand-modal'); if(m) m.remove(); }
 async function sendNotstand(){
   const aid=document.getElementById('notstand-artikel')?.value||'';
   const frei=(document.getElementById('notstand-frei')?.value||'').trim();
   const notiz=(document.getElementById('notstand-notiz')?.value||'').trim();
+  const mengeRaw=(document.getElementById('notstand-menge')?.value||'').trim().replace(',','.');
+  const menge=mengeRaw===''?null:parseFloat(mengeRaw);
+  const bis=document.getElementById('notstand-bis')?.value||notstandDatum(1);
   const art=aid?(articles||[]).find(a=>String(a.id)===aid):null;
   const produkt=art?art.name:frei;
-  if(!produkt){ showToast('Bitte angeben, was aus ist',true); return; }
+  if(!produkt){ showToast('Bitte angeben, was gebraucht wird',true); return; }
+  if(menge!=null && (isNaN(menge)||menge<=0)){ showToast('Bitte eine gültige Menge eingeben',true); return; }
   const btn=document.getElementById('notstand-send-btn'); if(btn){ btn.disabled=true; btn.textContent='Wird gesendet…'; }
   try{
-    await api('notstand_meldungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id, article_id:art?art.id:null, produkt, notiz:notiz||null, gemeldet_von:currentStore.name||currentStore.id, status:'offen'}])});
+    await api('notstand_meldungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id, article_id:art?art.id:null, produkt, menge, benoetigt_bis:bis, notiz:notiz||null, gemeldet_von:currentStore.name||currentStore.id, status:'offen'}])});
     closeNotstandModal();
-    showToast('🚨 Notstand gemeldet — die Organisation ist informiert');
+    showToast('🚨 Dringend gemeldet — die Organisation ist informiert');
   }catch(e){
     console.error(e);
-    if(btn){ btn.disabled=false; btn.textContent='🚨 Notstand senden'; }
+    if(btn){ btn.disabled=false; btn.textContent='🚨 Dringend melden'; }
     showToast('Fehler beim Senden — bitte direkt anrufen: '+(e?.message||String(e)).slice(0,80),true);
   }
 }
@@ -3871,19 +3895,22 @@ async function renderNotstandZentrale(){
     const rows=await api(`notstand_meldungen?status=eq.offen&select=*&order=id.asc`).catch(()=>null);
     if(!rows) return;
     const neu=rows.filter(r=>!_notstandSeen.has(r.id));
-    if(neu.length){ neu.forEach(r=>_notstandSeen.add(r.id)); showToast('🚨 Notstand: '+neu.map(r=>r.produkt).join(', '),true); }
+    if(neu.length){ neu.forEach(r=>_notstandSeen.add(r.id)); showToast('🚨 Dringend: '+neu.map(r=>r.produkt).join(', '),true); }
+    const heute=notstandDatum(0), morgen=notstandDatum(1);
+    const bisLabel=d=>!d?'':(d<=heute?'HEUTE':(d===morgen?'MORGEN':new Date(d+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})));
+    const unitOf=r=>{ const a=r.article_id?(articles||[]).find(x=>x.id===r.article_id):null; return a?.unit||''; };
     el.innerHTML=rows.map(r=>`<div class="card" style="padding:14px;margin-bottom:12px;border:2px solid #DC2626;background:#FEF2F2;">
-      <div data-no-translate style="font-size:14px;font-weight:800;color:#991B1B;">🚨 Notstand ${NOTRUF_NAMEN[r.store_id]||r.gemeldet_von||r.store_id}: ${escAttr(r.produkt)} ist aus</div>
+      <div data-no-translate style="font-size:14px;font-weight:800;color:#991B1B;">🚨 ${NOTRUF_NAMEN[r.store_id]||r.gemeldet_von||r.store_id}: ${r.menge!=null?formatQty(r.menge)+' '+escAttr(unitOf(r))+' ':''}${escAttr(r.produkt)} dringend${r.benoetigt_bis?' bis <u>'+bisLabel(r.benoetigt_bis)+'</u>':''}</div>
       ${r.notiz?`<div data-no-translate style="font-size:12.5px;color:#7F1D1D;margin-top:4px;">${escAttr(r.notiz)}</div>`:''}
       <div style="font-size:11px;color:#7F1D1D;margin-top:4px;">gemeldet ${new Date(r.created_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Vienna'})} Uhr</div>
-      <button onclick="notstandErledigt(${r.id})" style="margin-top:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">✓ Erledigt / gelöst</button></div>`).join('');
+      <button onclick="notstandErledigt(${r.id})" style="margin-top:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">✓ Erledigt / organisiert</button></div>`).join('');
   }catch(e){console.error(e);}
 }
 async function notstandErledigt(id){
   await api(`notstand_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}).catch(e=>showToast('Fehler beim Speichern',true));
   renderNotstandZentrale();
 }
-window.showNotstandModal=showNotstandModal; window.closeNotstandModal=closeNotstandModal; window.sendNotstand=sendNotstand; window.notstandErledigt=notstandErledigt; window.renderNotstandZentrale=renderNotstandZentrale;
+window.notstandArtikelChanged=notstandArtikelChanged; window.showNotstandModal=showNotstandModal; window.closeNotstandModal=closeNotstandModal; window.sendNotstand=sendNotstand; window.notstandErledigt=notstandErledigt; window.renderNotstandZentrale=renderNotstandZentrale;
 
 // Alle 20 Sekunden prüfen — bewusst häufig, weil's im Ernstfall wirklich schnell gehen muss.
 setInterval(checkEssenNotruf, 20000);
