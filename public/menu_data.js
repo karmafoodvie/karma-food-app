@@ -687,7 +687,7 @@ const MENU_DATA_HERBST_WINTER_2026_27 = {
  "w1_mo": [
   {
    "slot": "gericht1",
-   "name": "Melanzani Couscous Bowl mit Limetten Dip",
+   "name": "Orientalische Couscous Bowl mit Limetten Dip",
    "zutaten": "",
    "allergene": {
     "main": [],
