@@ -6407,8 +6407,10 @@ async function openStoreDishHistory(dish, dateStr){
 
   // Tab 1: exakt dieses Gericht, an früheren Terminen (4-Wochen-Rhythmus, chronologisch)
   const hist=[];
-  for(let wBack=1; wBack<=12; wBack++){
-    const td=dateMinusDays(dateStr, wBack*7);
+  // 06.10.26: ALLE früheren Termine mit exakt diesem Gericht, egal welcher Wochentag (z.B. Veggie
+  // Bolognese Lasagne läuft Di UND Do) — nicht mehr nur im 7-Tage-Raster desselben Wochentags.
+  const _dishDates=Object.keys(qtyByDish).filter(k=>k.slice(k.indexOf('|')+1)===dish).map(k=>k.slice(0,k.indexOf('|'))).filter(d=>d<dateStr).sort().reverse();
+  for(const td of _dishDates){
     const k=td+'|'+dish;
     if(qtyByDish[k]==null) continue;
     const dp=dispByDateCat[td+'|'+cat];
@@ -9355,6 +9357,19 @@ async function renderOrgStoreForecast(){
         }
         hist.push({date:td, qty:q, sizes, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
       }
+      // 06.10.26: Zusätzlich ALLE anderen früheren Termine mit exakt diesem Gericht (anderer
+      // Wochentag, z.B. Do statt Di) — nur für die Anzeige; die Schätzung oben nutzt weiter `hist`.
+      const histShow=[...hist]; const _have=new Set(hist.map(h=>h.date));
+      Object.keys(qtyByDish).forEach(k=>{
+        const i=k.indexOf('|'); const td=k.slice(0,i);
+        if(k.slice(i+1)!==dish||td>=dateStr||_have.has(td)||qtyByDish[k]==null) return;
+        const dp=dispByDateCat[td+'|'+cat];
+        let sizes=null;
+        if(catIsLasagne) sizes=LASAGNE_SIZES.map(sz=>({l:sz.l, qty:qtyBySize[td+'|'+dish+'|'+sz.k]?.qty})).filter(x=>x.qty);
+        else if(catIsMeatballs) sizes=meatballsTeileFor(dish).map(t=>({l:t.l, qty:qtyBySize[td+'|'+dish+'|'+t.k]?.qty})).filter(x=>x.qty);
+        histShow.push({date:td, qty:qtyByDish[k], sizes, leftover:dp?dp.leftover:null, soldOutTime:dp?dp.soldOutTime:null, weather:weatherHistMap[td]||null});
+      });
+      histShow.sort((a,b)=>b.date.localeCompare(a.date));
       // Tab 2: ALLE [Wochentag]e in dieser Kategorie, unabhängig vom konkreten Gericht — jede Woche
       // rückwirkend (nicht nur die 4-Wochen-Menüzyklus-Punkte), Menge = Summe aller Gerichte der
       // Kategorie an dem Tag. Nutzt dieselben, ohnehin kategorie-basierten Entsorgungsdaten.
@@ -9374,7 +9389,7 @@ async function renderOrgStoreForecast(){
       }
       const detailId=`ordet-${dateStr}-${ci}`;
       const weekdayLabel=new Date(dateStr+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long'});
-      window._orgDetailData[detailId]={dish, hist, histWeekday, weekdayLabel, cat};
+      window._orgDetailData[detailId]={dish, hist:histShow, histWeekday, weekdayLabel, cat};
       let dispLine='';
       if(disp?.soldOutTime) dispLine=`<div style="font-size:9px;color:#DC2626;">🔥 ${disp.soldOutTime}</div>`;
       else if(disp) dispLine=`<div style="font-size:9px;color:${disp.leftover>4?'#C2410C':'#16A34A'};">🗑 ${formatQty(disp.leftover)}</div>`;
