@@ -222,6 +222,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
     <div id="v-maengel" class="view"></div>
+    <div id="v-catering" class="view"></div>
     <div id="v-messen" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
@@ -1812,8 +1813,8 @@ async function loginAs(store){
     checkForBroadcasts();
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
-    const orgViews=['management','maengel','grundreinigung','kuechenlager'];
-    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager','grundreinigung'];
+    const orgViews=['management','maengel','grundreinigung','kuechenlager','catering'];
+    const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager','grundreinigung','catering'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
     goTo(allowedViews.includes(savedView)?savedView:'home');
@@ -1910,7 +1911,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle'};
+  const subs={catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1919,7 +1920,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -7856,7 +7857,7 @@ window.renderForecastAmpel=renderForecastAmpel;
 // Nutzungsstatistik (21.09.26, Wunsch Tini) — zeigt, welche Bereiche der Organisation-Ansicht
 // wirklich am häufigsten genutzt werden, damit künftige UX-Entscheidungen datenbasiert statt nur
 // geschätzt getroffen werden können. Sammelt erst ab jetzt (v6.99.84) Daten, also anfangs noch dünn.
-const VIEW_LABELS={home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',menuKontrolle:'Menü-Kontrolle',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Feedback',samosas:'Samosas'};
+const VIEW_LABELS={catering:'Catering',home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',menuKontrolle:'Menü-Kontrolle',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Feedback',samosas:'Samosas'};
 
 async function renderNutzungsstatistik(){
   const el=document.getElementById('v-nutzungsstatistik');
@@ -7950,6 +7951,13 @@ async function renderManagement(){
     </button>
 
     <div class="section-lbl" style="margin-top:16px;">🔧 Meldungen & Kontrolle</div>
+    <button class="org-btn" onclick="goTo('catering')" style="border-color:#0F6E56;">
+      <span class="org-btn-icon">🍽️</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#0F6E56;">Catering</span>
+        <span class="org-btn-sub">Produktionspläne eintragen, Packliste — statt PDF in WhatsApp</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('maengel')" style="border-color:#0F6E56;">
       <span class="org-btn-icon">🔧</span>
       <div class="org-btn-text">
@@ -15511,6 +15519,7 @@ async function renderKitchenDaily(){
   // Links-Liste im Onboarding — neutrale item-rows in einer Karte statt bunter Einzelkacheln).
   html+=`<div class="section-lbl" style="margin-top:4px;">🔗 Bereiche</div><div class="card">`;
   const kdLinks=[
+    {icon:'🍽️', label:'Catering', sub:'Produktionspläne & Packliste', action:"goTo('catering')"},
     {icon:'🧹', label:'Grundreinigung', sub:'Fällige Stores & Checkliste eintragen', action:"goTo('grundreinigung')"},
     {icon:'🏛️', label:'Stadtgemeinde', sub:'Zahlungen erfassen & Übersicht', action:"goTo('stadtgemeinde')"},
     {icon:'🏭', label:'Küchenlager', sub:'Zentraler Bestand — FOODPACK, INVOLO & Co.', action:"goTo('kuechenlager')"},
@@ -17495,6 +17504,124 @@ async function markFeedbackBearbeitet(feedbackId, el){
   }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
 }
 window.markFeedbackBearbeitet=markFeedbackBearbeitet;
+
+// ==== CATERING (06.10.26) — Produktionspläne, die Simone sonst als PDF in die WhatsApp-Gruppe schickt ====
+const CATERING_DEFAULT_HINWEIS='NUR IN PLASTIKBOXEN GELIEFERT!! KEIN EQUIPMENT! KEIN RÜCKTRANSPORT!';
+let _cateringList=[];
+function cateringDateLabel(d){ return new Date(d+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
+function cateringCanEdit(){ return currentStore?.id==='zentrale'||currentStore?.id==='kitchen'; }
+async function renderCatering(){
+  const el=document.getElementById('v-catering');
+  const today=new Date().toISOString().split('T')[0];
+  const rows=await api(`caterings?status=eq.aktiv&datum=gte.${today}&select=*&order=datum.asc`).catch(()=>[]);
+  _cateringList=rows||[];
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🍽️','Catering','Produktionspläne — ersetzt die PDFs in der WhatsApp-Gruppe','#0F6E56');
+  if(cateringCanEdit()) html+=`<button onclick="showCateringForm()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">➕ Neues Catering eintragen</button>`;
+  if(!_cateringList.length) html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine anstehenden Caterings.</div>`;
+  _cateringList.forEach(c=>{
+    const left=(c.packliste||[]).filter(p=>!p.done).length;
+    const days=Math.round((new Date(c.datum+'T00:00:00')-new Date(today+'T00:00:00'))/86400000);
+    const when=days===0?'HEUTE':days===1?'MORGEN':'in '+days+' Tagen';
+    html+=`<div class="card" onclick="showCateringDetail(${c.id})" style="padding:12px 14px;margin-bottom:8px;cursor:pointer;${days<=1?'border-color:#F97316;':''}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+        <strong style="font-size:14px;">${escAttr(c.kunde)}</strong>
+        <span style="font-size:10.5px;font-weight:700;color:${days<=1?'#C2410C':'var(--muted)'};">${when}</span>
+      </div>
+      <div style="font-size:12px;color:var(--sub);margin-top:3px;">${cateringDateLabel(c.datum)} · ${c.personen||'?'} PAX${c.ankunft?' · Ankunft '+escAttr(c.ankunft):''}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px;">${left?`☐ ${left} Packpunkt${left>1?'e':''} offen`:((c.packliste||[]).length?'☑ alles eingepackt':'')}</div>
+    </div>`;
+  });
+  el.innerHTML=html; translateEl(el);
+}
+window.renderCatering=renderCatering;
+function cateringText(c){
+  const L=[`📋 CATERING ${c.kunde}`,`📅 ${cateringDateLabel(c.datum)}`];
+  if(c.ort) L.push(`📍 ${c.ort}`); if(c.ankunft) L.push(`🕐 Ankunft Location ${c.ankunft}`);
+  if(c.kontakt) L.push(`☎️ Kontakt vor Ort: ${c.kontakt}`); if(c.personen) L.push(`👥 ${c.personen} PAX`);
+  if(c.hinweis) L.push('',`⚠️ ${c.hinweis}`);
+  L.push('','LUNCH'); (c.menue||[]).forEach(m=>L.push('• '+m)); if((c.extras||[]).length) L.push((c.extras||[]).join(', '));
+  if((c.packliste||[]).length){ L.push('','PACKLISTE'); c.packliste.forEach(p=>L.push((p.done?'☑ ':'☐ ')+p.t)); }
+  return L.join('\n');
+}
+function showCateringDetail(id){
+  const c=_cateringList.find(x=>x.id===id); if(!c) return;
+  const el=document.getElementById('v-catering');
+  const row=(l,v)=>v?`<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><div style="width:105px;color:var(--muted);flex-shrink:0;">${l}</div><div style="flex:1;font-weight:500;">${escAttr(String(v))}</div></div>`:'';
+  let html=`<div onclick="renderCatering()" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">‹ Zurück zur Catering-Liste</div>`;
+  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);">CATERING PRODUKTIONSPLAN</div><div style="font-size:22px;font-weight:800;margin-bottom:10px;">${escAttr(c.kunde)}</div>`;
+  html+=`<div class="card" style="padding:6px 14px;margin-bottom:10px;">${row('Veranstaltungsdatum',cateringDateLabel(c.datum))}${row('Ort',c.ort)}${row('Ankunft Location',c.ankunft)}${row('Kontakt vor Ort',c.kontakt)}${row('Personen',c.personen?c.personen+' PAX':'')}</div>`;
+  if(c.hinweis) html+=`<div style="background:#FEF2F2;border:1.5px solid #DC2626;color:#991B1B;border-radius:10px;padding:10px 12px;font-size:12.5px;font-weight:800;margin-bottom:12px;">⚠️ ${escAttr(c.hinweis)}</div>`;
+  html+=`<div class="section-lbl">LUNCH${c.personen?` · ${c.personen} PAX`:''}</div><div class="card" style="padding:12px 14px;margin-bottom:12px;">`+(c.menue||[]).map(m=>`<div style="font-size:13.5px;font-weight:600;padding:3px 0;">${escAttr(m)}</div>`).join('')+((c.extras||[]).length?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${(c.extras||[]).map(escAttr).join(', ')}</div>`:'')+`</div>`;
+  html+=`<div class="section-lbl">PACKLISTE <span style="font-weight:500;color:var(--muted);">· abhaken, wenn eingepackt</span></div><div class="card" style="padding:6px 14px;margin-bottom:12px;">`;
+  if(!(c.packliste||[]).length) html+=`<div style="font-size:12px;color:var(--muted);padding:8px 0;">Keine Packliste hinterlegt.</div>`;
+  (c.packliste||[]).forEach((p,i)=>{ html+=`<label style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;"><input type="checkbox" ${p.done?'checked':''} onchange="toggleCateringPack(${c.id},${i},this.checked,this)" style="width:24px;height:24px;accent-color:#0F6E56;flex-shrink:0;"><span style="font-size:14px;${p.done?'text-decoration:line-through;color:var(--muted);':''}">${escAttr(p.t)}</span></label>`; });
+  html+=`</div><div style="display:flex;gap:8px;">
+    <button onclick="copyCateringText(${c.id})" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;">📋 Text kopieren (WhatsApp)</button>
+    ${cateringCanEdit()?`<button onclick="showCateringForm(${c.id})" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;">✏️ Bearbeiten</button>`:''}</div>`;
+  el.innerHTML=html; translateEl(el); window.scrollTo(0,0);
+}
+async function toggleCateringPack(id,i,checked,inp){
+  const c=_cateringList.find(x=>x.id===id); if(!c) return;
+  const prev=c.packliste[i].done; c.packliste[i].done=checked;
+  const span=inp.nextElementSibling; if(span){ span.style.textDecoration=checked?'line-through':'none'; span.style.color=checked?'var(--muted)':''; }
+  try{ await api(`caterings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({packliste:c.packliste,updated_at:new Date().toISOString()})}); }
+  catch(e){ console.error(e); c.packliste[i].done=prev; inp.checked=prev; showToast('Fehler beim Speichern',true); }
+}
+function copyCateringText(id){
+  const c=_cateringList.find(x=>x.id===id); if(!c) return;
+  const t=cateringText(c);
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>showToast('✓ Kopiert — in WhatsApp einfügen')).catch(()=>{ window.prompt('Text kopieren:',t); });
+}
+function closeCateringForm(){ document.getElementById('catering-modal')?.remove(); }
+function showCateringForm(id){
+  closeCateringForm();
+  const c=id?_cateringList.find(x=>x.id===id):null;
+  const inp=(i,l,v,ph='',type='text')=>`<label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">${l}</label><input id="cf-${i}" type="${type}" value="${escAttr(v||'')}" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;">`;
+  const ta=(i,l,v,ph='',rows=3)=>`<label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">${l}</label><textarea id="cf-${i}" rows="${rows}" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;">${escAttr(v||'')}</textarea>`;
+  const ov=document.createElement('div'); ov.id='catering-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:18px;margin:auto;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:2px;">${c?'✏️ Catering bearbeiten':'➕ Neues Catering'}</div>
+    ${inp('kunde','Kunde / Veranstaltung *',c?.kunde,'z.B. ÖGUT')}
+    <div style="display:flex;gap:8px;"><div style="flex:1;">${inp('datum','Datum *',c?.datum,'','date')}</div><div style="flex:1;">${inp('personen','Personen (PAX)',c?.personen,'25','number')}</div></div>
+    ${inp('ort','Ort',c?.ort,'Straße, PLZ Wien')}
+    <div style="display:flex;gap:8px;"><div style="flex:1;">${inp('ankunft','Ankunft Location',c?.ankunft,'11:30')}</div><div style="flex:1;">${inp('kontakt','Kontakt vor Ort',c?.kontakt,'Name + Tel.')}</div></div>
+    ${ta('hinweis','Wichtiger Hinweis (rot, leer lassen = keiner)',c?c.hinweis:CATERING_DEFAULT_HINWEIS,'',2)}
+    ${ta('menue','Lunch — ein Gericht pro Zeile',(c?.menue||[]).join('\n'),'Green Power Pesto Veggie Lasagne mit Salat\nSüßkartoffel Linsen Dal mit Reis',4)}
+    ${ta('extras','Dazu (Komma getrennt)',(c?.extras||[]).join(', '),'Limetten, Kräuter, Mangochilisauce',2)}
+    ${ta('pack','Packliste — ein Punkt pro Zeile',(c?c.packliste.map(p=>p.t):['Ausgedruckte Menüs']).join('\n'),'',4)}
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button onclick="closeCateringForm()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button id="cf-save" onclick="saveCatering(${id||'null'})" style="flex:2;padding:11px;border:none;border-radius:10px;background:#0F6E56;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Speichern ✓</button>
+    </div>
+    ${c?`<button onclick="cancelCatering(${c.id})" style="width:100%;margin-top:8px;padding:9px;border:none;background:none;color:#B91C1C;font-size:12px;cursor:pointer;">Catering absagen / entfernen</button>`:''}
+  </div>`;
+  document.body.appendChild(ov);
+}
+async function saveCatering(id){
+  const g=k=>(document.getElementById('cf-'+k)?.value||'').trim();
+  const kunde=g('kunde'), datum=g('datum');
+  if(!kunde||!datum){ showToast('Kunde und Datum fehlen',true); return; }
+  const old=id?_cateringList.find(x=>x.id===id):null;
+  const lines=s=>s.split('\n').map(x=>x.trim()).filter(Boolean);
+  // bereits abgehakte Punkte bleiben abgehakt, wenn Text unverändert
+  const doneSet=new Set((old?.packliste||[]).filter(p=>p.done).map(p=>p.t));
+  const body={kunde,datum,ort:g('ort')||null,ankunft:g('ankunft')||null,kontakt:g('kontakt')||null,personen:g('personen')?parseInt(g('personen'),10):null,hinweis:g('hinweis')||null,
+    menue:lines(g('menue')),extras:g('extras').split(',').map(x=>x.trim()).filter(Boolean),packliste:lines(g('pack')).map(t=>({t,done:doneSet.has(t)})),updated_at:new Date().toISOString()};
+  const b=document.getElementById('cf-save'); if(b){b.disabled=true;b.textContent='Speichert…';}
+  try{
+    if(id) await api(`caterings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(body)});
+    else await api('caterings',{method:'POST',body:JSON.stringify({...body,created_by:currentStore?.id||null})});
+    closeCateringForm(); showToast('✓ Gespeichert'); await renderCatering();
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); if(b){b.disabled=false;b.textContent='Speichern ✓';} }
+}
+async function cancelCatering(id){
+  if(!confirm('Catering wirklich absagen/entfernen?')) return;
+  try{ await api(`caterings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'abgesagt',updated_at:new Date().toISOString()})}); closeCateringForm(); showToast('Entfernt'); await renderCatering(); }
+  catch(e){ console.error(e); showToast('Fehler',true); }
+}
+Object.assign(window,{showCateringDetail,toggleCateringPack,copyCateringText,showCateringForm,closeCateringForm,saveCatering,cancelCatering});
 
 async function renderTeamFeedback(){
   const el=document.getElementById('v-teamFeedback');
