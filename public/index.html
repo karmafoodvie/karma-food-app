@@ -18006,9 +18006,51 @@ async function renderTeamFeedback(){
     </div>`;
   };
   const group=(title,sub,col,list)=>{ if(!list.length) return; html+=`<div class="section-lbl" style="margin-top:6px;color:${col};">${title} <span style="font-weight:500;color:var(--muted);">· ${sub}</span></div>`; list.sort((a,b)=>(a.avg??9)-(b.avg??9)).forEach(x=>html+=dishRow(x)); };
-  group('⚠️ HANDLUNGSBEDARF','Ø unter 3,0 — hier ansetzen','#DC2626',crit);
-  group('🟠 MITTELFELD','verbesserbar','#EA580C',mid);
-  group('✅ LÄUFT GUT','Ø ab 4,0 oder Perfekt','#16A34A',top);
+  // ===== Ansichten (06.10.26): nach Kategorie · nach Thema · nach Filiale · alle Gerichte =====
+  const _mode=window._tfView||'kat';
+  const modeBtn=(k,l)=>`<button onclick="window._tfView='${k}';renderTeamFeedback()" style="flex:1;padding:8px 4px;border-radius:9px;font-size:11.5px;font-weight:700;cursor:pointer;border:1px solid ${_mode===k?'#1a1a18':'var(--border)'};background:${_mode===k?'#1a1a18':'#fff'};color:${_mode===k?'#fff':'var(--sub)'};">${l}</button>`;
+  html+=`<div style="display:flex;gap:5px;margin-bottom:12px;">${modeBtn('kat','🗂️ Kategorie')}${modeBtn('thema','🏷️ Thema')}${modeBtn('filiale','🏪 Filiale')}${modeBtn('alle','📋 Alle')}</div>`;
+  const merge=(list)=>{ const m={name:'',d:{todayVals:[],historyVals:[],comments:[],tags:{},byStore:{},perfekt:[]},all:[],perf:0};
+    list.forEach(x=>{ m.all.push(...x.all); m.perf+=x.perf; m.d.todayVals.push(...x.d.todayVals); m.d.historyVals.push(...x.d.historyVals); m.d.comments.push(...x.d.comments);
+      Object.entries(x.d.tags).forEach(([k,c])=>m.d.tags[k]=(m.d.tags[k]||0)+c); Object.entries(x.d.byStore).forEach(([s,v])=>(m.d.byStore[s]=m.d.byStore[s]||[]).push(...v)); m.d.perfekt.push(...(x.d.perfekt||[])); });
+    m.avg=avgOf(m.all); m.n=m.all.length; return m; };
+  const chipsFor=(d)=>{
+    const tagList=Object.entries(d.tags).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,c])=>{const t=KF_TAGS.find(z=>z.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin:0 4px 3px 0;">${t?t.label:k} ${c}×</span>`;}).join('');
+    const stores=Object.entries(d.byStore).map(([sid,v])=>[sid,avgOf(v)]).sort((a,b)=>a[1]-b[1]).map(([sid,a])=>`<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;margin:0 4px 3px 0;background:${a<3?'#FEE2E2':a<4?'#FFEDD5':'#DCFCE7'};color:${colorFor(a)};font-weight:600;">${(storeNameMap[sid]||sid).replace(/\s*\d{4}$/,'')} ${a.toFixed(1)}</span>`).join('');
+    return (tagList?`<div style="margin-top:6px;">${tagList}</div>`:'')+(stores?`<div>${stores}</div>`:'');
+  };
+  const bar=(avg)=>avg!=null?`<div style="height:6px;background:var(--surface-1);border-radius:3px;margin:7px 0 4px;overflow:hidden;"><div style="height:100%;width:${Math.max(4,Math.min(100,avg/5*100))}%;background:${colorFor(avg)};border-radius:3px;"></div></div>`:'';
+  if(_mode==='alle'){
+    group('⚠️ HANDLUNGSBEDARF','Ø unter 3,0 — hier ansetzen','#DC2626',crit);
+    group('🟠 MITTELFELD','verbesserbar','#EA580C',mid);
+    group('✅ LÄUFT GUT','Ø ab 4,0 oder Perfekt','#16A34A',top);
+  } else if(_mode==='kat'){
+    const cats={}; stats.forEach(x=>{ const c=mapDishNameToCategory(x.name); (cats[c]=cats[c]||[]).push(x); });
+    const rows=Object.entries(cats).map(([c,list])=>({c,list,m:merge(list)})).sort((a,b)=>(a.m.avg??9)-(b.m.avg??9));
+    html+=`<div style="font-size:11px;color:var(--muted);margin:-2px 0 8px;">Gerichte nach Art gebündelt — aufklappen für die einzelnen Gerichte. Schwächste Kategorie zuerst.</div>`;
+    rows.forEach(({c,list,m})=>{
+      const lvl=m.avg==null?'var(--border)':colorFor(m.avg);
+      html+=`<details class="card" style="padding:11px 13px;margin-bottom:8px;border-left:4px solid ${lvl};"><summary style="cursor:pointer;list-style:none;">
+        <div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;"><div style="font-size:13.5px;font-weight:700;">${c}</div><div style="font-size:10.5px;color:var(--muted);">${list.length} Gericht${list.length>1?'e':''} · ${m.n} Bewertungen${m.perf?` · 💯 ${m.perf}×`:''}</div></div>
+        ${m.avg!=null?`<div style="text-align:right;"><span style="font-size:16px;">${scaleFor(m.avg)}</span> <span style="font-size:16px;font-weight:800;color:${colorFor(m.avg)};">${m.avg.toFixed(1)}</span></div>`:''}</div>
+        ${bar(m.avg)}${chipsFor(m.d)}</summary>
+        <div style="margin-top:8px;">${list.sort((a,b)=>(a.avg??9)-(b.avg??9)).map(dishRow).join('')}</div></details>`;
+    });
+  } else if(_mode==='thema'){
+    const th={}; stats.forEach(x=>Object.entries(x.d.tags).forEach(([k,c])=>{ const t=th[k]=th[k]||{n:0,dishes:{}}; t.n+=c; t.dishes[x.name]=(t.dishes[x.name]||0)+c; }));
+    const list=Object.entries(th).map(([k,v])=>({k,v,t:KF_TAGS.find(z=>z.k===k)})).sort((a,b)=>b.v.n-a.v.n);
+    const sect=(title,col,items,neg)=>{ if(!items.length) return; html+=`<div class="section-lbl" style="margin-top:6px;color:${col};">${title}</div>`;
+      items.forEach(({k,v,t})=>{ html+=`<div class="card" style="padding:10px 13px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:13px;font-weight:700;">${t?t.label:k}</span><span class="badge" style="background:${neg?'#FEE2E2':'#DCFCE7'};color:${neg?'#B91C1C':'#166534'};">${v.n}×</span></div>
+        <div style="margin-top:6px;">${Object.entries(v.dishes).sort((a,b)=>b[1]-a[1]).map(([dn,c])=>`<span style="display:inline-block;font-size:10.5px;background:var(--surface-1);border-radius:10px;padding:2px 8px;margin:0 4px 4px 0;color:var(--sub);">${dn}${c>1?' · '+c+'×':''}</span>`).join('')}</div></div>`; }); };
+    sect('⚠️ WAS NICHT PASST — hier ableiten','#DC2626',list.filter(x=>x.t?.neg),true);
+    sect('👍 WAS GUT ANKOMMT','#16A34A',list.filter(x=>x.t&&!x.t.neg),false);
+    if(!list.length) html+=`<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px;">Noch keine Gründe/Tags angegeben.</div>`;
+  } else {
+    const st={}; stats.forEach(x=>Object.entries(x.d.byStore).forEach(([sid,v])=>{ const o=st[sid]=st[sid]||{vals:[],dishes:[]}; o.vals.push(...v); o.dishes.push({name:x.name,avg:avgOf(v),n:v.length}); }));
+    Object.entries(st).map(([sid,o])=>({sid,avg:avgOf(o.vals),n:o.vals.length,dishes:o.dishes.sort((a,b)=>a.avg-b.avg)})).sort((a,b)=>a.avg-b.avg).forEach(o=>{
+      html+=`<div class="card" style="padding:11px 13px;margin-bottom:8px;border-left:4px solid ${colorFor(o.avg)};"><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;"><div style="font-size:13.5px;font-weight:700;">${storeNameMap[o.sid]||o.sid}</div><div style="font-size:10.5px;color:var(--muted);">${o.n} Bewertungen</div></div><span style="font-size:16px;">${scaleFor(o.avg)}</span> <span style="font-size:16px;font-weight:800;color:${colorFor(o.avg)};">${o.avg.toFixed(1)}</span></div>${bar(o.avg)}
+        <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">Schwächste:</div>${o.dishes.slice(0,3).map(d=>`<div style="font-size:11.5px;color:var(--sub);">• ${d.name} <b style="color:${colorFor(d.avg)};">${d.avg.toFixed(1)}</b> (${d.n}×)</div>`).join('')}</div>`; });
+  }
 
   // Freies, nicht an ein Gericht gebundenes Feedback (allgemeine App-/sonstige Anmerkungen) —
   // bleibt als eigener, kleinerer Block ganz unten, ebenfalls anonym.
