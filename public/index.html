@@ -7978,6 +7978,9 @@ async function kzOpenItemsHtml(){
   const nApp=(appfb||[]).length+(oldfb||[]).filter(r=>isAppFreeText(r.feedback_frei)).length;
   if(nApp) items.push({c:'orange',i:'📱',t:`${nApp} App-Feedback zum Abarbeiten`,go:"window._tfTab='app';goTo('teamFeedback')"});
   if((cats||[]).length) items.push({c:'blue',i:'🍽️',t:`${cats.length} Catering in den nächsten 7 Tagen — nächstes: ${cats[0].kunde}, ${new Date(cats[0].datum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}`,go:"goTo('catering')"});
+  try{ const gE=await api('grundreinigung_eintraege?select=store_id,datum&order=datum.desc').catch(()=>[]); const last={}; (gE||[]).forEach(e=>{ if(!last[e.store_id]) last[e.store_id]=e.datum; });
+    const due=GRUNDREINIGUNG_STORES.filter(id=>{ const d=last[id]; return !d||Math.floor((Date.now()-new Date(d+'T00:00:00').getTime())/86400000)>GRUNDREINIGUNG_TAGE_FAELLIG; });
+    if(due.length) items.push({c:'orange',i:'🧹',t:`Grundreinigung fällig: ${due.map(id=>({lb:'Laurenzerberg','1020':'Ausstellungsstraße',kitchen:'Kitchen Collective'}[id])).join(', ')}`,go:"goTo('grundreinigung')"}); }catch(e){}
   if((fl||[]).length){ const st=flStatus(fl); if(st.level!=='green'||st.defekte) items.push({c:st.level==='red'?'red':'orange',i:'🧯',t:`Feuerlöscher-Prüfung ${st.level==='red'?'überfällig':'bald fällig ('+flFmt(st.due)+')'}${st.defekte?' · '+st.defekte+' defekt':''}`,go:"goTo('feuerloescher')"}); }
   const col={red:['#FEF2F2','#FECACA','#991B1B'],orange:['#FFF7ED','#FED7AA','#9A3412'],blue:['#EFF6FF','#BFDBFE','#1E40AF']};
   let h=`<div class="section-lbl" style="margin-top:4px;">🎯 JETZT OFFEN</div>`;
@@ -13854,7 +13857,9 @@ const LIEFERANT_ORDER=['FOODPACK','INVOLO','Reinigung','SCHRANKERL','BIPA','Sons
 // Filiale — Kitchen ist nur der Ausgangspunkt (wo Everton eingeloggt ist), nicht der Ort des
 // Geschehens. Nur Kitchen darf eintragen (Anfrage vom 17.08.), Filialen sehen/bearbeiten das nicht.
 // Fälligkeit: alle 21 Tage (strenger als die "monatlich/quartalsweise"-Empfehlung am Papier-Zettel).
-const GRUNDREINIGUNG_TAGE_FAELLIG = 21;
+// 06.10.26 (Absprache Simone/Tini): Zyklus alle 2 Wochen; Börse raus, Kitchen Collective rein
+const GRUNDREINIGUNG_TAGE_FAELLIG = 14;
+const GRUNDREINIGUNG_STORES = ['lb','1020','kitchen']; // Laurenzerberg, Ausstellungsstraße, Kitchen Collective (Börse raus)
 const GRUNDREINIGUNG_ITEMS = {
   'Küchengeräte': [
     'Geschirrspüler: Innenraum, Ränder, Oberflächen (Sprüharme & Sieb entnehmen, entkalken)',
@@ -13900,8 +13905,10 @@ let grundreinigungChecked=new Set();
 
 async function grundreinigungBodyHtml(){
   const isKitchen=currentStore?.id==='kitchen';
+  const canNachtragen=isKitchen||currentStore?.id==='zentrale';
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
-  const storeList=stores.filter(s=>!['zentrale','kitchen','1070'].includes(s.id));
+  // Börse raus (06.10.26) — dafür Kitchen Collective (id 'kitchen') rein
+  const storeList=stores.filter(s=>GRUNDREINIGUNG_STORES.includes(s.id)).map(s=>s.id==='kitchen'?{...s,name:'Kitchen Collective'}:s);
   const alleEintraege=await api('grundreinigung_eintraege?select=*&order=datum.desc').catch(()=>[]);
 
   const letzteJeFiliale={}, anzahlJeFiliale={};
@@ -13911,7 +13918,7 @@ async function grundreinigungBodyHtml(){
   });
 
   let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
-    <th style="text-align:left;">Filiale</th><th>Zuletzt</th><th>Tage her</th><th>Anzahl gesamt</th>${isKitchen?'<th></th>':''}
+    <th style="text-align:left;">Filiale</th><th>Zuletzt gereinigt</th><th>Tage her</th><th>Nächste fällig</th>${canNachtragen?'<th></th>':''}
   </tr></thead><tbody>`;
   // Nach Dringlichkeit sortiert — am längsten überfällige zuerst, das IST der Putzplan-Hinweis:
   // Everton sieht auf einen Blick, wo er als nächstes hin muss.
@@ -13929,10 +13936,10 @@ async function grundreinigungBodyHtml(){
     const col=tageHer===null?'#DC2626':ueberfaellig?'#EA580C':'#16A34A';
     html+=`<tr>
       <td style="font-size:12.5px;font-weight:500;" data-no-translate>${s.name}</td>
-      <td style="text-align:center;font-size:12px;">${letzte?new Date(letzte.datum).toLocaleDateString('de-AT'):'—'}</td>
+      <td style="text-align:center;font-size:12px;">${letzte?new Date(letzte.datum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'}):'—'}${letzte?.durchgefuehrt_von?`<div style="font-size:9.5px;color:var(--muted);">${escAttr(letzte.durchgefuehrt_von)}</div>`:''}</td>
       <td style="text-align:center;font-size:12px;font-weight:700;color:${col};">${tageHer===null?'nie':tageHer+' Tg'}${ueberfaellig?' ⚠️':''}</td>
-      <td style="text-align:center;font-size:12px;color:var(--muted);">${anzahlJeFiliale[s.id]||0}</td>
-      ${isKitchen?`<td><button onclick="showGrundreinigungForm('${s.id}')" style="background:#0F766E;color:#fff;border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Checkliste →</button></td>`:''}
+      <td style="text-align:center;font-size:12px;color:${ueberfaellig?'#B91C1C':'var(--muted)'};">${letzte?(()=>{const d=new Date(letzte.datum+'T00:00:00');d.setDate(d.getDate()+GRUNDREINIGUNG_TAGE_FAELLIG);return d.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});})():'sofort'}</td>
+      ${canNachtragen?`<td style="white-space:nowrap;"><button onclick="showGrundreinigungForm('${s.id}')" style="background:#0F766E;color:#fff;border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;">Checkliste →</button> <button onclick="grundreinigungNachtragen('${s.id}')" title="Letztes Mal nachtragen" style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:11px;cursor:pointer;">📅</button></td>`:''}
     </tr>`;
   });
   html+='</tbody></table></div></div>';
@@ -13947,7 +13954,7 @@ async function renderGrundreinigung(){
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
 
   let html=backToHomeHtml();
-  html+=pageHeaderHtml('🧹','Grundreinigung','Tiefenreinigung Stores — Fälligkeit alle 21 Tage','#0F766E');
+  html+=pageHeaderHtml('🧹','Grundreinigung','Tiefenreinigung — Fälligkeit alle 14 Tage','#0F766E');
   html+=await grundreinigungBodyHtml();
 
   el.innerHTML=html;
@@ -14008,6 +14015,27 @@ function toggleGrundreinigungItem(key, el){
 }
 window.toggleGrundreinigungItem=toggleGrundreinigungItem;
 
+function grundreinigungNachtragen(storeId){
+  const today=new Date().toISOString().split('T')[0];
+  document.getElementById('gr-nachtrag')?.remove();
+  const ov=document.createElement('div'); ov.id='gr-nachtrag';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:18px;">
+    <div style="font-size:16px;font-weight:800;">📅 Letzte Grundreinigung nachtragen</div>
+    <div style="font-size:12px;color:var(--sub);margin:4px 0 8px;">Nur das Datum — ohne Checkliste. Für den Start oder wenn es schon gemacht wurde.</div>
+    <label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">Datum</label><input id="grn-datum" type="date" max="${today}" value="${today}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;">
+    <label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">Durchgeführt von (optional)</label><input id="grn-von" type="text" placeholder="z.B. Everton" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;margin-top:14px;"><button onclick="document.getElementById('gr-nachtrag').remove()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);cursor:pointer;">Abbrechen</button><button onclick="saveGrundreinigungNachtrag('${storeId}')" style="flex:2;padding:11px;border:none;border-radius:10px;background:#0F766E;color:#fff;font-weight:700;cursor:pointer;">Speichern ✓</button></div></div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); }); document.body.appendChild(ov);
+}
+async function saveGrundreinigungNachtrag(storeId){
+  const datum=document.getElementById('grn-datum')?.value; const von=(document.getElementById('grn-von')?.value||'').trim();
+  if(!datum){ showToast('Datum fehlt',true); return; }
+  try{ await api('grundreinigung_eintraege',{method:'POST',body:JSON.stringify([{store_id:storeId,datum,durchgefuehrt_von:von||null,items_erledigt:[]}])});
+    document.getElementById('gr-nachtrag')?.remove(); showToast('✓ Eingetragen'); if(currentView==='sweets') renderSweets(); else renderGrundreinigung(); }
+  catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
+}
+window.grundreinigungNachtragen=grundreinigungNachtragen; window.saveGrundreinigungNachtrag=saveGrundreinigungNachtrag;
 async function submitGrundreinigung(storeId){
   const datum=document.getElementById('gr-datum')?.value;
   const von=document.getElementById('gr-von')?.value?.trim();
