@@ -223,6 +223,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="v-dailycheck" class="view"></div>
     <div id="v-maengel" class="view"></div>
     <div id="v-catering" class="view"></div>
+    <div id="v-feuerloescher" class="view"></div>
     <div id="v-messen" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
@@ -309,6 +310,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     </button>
     <button class="nav-btn" onclick="goTo('hygieneSchulung')" id="nav-org-hygiene" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Hygiene
+    </button>
+    <button class="nav-btn" onclick="goTo('feuerloescher')" id="nav-org-feuer" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M12 2c1 3 4 4 4 8a4 4 0 01-8 0c0-2 1-3 2-4-.5 2 1 2.5 1 1 0-2-1-3 1-5z"/><path d="M8 20h8"/></svg>Feuer
     </button>
     <button class="nav-btn" onclick="goTo('maengel')" id="nav-org-schaeden" style="display:none;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Schäden
@@ -1782,6 +1786,7 @@ async function loginAs(store){
     document.getElementById('nav-org-mengen').style.display='flex';
     document.getElementById('nav-org-hygiene').style.display='flex';
     document.getElementById('nav-org-schaeden').style.display='flex';
+    document.getElementById('nav-org-feuer').style.display='flex';
     document.getElementById('nav-org-feedback').style.display='flex';
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
@@ -1813,7 +1818,7 @@ async function loginAs(store){
     checkForBroadcasts();
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
-    const orgViews=['management','maengel','grundreinigung','kuechenlager','catering'];
+    const orgViews=['management','maengel','grundreinigung','kuechenlager','catering','feuerloescher'];
     const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager','grundreinigung','catering'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
@@ -1900,6 +1905,7 @@ function goTo(v, noPush=false){
     else if(v==='orgForecast' || v==='forecastReview') navId='nav-org-mengen';
     else if(v==='hygieneSchulung' || v==='schulung') navId='nav-org-hygiene';
     else if(v==='maengel') navId='nav-org-schaeden';
+    else if(v==='feuerloescher') navId='nav-org-feuer';
     else if(v==='teamFeedback' || v==='kundenfeedback' || v==='teamRating') navId='nav-org-feedback';
     // Alte Tabs (Sweets, Küche etc.) behalten ihre IDs
     else if(v==='kitchenDaily') navId='nav-kitchen-daily';
@@ -1911,7 +1917,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle'};
+  const subs={feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1920,7 +1926,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -7859,7 +7865,7 @@ window.renderForecastAmpel=renderForecastAmpel;
 // Nutzungsstatistik (21.09.26, Wunsch Tini) — zeigt, welche Bereiche der Organisation-Ansicht
 // wirklich am häufigsten genutzt werden, damit künftige UX-Entscheidungen datenbasiert statt nur
 // geschätzt getroffen werden können. Sammelt erst ab jetzt (v6.99.84) Daten, also anfangs noch dünn.
-const VIEW_LABELS={catering:'Catering',home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',menuKontrolle:'Menü-Kontrolle',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Feedback',samosas:'Samosas'};
+const VIEW_LABELS={feuerloescher:'Feuerlöscher-Kontrolle',catering:'Catering',home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',menuKontrolle:'Menü-Kontrolle',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Feedback',samosas:'Samosas'};
 
 async function renderNutzungsstatistik(){
   const el=document.getElementById('v-nutzungsstatistik');
@@ -7904,8 +7910,10 @@ async function renderManagement(){
   const anzOffen=(maengelOffen||[]).filter(m=>(m.status||'offen')==='offen').length;
   const anzInBearbeitung=(maengelOffen||[]).filter(m=>m.status==='in_bearbeitung').length;
   loadNotifBadge();
+  const _flBanner=await flBannerHtml().catch(()=>'');
   el.innerHTML=`
     ${pageHeaderHtml('🗂️','Management','Alles, was Organisation braucht — an einem Ort','#2B3A67')}
+    ${_flBanner}
     ${(maengelOffen||[]).length?`<div onclick="goTo('maengel')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
       <span style="font-size:18px;">🔧</span>
       <div style="flex:1;">
@@ -8011,6 +8019,13 @@ async function renderManagement(){
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#B45309;">Hygiene-Schulungen</span>
         <span class="org-btn-sub">Wer wurde wann geschult — pro Person</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="goTo('feuerloescher')" style="border-color:#DC2626;">
+      <span class="org-btn-icon">🧯</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#DC2626;">Feuerlöscher-Kontrolle</span>
+        <span class="org-btn-sub">Jährliche Prüfung, Standorte, Reminder</span>
       </div>
     </button>
 
@@ -17526,6 +17541,107 @@ async function markFeedbackBearbeitet(feedbackId, el){
   }catch(e){console.error(e);showToast('Fehler beim Speichern',true);}
 }
 window.markFeedbackBearbeitet=markFeedbackBearbeitet;
+
+// ==== FEUERLÖSCHER-KONTROLLE (06.10.26) — jährlich, mit Reminder ====
+let _flRows=[];
+function flAddYear(d){ const x=new Date(d+'T00:00:00'); x.setFullYear(x.getFullYear()+1); return x.toISOString().split('T')[0]; }
+function flFmt(d){ return d?new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'}):'–'; }
+function flStatus(rows){
+  // Älteste Prüfung bestimmt die Fälligkeit; Standorte ohne Datum gelten als fällig
+  const dates=rows.map(r=>r.letzte_pruefung).filter(Boolean).sort();
+  const noDate=rows.some(r=>!r.letzte_pruefung);
+  const due=dates.length?flAddYear(dates[0]):null;
+  const today=new Date().toISOString().split('T')[0];
+  const days=due?Math.round((new Date(due+'T00:00:00')-new Date(today+'T00:00:00'))/86400000):-1;
+  const defekte=rows.filter(r=>r.defekt).length;
+  const level=(noDate||days<0)?'red':(days<=60?'orange':'green');
+  return {due,days,level,defekte};
+}
+async function flBannerHtml(){
+  const rows=await api('feuerloescher?select=*&order=sort.asc').catch(()=>[]);
+  if(!rows||!rows.length) return '';
+  const st=flStatus(rows); if(st.level==='green'&&!st.defekte) return '';
+  const msg=st.level==='red'?`Prüfung überfällig (fällig seit ${flFmt(st.due)})`:st.level==='orange'?`Prüfung fällig am ${flFmt(st.due)} (in ${st.days} Tagen)`:'';
+  return `<div onclick="goTo('feuerloescher')" style="display:flex;align-items:center;gap:10px;background:${st.level==='red'?'#FEF2F2':'#FFF7ED'};border:1px solid ${st.level==='red'?'#FECACA':'#FED7AA'};border-radius:10px;padding:10px 12px;margin-bottom:12px;cursor:pointer;">
+    <span style="font-size:20px;">🧯</span>
+    <div style="flex:1;"><div style="font-size:12.5px;font-weight:700;color:${st.level==='red'?'#991B1B':'#9A3412'};">Feuerlöscher-Kontrolle</div>
+    <div style="font-size:11px;color:var(--sub);">${[msg,st.defekte?st.defekte+' defekt gemeldet':''].filter(Boolean).join(' · ')}</div></div><span style="color:var(--muted);">→</span></div>`;
+}
+window.flBannerHtml=flBannerHtml;
+async function renderFeuerloescher(){
+  const el=document.getElementById('v-feuerloescher');
+  _flRows=(await api('feuerloescher?select=*&order=sort.asc').catch(()=>[]))||[];
+  const st=flStatus(_flRows);
+  const total=_flRows.reduce((a,r)=>a+(r.anzahl||0),0);
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🧯','Feuerlöscher-Kontrolle','Jährliche Prüfung — Standorte & Status','#DC2626');
+  const col={red:['#FEF2F2','#FECACA','#991B1B'],orange:['#FFF7ED','#FED7AA','#9A3412'],green:['#F0FDF4','#BBF7D0','#166534']}[st.level];
+  html+=`<div style="background:${col[0]};border:1px solid ${col[1]};border-radius:12px;padding:12px 14px;margin-bottom:12px;">
+    <div style="font-size:13.5px;font-weight:800;color:${col[2]};">${st.level==='red'?'⚠️ Prüfung überfällig':st.level==='orange'?'⏰ Prüfung bald fällig':'✅ Alles im Plan'}</div>
+    <div style="font-size:12px;color:var(--sub);margin-top:3px;">Nächste Prüfung fällig: <b>${st.due?flFmt(st.due):'sofort (Datum fehlt)'}</b> · ${total} Feuerlöscher an ${_flRows.length} Standorten${st.defekte?` · <b style="color:#B91C1C;">${st.defekte} defekt</b>`:''}<br>Reminder: erscheint bei Management ab 60 Tage vor Fälligkeit, danach bis zur Prüfung.</div>
+  </div>`;
+  html+=`<div style="display:flex;gap:8px;margin-bottom:12px;">
+    <button onclick="flMarkAllDone()" style="flex:1;padding:10px;border:none;border-radius:10px;background:#16A34A;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Prüfung durchgeführt</button>
+    <button onclick="flShowMail()" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✉️ Mail an Prüfer</button>
+  </div>`;
+  html+=`<div class="section-lbl">STANDORTE</div>`;
+  _flRows.forEach(r=>{
+    const due=r.letzte_pruefung?flAddYear(r.letzte_pruefung):null;
+    const over=!due||due<new Date().toISOString().split('T')[0];
+    html+=`<div class="card" onclick="flEdit(${r.id})" style="padding:11px 13px;margin-bottom:8px;cursor:pointer;${r.defekt?'border-color:#FCA5A5;':''}">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><strong style="font-size:13.5px;">${escAttr(r.standort)} <span style="font-weight:500;color:var(--muted);">${r.anzahl}×</span></strong>
+      <span style="font-size:10.5px;font-weight:700;color:${r.defekt?'#B91C1C':over?'#B45309':'#16A34A'};">${r.defekt?'🔴 defekt':over?'⏰ fällig':'✓ ok'}</span></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px;">Letzte Prüfung: ${flFmt(r.letzte_pruefung)} · fällig ${flFmt(due)}</div>
+      ${r.notiz?`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">${escAttr(r.notiz)}</div>`:''}
+    </div>`;
+  });
+  html+=`<button onclick="flEdit(null)" style="width:100%;padding:10px;border:1.5px dashed var(--border);border-radius:10px;background:none;font-size:12.5px;cursor:pointer;margin-top:4px;">➕ Standort hinzufügen</button>`;
+  el.innerHTML=html; translateEl(el);
+}
+window.renderFeuerloescher=renderFeuerloescher;
+function flModal(inner){ document.getElementById('fl-modal')?.remove(); const ov=document.createElement('div'); ov.id='fl-modal'; ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;'; ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:400px;width:100%;padding:18px;max-height:90vh;overflow-y:auto;">${inner}</div>`; ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();}); document.body.appendChild(ov); }
+function flClose(){ document.getElementById('fl-modal')?.remove(); }
+function flEdit(id){
+  const r=id?_flRows.find(x=>x.id===id):{standort:'',anzahl:1,letzte_pruefung:'',defekt:false,notiz:''};
+  const f=(i,l,v,t='text')=>`<label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">${l}</label><input id="fl-${i}" type="${t}" value="${escAttr(v==null?'':String(v))}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;">`;
+  flModal(`<div style="font-size:16px;font-weight:800;">${id?'Standort bearbeiten':'Neuer Standort'}</div>
+    ${f('standort','Standort',r.standort)}<div style="display:flex;gap:8px;"><div style="flex:1;">${f('anzahl','Anzahl',r.anzahl,'number')}</div><div style="flex:2;">${f('datum','Letzte Prüfung',r.letzte_pruefung||'','date')}</div></div>
+    <label style="display:flex;align-items:center;gap:8px;margin:10px 0;font-size:13px;"><input id="fl-defekt" type="checkbox" ${r.defekt?'checked':''} style="width:20px;height:20px;"> Defekt / Ersatz nötig</label>
+    ${f('notiz','Notiz',r.notiz)}
+    <div style="display:flex;gap:8px;margin-top:14px;"><button onclick="flClose()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);cursor:pointer;">Abbrechen</button><button onclick="flSave(${id||'null'})" style="flex:2;padding:11px;border:none;border-radius:10px;background:#DC2626;color:#fff;font-weight:700;cursor:pointer;">Speichern ✓</button></div>
+    ${id?`<button onclick="flDelete(${id})" style="width:100%;margin-top:8px;border:none;background:none;color:#B91C1C;font-size:12px;cursor:pointer;">Standort entfernen</button>`:''}`);
+}
+async function flSave(id){
+  const g=k=>(document.getElementById('fl-'+k)?.value||'').trim();
+  if(!g('standort')){ showToast('Standort fehlt',true); return; }
+  const body={standort:g('standort'),anzahl:parseInt(g('anzahl'),10)||1,letzte_pruefung:g('datum')||null,defekt:document.getElementById('fl-defekt').checked,notiz:g('notiz')||null};
+  try{ if(id) await api(`feuerloescher?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(body)}); else await api('feuerloescher',{method:'POST',body:JSON.stringify({...body,sort:(_flRows.length+1)})});
+    flClose(); showToast('✓ Gespeichert'); renderFeuerloescher(); }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
+}
+async function flDelete(id){ if(!confirm('Standort wirklich entfernen?')) return; try{ await api(`feuerloescher?id=eq.${id}`,{method:'DELETE'}); flClose(); renderFeuerloescher(); }catch(e){ console.error(e); showToast('Fehler',true); } }
+function flMarkAllDone(){
+  const today=new Date().toISOString().split('T')[0];
+  flModal(`<div style="font-size:16px;font-weight:800;">✓ Prüfung durchgeführt</div><div style="font-size:12px;color:var(--sub);margin:6px 0;">Setzt bei allen Standorten das Prüfdatum. Defekte bleiben markiert, bis du sie einzeln änderst.</div>
+    <label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">Datum der Prüfung</label><input id="fl-alldate" type="date" value="${today}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;margin-top:14px;"><button onclick="flClose()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);cursor:pointer;">Abbrechen</button><button onclick="flSaveAll()" style="flex:2;padding:11px;border:none;border-radius:10px;background:#16A34A;color:#fff;font-weight:700;cursor:pointer;">Speichern</button></div>`);
+}
+async function flSaveAll(){
+  const d=document.getElementById('fl-alldate')?.value; if(!d){ showToast('Datum fehlt',true); return; }
+  try{ await api('feuerloescher?id=gt.0',{method:'PATCH',body:JSON.stringify({letzte_pruefung:d})}); flClose(); showToast('✓ Alle Standorte aktualisiert'); renderFeuerloescher(); }catch(e){ console.error(e); showToast('Fehler',true); }
+}
+function flMailText(){
+  const last=[..._flRows.map(r=>r.letzte_pruefung).filter(Boolean)].sort().pop();
+  const lastTxt=last?new Date(last+'T00:00:00').toLocaleDateString('de-AT',{month:'long',year:'numeric'}):'(Datum unbekannt)';
+  const L=_flRows.map(r=>`${r.standort} (${r.anzahl}x)`).join('\n');
+  const def=_flRows.filter(r=>r.defekt).map(r=>r.standort);
+  return `Hallo David,\n\nunsere Feuerlöscher müssen wieder überprüft werden. Die letzte Überprüfung war im ${lastTxt}.\nLetztes Mal waren das diese Standorte:\n${L}\n${def.length?`\nBei ${def.join(', ')} war der Feuerlöscher damals defekt. Kannst du dir den bitte auch anschauen bzw. uns einen neuen anbieten?\n`:''}\nWann hättest du in den nächsten Wochen Zeit? Gib mir am besten ein paar Termine, dann stimme ich das mit den Standorten ab.\nDie Rechnung bitte wieder an die Raihmann GmbH.\n\nDanke und liebe Grüße\nAdi`;
+}
+function flShowMail(){
+  flModal(`<div style="font-size:16px;font-weight:800;margin-bottom:8px;">✉️ Mail an Prüfer</div><textarea id="fl-mail" readonly style="width:100%;height:280px;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:12.5px;font-family:inherit;box-sizing:border-box;">${escAttr(flMailText())}</textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;"><button onclick="flClose()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);cursor:pointer;">Schließen</button><button onclick="flCopyMail()" style="flex:2;padding:11px;border:none;border-radius:10px;background:#2B3A67;color:#fff;font-weight:700;cursor:pointer;">📋 Kopieren</button></div>`);
+}
+function flCopyMail(){ const t=document.getElementById('fl-mail').value; (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>showToast('✓ Kopiert')).catch(()=>{ const a=document.getElementById('fl-mail'); a.select(); showToast('Markiert — bitte kopieren'); }); }
+Object.assign(window,{flEdit,flSave,flDelete,flMarkAllDone,flSaveAll,flShowMail,flCopyMail,flClose});
 
 // ==== CATERING (06.10.26) — Produktionspläne, die Simone sonst als PDF in die WhatsApp-Gruppe schickt ====
 const CATERING_DEFAULT_HINWEIS='NUR IN PLASTIKBOXEN GELIEFERT!! KEIN EQUIPMENT! KEIN RÜCKTRANSPORT!';
