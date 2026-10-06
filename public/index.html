@@ -16553,10 +16553,6 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const validDishObjs=menuDishes.filter(d=>d.name&&!d.name.startsWith('ÖL'));
   // Lasagne-Legende: einmalig oben, kompakt, damit Mitarbeitende die Größen verstehen
   const hasAnyLasagne=validDishObjs.some(d=>d.name.includes('Lasagne'));
-  // 06.10.26: Caterings dieses Tages als zusätzliche Spalte in "Gerichte & Mengen"
-  const _cats=(await api(`caterings?status=eq.aktiv&datum=eq.${tomorrowStr}&select=kunde,personen,menue`).catch(()=>[]))||[];
-  const _catLines=_cats.flatMap(c=>(c.menue||[]).map(m=>({kunde:c.kunde,pax:c.personen,...cateringSplit(m)})));
-  const _catUsed=new Set();
   html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <span style="font-size:18px;">🍽️</span>
@@ -16582,12 +16578,11 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   }
   html+=`<div style="background:var(--card);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:12px;">
   <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;table-layout:fixed;">
-  <colgroup><col style="width:26%;">${storeList.map(()=>`<col style="width:${Math.floor(64/storeList.length)}%;">`).join('')}<col style="width:10%;">${_cats.length?'<col style="width:11%;">':''}</colgroup>
+  <colgroup><col style="width:26%;">${storeList.map(()=>`<col style="width:${Math.floor(64/storeList.length)}%;">`).join('')}<col style="width:10%;"></colgroup>
   <thead><tr style="background:var(--surface-1);">
     <th style="text-align:left;padding:6px 6px;font-size:10.5px;font-weight:600;letter-spacing:0.02em;color:var(--sub);border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht</th>
     ${storeList.map((s,si)=>`<th data-no-translate style="padding:6px 2px;font-size:9px;font-weight:700;color:${STORE_COLORS[s.id]||'#888'};border-bottom:1.5px solid var(--border);${si<storeList.length-1?'border-right:1px solid var(--border);':''}overflow:hidden;text-overflow:ellipsis;">${STORE_SHORT[s.id]||s.name.split(' ')[0]}</th>`).join('')}
     <th style="padding:6px 2px;font-size:10px;font-weight:700;color:var(--green);border-bottom:1.5px solid var(--border);border-left:1px solid var(--border);">Σ</th>
-    ${_cats.length?`<th style="padding:6px 2px;font-size:9px;font-weight:700;color:#7C3AED;border-bottom:1.5px solid var(--border);border-left:1px solid var(--border);">🍽️ Catering</th>`:''}
   </tr></thead><tbody>`;
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
@@ -16653,11 +16648,9 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       <td style="text-align:left;padding:6px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);word-break:break-word;"><span style="display:flex;align-items:center;gap:4px;"><span style="flex-shrink:0;">${dishImgHtml(dish, 16)}</span><span style="font-weight:600;font-size:11px;line-height:1.25;">${dish}</span></span></td>
       ${cells}
       <td style="font-weight:700;font-size:12px;color:${hasData?'var(--green)':'var(--muted)'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);">${sumCellHtml}</td>
-      ${_cats.length?(()=>{ const ms=_catLines.filter(l=>cateringMatchesDish(l.name,dish)); ms.forEach(l=>_catUsed.add(l)); return `<td style="font-size:11px;font-weight:700;color:#7C3AED;background:${ms.length?'#F5F3FF':'transparent'};border-bottom:1px solid var(--border);border-left:1px solid var(--border);padding:4px 2px;">${ms.length?ms.map(l=>`<div>${escAttr(l.qty||(l.pax?l.pax+' PAX':'✓'))}</div><div style="font-size:8px;font-weight:500;color:var(--muted);">${escAttr(l.kunde)}</div>`).join(''):'–'}</td>`; })():''}
     </tr>`;
   });
   html+='</tbody></table></div></div>';
-  { const _un=_catLines.filter(l=>!_catUsed.has(l)); if(_un.length) html+=`<div style="font-size:11.5px;color:#5B21B6;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:7px 10px;margin:-4px 0 10px;">🍽️ Catering zusätzlich: ${_un.map(l=>`<b>${escAttr(l.kunde)}</b> – ${escAttr(l.name)}${l.qty?' ('+escAttr(l.qty)+')':l.pax?' ('+l.pax+' PAX)':''}`).join(' · ')}</div>`; }
 
   // "Serviert mit" — kompakte Badge-Zeile pro Gericht mit Beilage-Zuordnung
   const beilagenChips=validDishObjs.map(dishObj=>{
@@ -17530,14 +17523,6 @@ window.markFeedbackBearbeitet=markFeedbackBearbeitet;
 // ==== CATERING (06.10.26) — Produktionspläne, die Simone sonst als PDF in die WhatsApp-Gruppe schickt ====
 const CATERING_DEFAULT_HINWEIS='NUR IN PLASTIKBOXEN GELIEFERT!! KEIN EQUIPMENT! KEIN RÜCKTRANSPORT!';
 let _cateringList=[];
-// Menüzeile darf "Gericht | 3x Groß" lauten — Teil nach | = Menge fürs Catering (optional)
-function cateringSplit(line){ const i=line.indexOf('|'); return i<0?{name:line.trim(),qty:''}:{name:line.slice(0,i).trim(),qty:line.slice(i+1).trim()}; }
-function cateringMatchesDish(lineName,dish){
-  const n=x=>(x||'').toLowerCase().replace(/[^a-zäöüß0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-  const a=n(lineName), b=n(dish); if(!a||!b) return false;
-  if(a.includes(b)||b.includes(a)) return true;
-  return /\breis\b/.test(b)&&/\breis\b/.test(a)&&b.split(' ').length<=3; // "… mit Reis" → Reis-Zeile
-}
 function cateringDateLabel(d){ return new Date(d+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
 function cateringCanEdit(){ return currentStore?.id==='zentrale'||currentStore?.id==='kitchen'; }
 async function renderCatering(){
@@ -17570,7 +17555,7 @@ function cateringText(c){
   if(c.ort) L.push(`📍 ${c.ort}`); if(c.ankunft) L.push(`🕐 Ankunft Location ${c.ankunft}`);
   if(c.kontakt) L.push(`☎️ Kontakt vor Ort: ${c.kontakt}`); if(c.personen) L.push(`👥 ${c.personen} PAX`);
   if(c.hinweis) L.push('',`⚠️ ${c.hinweis}`);
-  L.push('','LUNCH'); (c.menue||[]).forEach(m=>{const x=cateringSplit(m);L.push('• '+x.name+(x.qty?' — '+x.qty:''));}); if((c.extras||[]).length) L.push((c.extras||[]).join(', '));
+  L.push('','LUNCH'); (c.menue||[]).forEach(m=>L.push('• '+m)); if((c.extras||[]).length) L.push((c.extras||[]).join(', '));
   if((c.packliste||[]).length){ L.push('','PACKLISTE'); c.packliste.forEach(p=>L.push((p.done?'☑ ':'☐ ')+p.t)); }
   return L.join('\n');
 }
@@ -17582,7 +17567,7 @@ function showCateringDetail(id){
   html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);">CATERING PRODUKTIONSPLAN</div><div style="font-size:22px;font-weight:800;margin-bottom:10px;">${escAttr(c.kunde)}</div>`;
   html+=`<div class="card" style="padding:6px 14px;margin-bottom:10px;">${row('Veranstaltungsdatum',cateringDateLabel(c.datum))}${row('Ort',c.ort)}${row('Ankunft Location',c.ankunft)}${row('Kontakt vor Ort',c.kontakt)}${row('Personen',c.personen?c.personen+' PAX':'')}</div>`;
   if(c.hinweis) html+=`<div style="background:#FEF2F2;border:1.5px solid #DC2626;color:#991B1B;border-radius:10px;padding:10px 12px;font-size:12.5px;font-weight:800;margin-bottom:12px;">⚠️ ${escAttr(c.hinweis)}</div>`;
-  html+=`<div class="section-lbl">LUNCH${c.personen?` · ${c.personen} PAX`:''}</div><div class="card" style="padding:12px 14px;margin-bottom:12px;">`+(c.menue||[]).map(m=>{const x=cateringSplit(m);return `<div style="font-size:13.5px;font-weight:600;padding:3px 0;">${escAttr(x.name)}${x.qty?` <span style="font-size:11px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;padding:1px 6px;color:#92400E;">${escAttr(x.qty)}</span>`:''}</div>`;}).join('')+((c.extras||[]).length?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${(c.extras||[]).map(escAttr).join(', ')}</div>`:'')+`</div>`;
+  html+=`<div class="section-lbl">LUNCH${c.personen?` · ${c.personen} PAX`:''}</div><div class="card" style="padding:12px 14px;margin-bottom:12px;">`+(c.menue||[]).map(m=>`<div style="font-size:13.5px;font-weight:600;padding:3px 0;">${escAttr(m)}</div>`).join('')+((c.extras||[]).length?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${(c.extras||[]).map(escAttr).join(', ')}</div>`:'')+`</div>`;
   html+=`<div class="section-lbl">PACKLISTE <span style="font-weight:500;color:var(--muted);">· abhaken, wenn eingepackt</span></div><div class="card" style="padding:6px 14px;margin-bottom:12px;">`;
   if(!(c.packliste||[]).length) html+=`<div style="font-size:12px;color:var(--muted);padding:8px 0;">Keine Packliste hinterlegt.</div>`;
   (c.packliste||[]).forEach((p,i)=>{ html+=`<label style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;"><input type="checkbox" ${p.done?'checked':''} onchange="toggleCateringPack(${c.id},${i},this.checked,this)" style="width:24px;height:24px;accent-color:#0F6E56;flex-shrink:0;"><span style="font-size:14px;${p.done?'text-decoration:line-through;color:var(--muted);':''}">${escAttr(p.t)}</span></label>`; });
@@ -17618,7 +17603,7 @@ function showCateringForm(id){
     ${inp('ort','Ort',c?.ort,'Straße, PLZ Wien')}
     <div style="display:flex;gap:8px;"><div style="flex:1;">${inp('ankunft','Ankunft Location',c?.ankunft,'11:30')}</div><div style="flex:1;">${inp('kontakt','Kontakt vor Ort',c?.kontakt,'Name + Tel.')}</div></div>
     ${ta('hinweis','Wichtiger Hinweis (rot, leer lassen = keiner)',c?c.hinweis:CATERING_DEFAULT_HINWEIS,'',2)}
-    ${ta('menue','Lunch — ein Gericht pro Zeile (optional: Gericht | 3x Groß)',(c?.menue||[]).join('\n'),'Green Power Pesto Veggie Lasagne mit Salat\nSüßkartoffel Linsen Dal mit Reis',4)}
+    ${ta('menue','Lunch — ein Gericht pro Zeile',(c?.menue||[]).join('\n'),'Green Power Pesto Veggie Lasagne mit Salat\nSüßkartoffel Linsen Dal mit Reis',4)}
     ${ta('extras','Dazu (Komma getrennt)',(c?.extras||[]).join(', '),'Limetten, Kräuter, Mangochilisauce',2)}
     ${ta('pack','Packliste — ein Punkt pro Zeile',(c?c.packliste.map(p=>p.t):['Ausgedruckte Menüs']).join('\n'),'',4)}
     <div style="display:flex;gap:8px;margin-top:14px;">
