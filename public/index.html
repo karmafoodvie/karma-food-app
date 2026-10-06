@@ -12178,6 +12178,7 @@ async function renderWaehrend(){
           ${FEEDBACK_SCALE.map(s=>`<button type="button" data-dish="${escAttr(d.name)}" data-val="${s.v}" onclick="setFeedbackRating(this,${dIdxW})" title="${s.label}" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:15px;cursor:pointer;">${s.emoji}</button>`).join('')}
           <button type="button" data-dish="${escAttr(d.name)}" data-val="" onclick="setFeedbackRating(this,${dIdxW})" title="Nicht probiert" style="padding:5px 7px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:9.5px;color:var(--muted);cursor:pointer;white-space:nowrap;">nicht probiert</button>
         </div>
+        <div style="margin-left:32px;">${feedbackPerfektBtnHtml(d.name,dIdxW)}</div>
         <div id="feedback-reason-link-${dIdxW}" style="display:none;margin-left:32px;margin-top:5px;">
           <a href="#" onclick="event.preventDefault();toggleFeedbackReasonPanel(${dIdxW})" style="font-size:10.5px;color:#EC4899;text-decoration:underline;cursor:pointer;">+ Grund hinzufügen</a>
         </div>
@@ -12954,11 +12955,12 @@ function renderFeedbackExistingList(existing, todayMenu){
       const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
       const note=(rec && typeof rec==='object')?rec.note:null;
       const scale=FEEDBACK_SCALE.find(s=>s.v===val);
+      const isPerfekt=!!(rec && typeof rec==='object' && rec.perfekt);
       const tagsHtml=tags.map(k=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin-left:4px;">${t?t.label:k}</span>`;}).join('');
       return `<div style="padding:4px 0;font-size:12px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span style="color:var(--sub);">${d.name}</span>
-          <span>${scale?`${scale.emoji} ${scale.label}`:'<span style="color:var(--muted);">– nicht probiert</span>'}</span>
+          <span>${isPerfekt?'<b style="color:#16A34A;">💯 Perfekt — so lassen!</b>':(scale?`${scale.emoji} ${scale.label}`:'<span style="color:var(--muted);">– nicht probiert</span>')}</span>
         </div>
         ${tagsHtml?`<div style="margin-top:2px;">${tagsHtml}</div>`:''}
         ${note?`<div style="font-size:11px;color:var(--sub);margin-top:2px;font-style:italic;">„${note}"</div>`:''}
@@ -12990,6 +12992,7 @@ function showFeedbackForm(){
         ${FEEDBACK_SCALE.map(s=>`<button type="button" data-dish="${escAttr(d.name)}" data-val="${s.v}" onclick="setFeedbackRating(this)" title="${s.label}" style="flex:1;min-width:38px;padding:8px 2px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:18px;cursor:pointer;">${s.emoji}</button>`).join('')}
         <button type="button" data-dish="${escAttr(d.name)}" data-val="" onclick="setFeedbackRating(this)" title="Nicht probiert" style="padding:8px 8px;border:1.5px solid var(--border);border-radius:8px;background:#fff;font-size:10.5px;color:var(--muted);cursor:pointer;white-space:nowrap;">nicht probiert</button>
       </div>
+      ${feedbackPerfektBtnHtml(d.name,null)}
     </div>`;
   });
   html+=`<textarea id="feedback-kommentar" placeholder="Kommentar zum Essen (optional)" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;min-height:50px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:10px;font-size:13px;"></textarea>
@@ -13010,11 +13013,40 @@ function cancelFeedbackForm(){
 }
 window.cancelFeedbackForm=cancelFeedbackForm;
 
+// 06.10.26 (Wunsch Tini): "💯 PERFEKT — genau so lassen / wieder so machen". Setzt 5/5 + perfekt:true,
+// damit in der Auswertung/Menüplanung sofort sichtbar ist, welche Gerichte man nicht anfassen soll.
+function feedbackPerfektBtnHtml(dishName, dIdx){
+  return `<button type="button" data-dish="${escAttr(dishName)}" data-perfekt="1" onclick="setFeedbackPerfekt(this,${dIdx==null?'null':dIdx})" style="width:100%;margin-top:6px;padding:8px 10px;border:1.5px solid #86EFAC;border-radius:8px;background:#fff;color:#166534;font-size:12px;font-weight:700;cursor:pointer;">💯 PERFEKT — genau so lassen!</button>`;
+}
+function _fbDishButtons(dish){ return [...document.querySelectorAll('button[data-val]')].filter(b=>b.dataset.dish===dish); }
+function _fbPerfektBtn(dish){ return [...document.querySelectorAll('button[data-perfekt]')].find(b=>b.dataset.dish===dish); }
+function setFeedbackPerfekt(btn, dIdxW){
+  const dish=btn.dataset.dish;
+  const was=!!(_feedbackDraft[dish] && _feedbackDraft[dish].perfekt);
+  _fbDishButtons(dish).forEach(b=>{ b.style.background='#fff'; b.style.borderColor='var(--border)'; });
+  if(was){
+    _feedbackDraft[dish]=null;
+    btn.style.background='#fff'; btn.style.color='#166534'; btn.style.borderColor='#86EFAC';
+  }else{
+    _feedbackDraft[dish]={v:5, tags:[], perfekt:true};
+    btn.style.background='#16A34A'; btn.style.color='#fff'; btn.style.borderColor='#16A34A';
+  }
+  if(dIdxW!=null){
+    // Bei "Perfekt" gibt es nichts zu begründen/verbessern — Grund-Bereich ausblenden
+    const link=document.getElementById(`feedback-reason-link-${dIdxW}`);
+    if(link) link.style.display='none';
+    const panel=document.getElementById(`feedback-reason-panel-${dIdxW}`);
+    if(panel) panel.style.display='none';
+  }
+}
+window.setFeedbackPerfekt=setFeedbackPerfekt;
+
 function setFeedbackRating(btn, dIdxW){
   const dish=btn.dataset.dish;
   const val=btn.dataset.val;
   const prevTags=(_feedbackDraft[dish] && _feedbackDraft[dish].tags) || [];
   _feedbackDraft[dish]=val===''?null:{v:parseInt(val), tags:prevTags};
+  const _pb=_fbPerfektBtn(dish); if(_pb){ _pb.style.background='#fff'; _pb.style.color='#166534'; _pb.style.borderColor='#86EFAC'; }
   // Alle Buttons dieser Zeile zurücksetzen, den geklickten hervorheben
   const row=btn.parentElement;
   row.querySelectorAll('button').forEach(b=>{ b.style.background='#fff'; b.style.borderColor='var(--border)'; });
@@ -16132,7 +16164,7 @@ async function getDishFeedbackSummary(dishName, refDateStr){
     for(const r of (teamRows||[])){
       if(r.ratings && r.ratings[dishName]!=null && dateFilterFn(r.datum)){ date=r.datum; break; }
     }
-    let avg=null, count=0; const tagCounts={}; const notes=[];
+    let avg=null, count=0, perfekt=0; const tagCounts={}; const notes=[];
     if(date){
       const sameDay=(teamRows||[]).filter(r=>r.datum===date && r.ratings && r.ratings[dishName]!=null);
       count=sameDay.length;
@@ -16140,6 +16172,7 @@ async function getDishFeedbackSummary(dishName, refDateStr){
       if(vals.length) avg=vals.reduce((s,v)=>s+Number(v),0)/vals.length;
       sameDay.forEach(r=>{
         const rec=r.ratings[dishName];
+        if(rec && typeof rec==='object' && rec.perfekt) perfekt++;
         const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
         tags.forEach(t=>tagCounts[t]=(tagCounts[t]||0)+1);
         const note=(rec && typeof rec==='object')?rec.note:null;
@@ -16148,7 +16181,7 @@ async function getDishFeedbackSummary(dishName, refDateStr){
         if(improve) notes.push('→ Für 5/5: '+improve);
       });
     }
-    return {avg, count, date, notes, tagCounts};
+    return {avg, count, date, notes, tagCounts, perfekt};
   }
   function summarizeKunden(dateFilterFn){
     let date=null;
@@ -16182,10 +16215,10 @@ async function getDishFeedbackSummary(dishName, refDateStr){
   }
 
   return {
-    today:{teamAvg:teamToday.avg, teamCount:teamToday.count, teamNotes:teamToday.notes,
+    today:{teamPerfekt:teamToday.perfekt, teamAvg:teamToday.avg, teamCount:teamToday.count, teamNotes:teamToday.notes,
            kundenAvg:kundenToday.avg, kundenCount:kundenToday.count, kundenNotes:kundenToday.notes,
            topTags:combineTags(teamToday, kundenToday)},
-    lastTime:{teamAvg:teamLast.avg, teamCount:teamLast.count, teamDate:teamLast.date, teamNotes:teamLast.notes,
+    lastTime:{teamPerfekt:teamLast.perfekt, teamAvg:teamLast.avg, teamCount:teamLast.count, teamDate:teamLast.date, teamNotes:teamLast.notes,
               kundenAvg:kundenLast.avg, kundenCount:kundenLast.count, kundenDate:kundenLast.date, kundenNotes:kundenLast.notes,
               topTags:combineTags(teamLast, kundenLast)}
   };
@@ -16213,7 +16246,7 @@ function feedbackSummaryHtml(sum){
       <div style="display:flex;gap:8px;margin-bottom:6px;">
         <div style="flex:1;background:#FDF2F8;border-radius:8px;padding:8px 10px;text-align:center;">
           <div style="font-size:9px;font-weight:700;color:#9D2463;letter-spacing:.04em;">👥 TEAM</div>
-          ${s.teamAvg!=null?`<div style="font-size:18px;">${emojiFor(s.teamAvg)}</div><div style="font-size:12px;font-weight:700;">${s.teamAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${s.teamCount}× ${dateLabelFn(s.teamDate)}${hasTeamNotes?' · 💬':''}</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
+          ${s.teamAvg!=null?`<div style="font-size:18px;">${emojiFor(s.teamAvg)}</div><div style="font-size:12px;font-weight:700;">${s.teamAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${s.teamCount}× ${dateLabelFn(s.teamDate)}${hasTeamNotes?' · 💬':''}</div>${s.teamPerfekt?`<div style="font-size:10px;font-weight:800;color:#16A34A;margin-top:3px;">💯 ${s.teamPerfekt}× Perfekt</div>`:''}`:`<div style="font-size:11px;color:var(--muted);margin-top:6px;">–</div>`}
         </div>
         <div style="flex:1;background:#FFF7ED;border-radius:8px;padding:8px 10px;text-align:center;">
           <div style="font-size:9px;font-weight:700;color:#B8460F;letter-spacing:.04em;">🗣️ GÄSTE</div>
@@ -17430,6 +17463,7 @@ async function renderTeamFeedback(){
       const improve=(rec && typeof rec==='object')?rec.improve:null;
       if(val==null && !note && !improve) return;
       const d=ensure(dish);
+      if(rec && typeof rec==='object' && rec.perfekt){ d.perfekt=(d.perfekt||[]); d.perfekt.push({store:r.store_id, date:r.datum}); }
       if(val!=null) (r.datum===todayStr?d.todayVals:d.historyVals).push(val);
       if(note) d.comments.push({store:r.store_id, date:r.datum, text:note});
       if(improve) d.comments.push({store:r.store_id, date:r.datum, text:'→ Für 5/5: '+improve});
@@ -17457,7 +17491,7 @@ async function renderTeamFeedback(){
     const scaleFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
     const colorFor=(v)=>v<3?'#DC2626':v<4?'#EA580C':'#16A34A';
     html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">${name}</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">${name}${(d.perfekt&&d.perfekt.length)?` <span class="badge" style="background:#DCFCE7;color:#166534;margin-left:4px;" title="${escAttr(d.perfekt.map(x=>(storeNameMap[x.store]||x.store||'?')+' '+(x.date||'').slice(5)).join(', '))}">💯 ${d.perfekt.length}× Perfekt — so lassen</span>`:''}</div>
       <div style="display:flex;gap:8px;">
         <div style="flex:1;background:${todayAvg!=null?'#FDF2F8':'var(--surface-1)'};border-radius:8px;padding:8px 10px;text-align:center;">
           <div style="font-size:9px;font-weight:700;color:${todayAvg!=null?'#9D2463':'var(--muted)'};letter-spacing:.04em;">📅 HEUTE</div>
@@ -17498,7 +17532,7 @@ async function renderTeamFeedback(){
       const tags=(rec && typeof rec==='object')?(rec.tags||[]):[];
       const scale=FEEDBACK_SCALE.find(s=>s.v===val);
       const tagsHtml=tags.map(k=>{const t=KF_TAGS.find(x=>x.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin-left:3px;">${t?t.label:k}</span>`;}).join('');
-      return `<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0;"><span style="color:var(--sub);">${dish}</span><span>${scale?scale.emoji:'– nicht probiert'}${tagsHtml}</span></div>`;
+      return `<div style="display:flex;justify-content:space-between;font-size:11.5px;padding:2px 0;"><span style="color:var(--sub);">${dish}</span><span>${(rec && typeof rec==='object' && rec.perfekt)?'<b style="color:#16A34A;">💯 Perfekt</b>':(scale?scale.emoji:'– nicht probiert')}${tagsHtml}</span></div>`;
     }).join('');
     html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
       <div style="font-size:10px;color:var(--muted);text-align:right;">${storeNameMap[r.store_id]||r.store_id||'ohne Filiale'} · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
