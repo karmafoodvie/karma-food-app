@@ -7904,25 +7904,129 @@ async function renderNutzungsstatistik(){
 }
 window.renderNutzungsstatistik=renderNutzungsstatistik;
 
+// ==== KONTROLLZENTRALE (06.10.26) — Organisation: Jetzt offen · Routine · Parkplatz ====
+// Routine-Punkte: Reihenfolge/Inhalt aus der tatsächlichen Nutzung (Mo/Di/Do vormittags: Überblick,
+// Bestellungen, Küche, Mengen, Mängel, Feedback). Erledigt-Status liegt in org_routine_done
+// (pro Zeitraum: Tag / ISO-Woche / Monat) und setzt sich damit von selbst zurück.
+const ORG_ROUTINE=[
+  {k:'d_notstand',f:'d',t:'Notstand & dringende Meldungen ansehen',go:"goTo('home')"},
+  {k:'d_bestell',f:'d',t:'Bestellungen aller Filialen ansehen',go:"goTo('pack')"},
+  {k:'d_maengel',f:'d',t:'Mängel & Schäden durchgehen',go:"goTo('maengel')"},
+  {k:'d_catering',f:'d',t:'Caterings heute/morgen prüfen',go:"goTo('catering')"},
+  {k:'w_forecast',f:'w',t:'Mengen/Forecast nächste Woche prüfen',go:"goTo('orgForecast')"},
+  {k:'w_wochenfb',f:'w',t:'Wochen-Feedback fürs Küchenteam durchgehen',go:"goTo('wochenFeedback')"},
+  {k:'w_appfb',f:'w',t:'App-Feedback abarbeiten (To-do)',go:"window._tfTab='app';goTo('teamFeedback')"},
+  {k:'w_verfueg',f:'w',t:'Verfügbarkeit: nicht lieferbare Artikel aktuell?',go:"goTo('verfuegbarkeit')"},
+  {k:'w_transport',f:'w',t:'Aufgaben für Michi (Transporter) eintragen',go:"goTo('transporterTasks')"},
+  {k:'m_hygiene',f:'m',t:'Hygiene-Schulungen: wer ist fällig?',go:"goTo('hygieneSchulung')"},
+  {k:'m_dailycheck',f:'m',t:'Daily Check-up Verlauf ansehen',go:"goTo('dailycheck')"},
+  {k:'m_umsatz',f:'m',t:'Umsatz ansehen',go:"goTo('umsatz')"},
+  {k:'m_feuer',f:'m',t:'Feuerlöscher-Kontrolle: Status ok?',go:"goTo('feuerloescher')"},
+];
+function kzPeriod(f){
+  const d=new Date(); const pad=n=>String(n).padStart(2,'0');
+  if(f==='d') return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  if(f==='m') return d.getFullYear()+'-'+pad(d.getMonth()+1);
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())); const dn=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-dn);
+  const y0=new Date(Date.UTC(t.getUTCFullYear(),0,1)); return t.getUTCFullYear()+'-W'+pad(Math.ceil(((t-y0)/86400000+1)/7));
+}
+let _kzDone=new Set();
+async function kzLoad(){
+  const periods=['d','w','m'].map(kzPeriod);
+  const rows=await api(`org_routine_done?period=in.(${periods.map(p=>'"'+p+'"').join(',')})&select=key,period`).catch(()=>[]);
+  _kzDone=new Set((rows||[]).map(r=>r.key+'|'+r.period));
+}
+async function kzToggle(k,f,checked,el){
+  const period=kzPeriod(f); const id=k+'|'+period;
+  try{
+    if(checked){ await api('org_routine_done?on_conflict=key,period',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({key:k,period})}); _kzDone.add(id); }
+    else { await api(`org_routine_done?key=eq.${k}&period=eq.${encodeURIComponent(period)}`,{method:'DELETE'}); _kzDone.delete(id); }
+    kzRefreshRoutine();
+  }catch(e){ console.error(e); el.checked=!checked; showToast('Fehler beim Speichern',true); }
+}
+function kzRoutineHtml(){
+  const groups=[['d','HEUTE','Jeden Arbeitstag'],['w','DIESE WOCHE','Einmal pro Woche'],['m','DIESEN MONAT','Einmal pro Monat']];
+  const total=ORG_ROUTINE.length, done=ORG_ROUTINE.filter(r=>_kzDone.has(r.k+'|'+kzPeriod(r.f))).length;
+  let h=`<div class="section-lbl" style="margin-top:4px;">✅ ROUTINE <span style="font-weight:500;color:var(--muted);">· ${done}/${total} erledigt</span></div>
+    <div style="height:7px;background:var(--surface-1);border-radius:4px;overflow:hidden;margin:0 0 10px;"><div style="height:100%;width:${Math.round(done/total*100)}%;background:${done===total?'#16A34A':'#2B3A67'};"></div></div>`;
+  groups.forEach(([f,lbl,sub])=>{
+    const items=ORG_ROUTINE.filter(r=>r.f===f); const left=items.filter(r=>!_kzDone.has(r.k+'|'+kzPeriod(f)));
+    h+=`<details ${(f==='d'||left.length)?'open':''} style="margin-bottom:8px;"><summary style="font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;padding:4px 2px;">${lbl} <span style="font-weight:500;color:var(--muted);">· ${left.length?left.length+' offen':'alles erledigt ✓'}</span></summary><div class="card" style="padding:2px 12px;">`;
+    items.forEach(r=>{ const dn=_kzDone.has(r.k+'|'+kzPeriod(f));
+      h+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <input type="checkbox" ${dn?'checked':''} onchange="kzToggle('${r.k}','${f}',this.checked,this)" style="width:24px;height:24px;accent-color:#16A34A;flex-shrink:0;">
+        <span style="flex:1;font-size:13px;${dn?'text-decoration:line-through;color:var(--muted);':''}">${r.t}</span>
+        <button onclick="${r.go}" style="border:1px solid var(--border);background:#fff;border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer;">öffnen →</button></div>`; });
+    h+=`</div></details>`;
+  });
+  return h;
+}
+function kzRefreshRoutine(){ const b=document.getElementById('kz-routine'); if(b){ b.innerHTML=kzRoutineHtml(); translateEl(b); } }
+async function kzOpenItemsHtml(){
+  const today=new Date().toISOString().split('T')[0]; const in7=new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+  const [maengel,notst,appfb,oldfb,cats,fl]=await Promise.all([
+    api('maengel?status=neq.behoben&select=id,status').catch(()=>[]),
+    api('notstand_meldungen?status=eq.offen&select=id').catch(()=>[]),
+    api('app_feedback?bearbeitet=eq.false&select=id').catch(()=>[]),
+    api('essen_feedback?feedback_frei=not.is.null&bearbeitet=is.false&select=feedback_frei&limit=200').catch(()=>[]),
+    api(`caterings?status=eq.aktiv&datum=gte.${today}&datum=lte.${in7}&select=id,kunde,datum&order=datum.asc`).catch(()=>[]),
+    api('feuerloescher?select=*&order=sort.asc').catch(()=>[])
+  ]);
+  const items=[];
+  if((notst||[]).length) items.push({c:'red',i:'🚨',t:`${notst.length} Notstand-Meldung${notst.length>1?'en':''} offen`,go:"goTo('home')"});
+  if((maengel||[]).length){ const o=maengel.filter(m=>(m.status||'offen')==='offen').length; items.push({c:o?'red':'orange',i:'🔧',t:`${maengel.length} Mängel offen${o?` (${o} neu)`:''}`,go:"goTo('maengel')"}); }
+  const nApp=(appfb||[]).length+(oldfb||[]).filter(r=>isAppFreeText(r.feedback_frei)).length;
+  if(nApp) items.push({c:'orange',i:'📱',t:`${nApp} App-Feedback zum Abarbeiten`,go:"window._tfTab='app';goTo('teamFeedback')"});
+  if((cats||[]).length) items.push({c:'blue',i:'🍽️',t:`${cats.length} Catering in den nächsten 7 Tagen — nächstes: ${cats[0].kunde}, ${new Date(cats[0].datum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}`,go:"goTo('catering')"});
+  if((fl||[]).length){ const st=flStatus(fl); if(st.level!=='green'||st.defekte) items.push({c:st.level==='red'?'red':'orange',i:'🧯',t:`Feuerlöscher-Prüfung ${st.level==='red'?'überfällig':'bald fällig ('+flFmt(st.due)+')'}${st.defekte?' · '+st.defekte+' defekt':''}`,go:"goTo('feuerloescher')"}); }
+  const col={red:['#FEF2F2','#FECACA','#991B1B'],orange:['#FFF7ED','#FED7AA','#9A3412'],blue:['#EFF6FF','#BFDBFE','#1E40AF']};
+  let h=`<div class="section-lbl" style="margin-top:4px;">🎯 JETZT OFFEN</div>`;
+  if(!items.length) h+=`<div class="card" style="padding:14px;text-align:center;color:#166534;background:#F0FDF4;border-color:#BBF7D0;font-size:13px;font-weight:600;margin-bottom:12px;">✅ Nichts offen — alles im grünen Bereich</div>`;
+  items.forEach(x=>{ const c=col[x.c]; h+=`<div onclick="${x.go}" style="display:flex;align-items:center;gap:10px;background:${c[0]};border:1px solid ${c[1]};border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;"><span style="font-size:19px;">${x.i}</span><div style="flex:1;font-size:12.5px;font-weight:700;color:${c[2]};">${x.t}</div><span style="color:${c[2]};">→</span></div>`; });
+  return h;
+}
+async function kzParkplatzHtml(){
+  const rows=(await api('org_todos?done=eq.false&select=*&order=created_at.asc').catch(()=>[]))||[];
+  let h=`<div class="section-lbl" style="margin-top:14px;">🅿️ PARKPLATZ <span style="font-weight:500;color:var(--muted);">· Gedanke raus aus dem Kopf</span></div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;"><input id="kz-new" type="text" placeholder="Was darfst du nicht vergessen?" onkeydown="if(event.key==='Enter')kzAddTodo()" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:14px;"><button onclick="kzAddTodo()" style="padding:0 16px;border:none;border-radius:10px;background:#2B3A67;color:#fff;font-size:18px;font-weight:700;cursor:pointer;">＋</button></div>`;
+  if(rows.length){ h+=`<div class="card" style="padding:2px 12px;">`; rows.forEach(r=>{ h+=`<label style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;"><input type="checkbox" onchange="kzDoneTodo(${r.id},this)" style="width:24px;height:24px;accent-color:#16A34A;flex-shrink:0;"><span style="flex:1;font-size:13.5px;">${escAttr(r.text)}</span></label>`; }); h+='</div>'; }
+  else h+=`<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Nichts geparkt.</div>`;
+  return h;
+}
+async function kzAddTodo(){
+  const inp=document.getElementById('kz-new'); const t=(inp?.value||'').trim(); if(!t) return;
+  try{ await api('org_todos',{method:'POST',body:JSON.stringify({text:t})}); inp.value=''; const b=document.getElementById('kz-park'); b.innerHTML=await kzParkplatzHtml(); setTimeout(()=>document.getElementById('kz-new')?.focus(),30); }
+  catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
+}
+async function kzDoneTodo(id,el){
+  try{ await api(`org_todos?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({done:true,done_at:new Date().toISOString()})}); const row=el.closest('label'); row.style.opacity='.4'; row.style.textDecoration='line-through'; setTimeout(async()=>{ const b=document.getElementById('kz-park'); if(b) b.innerHTML=await kzParkplatzHtml(); },700); }
+  catch(e){ console.error(e); el.checked=false; showToast('Fehler',true); }
+}
+Object.assign(window,{kzToggle,kzAddTodo,kzDoneTodo});
+// Bereichsliste: jede "section-lbl" + ihre Buttons zu einem Einklapp-Block machen
+function kzCollapseSections(root){
+  const labels=[...root.querySelectorAll(':scope > .section-lbl')];
+  labels.forEach((lbl,idx)=>{
+    const det=document.createElement('details'); det.open=idx<2; det.style.marginBottom='8px';
+    const sum=document.createElement('summary'); sum.className='section-lbl'; sum.style.cssText='cursor:pointer;margin-top:10px;'; sum.innerHTML=lbl.innerHTML;
+    det.appendChild(sum);
+    let n=lbl.nextElementSibling; const move=[]; while(n&&!n.classList.contains('section-lbl')){ move.push(n); n=n.nextElementSibling; }
+    move.forEach(m=>det.appendChild(m)); lbl.replaceWith(det);
+  });
+}
+
 async function renderManagement(){
   const el=document.getElementById('v-management');
-  const maengelOffen=await api(`maengel?status=neq.behoben&select=id,status`).catch(()=>[]);
-  const anzOffen=(maengelOffen||[]).filter(m=>(m.status||'offen')==='offen').length;
-  const anzInBearbeitung=(maengelOffen||[]).filter(m=>m.status==='in_bearbeitung').length;
   loadNotifBadge();
-  const _flBanner=await flBannerHtml().catch(()=>'');
+  await kzLoad();
+  const [_kzOpen,_kzPark]=await Promise.all([kzOpenItemsHtml().catch(()=>''),kzParkplatzHtml().catch(()=>'')]);
   el.innerHTML=`
-    ${pageHeaderHtml('🗂️','Management','Alles, was Organisation braucht — an einem Ort','#2B3A67')}
-    ${_flBanner}
-    ${(maengelOffen||[]).length?`<div onclick="goTo('maengel')" style="display:flex;align-items:center;gap:10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
-      <span style="font-size:18px;">🔧</span>
-      <div style="flex:1;">
-        <div style="font-size:12.5px;font-weight:600;color:#991B1B;">${maengelOffen.length} Meldung${maengelOffen.length===1?'':'en'} — ${anzOffen} offen${anzInBearbeitung?`, ${anzInBearbeitung} in Bearbeitung`:''}</div>
-        <div style="font-size:10.5px;color:#B45309;">Antippen für Übersicht</div>
-      </div>
-      <span style="color:#991B1B;">→</span>
-    </div>`:''}
-
+    ${pageHeaderHtml('🗂️','Kontrollzentrale','Nichts vergessen: offen · Routine · Parkplatz','#2B3A67')}
+    ${_kzOpen}
+    <div id="kz-routine">${kzRoutineHtml()}</div>
+    <div id="kz-park">${_kzPark}</div>
+    <div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--muted);margin:22px 0 4px;">📂 ALLE BEREICHE</div>
+    <div id="kz-areas">
     <div class="section-lbl">📊 Tagesgeschäft</div>
     <button class="org-btn" onclick="goTo('pack')" style="border-color:#2B3A67;">
       <span class="org-btn-icon">📋</span>
@@ -8077,7 +8181,9 @@ async function renderManagement(){
         <span class="org-btn-title" style="color:#5B8C5A;">Zutaten-Datenbank</span>
         <span class="org-btn-sub">Zutaten mit Kategorie & Allergenen zentral pflegen</span>
       </div>
-    </button>`;
+    </button>
+    </div>`;
+  kzCollapseSections(document.getElementById('kz-areas'));
   translateEl(el);
 }
 window.renderManagement=renderManagement;
