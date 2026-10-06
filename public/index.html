@@ -3869,6 +3869,14 @@ async function markAppFeedbackErledigt(id,el){
   }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
 }
 window.markAppFeedbackErledigt=markAppFeedbackErledigt;
+async function toggleAppFeedbackDone(tbl,id,checked,el){
+  try{ await api(`${tbl}?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({bearbeitet:checked})});
+    const c=el.closest('.card'); c.style.opacity=checked?'.65':'1';
+    const t=c.querySelector('.afb-txt'); if(t) t.style.textDecoration=checked?'line-through':'none';
+    showToast(checked?'✓ Erledigt':'Wieder offen');
+  }catch(e){ console.error(e); el.checked=!checked; showToast('Fehler beim Speichern',true); }
+}
+window.toggleAppFeedbackDone=toggleAppFeedbackDone;
 function showNotstandModal(){
   closeNotstandModal();
   const opts=(articles||[]).filter(a=>!a.archiviert).sort((x,y)=>x.name.localeCompare(y.name,'de')).map(a=>`<option value="${a.id}" data-unit="${escAttr(a.unit||'')}">${escAttr(a.name)}</option>`).join('');
@@ -17629,15 +17637,16 @@ async function renderTeamFeedback(){
 }
 window.renderTeamFeedback=renderTeamFeedback;
 
-// Alte Freitexte (vor 06.10.26) lagen unsortiert in essen_feedback.feedback_frei — grob per Stichwort
-// zuordnen: Essen-Begriffe → Koch, alles andere → App.
-function isFoodFreeText(t){
-  return /lecker|schmeck|curry|essen|gericht|special|salat|scharf|würz|portion|reis|dessert|sweet|suppe|dal|chili|samosa|zu salzig|versalzen|kalt|warm|chutney|chole|rajma|massaman/i.test(t||'');
+// Alte Freitexte (vor 06.10.26) lagen unsortiert in essen_feedback.feedback_frei — Standard: Essen
+// (Koch). Nur bei eindeutigen App-Begriffen → App.
+function isAppFreeText(t){
+  return /\bapp\b|pfeil|button|klick|eingeb|eintrag|bestell|funktion|bug|fehler|laden|lädt|speicher|scroll|seite|menü-?punkt|anzeige|liste|schild|zahlenfeld|\bfeld/i.test(t||'');
 }
+function isFoodFreeText(t){ return !isAppFreeText(t); }
 async function renderTeamFeedbackApp(el,html){
   const [appRows, oldRows, stores]=await Promise.all([
     api('app_feedback?select=*&order=created_at.desc&limit=200').catch(()=>[]),
-    api('essen_feedback?feedback_frei=not.is.null&select=store_id,datum,feedback_frei,submitted_at&order=submitted_at.desc&limit=150').catch(()=>[]),
+    api('essen_feedback?feedback_frei=not.is.null&select=id,store_id,datum,feedback_frei,bearbeitet,submitted_at&order=submitted_at.desc&limit=150').catch(()=>[]),
     api('stores?select=id,name').catch(()=>[])
   ]);
   const nm={}; (stores||[]).forEach(s=>nm[s.id]=s.name);
@@ -17645,17 +17654,15 @@ async function renderTeamFeedbackApp(el,html){
   html+=`<button onclick="showAppFeedbackModal()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#2563EB;color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">📱 Neues App-Feedback eintragen</button>`;
   const olds=(oldRows||[]).filter(r=>r.feedback_frei&&r.feedback_frei.trim()&&!isFoodFreeText(r.feedback_frei));
   const open=(appRows||[]).filter(r=>!r.bearbeitet), done=(appRows||[]).filter(r=>r.bearbeitet);
-  if(!open.length&&!olds.length&&!done.length) html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Noch kein App-Feedback.</div>`;
-  if(open.length) html+=`<div class="section-lbl">📱 Offen (${open.length})</div>`;
-  const card=(r)=>`<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#EFF6FF;border-color:#BFDBFE;">
-    <div style="font-size:12.5px;color:#1E3A8A;white-space:pre-wrap;">${escAttr(r.text)}</div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;"><span style="font-size:9.5px;color:var(--muted);">${r.store_id?(nm[r.store_id]||r.store_id):'ohne Filiale'} · ${fmt(r.created_at)}</span>${r.bearbeitet?'':`<button onclick="markAppFeedbackErledigt(${r.id},this)" style="background:#fff;border:1px solid #BFDBFE;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;">✓ Erledigt</button>`}</div></div>`;
+  const oldOpen=olds.filter(r=>!r.bearbeitet), oldDone=olds.filter(r=>r.bearbeitet);
+  if(!open.length&&!oldOpen.length&&!done.length&&!oldDone.length) html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Noch kein App-Feedback.</div>`;
+  const nOpen=open.length+oldOpen.length;
+  html+=`<div class="section-lbl">☐ To-do (${nOpen})</div>`;
+  if(!nOpen) html+=`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Alles abgehakt 🎉</div>`;
   open.forEach(r=>html+=card(r));
-  if(olds.length){
-    html+=`<div class="section-lbl" style="margin-top:16px;">🗂️ Ältere Einträge (alt, automatisch zugeordnet)</div>`;
-    olds.forEach(r=>{ html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;"><div style="font-size:12.5px;white-space:pre-wrap;">${escAttr(r.feedback_frei)}</div><div style="font-size:9.5px;color:var(--muted);margin-top:5px;">${r.store_id?(nm[r.store_id]||r.store_id):'ohne Filiale'} · ${fmt(r.datum)}</div></div>`; });
-  }
-  if(done.length){ html+=`<div class="section-lbl" style="margin-top:16px;">✓ Erledigt (${done.length})</div>`; done.forEach(r=>html+=card(r)); }
+  oldOpen.forEach(r=>html+=card(r,'essen_feedback',r.feedback_frei,r.store_id,r.datum));
+  const dn=done.length+oldDone.length;
+  if(dn){ html+=`<div class="section-lbl" style="margin-top:16px;">☑ Erledigt (${dn})</div>`; done.forEach(r=>html+=card(r)); oldDone.forEach(r=>html+=card(r,'essen_feedback',r.feedback_frei,r.store_id,r.datum)); }
   el.innerHTML=html; translateEl(el);
 }
 window.renderTeamFeedbackApp=renderTeamFeedbackApp;
