@@ -17530,7 +17530,8 @@ async function renderTeamFeedback(){
   // (Wunsch Tini 08.09.26: "besser gebündelt, schnelle Ableitungen treffen können"). Namen werden
   // nirgends mehr angezeigt — nur Filiale + Datum, bleibt anonym.
   const byDish={}; // name -> {todayVals:[], historyVals:[], comments:[{store,date,text}]}
-  function ensure(name){ return byDish[name]=byDish[name]||{todayVals:[], historyVals:[], comments:[]}; }
+  function ensure(name){ return byDish[name]=byDish[name]||{todayVals:[], historyVals:[], comments:[], tags:{}, byStore:{}}; }
+  const addVal=(d,store,v)=>{ if(v==null||!store) return; (d.byStore[store]=d.byStore[store]||[]).push(v); };
   (teamRows||[]).forEach(r=>{
     Object.entries(r.ratings||{}).forEach(([dish,rec])=>{
       const val=(rec && typeof rec==='object')?rec.v:rec;
@@ -17540,6 +17541,8 @@ async function renderTeamFeedback(){
       const d=ensure(dish);
       if(rec && typeof rec==='object' && rec.perfekt){ d.perfekt=(d.perfekt||[]); d.perfekt.push({store:r.store_id, date:r.datum}); }
       if(val!=null) (r.datum===todayStr?d.todayVals:d.historyVals).push(val);
+      addVal(d,r.store_id,val);
+      ((rec&&typeof rec==='object'&&rec.tags)||[]).forEach(k=>d.tags[k]=(d.tags[k]||0)+1);
       if(note) d.comments.push({store:r.store_id, date:r.datum, text:note});
       if(improve) d.comments.push({store:r.store_id, date:r.datum, text:'→ Für 5/5: '+improve});
     });
@@ -17549,6 +17552,8 @@ async function renderTeamFeedback(){
     const d=ensure(r.dish_name);
     const date=(r.submitted_at||'').split('T')[0];
     if(r.rating!=null) (date===todayStr?d.todayVals:d.historyVals).push(r.rating);
+    addVal(d,r.store_id,r.rating);
+    (r.quick_tags||[]).forEach(k=>d.tags[k]=(d.tags[k]||0)+1);
     if(r.kommentar) d.comments.push({store:r.store_id, date, text:r.kommentar});
   });
 
@@ -17558,28 +17563,46 @@ async function renderTeamFeedback(){
     return avgA-avgB;
   });
 
-  html+=`<div class="section-lbl">📊 Gerichte im Überblick</div>`;
-  dishNames.forEach(name=>{
-    const d=byDish[name];
-    const todayAvg=d.todayVals.length?d.todayVals.reduce((s,v)=>s+v,0)/d.todayVals.length:null;
-    const historyAvg=d.historyVals.length?d.historyVals.reduce((s,v)=>s+v,0)/d.historyVals.length:null;
-    const scaleFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
-    const colorFor=(v)=>v<3?'#DC2626':v<4?'#EA580C':'#16A34A';
-    html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">${name}${(d.perfekt&&d.perfekt.length)?` <span class="badge" style="background:#DCFCE7;color:#166534;margin-left:4px;" title="${escAttr(d.perfekt.map(x=>(storeNameMap[x.store]||x.store||'?')+' '+(x.date||'').slice(5)).join(', '))}">💯 ${d.perfekt.length}× Perfekt — so lassen</span>`:''}</div>
-      <div style="display:flex;gap:8px;">
-        <div style="flex:1;background:${todayAvg!=null?'#FDF2F8':'var(--surface-1)'};border-radius:8px;padding:8px 10px;text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:${todayAvg!=null?'#9D2463':'var(--muted)'};letter-spacing:.04em;">📅 HEUTE</div>
-          ${todayAvg!=null?`<div style="font-size:16px;">${scaleFor(todayAvg)}</div><div style="font-size:13px;font-weight:800;color:${colorFor(todayAvg)};">${todayAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${d.todayVals.length}×</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:8px;">–</div>`}
-        </div>
-        <div style="flex:1;background:var(--surface-1);border-radius:8px;padding:8px 10px;text-align:center;">
-          <div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.04em;">🕐 BISHER</div>
-          ${historyAvg!=null?`<div style="font-size:16px;">${scaleFor(historyAvg)}</div><div style="font-size:13px;font-weight:800;color:${colorFor(historyAvg)};">${historyAvg.toFixed(1)}</div><div style="font-size:9px;color:var(--muted);">${d.historyVals.length}×</div>`:`<div style="font-size:11px;color:var(--muted);margin-top:8px;">–</div>`}
-        </div>
+  // ===== DASHBOARD (06.10.26): KPIs + Handlungsbedarf / Mittelfeld / Läuft gut =====
+  const avgOf=(a)=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+  const stat=name=>{ const d=byDish[name]; const all=[...d.todayVals,...d.historyVals]; return {name,d,all,avg:avgOf(all),n:all.length,perf:(d.perfekt||[]).length}; };
+  const stats=dishNames.map(stat).filter(x=>x.n>0||x.perf>0);
+  const allVals=stats.flatMap(x=>x.all);
+  const gAvg=avgOf(allVals);
+  const colorFor=(v)=>v<3?'#DC2626':v<4?'#EA580C':'#16A34A';
+  const scaleFor=(v)=>{ const s=FEEDBACK_SCALE.find(x=>x.v===Math.round(v)); return s?s.emoji:'–'; };
+  const crit=stats.filter(x=>x.avg!=null&&x.avg<3&&!x.perf), top=stats.filter(x=>(x.avg!=null&&x.avg>=4)||x.perf), mid=stats.filter(x=>!crit.includes(x)&&!top.includes(x));
+  const perfTotal=stats.reduce((n,x)=>n+x.perf,0);
+  const kpi=(lbl,val,col,sub)=>`<div style="flex:1;background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 6px;text-align:center;"><div style="font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.04em;">${lbl}</div><div style="font-size:20px;font-weight:800;color:${col};margin-top:2px;">${val}</div><div style="font-size:9px;color:var(--muted);">${sub}</div></div>`;
+  html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">
+    ${kpi('Ø GESAMT',gAvg!=null?gAvg.toFixed(1):'–',gAvg!=null?colorFor(gAvg):'var(--muted)',allVals.length+' Bewertungen')}
+    ${kpi('⚠️ KRITISCH',crit.length,crit.length?'#DC2626':'#16A34A','Gerichte < 3,0')}
+    ${kpi('💯 PERFEKT',perfTotal,'#16A34A','so lassen')}
+  </div>`;
+  const dishRow=(x)=>{
+    const {name,d,avg,n}=x;
+    const tA=avgOf(d.todayVals), hA=avgOf(d.historyVals);
+    const trend=(tA!=null&&hA!=null)?(tA-hA>=0.4?'<span style="color:#16A34A;font-weight:700;">↗ heute besser</span>':tA-hA<=-0.4?'<span style="color:#DC2626;font-weight:700;">↘ heute schlechter</span>':''):(tA!=null?'<span style="color:var(--muted);">nur heute</span>':'');
+    const tagList=Object.entries(d.tags).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,c])=>{const t=KF_TAGS.find(z=>z.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin:0 4px 3px 0;">${t?t.label:k} ${c}×</span>`;}).join('');
+    const stores=Object.entries(d.byStore).map(([sid,v])=>[sid,avgOf(v),v.length]).sort((a,b)=>a[1]-b[1]).map(([sid,a,c])=>`<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;margin:0 4px 3px 0;background:${a<3?'#FEE2E2':a<4?'#FFEDD5':'#DCFCE7'};color:${colorFor(a)};font-weight:600;">${(storeNameMap[sid]||sid).replace(/\s*\d{4}$/,'')} ${a.toFixed(1)}</span>`).join('');
+    const pct=avg!=null?Math.max(4,Math.min(100,avg/5*100)):0;
+    const comm=d.comments.length?`<details style="margin-top:6px;"><summary style="font-size:10.5px;color:var(--muted);cursor:pointer;">💬 ${d.comments.length} Kommentar${d.comments.length>1?'e':''}</summary>`+d.comments.slice(0,8).map(c=>`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">„${c.text}"<span style="font-size:9.5px;color:var(--muted);"> — ${c.store?(storeNameMap[c.store]||c.store):'ohne Filiale'}${c.date?' · '+new Date(c.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</span></div>`).join('')+`</details>`:'';
+    return `<div class="card" style="padding:11px 13px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;font-size:12.5px;font-weight:600;line-height:1.3;">${name}</div>
+        ${avg!=null?`<div style="text-align:right;"><span style="font-size:15px;">${scaleFor(avg)}</span> <span style="font-size:15px;font-weight:800;color:${colorFor(avg)};">${avg.toFixed(1)}</span><div style="font-size:9px;color:var(--muted);">${n}×</div></div>`:''}
       </div>
-      ${d.comments.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">`+d.comments.slice(0,6).map(c=>`<div style="font-size:11.5px;color:var(--sub);margin-bottom:5px;">„${c.text}"<span style="font-size:9.5px;color:var(--muted);"> — ${c.store?(storeNameMap[c.store]||c.store):'ohne Filiale'}${c.date?' · '+new Date(c.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</span></div>`).join('')+`</div>`:''}
+      ${avg!=null?`<div style="height:6px;background:var(--surface-1);border-radius:3px;margin:7px 0 6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${colorFor(avg)};border-radius:3px;"></div></div>`:''}
+      <div style="font-size:10.5px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:${(tagList||stores)?'6px':'0'};">${trend}${x.perf?`<span class="badge" style="background:#DCFCE7;color:#166534;" title="${escAttr((d.perfekt||[]).map(y=>(storeNameMap[y.store]||y.store||'?')+' '+(y.date||'').slice(5)).join(', '))}">💯 ${x.perf}× Perfekt — so lassen</span>`:''}</div>
+      ${tagList?`<div>${tagList}</div>`:''}
+      ${stores?`<div>${stores}</div>`:''}
+      ${comm}
     </div>`;
-  });
+  };
+  const group=(title,sub,col,list)=>{ if(!list.length) return; html+=`<div class="section-lbl" style="margin-top:6px;color:${col};">${title} <span style="font-weight:500;color:var(--muted);">· ${sub}</span></div>`; list.sort((a,b)=>(a.avg??9)-(b.avg??9)).forEach(x=>html+=dishRow(x)); };
+  group('⚠️ HANDLUNGSBEDARF','Ø unter 3,0 — hier ansetzen','#DC2626',crit);
+  group('🟠 MITTELFELD','verbesserbar','#EA580C',mid);
+  group('✅ LÄUFT GUT','Ø ab 4,0 oder Perfekt','#16A34A',top);
 
   // Freies, nicht an ein Gericht gebundenes Feedback (allgemeine App-/sonstige Anmerkungen) —
   // bleibt als eigener, kleinerer Block ganz unten, ebenfalls anonym.
