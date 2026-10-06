@@ -3833,6 +3833,42 @@ function notstandDatum(offsetDays){
   const d=new Date(Date.now()+offsetDays*86400000);
   return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Vienna'}).format(d); // YYYY-MM-DD
 }
+// ==== APP-FEEDBACK an Tini (06.10.26) — klar getrennt vom Essen-Feedback an den Koch ====
+function closeAppFeedbackModal(){ const m=document.getElementById('appfb-modal'); if(m) m.remove(); }
+function showAppFeedbackModal(){
+  closeAppFeedbackModal();
+  const ov=document.createElement('div');
+  ov.id='appfb-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+    <div style="font-size:16px;font-weight:800;color:#1D4ED8;margin-bottom:4px;">📱 Feedback an Tini — zur App</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.45;">Etwas funktioniert nicht, ist umständlich oder du hast eine Idee für die App? Schreib's hier rein.<br><b>Zum Essen?</b> Das geht an den Koch — über „Food-Feedback“.</div>
+    <textarea id="appfb-text" placeholder="z.B. Zahlenfeld ist mühsam, Liste fehlt…" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;min-height:90px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:14px;"></textarea>
+    <div style="display:flex;gap:8px;">
+      <button onclick="closeAppFeedbackModal()" style="flex:1;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button id="appfb-send-btn" onclick="sendAppFeedback()" style="flex:2;background:#2563EB;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">An Tini senden ✓</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) closeAppFeedbackModal(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>document.getElementById('appfb-text')?.focus(),50);
+}
+async function sendAppFeedback(){
+  const t=(document.getElementById('appfb-text')?.value||'').trim();
+  if(!t){ showToast('Bitte kurz etwas eintippen',true); return; }
+  const btn=document.getElementById('appfb-send-btn'); if(btn){btn.disabled=true;btn.textContent='Sende…';}
+  try{
+    await api('app_feedback',{method:'POST',body:JSON.stringify({store_id:currentStore?.id||null,text:t})});
+    closeAppFeedbackModal(); showToast('✓ Danke! Geht an Tini');
+  }catch(e){ console.error(e); showToast('Fehler beim Senden',true); if(btn){btn.disabled=false;btn.textContent='An Tini senden ✓';} }
+}
+window.showAppFeedbackModal=showAppFeedbackModal; window.sendAppFeedback=sendAppFeedback; window.closeAppFeedbackModal=closeAppFeedbackModal;
+async function markAppFeedbackErledigt(id,el){
+  try{ await api(`app_feedback?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({bearbeitet:true})});
+    const c=el.closest('.card'); c.style.opacity='0.4'; c.style.pointerEvents='none'; showToast('✓ Erledigt');
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
+}
+window.markAppFeedbackErledigt=markAppFeedbackErledigt;
 function showNotstandModal(){
   closeNotstandModal();
   const opts=(articles||[]).filter(a=>!a.archiviert).sort((x,y)=>x.name.localeCompare(y.name,'de')).map(a=>`<option value="${a.id}" data-unit="${escAttr(a.unit||'')}">${escAttr(a.name)}</option>`).join('');
@@ -4199,9 +4235,14 @@ async function renderHome(){
     <div style="display:flex;gap:6px;margin-bottom:6px;">
       ${(getTodayMenu()||[]).length?`<div class="home-card" onclick="window._waehrendHideFeedback=false;goTo('waehrend')" style="flex:1;padding:9px 8px;text-align:center;${feedbackDoneHome?'background:#F0FDF4;border-color:var(--green);':''}">
         <div style="font-size:20px;line-height:1;">😋</div>
-        <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Food-Feedback</div>
-        <div style="font-size:9.5px;color:${feedbackDoneHome?'var(--green)':'var(--muted)'};margin-top:1px;">${feedbackDoneHome?'✓ abgegeben':'Wie war\'s?'}</div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Feedback an Koch</div>
+        <div style="font-size:9.5px;color:${feedbackDoneHome?'var(--green)':'var(--muted)'};margin-top:1px;">${feedbackDoneHome?'✓ abgegeben':'Essen · Wie war\'s?'}</div>
       </div>`:''}
+      <div class="home-card" onclick="showAppFeedbackModal()" style="flex:1;padding:9px 8px;text-align:center;">
+        <div style="font-size:20px;line-height:1;">📱</div>
+        <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Feedback an Tini</div>
+        <div style="font-size:9.5px;color:var(--muted);margin-top:1px;">Die App</div>
+      </div>
       <div class="home-card kf-disposal" onclick="goTo('disposal')" style="flex:1;padding:9px 8px;text-align:center;${disposalDone?'background:#F0FDF4;border-color:var(--green);':''}">
         <div style="font-size:20px;line-height:1;">🗑️</div>
         <div style="font-size:11.5px;font-weight:600;margin-top:3px;">Entsorgung</div>
@@ -7807,7 +7848,7 @@ window.renderForecastAmpel=renderForecastAmpel;
 // Nutzungsstatistik (21.09.26, Wunsch Tini) — zeigt, welche Bereiche der Organisation-Ansicht
 // wirklich am häufigsten genutzt werden, damit künftige UX-Entscheidungen datenbasiert statt nur
 // geschätzt getroffen werden können. Sammelt erst ab jetzt (v6.99.84) Daten, also anfangs noch dünn.
-const VIEW_LABELS={home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',menuKontrolle:'Menü-Kontrolle',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Team-Feedback',samosas:'Samosas'};
+const VIEW_LABELS={home:'Startseite',broadcast:'Nachricht senden',msg:'Nachrichten-Übersicht',orgForecast:'Mengen (Forecast)',forecastReview:'Mengen-Übersicht',rabattcodes:'Rabattcodes',forecastAmpel:'Forecast-Kontrolle',wochenFeedback:'Wochen-Feedback',epochenCheck:'Epochen-Check',menuKontrolle:'Menü-Kontrolle',zutatenkontrolle:'Zutaten-Kontrolle',order:'Bestellen',pack:'Packliste',hygieneSchulung:'Hygiene-Schulung',maengel:'Schäden',teamFeedback:'Feedback',samosas:'Samosas'};
 
 async function renderNutzungsstatistik(){
   const el=document.getElementById('v-nutzungsstatistik');
@@ -12221,8 +12262,8 @@ async function renderWaehrend(){
     // über WhatsApp bei ihr) — siehe submitKuecheFeedback weiter unten.
     // Nicht zeigen, wenn direkt über den "Sweets"-Link auf der Startseite aufgerufen (Wunsch Tini 07.09.26).
     if(!_hideFeedbackThisTime){
-    html+=`<div class="section-lbl" style="margin-top:14px;">😋 Feedback an die Küche</div>`;
-    html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
+    html+=`<div class="section-lbl" style="margin-top:14px;">😋 Feedback an den Koch — Essen</div>`;
+    html+=`<div style="font-size:11.5px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:9px 11px;margin-bottom:10px;line-height:1.5;">Oben bei den Gerichten antippen, dann hier abschicken. Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #FBCFE8;">📱 Fragen/Ideen zur <b>App</b>? <a href="#" onclick="showAppFeedbackModal();return false;" style="color:#2563EB;font-weight:600;">Feedback an Tini</a></div></div>`;
     html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
       <button onclick="submitKuecheFeedback()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#EC4899;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;">Feedback an Küche abschicken ✓</button>
     </div>`;
@@ -12935,7 +12976,7 @@ async function renderEssenFeedback(){
 
   let html=backToHomeHtml();
   html+=pageHeaderHtml('😋','Food-Feedback','Wie hat\'s heute geschmeckt?','#EC4899');
-  html+=`<div style="font-size:12px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛</div>`;
+  html+=`<div style="font-size:12px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #FBCFE8;">📱 Fragen/Ideen zur <b>App</b>? <a href="#" onclick="showAppFeedbackModal();return false;" style="color:#2563EB;font-weight:600;">Feedback an Tini</a></div></div>`;
 
   const todayMenu=(getTodayMenu()||[]).filter(d=>d.name && !d.name.startsWith('ÖL') && !d.name.startsWith('ZUTATEN'));
   const today=new Date().toISOString().split('T')[0];
@@ -17451,8 +17492,14 @@ async function renderTeamFeedback(){
   const el=document.getElementById('v-teamFeedback');
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   let html=backToHomeHtml();
-  html+=pageHeaderHtml('😋','Crew Food-Feedback','Standort-Crew + Adi/Tini/Ines gesammelt','#EC4899');
-  html+=`<button onclick="goTo('waehrend')" style="width:100%;display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">😋 Eigene Bewertung abgeben</button>`;
+  html+=pageHeaderHtml('💬','Feedback','Getrennt: Essen (Koch) · App (Tini)','#EC4899');
+  const _tab=window._tfTab||'essen';
+  html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">
+    <button onclick="window._tfTab='essen';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #EC4899;${_tab==='essen'?'background:#EC4899;color:#fff;':'background:#fff;color:#BE185D;'}">🍽️ An den Koch<div style="font-size:9.5px;font-weight:500;">Essen</div></button>
+    <button onclick="window._tfTab='app';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #2563EB;${_tab==='app'?'background:#2563EB;color:#fff;':'background:#fff;color:#1D4ED8;'}">📱 An Tini<div style="font-size:9.5px;font-weight:500;">App</div></button>
+  </div>`;
+  if(_tab==='app'){ await renderTeamFeedbackApp(el,html); return; }
+  html+=`<button onclick="goTo('waehrend')" style="width:100%;display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">😋 Eigene Essens-Bewertung abgeben</button>`;
   html+=`<div style="font-size:11px;color:var(--muted);text-align:center;margin:-8px 0 14px;">Anonym — der Name muss nirgends stehen, mehrere Bewertungen pro Person sind kein Problem.</div>`;
 
   const [teamRows, linkRows, stores] = await Promise.all([
@@ -17528,10 +17575,10 @@ async function renderTeamFeedback(){
 
   // Freies, nicht an ein Gericht gebundenes Feedback (allgemeine App-/sonstige Anmerkungen) —
   // bleibt als eigener, kleinerer Block ganz unten, ebenfalls anonym.
-  const freieAllgemein=(teamRows||[]).filter(r=>r.feedback_frei && r.feedback_frei.trim())
+  const freieAllgemein=(teamRows||[]).filter(r=>r.feedback_frei && r.feedback_frei.trim() && isFoodFreeText(r.feedback_frei))
     .map(r=>({store:r.store_id, date:r.datum, text:r.feedback_frei}));
   if(freieAllgemein.length){
-    html+=`<div class="section-lbl" style="margin-top:16px;">💬 Sonstiges Feedback</div>`;
+    html+=`<div class="section-lbl" style="margin-top:16px;">💬 Weitere Kommentare zum Essen</div>`;
     freieAllgemein.forEach(f=>{
       html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#FAF5FF;border-color:#DDD6FE;">
         <div style="font-size:12.5px;color:#4C1D95;white-space:pre-wrap;">${f.text}</div>
@@ -17558,7 +17605,7 @@ async function renderTeamFeedback(){
       <div style="font-size:10px;color:var(--muted);text-align:right;">${storeNameMap[r.store_id]||r.store_id||'ohne Filiale'} · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
       <div style="margin-top:4px;">${ratingRows}</div>
       ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${r.kommentar}"</div>`:''}
-      ${r.feedback_frei?`<div style="font-size:11.5px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;">💬 ${r.feedback_frei}</div>`:''}
+      ${(r.feedback_frei && isFoodFreeText(r.feedback_frei))?`<div style="font-size:11.5px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;">💬 ${r.feedback_frei}</div>`:''}
     </div>`;
   });
   // Link-Einträge (ein Gericht pro Zeile, anonym)
@@ -17581,6 +17628,38 @@ async function renderTeamFeedback(){
   translateEl(el);
 }
 window.renderTeamFeedback=renderTeamFeedback;
+
+// Alte Freitexte (vor 06.10.26) lagen unsortiert in essen_feedback.feedback_frei — grob per Stichwort
+// zuordnen: Essen-Begriffe → Koch, alles andere → App.
+function isFoodFreeText(t){
+  return /lecker|schmeck|curry|essen|gericht|special|salat|scharf|würz|portion|reis|dessert|sweet|suppe|dal|chili|samosa|zu salzig|versalzen|kalt|warm|chutney|chole|rajma|massaman/i.test(t||'');
+}
+async function renderTeamFeedbackApp(el,html){
+  const [appRows, oldRows, stores]=await Promise.all([
+    api('app_feedback?select=*&order=created_at.desc&limit=200').catch(()=>[]),
+    api('essen_feedback?feedback_frei=not.is.null&select=store_id,datum,feedback_frei,submitted_at&order=submitted_at.desc&limit=150').catch(()=>[]),
+    api('stores?select=id,name').catch(()=>[])
+  ]);
+  const nm={}; (stores||[]).forEach(s=>nm[s.id]=s.name);
+  const fmt=(d)=>d?new Date(d).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'';
+  html+=`<button onclick="showAppFeedbackModal()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#2563EB;color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">📱 Neues App-Feedback eintragen</button>`;
+  const olds=(oldRows||[]).filter(r=>r.feedback_frei&&r.feedback_frei.trim()&&!isFoodFreeText(r.feedback_frei));
+  const open=(appRows||[]).filter(r=>!r.bearbeitet), done=(appRows||[]).filter(r=>r.bearbeitet);
+  if(!open.length&&!olds.length&&!done.length) html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Noch kein App-Feedback.</div>`;
+  if(open.length) html+=`<div class="section-lbl">📱 Offen (${open.length})</div>`;
+  const card=(r)=>`<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#EFF6FF;border-color:#BFDBFE;">
+    <div style="font-size:12.5px;color:#1E3A8A;white-space:pre-wrap;">${escAttr(r.text)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;"><span style="font-size:9.5px;color:var(--muted);">${r.store_id?(nm[r.store_id]||r.store_id):'ohne Filiale'} · ${fmt(r.created_at)}</span>${r.bearbeitet?'':`<button onclick="markAppFeedbackErledigt(${r.id},this)" style="background:#fff;border:1px solid #BFDBFE;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;">✓ Erledigt</button>`}</div></div>`;
+  open.forEach(r=>html+=card(r));
+  if(olds.length){
+    html+=`<div class="section-lbl" style="margin-top:16px;">🗂️ Ältere Einträge (alt, automatisch zugeordnet)</div>`;
+    olds.forEach(r=>{ html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;"><div style="font-size:12.5px;white-space:pre-wrap;">${escAttr(r.feedback_frei)}</div><div style="font-size:9.5px;color:var(--muted);margin-top:5px;">${r.store_id?(nm[r.store_id]||r.store_id):'ohne Filiale'} · ${fmt(r.datum)}</div></div>`; });
+  }
+  if(done.length){ html+=`<div class="section-lbl" style="margin-top:16px;">✓ Erledigt (${done.length})</div>`; done.forEach(r=>html+=card(r)); }
+  el.innerHTML=html; translateEl(el);
+}
+window.renderTeamFeedbackApp=renderTeamFeedbackApp;
+
 
 // In-App-Bewertung für Adi/Tini/Ines (25.08.26, Wunsch Tini) — bettet dasselbe Formular ein, das
 // bisher nur über den externen Link (?feedback=1) erreichbar war. Landet in derselben Tabelle
