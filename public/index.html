@@ -491,8 +491,25 @@ function normGerichtName(s){
 function findOverrideByName(overrideMap, name){
   return overrideMap[name] || overrideMap[normGerichtName(name)];
 }
+// Englische Zutatennamen (z.B. "Bell pepper" = Paprika) vor Matching/Kategorisierung ins Deutsche
+// übersetzen — sonst landen sie in "Sonstiges", weil Datenbank und Regeln nur deutsche Namen kennen.
+const ZUTAT_EN_DE=[
+  [/\b(red |green |yellow |orange )?bell peppers?\b/gi,'Paprika'],[/\bcapsicums?\b/gi,'Paprika'],
+  [/\bpowder\b/gi,'Pulver'],[/\bonions?\b/gi,'Zwiebel'],[/\btomatoes|tomato\b/gi,'Tomate'],
+  [/\bcarrots?\b/gi,'Karotte'],[/\bgarlic\b/gi,'Knoblauch'],[/\bspinach\b/gi,'Spinat'],
+  [/\beggplants?\b/gi,'Melanzani'],[/\bcauliflower\b/gi,'Karfiol'],[/\bcucumbers?\b/gi,'Gurke'],
+  [/\bpotato(es)?\b/gi,'Erdäpfel'],[/\bzucchini\b/gi,'Zucchini'],[/\bcabbage\b/gi,'Kohl'],
+  [/\bbroccoli\b/gi,'Brokkoli'],[/\bpumpkin\b/gi,'Kürbis'],[/\bcoriander leaves\b/gi,'Koriander frisch'],
+  [/\bchickpeas?\b/gi,'Kichererbsen'],[/\blentils?\b/gi,'Linsen'],[/\bcoconut milk\b/gi,'Kokosmilch'],
+  [/\bginger\b/gi,'Ingwer'],[/\blemon\b/gi,'Zitrone'],[/\blime\b/gi,'Limette']
+];
+function zutatEnToDe(name){
+  let n=String(name||'');
+  ZUTAT_EN_DE.forEach(([re,de])=>{ n=n.replace(re,de); });
+  return n;
+}
 function findZutatMasterMatch(name){
-  const n=(name||'').toUpperCase();
+  const n=zutatEnToDe(name).toUpperCase();
   const master=_zutatenMasterCache;
   if(!master) return null;
   // Exakter Treffer hat immer Vorrang. Sonst NICHT einfach den ersten Teilstring-Treffer nehmen
@@ -2069,7 +2086,7 @@ function zutatenKey(woche, tag, slot){
 }
 
 function guessZutatKat(name){
-  const n=name.toLowerCase();
+  const n=zutatEnToDe(name).toLowerCase();
   if(/röstzwiebel|crouton|krokant|sprossen(?!.*salat)|crispy onion/.test(n)) return 'Toppings';
   if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
   if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|mais|sellerie|blumenkohl|karfiol|süßkartoffel/.test(n)) return 'Gemüse';
@@ -11079,7 +11096,7 @@ window.renderZutatenForGericht=renderZutatenForGericht;
 // und die genauere Gewürze-Regel kommt nie mehr zum Zug. Zusätzlich negative lookahead als
 // zweite Absicherung: "paprika" matcht NICHT, wenn direkt "pulver" folgt.
 function guessZutatKategorie(name){
-  const n = name.toLowerCase();
+  const n = zutatEnToDe(name).toLowerCase();
   if(/pulver|samen|masala|garam|kreuzkümmel|kurkuma|koriander.gem|kardamom|zimt|nelken|muskat|curry|fenugreek|paprikapulv|ingwer.pulv|chili.floc|chili.pulv/.test(n)) return 'Gewürze';
   if(/spinat|tomate|zwiebel|knoblauch|paprika(?!pulver)|karott|zucchini|gurk|aubergine|brokkoli|kohl|fenchel|lauch|erbsen|mais|sellerie|karfiol/.test(n)) return 'Gemüse';
   if(/limett|zitronen|orange|mango|kokos|ananas|apfel/.test(n)) return 'Obst';
