@@ -3786,9 +3786,13 @@ async function essenNotrufErledigt(id){
 window.essenNotrufErledigt=essenNotrufErledigt;
 
 // Status-Karte auf der Startseite: für die anfragende Location (wie weit ist die Hilfe?) und für die zusagende.
+function notrufHide(id,status){ try{ localStorage.setItem(`notruf_hide_${id}_${status}`,'1'); }catch(e){} document.getElementById(`nr-card-${id}`)?.remove(); }
+window.notrufHide=notrufHide;
 function renderNotrufStatus(rows){
   const el=document.getElementById('essen-notruf-status'); if(!el) return;
   const me=currentStore.id;
+  // 07.10.26: Karten lassen sich wegklicken (pro Status — ändert sich der Status, kommt sie wieder)
+  rows=(rows||[]).filter(r=>{ try{ return !localStorage.getItem(`notruf_hide_${r.id}_${r.status}`); }catch(e){ return true; } });
   el.innerHTML=(rows||[]).map(r=>{
     const mine=r.von_store===me;
     const txt=notrufGerichteText(r);
@@ -3803,7 +3807,7 @@ function renderNotrufStatus(rows){
       head=r.status==='zugesagt'?'🤝 Danke — bitte Essen bereit stellen':`🚗 Uber holt ab${r.ankunft?' (ca. '+r.ankunft+' Uhr bei '+(NOTRUF_NAMEN[r.von_store]||'')+')':''}`;
       body=`${r.zusage_menge||''} Gebinde für ${NOTRUF_NAMEN[r.von_store]||r.von_store}: ${txt}`;
     }
-    return `<div class="card" style="padding:12px 14px;margin-bottom:14px;border:1.5px solid #F59E0B;background:#FFFBEB;"><div style="font-size:13px;font-weight:800;color:#78350F;">${head}</div><div data-no-translate style="font-size:12px;color:#78350F;margin-top:3px;">${body}</div>${btn}</div>`;
+    return `<div id="nr-card-${r.id}" class="card" style="padding:12px 14px;margin-bottom:14px;border:1.5px solid #F59E0B;background:#FFFBEB;position:relative;"><button onclick="notrufHide(${r.id},'${r.status}')" title="Wegklicken" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:16px;color:#92400E;cursor:pointer;">✕</button><div style="font-size:13px;font-weight:800;color:#78350F;padding-right:22px;">${head}</div><div data-no-translate style="font-size:12px;color:#78350F;margin-top:3px;">${body}</div>${btn}</div>`;
   }).join('');
 }
 
@@ -8043,19 +8047,22 @@ function kzRoutineHtml(){
 function kzRefreshRoutine(){ const b=document.getElementById('kz-routine'); if(b){ b.innerHTML=kzRoutineHtml(); translateEl(b); } }
 async function kzOpenItemsHtml(){
   const today=new Date().toISOString().split('T')[0]; const in7=new Date(Date.now()+7*86400000).toISOString().split('T')[0];
-  const [maengel,notst,appfb,oldfb,cats,fl]=await Promise.all([
+  const [maengel,notst,appfb,oldfb,cats,fl,bcReplies]=await Promise.all([
     api('maengel?status=neq.behoben&select=id,status').catch(()=>[]),
     api('notstand_meldungen?status=eq.offen&select=id').catch(()=>[]),
     api('app_feedback?bearbeitet=eq.false&select=id').catch(()=>[]),
     api('essen_feedback?feedback_frei=not.is.null&bearbeitet=is.false&select=feedback_frei&limit=200').catch(()=>[]),
     api(`caterings?status=eq.aktiv&datum=gte.${today}&datum=lte.${in7}&select=id,kunde,datum&order=datum.asc`).catch(()=>[]),
-    api('feuerloescher?select=*&order=sort.asc').catch(()=>[])
+    api('feuerloescher?select=*&order=sort.asc').catch(()=>[]),
+    api(`org_broadcast_replies?created_at=gte.${new Date(Date.now()-14*86400000).toISOString()}&select=id,created_at&order=created_at.desc`).catch(()=>[])
   ]);
   const items=[];
   if((notst||[]).length) items.push({c:'red',i:'🚨',t:`${notst.length} Notstand-Meldung${notst.length>1?'en':''} offen`,go:"goTo('home')"});
   if((maengel||[]).length){ const o=maengel.filter(m=>(m.status||'offen')==='offen').length; items.push({c:o?'red':'orange',i:'🔧',t:`${maengel.length} Mängel offen${o?` (${o} neu)`:''}`,go:"goTo('maengel')"}); }
   const nApp=(appfb||[]).length+(oldfb||[]).filter(r=>isAppFreeText(r.feedback_frei)).length;
   if(nApp) items.push({c:'orange',i:'📱',t:`${nApp} App-Feedback zum Abarbeiten`,go:"window._tfTab='app';goTo('teamFeedback')"});
+  try{ const seen=localStorage.getItem('kz_bc_seen')||''; const nr=(bcReplies||[]).filter(r=>r.created_at>seen).length;
+    if(nr) items.push({c:'orange',i:'💬',t:`${nr} neue Rückmeldung${nr>1?'en':''} von Filialen`,go:"localStorage.setItem('kz_bc_seen',new Date().toISOString());goTo('broadcast')"}); }catch(e){}
   if((cats||[]).length) items.push({c:'blue',i:'🍽️',t:`${cats.length} Catering in den nächsten 7 Tagen — nächstes: ${cats[0].kunde}, ${new Date(cats[0].datum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})}`,go:"goTo('catering')"});
   try{ const gE=await api('grundreinigung_eintraege?select=store_id,datum&order=datum.desc').catch(()=>[]); const last={}; (gE||[]).forEach(e=>{ if(!last[e.store_id]) last[e.store_id]=e.datum; });
     const due=GRUNDREINIGUNG_STORES.filter(id=>{ const d=last[id]; return !d||Math.floor((Date.now()-new Date(d+'T00:00:00').getTime())/86400000)>GRUNDREINIGUNG_TAGE_FAELLIG; });
@@ -10763,6 +10770,7 @@ async function loadBroadcastHistory(storeList){
   const broadcasts=await api('org_broadcasts?select=*&order=created_at.desc&limit=30').catch(()=>[]);
   const reads=await api('org_broadcast_reads?select=broadcast_id,store_id').catch(()=>[]);
   const replies=await api('org_broadcast_replies?select=*&order=created_at.asc').catch(()=>[]);
+  const dones=await api('org_broadcast_done?select=broadcast_id,store_id').catch(()=>[]);
   if(!broadcasts?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Nachrichten gesendet.</div>'; return; }
 
   wrap.innerHTML=broadcasts.map(b=>{
@@ -10771,6 +10779,8 @@ async function loadBroadcastHistory(storeList){
     const targetStores=b.target_store_id?[b.target_store_id]:storeList.map(s=>s.id);
     const readSet=new Set(reads.filter(r=>r.broadcast_id===b.id).map(r=>r.store_id));
     const readCount=targetStores.filter(id=>readSet.has(id)).length;
+    const doneSet=new Set((dones||[]).filter(r=>r.broadcast_id===b.id).map(r=>r.store_id));
+    const doneCount=targetStores.filter(id=>doneSet.has(id)).length;
     const myReplies=replies.filter(r=>r.broadcast_id===b.id);
     return `<div class="card" style="padding:12px;margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
@@ -10779,7 +10789,7 @@ async function loadBroadcastHistory(storeList){
       </div>
       <div style="font-size:13px;color:#1a1a18;margin-top:4px;">${linkifyText(b.message)}</div>
       ${b.photo_url?`<img src="${b.photo_url}" style="max-width:200px;border-radius:10px;margin-top:6px;display:block;">`:""}
-      ${isTransporter?'':`<div style="font-size:10.5px;color:var(--muted);margin-top:6px;">👁️ Gelesen: ${readCount}/${targetStores.length}</div>`}
+      ${isTransporter?'':`<div style="font-size:10.5px;color:var(--muted);margin-top:6px;">👁️ Gelesen: ${readCount}/${targetStores.length}${b.show_until?` · ✅ Erledigt: ${doneCount}/${targetStores.length}${doneCount<targetStores.length?' (offen: '+targetStores.filter(id=>!doneSet.has(id)).map(id=>storeMap[id]||id).join(', ')+')':''}`:''}</div>`}
       ${myReplies.length?`<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:6px;">
         ${myReplies.map(r=>{
           const scale=[null,'😖','😐','🙂','😋','🤩'];
@@ -11023,18 +11033,56 @@ async function loadActiveBroadcastBanner(){
   const today=new Date().toISOString().split('T')[0];
   try{
     const active=await api(`org_broadcasts?or=(target_store_id.is.null,target_store_id.eq.${currentStore.id})&show_until=gte.${today}&order=created_at.desc&select=id,message,show_until,photo_url`).catch(()=>[]);
-    if(!(active||[]).length){ wrap.innerHTML=''; return; }
-    wrap.innerHTML=active.map(b=>`
-      <div style="display:flex;align-items:flex-start;gap:10px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 14px;margin-bottom:8px;">
-        <span style="font-size:16px;">📌</span>
-        <div style="flex:1;">
-          <div style="font-size:12.5px;color:#78350F;line-height:1.4;">${linkifyText(b.message)}</div>
-          ${b.photo_url?`<img src="${b.photo_url}" style="max-width:180px;border-radius:8px;margin-top:6px;display:block;">`:""}
-          <div style="font-size:10px;color:#92660A;margin-top:3px;">sichtbar bis ${new Date(b.show_until+'T00:00:00').toLocaleDateString('de-AT')}</div>
+    // 07.10.26 (Wunsch Tini): zu viele Hinweise — erledigte kann die Filiale wegklicken ("✓ Erledigt") oder
+    // mit Rückmeldung abschließen; beides sieht die Organisation (Nachrichten-Verlauf + Kontrollzentrale).
+    const done=await api(`org_broadcast_done?store_id=eq.${currentStore.id}&select=broadcast_id`).catch(()=>[]);
+    const doneSet=new Set((done||[]).map(d=>d.broadcast_id));
+    const open=(active||[]).filter(b=>!doneSet.has(b.id));
+    if(!open.length){ wrap.innerHTML=''; return; }
+    wrap.innerHTML=open.map(b=>`
+      <div id="bn-${b.id}" style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:10px 14px;margin-bottom:8px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <span style="font-size:16px;">📌</span>
+          <div style="flex:1;">
+            <div style="font-size:12.5px;color:#78350F;line-height:1.4;">${linkifyText(b.message)}</div>
+            ${b.photo_url?`<img src="${b.photo_url}" style="max-width:180px;border-radius:8px;margin-top:6px;display:block;">`:""}
+            <div style="font-size:10px;color:#92660A;margin-top:3px;">sichtbar bis ${new Date(b.show_until+'T00:00:00').toLocaleDateString('de-AT')}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button onclick="bnDone(${b.id})" style="flex:1;padding:8px;border:none;border-radius:8px;background:#16A34A;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">✓ Erledigt</button>
+          <button onclick="bnReplyToggle(${b.id})" style="flex:1;padding:8px;border:1px solid #FCD34D;border-radius:8px;background:#fff;color:#92400E;font-size:12px;font-weight:700;cursor:pointer;">💬 Rückmeldung</button>
+        </div>
+        <div id="bn-reply-${b.id}" style="display:none;margin-top:8px;">
+          <textarea id="bn-text-${b.id}" placeholder="z.B. Seife fehlt, Spüli ist zu viel …" style="width:100%;min-height:60px;padding:8px;border:1px solid #FCD34D;border-radius:8px;font-family:inherit;font-size:13px;box-sizing:border-box;"></textarea>
+          <button onclick="bnReplySend(${b.id})" style="width:100%;margin-top:6px;padding:9px;border:none;border-radius:8px;background:#92400E;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">Senden & erledigt</button>
         </div>
       </div>`).join('');
   }catch(e){console.error(e);}
 }
+async function bnMarkDone(id){
+  await api('org_broadcast_done?on_conflict=broadcast_id,store_id',{method:'POST',headers:{'Prefer':'resolution=ignore-duplicates'},body:JSON.stringify([{broadcast_id:id,store_id:currentStore.id}])});
+  const el=document.getElementById('bn-'+id); if(el) el.remove();
+}
+async function bnDone(id){
+  try{ await bnMarkDone(id); showToast('✓ Erledigt'); }
+  catch(e){ console.error(e); showToast('Fehler — bitte nochmal tippen',true); }
+}
+function bnReplyToggle(id){
+  const b=document.getElementById('bn-reply-'+id); if(!b) return;
+  b.style.display=b.style.display==='none'?'block':'none';
+  if(b.style.display==='block') document.getElementById('bn-text-'+id)?.focus();
+}
+async function bnReplySend(id){
+  const t=(document.getElementById('bn-text-'+id)?.value||'').trim();
+  if(!t){ showToast('Bitte kurz etwas schreiben',true); return; }
+  try{
+    await api('org_broadcast_replies',{method:'POST',body:JSON.stringify([{broadcast_id:id, store_id:currentStore.id, reply:t}])});
+    await bnMarkDone(id);
+    showToast('✔ Rückmeldung gesendet');
+  }catch(e){ console.error(e); showToast('Fehler beim Senden',true); }
+}
+Object.assign(window,{bnDone,bnReplyToggle,bnReplySend});
 let bcSelectedRating=null;
 function linkifyText(text){
   // Escaped HTML-sicher, macht enthaltene http(s)-Links klickbar (z.B. Uber-Trip-Links, die
