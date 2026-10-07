@@ -8766,12 +8766,17 @@ window.tgSchrankerlWoche = window.tgSchrankerlWoche || null;
 
 const TG_KATEGORIE_ORDER=['Milchprodukte/Käse','Tiefkühlprodukte','Hülsenfrüchte','Dosen','Nüsse/Trockenfrüchte','Öle/Essig/Salz','Lasagne','Getränke','Kuchen','Sonstiges'];
 
+// 07.10.26 (Wunsch Tini): Der Küchenchef antwortet oft "wir haben genug" oder "10 × 100g" — deshalb pro Artikel
+// ein Freitextfeld (Zahl ODER z.B. "10 × 100g") plus ein "✓ genug"-Chip. Beides zählt als gezählt.
+function tgHas(a){ return !!a.genug || (a.bestand_text!=null && String(a.bestand_text).trim()!=='') || (a.bestand!=null && a.bestand!==''); }
 function tgArtikelRowHtml(a, extraLabel){
-  const has=a.bestand!=null && a.bestand!=='';
-  return `<div class="tg-row" data-id="${a.id}" data-has="${has?1:0}" style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);">
+  const has=tgHas(a);
+  const txt=a.bestand_text!=null?a.bestand_text:(a.bestand!=null?a.bestand:'');
+  return `<div class="tg-row" data-id="${a.id}" data-has="${has?1:0}" data-genug="${a.genug?1:0}" style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border);${a.genug?'background:#F0FDF4;':''}">
     <div style="flex:1;min-width:0;font-size:12.5px;" data-no-translate>${a.name}${extraLabel||''}</div>
-    <input type="number" inputmode="decimal" step="0.5" value="${a.bestand??''}" placeholder="–" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:58px;text-align:center;border:1.5px solid ${has?'#86EFAC':'var(--border)'};background:${has?'#F0FDF4':'#fff'};border-radius:8px;font-size:13px;padding:6px 2px;">
-    ${a.manuell_hinzugefuegt?`<button onclick="deleteTgArtikel(${a.id})" title="Entfernen" style="background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;padding:2px 4px;">🗑</button>`:'<span style="width:22px;"></span>'}
+    <input type="text" inputmode="text" value="${escAttr(String(txt))}" placeholder="–" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:84px;text-align:center;border:1.5px solid ${has?'#86EFAC':'var(--border)'};background:${has?'#F0FDF4':'#fff'};border-radius:8px;font-size:13px;padding:6px 2px;">
+    <button class="tg-genug" onclick="toggleTgGenug(${a.id})" title="Wir haben genug" style="flex-shrink:0;border:1.5px solid ${a.genug?'#16A34A':'var(--border)'};background:${a.genug?'#16A34A':'#fff'};color:${a.genug?'#fff':'var(--sub)'};border-radius:8px;padding:6px 7px;font-size:11px;font-weight:700;cursor:pointer;">✓ genug</button>
+    ${a.manuell_hinzugefuegt?`<button onclick="deleteTgArtikel(${a.id})" title="Entfernen" style="background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;padding:2px 2px;">🗑</button>`:''}
   </div>`;
 }
 // Zählfortschritt oben ("12 / 54 gezählt") live nachziehen, ohne neu zu rendern
@@ -8800,7 +8805,7 @@ async function renderTgBestellungHtml(){
   const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
 
   const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
-  const doneN=items.filter(a=>a.bestand!=null).length;
+  const doneN=items.filter(a=>tgHas(a)).length;
 
   // 07.10.26 (Wunsch Tini: "viel Text, wenig Inhalt"): kompakter — ein Block statt 10 Karten mit
   // wiederholten Tabellenköpfen, Fortschritt oben, Kategorien einklappbar, Referenz-Menüs eingeklappt.
@@ -8812,7 +8817,7 @@ async function renderTgBestellungHtml(){
     <div style="height:5px;background:var(--surface-1);border-radius:3px;margin:8px 0 6px;overflow:hidden;"><div id="tg-bar" style="height:100%;width:${items.length?Math.round(doneN/items.length*100):0}%;background:#F97316;"></div></div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
       <label style="font-size:11.5px;color:var(--sub);display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" onchange="tgToggleOpenOnly(this.checked)" ${window._tgOpenOnly?'checked':''} style="width:16px;height:16px;"> nur noch offene</label>
-      <span style="font-size:10.5px;color:var(--muted);">Bestand eintragen · Weitergabe an Simone noch manuell</span>
+      <span style="font-size:10.5px;color:var(--muted);">Zahl, „10 × 100g“ oder ✓ genug</span>
     </div>
   </div>`;
 
@@ -8822,7 +8827,7 @@ async function renderTgBestellungHtml(){
   katOrder.forEach(kat=>{
     const katItems=items.filter(a=>a.kategorie===kat).sort((x,y)=>String(x.name).localeCompare(String(y.name),'de',{sensitivity:'base',numeric:true}));
     if(!katItems.length) return;
-    const d=katItems.filter(a=>a.bestand!=null).length;
+    const d=katItems.filter(a=>tgHas(a)).length;
     html+=`<details class="tg-kat card" open style="padding:0;margin-bottom:8px;overflow:hidden;">
       <summary style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--sub);background:var(--surface-1);cursor:pointer;list-style:none;"><span>${kat.toUpperCase()}</span><span class="tg-kat-count" style="font-size:11px;font-weight:700;color:${d===katItems.length?'#16A34A':'var(--muted)'};">${d}/${katItems.length}</span></summary>
       ${katItems.map(a=>tgArtikelRowHtml(a)).join('')}
@@ -8887,16 +8892,35 @@ async function renderTgBestellungHtml(){
 }
 window.renderTgBestellungHtml=renderTgBestellungHtml;
 
+function tgRowRefresh(articleId){
+  const row=document.querySelector(`.tg-row[data-id="${articleId}"]`); if(!row) return;
+  const inp=row.querySelector('input'); const genug=row.dataset.genug==='1'; const hasTxt=!!(inp&&inp.value.trim());
+  const has=genug||hasTxt; row.dataset.has=has?'1':'0';
+  if(inp){ inp.style.borderColor=has?'#86EFAC':'var(--border)'; inp.style.background=has?'#F0FDF4':'#fff'; }
+  row.style.background=genug?'#F0FDF4':'';
+  const b=row.querySelector('.tg-genug'); if(b){ b.style.borderColor=genug?'#16A34A':'var(--border)'; b.style.background=genug?'#16A34A':'#fff'; b.style.color=genug?'#fff':'var(--sub)'; }
+  tgUpdateProgress();
+}
 async function updateTgBestand(articleId, value){
-  const v=value===''?null:parseFloat(String(value).replace(',','.'));
+  const t=String(value??'').trim();
+  const num=/^\d+([.,]\d+)?$/.test(t)?parseFloat(t.replace(',','.')):null;
   try{
-    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestand:v, aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
-    const row=document.querySelector(`.tg-row[data-id="${articleId}"]`);
-    if(row){ row.dataset.has=v==null?'0':'1'; const inp=row.querySelector('input'); if(inp){ inp.style.borderColor=v==null?'var(--border)':'#86EFAC'; inp.style.background=v==null?'#fff':'#F0FDF4'; } tgUpdateProgress(); }
+    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestand:num, bestand_text:t||null, aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
+    tgRowRefresh(articleId);
     showToast('✓ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateTgBestand=updateTgBestand;
+async function toggleTgGenug(articleId){
+  const row=document.querySelector(`.tg-row[data-id="${articleId}"]`); if(!row) return;
+  const neu=row.dataset.genug!=='1';
+  row.dataset.genug=neu?'1':'0'; tgRowRefresh(articleId);
+  try{
+    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({genug:neu, aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
+    showToast(neu?'✓ „Wir haben genug“ vermerkt':'✓ Zurückgesetzt');
+  }catch(e){ console.error(e); row.dataset.genug=neu?'0':'1'; tgRowRefresh(articleId); showToast('Fehler beim Speichern',true); }
+}
+window.toggleTgGenug=toggleTgGenug;
 
 async function addTgExtraArtikel(){
   const inp=document.getElementById('tg-extra-input');
