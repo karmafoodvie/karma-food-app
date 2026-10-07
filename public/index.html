@@ -14053,42 +14053,134 @@ async function renderGrundreinigung(){
 }
 window.renderGrundreinigung=renderGrundreinigung;
 
-function showGrundreinigungForm(storeId){
-  grundreinigungChecked=new Set();
+// 07.10.26 (Wunsch Tini): Checklisten direkt in der App bearbeitbar (Punkte ändern/löschen/ergänzen,
+// Rubriken anlegen/umbenennen) — liegen in `grundreinigung_items` (liste 'standard' = LB/1020, 'kitchen' = KC).
+// Die Konstanten oben bleiben nur als Fallback, falls die Datenbank nicht erreichbar ist.
+let _grListe='standard', _grStoreId=null, _grRows=[], _grEdit=false;
+async function grLoadItems(){
+  try{
+    const rows=await api(`grundreinigung_items?liste=eq.${_grListe}&select=*&order=sort_order.asc,id.asc`);
+    _grRows=Array.isArray(rows)?rows:[];
+  }catch(e){
+    console.error(e);
+    const src=_grListe==='kitchen'?GRUNDREINIGUNG_ITEMS_KC:GRUNDREINIGUNG_ITEMS;
+    _grRows=[]; let n=0;
+    Object.entries(src).forEach(([k,list])=>list.forEach(t=>_grRows.push({id:null,kategorie:k,text:t,sort_order:n++})));
+  }
+  _grActive={};
+  _grRows.forEach(r=>{ (_grActive[r.kategorie]=_grActive[r.kategorie]||[]).push(r.text); });
+}
+async function showGrundreinigungForm(storeId){
   const wrap=document.getElementById('grundreinigung-form-wrap');
   if(!wrap) return;
+  _grStoreId=storeId; _grListe=storeId==='kitchen'?'kitchen':'standard'; _grEdit=false;
+  await grLoadItems();
+  grRenderForm(true);
+}
+function grRenderForm(scroll){
+  const wrap=document.getElementById('grundreinigung-form-wrap');
+  if(!wrap) return;
+  grundreinigungChecked=new Set();
+  const storeId=_grStoreId;
   const heute=new Date().toISOString().split('T')[0];
-  _grActive=storeId==='kitchen'?GRUNDREINIGUNG_ITEMS_KC:GRUNDREINIGUNG_ITEMS;
+  const prevDatum=document.getElementById('gr-datum')?.value, prevVon=document.getElementById('gr-von')?.value;
   let totalItems=0;
   Object.values(_grActive).forEach(list=>totalItems+=list.length);
+  const inpStyle='flex:1;min-width:0;padding:7px 8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;box-sizing:border-box;';
   let html=`<div class="card" style="padding:14px;">
-    <div style="font-size:14px;font-weight:700;margin-bottom:2px;">🧹 Grundreinigung eintragen${storeId==='kitchen'?' — Kitchen Collective':''}</div>
-    ${storeId==='kitchen'?`<div style="font-size:11.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;margin:6px 0;">Boden gehört nicht dazu.</div>`:''}
-    <div id="gr-progress" style="font-size:11px;color:var(--muted);margin-bottom:10px;">0 / ${totalItems} erledigt</div>`;
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div style="font-size:14px;font-weight:700;margin-bottom:2px;">🧹 Grundreinigung eintragen${storeId==='kitchen'?' — Kitchen Collective':''}</div>
+      <button onclick="grToggleEdit()" style="flex-shrink:0;border:1px solid ${_grEdit?'#0F766E':'var(--border)'};background:${_grEdit?'#0F766E':'#fff'};color:${_grEdit?'#fff':'var(--sub)'};border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;">${_grEdit?'✓ Fertig':'✏️ Liste bearbeiten'}</button>
+    </div>
+    ${storeId==='kitchen'?`<div style="font-size:11.5px;color:#92400E;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;margin:6px 0;">Boden gehört nicht dazu.</div>`:''}`;
+  if(_grEdit){
+    html+=`<div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">Text ändern = Feld verlassen, wird sofort gespeichert. 🗑 löscht den Punkt. Gilt für ${storeId==='kitchen'?'Kitchen Collective':'Laurenzerberg und Ausstellungsstraße'}.</div>`;
+    Object.keys(_grActive).forEach(kat=>{
+      html+=`<div style="display:flex;gap:6px;align-items:center;margin:14px 0 6px;"><input value="${escAttr(kat)}" data-old="${escAttr(kat)}" onchange="grRenameKat(this)" title="Rubrik umbenennen" style="${inpStyle}font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.04em;color:var(--muted);"></div>`;
+      _grRows.filter(r=>r.kategorie===kat).forEach(r=>{
+        html+=`<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;"><input value="${escAttr(r.text)}" onchange="grSaveItem(${r.id},this)" style="${inpStyle}"><button onclick="grDeleteItem(${r.id})" title="Punkt löschen" style="flex-shrink:0;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:8px;padding:6px 9px;cursor:pointer;">🗑</button></div>`;
+      });
+      html+=`<div style="display:flex;gap:6px;align-items:center;margin:2px 0 4px;"><input id="gr-add-${escAttr(kat)}" placeholder="+ Neuer Punkt …" style="${inpStyle}border-style:dashed;" onkeydown="if(event.key==='Enter')grAddItem(this.id.slice(7))"><button onclick="grAddItem(document.getElementById('gr-add-${escAttr(kat)}').id.slice(7))" style="flex-shrink:0;border:none;background:#0F766E;color:#fff;border-radius:8px;padding:7px 11px;font-weight:700;cursor:pointer;">＋</button></div>`;
+    });
+    html+=`<div style="margin-top:16px;padding:10px;border:1px dashed var(--border);border-radius:10px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;">NEUE RUBRIK</div>
+      <input id="gr-newkat" placeholder="Name der Rubrik" style="${inpStyle}width:100%;margin-bottom:6px;">
+      <div style="display:flex;gap:6px;"><input id="gr-newkat-item" placeholder="Erster Punkt" style="${inpStyle}"><button onclick="grAddKat()" style="flex-shrink:0;border:none;background:#0F766E;color:#fff;border-radius:8px;padding:7px 11px;font-weight:700;cursor:pointer;">Anlegen</button></div>
+    </div>
+    <button onclick="grToggleEdit()" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:10px;background:#0F766E;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">✓ Fertig — zurück zur Checkliste</button>
+  </div>`;
+    wrap.innerHTML=html;
+    return;
+  }
+  html+=`<div id="gr-progress" style="font-size:11px;color:var(--muted);margin-bottom:10px;">0 / ${totalItems} erledigt</div>`;
   Object.entries(_grActive).forEach(([kat,items])=>{
-    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px;">${kat}</div>`;
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px;">${escAttr(kat)}</div>`;
     items.forEach((txt,i)=>{
       const key=`${kat}|${i}`;
-      html+=`<div class="cl-item" onclick="toggleGrundreinigungItem('${key.replace(/'/g,"\\'")}',this)">
+      html+=`<div class="cl-item" onclick="toggleGrundreinigungItem('${key.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;')}',this)">
         <div class="check-box"></div>
-        <span class="cl-text" style="font-size:12.5px;">${txt}</span>
+        <span class="cl-text" style="font-size:12.5px;">${escAttr(txt)}</span>
       </div>`;
     });
   });
   html+=`
     <div style="margin-top:14px;">
       <label style="font-size:11px;font-weight:600;color:var(--muted);">Datum</label>
-      <input id="gr-datum" type="date" value="${heute}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;">
+      <input id="gr-datum" type="date" value="${prevDatum||heute}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;margin:4px 0 10px;box-sizing:border-box;">
       <label style="font-size:11px;font-weight:600;color:var(--muted);">Durchgeführt von</label>
-      <input id="gr-von" type="text" placeholder="z.B. Everton" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
+      <input id="gr-von" type="text" value="${escAttr(prevVon||'')}" placeholder="z.B. Everton" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;">
     </div>
-    <button id="gr-submit-btn" onclick="submitGrundreinigung('${storeId}')" disabled style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:var(--border);color:#fff;font-size:14px;font-weight:600;cursor:not-allowed;">Erst alle Punkte abhaken</button>
+    <button id="gr-submit-btn" onclick="submitGrundreinigung('${storeId}')" ${totalItems?'disabled':''} style="width:100%;margin-top:12px;padding:12px;border:none;border-radius:10px;background:${totalItems?'var(--border)':'#0F766E'};color:#fff;font-size:14px;font-weight:600;cursor:${totalItems?'not-allowed':'pointer'};">${totalItems?'Erst alle Punkte abhaken':'✓ Grundreinigung abschließen'}</button>
     <button onclick="document.getElementById('grundreinigung-form-wrap').innerHTML='';" style="width:100%;margin-top:8px;padding:9px;border:1px solid var(--border);border-radius:8px;background:none;font-size:12px;color:var(--muted);cursor:pointer;">Abbrechen</button>
   </div>`;
   wrap.innerHTML=html;
-  wrap.scrollIntoView({behavior:'smooth', block:'start'});
+  if(scroll) wrap.scrollIntoView({behavior:'smooth', block:'start'});
 }
-window.showGrundreinigungForm=showGrundreinigungForm;
+async function grReload(){ await grLoadItems(); grRenderForm(false); }
+function grToggleEdit(){ _grEdit=!_grEdit; grRenderForm(false); }
+async function grSaveItem(id,inp){
+  const t=inp.value.trim();
+  if(!t){ showToast('Text darf nicht leer sein — zum Entfernen 🗑 nutzen',true); return grReload(); }
+  try{ await api(`grundreinigung_items?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({text:t})}); showToast('✓ Gespeichert'); await grReload(); }
+  catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
+}
+async function grDeleteItem(id){
+  if(!confirm('Diesen Punkt aus der Checkliste löschen?')) return;
+  try{ await api(`grundreinigung_items?id=eq.${id}`,{method:'DELETE'}); showToast('Gelöscht'); await grReload(); }
+  catch(e){ console.error(e); showToast('Fehler beim Löschen',true); }
+}
+async function grAddItem(kat){
+  const inp=document.getElementById('gr-add-'+kat);
+  const t=(inp?.value||'').trim(); if(!t) return;
+  const max=_grRows.reduce((m,r)=>Math.max(m,r.sort_order||0),0);
+  // direkt hinter den letzten Punkt der Rubrik einsortieren
+  const lastInKat=_grRows.filter(r=>r.kategorie===kat).reduce((m,r)=>Math.max(m,r.sort_order||0),0);
+  const so=lastInKat||max+1;
+  try{
+    // Platz schaffen: alle nachfolgenden Punkte um 1 nach hinten
+    const later=_grRows.filter(r=>(r.sort_order||0)>so && r.id);
+    for(const r of later){ await api(`grundreinigung_items?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({sort_order:(r.sort_order||0)+1})}); }
+    await api('grundreinigung_items',{method:'POST',body:JSON.stringify([{liste:_grListe,kategorie:kat,text:t,sort_order:so+1}])});
+    showToast('✓ Ergänzt'); await grReload();
+  }catch(e){ console.error(e); showToast('Fehler beim Ergänzen',true); }
+}
+async function grAddKat(){
+  const k=(document.getElementById('gr-newkat')?.value||'').trim();
+  const t=(document.getElementById('gr-newkat-item')?.value||'').trim();
+  if(!k||!t){ showToast('Rubrik und ersten Punkt eintragen',true); return; }
+  if(_grActive[k]){ showToast('Diese Rubrik gibt es schon',true); return; }
+  const max=_grRows.reduce((m,r)=>Math.max(m,r.sort_order||0),0);
+  try{ await api('grundreinigung_items',{method:'POST',body:JSON.stringify([{liste:_grListe,kategorie:k,text:t,sort_order:max+10}])}); showToast('✓ Rubrik angelegt'); await grReload(); }
+  catch(e){ console.error(e); showToast('Fehler beim Anlegen',true); }
+}
+async function grRenameKat(inp){
+  const old=inp.dataset.old, nw=inp.value.trim();
+  if(!nw||nw===old) return grReload();
+  if(_grActive[nw]){ showToast('Diese Rubrik gibt es schon',true); return grReload(); }
+  try{ await api(`grundreinigung_items?liste=eq.${_grListe}&kategorie=eq.${encodeURIComponent(old)}`,{method:'PATCH',body:JSON.stringify({kategorie:nw})}); showToast('✓ Umbenannt'); await grReload(); }
+  catch(e){ console.error(e); showToast('Fehler beim Umbenennen',true); }
+}
+Object.assign(window,{showGrundreinigungForm,grToggleEdit,grSaveItem,grDeleteItem,grAddItem,grAddKat,grRenameKat});
 
 function toggleGrundreinigungItem(key, el){
   if(grundreinigungChecked.has(key)){ grundreinigungChecked.delete(key); el.classList.remove('done'); el.querySelector('.check-box').classList.remove('done'); el.querySelector('.check-box').innerHTML=''; }
