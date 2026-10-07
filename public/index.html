@@ -4893,10 +4893,19 @@ function renderOrder(){
 
   if(activeOrderTab==='sweets'){
     html+=`<div style="background:#FEF3F7;border:1px solid #F9A8D4;border-radius:8px;padding:8px 12px;margin-top:-4px;margin-bottom:4px;font-size:12px;color:#BE185D;display:flex;align-items:center;gap:6px;">
-      <span>${sweetsOrderLocked()?'🔒':'⏰'}</span><span>${sweetsOrderLocked()?'Sweets-Bestellung für morgen ist <strong>ab 14:00 Uhr gesperrt</strong> — Änderungen nur noch direkt bei der Küche melden':'Sweets-Bestellung bitte bis <strong>14:00 Uhr</strong> für den nächsten Tag abschicken'}</span>
+      <span>${sweetsOrderLocked()?'🔒':'⏰'}</span><span>${sweetsOrderLocked()?'Sweets-Bestellung ist <strong>seit 14:00 Uhr fix</strong> — die Bestellung selbst ist gesperrt. Etwas vergessen? Unten einen <strong>Nachtrag</strong> schicken.':'Sweets-Bestellung bitte bis <strong>14:00 Uhr</strong> für den nächsten Tag abschicken'}</span>
     </div>`;
   }
 
+  if(sweetsOrderLocked()){
+    html+=`<div id="sn-card" style="background:#FFFBEB;border:1.5px solid #F59E0B;border-radius:12px;padding:12px 14px;margin:8px 0 4px;">
+      <div style="font-size:13px;font-weight:800;color:#78350F;">📝 Nachtrag nach 14:00 Uhr</div>
+      <div style="font-size:11.5px;color:#92400E;margin:3px 0 8px;">⚠️ Nicht sicher, ob das noch eingearbeitet werden kann — das Sweets-Team schaut es an und gibt dir Bescheid.</div>
+      <textarea id="sn-text" class="sn-keep" placeholder="z.B. +2 Choco Coco Cake für morgen" style="width:100%;min-height:60px;padding:9px;border:1px solid #FCD34D;border-radius:8px;font-family:inherit;font-size:13.5px;box-sizing:border-box;"></textarea>
+      <button id="sn-btn" onclick="sendSweetsNachtrag()" style="width:100%;margin-top:6px;padding:10px;border:none;border-radius:8px;background:#D97706;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Nachtrag senden</button>
+      <div id="sn-list" style="margin-top:8px;"></div>
+    </div>`;
+  }
   html+=`<div style="margin-top:16px;">
     <p style="font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Sonderbestellung / Anmerkung</p>
     <div id="special-antwort-box"></div>
@@ -4905,11 +4914,12 @@ function renderOrder(){
   <button class="submit-btn" id="order-submit-btn" style="background:${tab.color};" onclick="submitOrder()">${tab.title} abschicken ✓</button>`;
   el.innerHTML=html;
   if(sweetsOrderLocked()){
-    el.querySelectorAll('.qty-btn, input.qty-val, textarea, #order-submit-btn').forEach(x=>{ x.disabled=true; });
+    el.querySelectorAll('.qty-btn, input.qty-val, textarea:not(.sn-keep), #order-submit-btn').forEach(x=>{ x.disabled=true; });
     el.querySelectorAll('.qty-btn, input.qty-val').forEach(x=>{ x.style.opacity='0.45'; x.style.pointerEvents='none'; });
     const sb=document.getElementById('order-submit-btn'); if(sb){ sb.textContent='🔒 Gesperrt ab 14:00 Uhr'; sb.style.opacity='0.5'; }
   }
   loadSpecialOrderAntwortBox();
+  if(sweetsOrderLocked()) loadSweetsNachtraegeStore();
   translateEl(el);
   if(activeOrderTab==='transporter'){ loadGeldwechselList(); loadTransporterNoteList(); }
   if(activeOrderTab==='transporter' || activeOrderTab==='sweets'){ loadYesterdayOrderBox(); }
@@ -7199,13 +7209,41 @@ window.showOrderReceipt=showOrderReceipt;
 
 // 05.10.26 (Wunsch Tini): Sweets-Bestellung für den nächsten Tag ist ab 14:00 Uhr (Wiener Zeit) gesperrt —
 // danach darf nichts mehr eingetragen oder angepasst werden. Organisation ist ausgenommen.
+// 07.10.26 (Wunsch Tini): bis 14:00 Uhr ist die Sweets-Bestellung fix eintragbar; danach nur noch als
+// Nachtrag (Freitext) mit dem Hinweis, dass nicht sicher ist, ob er noch eingearbeitet wird. Das
+// Sweets-Team sieht die Nachträge im Sweets-Tab und antwortet "eingearbeitet" / "nicht mehr möglich".
+const SN_STATUS={offen:['⏳','noch nicht gesehen','#92400E'],ja:['✅','eingearbeitet','#166534'],nein:['❌','nicht mehr möglich','#B91C1C']};
+async function loadSweetsNachtraegeStore(){
+  const box=document.getElementById('sn-list'); if(!box||!currentStore) return;
+  const today=new Date().toISOString().split('T')[0];
+  const rows=await api(`sweets_nachtraege?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=*&order=created_at.asc`).catch(()=>[]);
+  box.innerHTML=(rows||[]).map(r=>{ const st=SN_STATUS[r.status]||SN_STATUS.offen;
+    return `<div style="font-size:12px;color:#78350F;border-top:1px solid #FDE68A;padding:6px 0;"><div>${linkifyText(r.text)}</div><div style="font-size:11px;font-weight:700;color:${st[2]};margin-top:2px;">${st[0]} ${st[1]}</div></div>`; }).join('');
+}
+async function sendSweetsNachtrag(){
+  const inp=document.getElementById('sn-text'); const t=(inp?.value||'').trim();
+  if(!t){ showToast('Bitte den Nachtrag eintragen',true); return; }
+  const btn=document.getElementById('sn-btn'); if(btn) btn.disabled=true;
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    await api('sweets_nachtraege',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,text:t}])});
+    inp.value=''; showToast('✓ Nachtrag gesendet — nicht sicher, ob er noch klappt');
+    await loadSweetsNachtraegeStore();
+  }catch(e){ console.error(e); showToast('Fehler beim Senden',true); }
+  if(btn) btn.disabled=false;
+}
+async function setSweetsNachtragStatus(id,status){
+  try{ await api(`sweets_nachtraege?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})}); showToast('✓ Gespeichert'); renderSweets(); }
+  catch(e){ console.error(e); showToast('Fehler',true); }
+}
+Object.assign(window,{sendSweetsNachtrag,setSweetsNachtragStatus,loadSweetsNachtraegeStore});
 function sweetsOrderLocked(){
   if(activeOrderTab!=='sweets' || currentStore?.id==='zentrale') return false;
   const h=Number(new Intl.DateTimeFormat('en-GB',{hour:'numeric',hourCycle:'h23',timeZone:'Europe/Vienna'}).format(new Date()));
   return h>=14;
 }
 async function submitOrder(){
-  if(sweetsOrderLocked()){ showToast('🔒 Sweets-Bestellung ab 14:00 Uhr gesperrt — bei Bedarf direkt bei der Küche melden',true); return; }
+  if(sweetsOrderLocked()){ showToast('🔒 Sweets-Bestellung ist seit 14:00 Uhr fix — bitte unten einen Nachtrag senden',true); return; }
   const today=new Date().toISOString().split('T')[0];
   const tab=ORDER_TABS[activeOrderTab];
   const tabArticleIds=new Set(articles.filter(a=>tab.cats.includes(a.category)).map(a=>a.id));
@@ -18588,6 +18626,22 @@ async function renderSweets(){
     }
   }
 
+  try{
+    const nts=await api(`sweets_nachtraege?order_date=eq.${sweetsDateStr}&select=*&order=created_at.asc`).catch(()=>[]);
+    if((nts||[]).length){
+      const sn=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
+      html+=`<div class="card" style="padding:12px 14px;margin:10px 0;border:1.5px solid #F59E0B;background:#FFFBEB;">
+        <div style="font-size:13px;font-weight:800;color:#78350F;">📝 Nachträge nach 14:00 Uhr (${nts.length})</div>
+        <div style="font-size:11px;color:#92400E;margin:2px 0 6px;">Bitte kurz rückmelden, ob es noch klappt — die Filiale sieht deine Antwort.</div>
+        ${nts.map(r=>`<div style="border-top:1px solid #FDE68A;padding:8px 0;">
+          <div style="font-size:12.5px;color:#78350F;"><strong data-no-translate>${escAttr(sn[r.store_id]||r.store_id)}:</strong> ${linkifyText(r.text)} <span style="font-size:10px;color:var(--muted);">${new Date(r.created_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})}</span></div>
+          <div style="display:flex;gap:6px;margin-top:5px;align-items:center;">
+            <button onclick="setSweetsNachtragStatus(${r.id},'ja')" style="flex:1;padding:6px;border:1px solid #86EFAC;border-radius:8px;background:${r.status==='ja'?'#16A34A':'#F0FDF4'};color:${r.status==='ja'?'#fff':'#166534'};font-size:11.5px;font-weight:700;cursor:pointer;">✅ eingearbeitet</button>
+            <button onclick="setSweetsNachtragStatus(${r.id},'nein')" style="flex:1;padding:6px;border:1px solid #FCA5A5;border-radius:8px;background:${r.status==='nein'?'#DC2626':'#FEF2F2'};color:${r.status==='nein'?'#fff':'#B91C1C'};font-size:11.5px;font-weight:700;cursor:pointer;">❌ nicht mehr möglich</button>
+          </div></div>`).join('')}
+      </div>`;
+    }
+  }catch(e){ console.error(e); }
   html+=`<div class="card" style="padding:8px 10px;margin:10px 0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
     <button onclick="navSweetsDate(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;">← Vorheriger</button>
     <div style="text-align:center;">
