@@ -6541,6 +6541,26 @@ async function renderForecastOrderTab(el, tabHtml){
     api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${lastWeekFrom}&forecast_date=lte.${lastWeekTo}&select=forecast_date,dish_name,qty,groesse`).catch(()=>[]),
     api(`disposal?store_id=eq.${currentStore.id}&disposal_date=gte.${lastWeekFrom}&disposal_date=lte.${lastWeekTo}&select=disposal_date,dish_name,leftover_qty,sold_out_time`).catch(()=>[])
   ]);
+  // Plausibilitäts-Basis für die "Achtung, zu wenig"-Warnung: typische Menge dieses Stores je Gericht-Kategorie
+  // (Median der letzten 8 Wochen, nur echte Eingaben — nicht automatisch Übernommenes). Weicht eine Eingabe
+  // deutlich nach unten ab, zeigt fcMarkLow() einen Hinweis. Reine Warnung, sperrt nichts (Crew hat Freiheit).
+  window._fcBaseline={};
+  try{
+    const _blFrom=dateMinusDays(todayStr,56);
+    const _blRows=await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${_blFrom}&forecast_date=lt.${todayStr}&select=dish_name,qty,source,groesse&limit=2000`).catch(()=>[]);
+    const _blBy={};
+    (_blRows||[]).forEach(r=>{
+      if(r.source==='copied'||r.source==='fallback_lastweek') return;
+      if(!(r.qty>0)) return;
+      const c=mapDishNameToCategory(r.dish_name);
+      if(c==='Lasagne'||c==='Meatballs') return; // mehrere Größen/Teile, nicht vergleichbar
+      (_blBy[c]=_blBy[c]||[]).push(r.qty);
+    });
+    Object.keys(_blBy).forEach(c=>{
+      const v=_blBy[c].sort((x,y)=>x-y);
+      if(v.length>=5) window._fcBaseline[c]={median:v[Math.floor(v.length/2)], n:v.length};
+    });
+  }catch(e){ window._fcBaseline={}; }
   // Vorwoche Forecast nach Datum & Kategorie — Basis für Vorschlag
   const lastWeekFcByDate={};
   (lastWeekFcRaw||[]).forEach(f=>{
@@ -6866,6 +6886,7 @@ async function renderForecastOrderTab(el, tabHtml){
 
   el.innerHTML=html;
   translateEl(el);
+  if(!isHistoric) fcScanLow();
 }
 function switchForecastTab(which){
   const gEl=document.getElementById('ft-tab-gerichte'), bEl=document.getElementById('ft-tab-beilagen');
@@ -6914,8 +6935,48 @@ window.markForecastDirty=markForecastDirty;
 // Verhindert, dass zwei Größen-Felder (z.B. Mittel + Klein) fast gleichzeitig gespeichert werden
 // (z.B. beim schnellen Tab-Wechsel zwischen Feldern) — ohne das können sich zwei parallele
 // Lösch+Schreib-Vorgänge für dasselbe Gericht überschneiden und einen Fehler auslösen.
+// "Achtung, zu wenig"-Warnung (07.10.26, Wunsch Tini: zu wenig Reis wurde geschickt/eingetragen).
+// Vergleicht die Eingabe mit der typischen Menge dieses Stores für die Kategorie. Reis ist sehr konstant
+// → strenger (unter 70 % des Üblichen), bei allen anderen Gerichten erst unter 50 % (Bowl/Biryani
+// dürfen bewusst anders verteilt werden). Nur Hinweis, kein Blockieren.
+function fcLowMsg(inputEl){
+  if(!inputEl || inputEl.disabled) return null;
+  const dish=inputEl.dataset.dish; if(!dish) return null;
+  const raw=String(inputEl.value||'').trim(); if(raw==='') return null;
+  const qty=parseFloat(raw.replace(',','.')); if(isNaN(qty)) return null;
+  const cat=mapDishNameToCategory(dish);
+  if(cat==='Lasagne'||cat==='Meatballs') return null;
+  const base=(window._fcBaseline||{})[cat]; if(!base) return null;
+  const thr=cat==='Reis'?0.7:0.5;
+  if(qty>=base.median*thr) return null;
+  const typ=Math.round(base.median*4)/4;
+  return {qty, typ, text:`${formatQty(qty)} ist deutlich weniger als üblich (meist ${formatQty(typ)})`};
+}
+function fcMarkLow(inputEl){
+  if(!inputEl) return null;
+  const host=inputEl.parentElement;
+  const key=`${inputEl.dataset.date}|${inputEl.dataset.dish}`;
+  if(host) [...host.querySelectorAll('.fc-low')].forEach(x=>{ if(x.dataset.for===key) x.remove(); });
+  const m=fcLowMsg(inputEl);
+  if(m && host){
+    const d=document.createElement('div');
+    d.className='fc-low';
+    d.dataset.for=key;
+    d.style.cssText='margin-top:3px;max-width:66px;font-size:8.5px;line-height:1.2;font-weight:700;color:#B91C1C;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:5px;padding:2px 3px;';
+    d.textContent='⚠️ Achtung, wenig! Meist '+formatQty(m.typ);
+    d.title=m.text+' — bitte prüfen, ob das stimmt';
+    inputEl.insertAdjacentElement('afterend', d);
+  }
+  return m;
+}
+function fcScanLow(){
+  document.querySelectorAll('#forecast-table-wrap input[data-dish]').forEach(i=>{ fcMarkLow(i); });
+}
+window.fcMarkLow=fcMarkLow; window.fcScanLow=fcScanLow;
 const _forecastSaveQueue={};
 async function autoSaveForecastCell(inputEl){
+  const _low=fcMarkLow(inputEl);
+  inputEl._low=_low;
   const dateStr=inputEl.dataset.date;
   const dishName=inputEl.dataset.dish;
   if(!dateStr||!dishName) return;
@@ -6974,7 +7035,8 @@ async function _autoSaveForecastCellInner(inputEl, dateStr, dishName){
     // Fokus bewusst verlassen, damit die mobile Tastatur zuverlässig zugeht — sonst kann der fix
     // positionierte Nav-Balken unten manchmal hängenbleiben und auf Taps nicht mehr reagieren.
     if(document.activeElement && document.activeElement.tagName==='INPUT') document.activeElement.blur();
-    showToast('✓ Gespeichert');
+    if(inputEl._low) showToast('⚠️ Gespeichert — aber Achtung: '+inputEl._low.text,true);
+    else showToast('✓ Gespeichert');
   }catch(e){
     console.error(e);
     showToast('❌ Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);
