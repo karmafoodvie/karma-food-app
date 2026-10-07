@@ -8864,22 +8864,16 @@ async function renderTgBestellungHtml(){
 
   const skMenu=await api(`schrankerl_menu?woche=eq.${schrankerlWoche}&select=*`).catch(()=>[]);
   if((skMenu||[]).length){
-    html+=`<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px;">
-      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);padding:10px 14px 0;">Schrankerl-Lieferung Woche ${schrankerlWoche}</div>
-      <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Gericht</th><th style="text-align:left;">Zutaten</th><th>Allergene</th><th>Gramm.</th></tr></thead><tbody>`;
+    // 07.10.26 (Wunsch Tini): Schrankerl genauso schlicht wie das Shop-Menü — eine Zeile je Gericht
     const SLOT_LABEL={curry:'Curry',salat:'Salat',dessert:'Dessert'};
+    html+=`<div class="card" style="padding:10px 14px;margin-bottom:14px;">
+      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Schrankerl-Menü Woche ${schrankerlWoche}</div>`;
     ['curry','salat','dessert'].forEach(slot=>{
       const item=(skMenu||[]).find(m=>m.slot===slot);
       if(!item) return;
-      const hatZutaten=item.zutaten && item.zutaten.trim();
-      html+=`<tr>
-        <td style="font-size:11.5px;" data-no-translate><b>${SLOT_LABEL[slot]}</b><br>${item.name}${item.spezial?`<br><span style="font-size:9.5px;color:var(--muted);">${item.spezial}</span>`:''}</td>
-        <td style="font-size:10.5px;">${hatZutaten?renderZutatenReadOnly(item.zutaten):'<span style="color:#92400E;">noch offen / nicht final</span>'}</td>
-        <td style="font-size:10.5px;text-align:center;">${item.allergene_codes ? (Array.isArray(item.allergene_codes)?item.allergene_codes.join(', '):item.allergene_codes) : '-'}</td>
-        <td style="font-size:10.5px;text-align:center;">${item.grammatur||'-'}</td>
-      </tr>`;
+      html+=`<div style="font-size:11px;margin-bottom:5px;"><b>${SLOT_LABEL[slot]}:</b> <span data-no-translate>${item.name}</span></div>`;
     });
-    html+='</tbody></table></div></div>';
+    html+='</div>';
   }
   html+='</details>';
 
