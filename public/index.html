@@ -3827,8 +3827,9 @@ async function renderNotrufZentrale(){
       const txt=notrufGerichteText(r);
       const von=NOTRUF_NAMEN[r.zusage_von]||r.zusage_von, nach=NOTRUF_NAMEN[r.von_store]||r.von_store;
       const head=`🆘 ${von} → ${nach}: ${r.zusage_menge||''} Gebinde`;
-      if(r.status==='zugesagt') return `<div class="card" style="padding:14px;margin-bottom:12px;border:2px solid #DC2626;background:#FEF2F2;">
-        <div style="font-size:13.5px;font-weight:800;color:#991B1B;">${head}</div>
+      if(r.status==='zugesagt') return `<div class="card" style="padding:14px;margin-bottom:12px;border:2px solid #DC2626;background:#FEF2F2;position:relative;">
+        <button onclick="notrufZentraleWeg(${r.id})" title="Nicht mehr nötig — wegklicken" style="position:absolute;top:8px;right:10px;border:none;background:none;font-size:18px;color:#991B1B;cursor:pointer;">✕</button>
+        <div style="font-size:13.5px;font-weight:800;color:#991B1B;padding-right:24px;">${head}</div>
         <div data-no-translate style="font-size:12px;color:#7F1D1D;margin:3px 0 10px;">${txt}</div>
         <a href="${notrufUberUrl(r.zusage_von,r.von_store)}" target="_blank" rel="noopener" style="display:block;text-align:center;background:#000;color:#fff;border-radius:10px;padding:12px;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:10px;">🚗 Uber öffnen (Abholung ${von} → ${nach})</a>
         <div style="display:flex;gap:6px;margin-bottom:8px;"><input id="nz-ank-${r.id}" type="time" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;"><input id="nz-link-${r.id}" type="text" placeholder="Tracking-Link (optional)" style="flex:2;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;"></div>
@@ -3841,6 +3842,15 @@ async function renderNotrufZentrale(){
   }catch(e){console.error(e);}
 }
 window.renderNotrufZentrale=renderNotrufZentrale;
+// 07.10.26: Zentrale kann eine Notruf-Karte wegklicken, wenn der Uber nicht (mehr) gebraucht wird —
+// schließt die Anfrage für alle ab (wie "Erledigt").
+async function notrufZentraleWeg(id){
+  try{ await api(`essen_notruf?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({erledigt:true,erledigt_am:new Date().toISOString(),status:'erledigt'})}); showToast('Weggeklickt'); }
+  catch(e){ console.error(e); showToast('Fehler — bitte nochmal tippen',true); return; }
+  document.title=document.title.replace('🆘 ',''); try{ navigator.clearAppBadge?.(); }catch(e){}
+  renderNotrufZentrale();
+}
+window.notrufZentraleWeg=notrufZentraleWeg;
 async function notrufUberBestellt(id){
   const ank=document.getElementById('nz-ank-'+id)?.value||null;
   const link=(document.getElementById('nz-link-'+id)?.value||'').trim()||null;
