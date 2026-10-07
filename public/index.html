@@ -8767,12 +8767,30 @@ window.tgSchrankerlWoche = window.tgSchrankerlWoche || null;
 const TG_KATEGORIE_ORDER=['Milchprodukte/Käse','Tiefkühlprodukte','Hülsenfrüchte','Dosen','Nüsse/Trockenfrüchte','Öle/Essig/Salz','Lasagne','Getränke','Kuchen','Sonstiges'];
 
 function tgArtikelRowHtml(a, extraLabel){
-  return `<tr>
-    <td style="font-size:12px;" data-no-translate>${a.name}${extraLabel||''}</td>
-    <td><input type="number" step="0.5" value="${a.bestand??''}" placeholder="Menge" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:12px;padding:5px;"></td>
-    ${a.manuell_hinzugefuegt?`<td><button onclick="deleteTgArtikel(${a.id})" style="background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;padding:2px 6px;">🗑</button></td>`:'<td></td>'}
-  </tr>`;
+  const has=a.bestand!=null && a.bestand!=='';
+  return `<div class="tg-row" data-id="${a.id}" data-has="${has?1:0}" style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--border);">
+    <div style="flex:1;min-width:0;font-size:12.5px;" data-no-translate>${a.name}${extraLabel||''}</div>
+    <input type="number" inputmode="decimal" step="0.5" value="${a.bestand??''}" placeholder="–" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:58px;text-align:center;border:1.5px solid ${has?'#86EFAC':'var(--border)'};background:${has?'#F0FDF4':'#fff'};border-radius:8px;font-size:13px;padding:6px 2px;">
+    ${a.manuell_hinzugefuegt?`<button onclick="deleteTgArtikel(${a.id})" title="Entfernen" style="background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;padding:2px 4px;">🗑</button>`:'<span style="width:22px;"></span>'}
+  </div>`;
 }
+// Zählfortschritt oben ("12 / 54 gezählt") live nachziehen, ohne neu zu rendern
+function tgUpdateProgress(){
+  const rows=[...document.querySelectorAll('.tg-row')]; if(!rows.length) return;
+  const done=rows.filter(r=>r.dataset.has==='1').length;
+  const el=document.getElementById('tg-progress'); if(el) el.textContent=`${done} / ${rows.length} gezählt`;
+  const bar=document.getElementById('tg-bar'); if(bar) bar.style.width=Math.round(done/rows.length*100)+'%';
+  document.querySelectorAll('.tg-kat').forEach(k=>{
+    const rs=[...k.querySelectorAll('.tg-row')]; const d=rs.filter(r=>r.dataset.has==='1').length;
+    const c=k.querySelector('.tg-kat-count'); if(c){ c.textContent=`${d}/${rs.length}`; c.style.color=d===rs.length?'#16A34A':'var(--muted)'; }
+  });
+}
+window.tgUpdateProgress=tgUpdateProgress;
+function tgToggleOpenOnly(on){
+  window._tgOpenOnly=!!on;
+  document.querySelectorAll('.tg-row').forEach(r=>{ r.style.display=(on&&r.dataset.has==='1')?'none':'flex'; });
+}
+window.tgToggleOpenOnly=tgToggleOpenOnly;
 
 async function renderTgBestellungHtml(){
   const shopWoche = window.tgShopWoche || CURRENT_MENU_WOCHE;
@@ -8782,30 +8800,41 @@ async function renderTgBestellungHtml(){
   const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
 
   const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
+  const doneN=items.filter(a=>a.bestand!=null).length;
 
-  let html=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">
-    <div style="font-size:12px;font-weight:700;color:#F97316;">🚛 Wochenbestellung — Transgourmet</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:2px;">Testversion — Bestand zählen und eintragen, wie bei der Inventur. Geht noch NICHT automatisch an Simone, muss aktuell noch manuell weitergegeben werden.</div>
+  // 07.10.26 (Wunsch Tini: "viel Text, wenig Inhalt"): kompakter — ein Block statt 10 Karten mit
+  // wiederholten Tabellenköpfen, Fortschritt oben, Kategorien einklappbar, Referenz-Menüs eingeklappt.
+  let html=`<div class="card" style="padding:12px 14px;margin-bottom:10px;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
+      <div style="font-size:13px;font-weight:800;color:#F97316;">🚛 Wochenbestellung · Transgourmet</div>
+      <div id="tg-progress" style="font-size:11.5px;font-weight:700;color:var(--sub);">${doneN} / ${items.length} gezählt</div>
+    </div>
+    <div style="height:5px;background:var(--surface-1);border-radius:3px;margin:8px 0 6px;overflow:hidden;"><div id="tg-bar" style="height:100%;width:${items.length?Math.round(doneN/items.length*100):0}%;background:#F97316;"></div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <label style="font-size:11.5px;color:var(--sub);display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" onchange="tgToggleOpenOnly(this.checked)" ${window._tgOpenOnly?'checked':''} style="width:16px;height:16px;"> nur noch offene</label>
+      <span style="font-size:10.5px;color:var(--muted);">Bestand eintragen · Weitergabe an Simone noch manuell</span>
+    </div>
   </div>`;
 
-  // ---- Artikelliste — 1:1 wie die Transgourmet-Excel: fixe Kategorien, Artikel + Bestand ----
   const katsInData=[...new Set(items.map(a=>a.kategorie))];
   const katOrder=[...TG_KATEGORIE_ORDER.filter(k=>katsInData.includes(k)), ...katsInData.filter(k=>!TG_KATEGORIE_ORDER.includes(k))];
   katOrder.forEach(kat=>{
     const katItems=items.filter(a=>a.kategorie===kat);
     if(!katItems.length) return;
-    html+=`<div style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin:12px 2px 4px;">${kat.toUpperCase()}</div>
-    <div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Artikel</th><th>Menge auf Lager</th><th></th></tr></thead><tbody>`;
-    katItems.forEach(a=>{ html+=tgArtikelRowHtml(a); });
-    html+='</tbody></table></div></div>';
+    const d=katItems.filter(a=>a.bestand!=null).length;
+    html+=`<details class="tg-kat card" open style="padding:0;margin-bottom:8px;overflow:hidden;">
+      <summary style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--sub);background:var(--surface-1);cursor:pointer;list-style:none;"><span>${kat.toUpperCase()}</span><span class="tg-kat-count" style="font-size:11px;font-weight:700;color:${d===katItems.length?'#16A34A':'var(--muted)'};">${d}/${katItems.length}</span></summary>
+      ${katItems.map(a=>tgArtikelRowHtml(a)).join('')}
+    </details>`;
   });
-  html+=`<div class="card" style="padding:10px 14px;margin-top:8px;display:flex;gap:8px;">
-    <input id="tg-extra-input" type="text" placeholder="Artikel, der auf keiner Liste steht..." style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;">
-    <button onclick="addTgExtraArtikel()" style="padding:8px 14px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">+ Hinzufügen</button>
+  html+=`<div style="display:flex;gap:8px;margin:6px 0 14px;">
+    <input id="tg-extra-input" type="text" placeholder="+ Artikel, der auf keiner Liste steht" onkeydown="if(event.key==='Enter')addTgExtraArtikel()" style="flex:1;padding:9px;border:1px dashed var(--border);border-radius:8px;font-size:12.5px;">
+    <button onclick="addTgExtraArtikel()" style="padding:8px 14px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">＋</button>
   </div>`;
+  if(window._tgOpenOnly) setTimeout(()=>tgToggleOpenOnly(true),0);
 
   // ---- Referenz (read-only, wie rechte Seite der Excel): Wochenmenü + Schrankerl-Tabelle ----
-  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:22px 2px 6px;">📋 REFERENZ — WOCHENMENÜ</div>`;
+  html+=`<details class="tg-ref" ${window._tgRefOpen?'open':''} ontoggle="window._tgRefOpen=this.open" style="margin-top:6px;"><summary style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:6px 2px 8px;cursor:pointer;">📋 REFERENZ — WOCHENMENÜ &amp; SCHRANKERL (antippen)</summary>`;
   html+=`<div style="display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
     <div style="flex:1;min-width:140px;">
       <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🏬 SHOP-WOCHE</div>
@@ -8852,6 +8881,7 @@ async function renderTgBestellungHtml(){
     });
     html+='</tbody></table></div></div>';
   }
+  html+='</details>';
 
   return html;
 }
@@ -8861,6 +8891,8 @@ async function updateTgBestand(articleId, value){
   const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestand:v, aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
+    const row=document.querySelector(`.tg-row[data-id="${articleId}"]`);
+    if(row){ row.dataset.has=v==null?'0':'1'; const inp=row.querySelector('input'); if(inp){ inp.style.borderColor=v==null?'var(--border)':'#86EFAC'; inp.style.background=v==null?'#fff':'#F0FDF4'; } tgUpdateProgress(); }
     showToast('✓ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
