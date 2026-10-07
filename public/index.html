@@ -8816,6 +8816,7 @@ async function renderTgBestellungHtml(){
     </div>
   </div>`;
 
+  const headerHtml=html; html='';
   const katsInData=[...new Set(items.map(a=>a.kategorie))];
   const katOrder=[...TG_KATEGORIE_ORDER.filter(k=>katsInData.includes(k)), ...katsInData.filter(k=>!TG_KATEGORIE_ORDER.includes(k))];
   katOrder.forEach(kat=>{
@@ -8833,8 +8834,9 @@ async function renderTgBestellungHtml(){
   </div>`;
   if(window._tgOpenOnly) setTimeout(()=>tgToggleOpenOnly(true),0);
 
-  // ---- Referenz (read-only, wie rechte Seite der Excel): Wochenmenü + Schrankerl-Tabelle ----
-  html+=`<details class="tg-ref" ${window._tgRefOpen?'open':''} ontoggle="window._tgRefOpen=this.open" style="margin-top:6px;"><summary style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin:6px 2px 8px;cursor:pointer;">📋 REFERENZ — WOCHENMENÜ &amp; SCHRANKERL (antippen)</summary>`;
+  // ---- Referenz — 07.10.26 (Wunsch Tini): oben angepinnt statt unten, als Öffnungsfeld mit allen Details ----
+  const listHtml=html; html='';
+  html+=`<details class="tg-ref card" ${window._tgRefOpen?'open':''} ontoggle="window._tgRefOpen=this.open" style="padding:0;margin-bottom:12px;overflow:hidden;border:1.5px solid #FDBA74;"><summary style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;font-size:12.5px;font-weight:800;color:#C2410C;background:#FFF7ED;cursor:pointer;list-style:none;"><span>📋 Menüs &amp; Schrankerl — Details</span><span style="font-size:11px;font-weight:600;color:var(--muted);">aufklappen ▾</span></summary><div style="padding:12px 12px 2px;">`
   html+=`<div style="display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap;">
     <div style="flex:1;min-width:140px;">
       <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🏬 SHOP-WOCHE</div>
@@ -8864,20 +8866,24 @@ async function renderTgBestellungHtml(){
 
   const skMenu=await api(`schrankerl_menu?woche=eq.${schrankerlWoche}&select=*`).catch(()=>[]);
   if((skMenu||[]).length){
-    // 07.10.26 (Wunsch Tini): Schrankerl genauso schlicht wie das Shop-Menü — eine Zeile je Gericht
+    // Schrankerl: Name je Gericht, darunter alle Details (Zutaten, Allergene, Grammatur) — im Öffnungsfeld
     const SLOT_LABEL={curry:'Curry',salat:'Salat',dessert:'Dessert'};
     html+=`<div class="card" style="padding:10px 14px;margin-bottom:14px;">
       <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Schrankerl-Menü Woche ${schrankerlWoche}</div>`;
     ['curry','salat','dessert'].forEach(slot=>{
       const item=(skMenu||[]).find(m=>m.slot===slot);
       if(!item) return;
-      html+=`<div style="font-size:11px;margin-bottom:5px;"><b>${SLOT_LABEL[slot]}:</b> <span data-no-translate>${item.name}</span></div>`;
+      const hatZ=item.zutaten && item.zutaten.trim();
+      const all=item.allergene_codes?(Array.isArray(item.allergene_codes)?item.allergene_codes.join(', '):item.allergene_codes):'';
+      html+=`<div style="margin-bottom:10px;"><div style="font-size:11.5px;"><b>${SLOT_LABEL[slot]}:</b> <span data-no-translate>${item.name}</span></div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">${item.spezial?escAttr(item.spezial)+' · ':''}Allergene: ${all||'–'}${item.grammatur?' · '+escAttr(item.grammatur):''}</div>
+        <div style="font-size:10.5px;color:var(--sub);margin-top:2px;line-height:1.45;" data-no-translate>${hatZ?escAttr(item.zutaten):'<span style="color:#92400E;">Zutaten noch offen / nicht final</span>'}</div></div>`;
     });
     html+='</div>';
   }
-  html+='</details>';
+  html+='</div></details>';
 
-  return html;
+  return headerHtml+html+listHtml;
 }
 window.renderTgBestellungHtml=renderTgBestellungHtml;
 
