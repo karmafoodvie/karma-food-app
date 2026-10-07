@@ -8822,7 +8822,7 @@ async function renderTgBestellungHtml(){
       <button onclick="tgCopyBestellliste()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;"><span id="tg-best-count">${items.filter(a=>a.bestellen).length?'🛒 '+items.filter(a=>a.bestellen).length+' zu bestellen':'🛒 Liste'}</span> · kopieren</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
-      <label style="font-size:11px;color:var(--sub);display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="tg-asana-test" ${tgAsanaTestMode()?'checked':''} onchange="try{localStorage.setItem('tg_asana_test',this.checked?'1':'0')}catch(e){};tgAsanaBtnRefresh()" style="width:16px;height:16px;"> Testmodus (nur an mich, nicht an Simone)</label>
+      <label style="font-size:11px;color:var(--sub);display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="tg-asana-test" ${tgAsanaTestMode()?'checked':''} onchange="try{localStorage.setItem('tg_asana_test2',this.checked?'1':'0')}catch(e){};tgAsanaBtnRefresh()" style="width:16px;height:16px;"> Test (nur an mich)</label>
       <button id="tg-asana-btn" onclick="tgSendAsana()" style="border:none;background:${tgAsanaTestMode()?'#2B3A67':'#EA580C'};color:#fff;border-radius:8px;padding:7px 11px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;">${tgAsanaTestMode()?'📨 Test senden':'📨 An Simone senden'}</button>
     </div>
   </div>`;
@@ -8942,27 +8942,30 @@ window.toggleTgBestellen=toggleTgBestellen;
 // Bestellliste (alle mit 🛒) als Text kopieren — Weitergabe an Simone läuft noch manuell
 // Wochenbestellung automatisch als Asana-Task (Edge Function asana-wochenbestellung). 07.10.26 (Wunsch
 // Tini): erster Versuch ist ein Test — Testmodus ist standardmäßig AN und schickt nur an Tini.
-function tgAsanaTestMode(){ try{ return localStorage.getItem('tg_asana_test')!=='0'; }catch(e){ return true; } }
+function tgAsanaTestMode(){ try{ return localStorage.getItem('tg_asana_test2')==='1'; }catch(e){ return false; } }
 function tgAsanaBtnRefresh(){
   const b=document.getElementById('tg-asana-btn'); const cb=document.getElementById('tg-asana-test');
   if(b&&cb){ const t=cb.checked; b.textContent=t?'📨 Test senden':'📨 An Simone senden'; b.style.background=t?'#2B3A67':'#EA580C'; }
 }
 async function tgSendAsana(){
-  const rows=[...document.querySelectorAll('.tg-row[data-bestellen="1"]')];
-  if(!rows.length){ showToast('Noch nichts zum Bestellen markiert (🛒)',true); return; }
-  const test=document.getElementById('tg-asana-test')?.checked!==false;
-  if(!test && !confirm(`Bestellliste mit ${rows.length} Artikeln jetzt als Aufgabe an Simone schicken?`)) return;
-  const artikel=rows.map(r=>({
+  const allRows=[...document.querySelectorAll('.tg-row')];
+  if(!allRows.length){ showToast('Keine Artikel in der Liste',true); return; }
+  const nBest=allRows.filter(r=>r.dataset.bestellen==='1').length;
+  const test=document.getElementById('tg-asana-test')?.checked===true;
+  if(!test && !confirm(`Komplette Wochenbestellung (${allRows.length} Artikel, davon ${nBest} 🛒 zu bestellen) jetzt als Aufgabe an Simone schicken?`)) return;
+  const artikel=allRows.map(r=>({
     name:r.children[0].textContent.trim(),
     kategorie:(r.closest('.tg-kat')?.querySelector('summary span')?.textContent||'Sonstiges').trim(),
-    bestand:(r.querySelector('input')?.value||'').trim()
+    bestand:(r.querySelector('input')?.value||'').trim(),
+    genug:r.dataset.genug==='1',
+    bestellen:r.dataset.bestellen==='1'
   }));
   const btn=document.getElementById('tg-asana-btn'); if(btn){ btn.disabled=true; btn.textContent='Sendet …'; }
   try{
     const res=await fetch(`${SUPABASE_URL}/functions/v1/asana-wochenbestellung`,{method:'POST',headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:JSON.stringify({artikel,test,von:currentStore?.name||'Küche'})});
     const j=await res.json().catch(()=>({}));
     if(!res.ok||!j.ok) throw new Error(j.error||('HTTP '+res.status));
-    showToast(test?`✓ Test gesendet (${artikel.length} Artikel) — Asana „Meine Aufgaben“ prüfen`:`✓ An Simone gesendet (${artikel.length} Artikel)`);
+    showToast(test?`✓ Test gesendet (${artikel.length} Artikel) — Asana „Meine Aufgaben“ prüfen`:`✓ An Simone gesendet — ${artikel.length} Artikel, ${nBest} zu bestellen`);
   }catch(e){ console.error(e); showToast('Senden an Asana fehlgeschlagen: '+(e?.message||String(e)).slice(0,100),true); }
   if(btn){ btn.disabled=false; tgAsanaBtnRefresh(); }
 }
