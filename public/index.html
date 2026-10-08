@@ -4904,6 +4904,11 @@ function renderOrder(){
       <textarea id="sn-text" class="sn-keep" placeholder="z.B. +2 Choco Coco Cake für morgen" style="width:100%;min-height:60px;padding:9px;border:1px solid #FCD34D;border-radius:8px;font-family:inherit;font-size:13.5px;box-sizing:border-box;"></textarea>
       <button id="sn-btn" onclick="sendSweetsNachtrag()" style="width:100%;margin-top:6px;padding:10px;border:none;border-radius:8px;background:#D97706;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Nachtrag senden</button>
       <div id="sn-list" style="margin-top:8px;"></div>
+    </div>
+    <div id="sw-done-card" style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:12px 14px;margin:8px 0 4px;">
+      <div style="font-size:13px;font-weight:800;color:#166534;">✅ Sweets für morgen erledigt?</div>
+      <div style="font-size:11.5px;color:#166534;margin:3px 0 8px;">Nichts mehr zu ändern oder heute nichts bestellt? Dann hier abhaken, damit die Aufgabe auf der Startseite grün wird.</div>
+      <button id="sw-done-btn" onclick="sweetsMarkErledigt()" style="width:100%;padding:11px;border:none;border-radius:8px;background:#16A34A;color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;">✓ Erledigt</button>
     </div>`;
   }
   html+=`<div style="margin-top:16px;">
@@ -4919,7 +4924,7 @@ function renderOrder(){
     const sb=document.getElementById('order-submit-btn'); if(sb){ sb.textContent='🔒 Gesperrt ab 14:00 Uhr'; sb.style.opacity='0.5'; }
   }
   loadSpecialOrderAntwortBox();
-  if(sweetsOrderLocked()) loadSweetsNachtraegeStore();
+  if(sweetsOrderLocked()){ loadSweetsNachtraegeStore(); sweetsErledigtRefresh(); }
   translateEl(el);
   if(activeOrderTab==='transporter'){ loadGeldwechselList(); loadTransporterNoteList(); }
   if(activeOrderTab==='transporter' || activeOrderTab==='sweets'){ loadYesterdayOrderBox(); }
@@ -7237,6 +7242,44 @@ async function setSweetsNachtragStatus(id,status){
   catch(e){ console.error(e); showToast('Fehler',true); }
 }
 Object.assign(window,{sendSweetsNachtrag,setSweetsNachtragStatus,loadSweetsNachtraegeStore});
+// Erledigt-Haken für Sweets nach 14:00 (Wunsch Tini, 08.10.26): die Bestellung ist gesperrt, also konnte
+// man sie nicht mehr "abschicken" — war vorher nichts bestellt oder alles passte, blieb die Aufgabe
+// auf der Startseite dauerhaft rot. Der Haken schreibt nur den Abschick-Marker (order_submissions),
+// berührt aber KEINE Mengen — eine bereits abgeschickte Bestellung bleibt unverändert.
+function sweetsErledigtStyle(btn,done){
+  if(!btn) return;
+  btn.disabled=!!done;
+  btn.textContent=done?'✓ Erledigt — Sweets abgehakt':'✓ Erledigt';
+  btn.style.background=done?'#DCFCE7':'#16A34A';
+  btn.style.color=done?'#166534':'#fff';
+  btn.style.cursor=done?'default':'pointer';
+}
+async function sweetsErledigtRefresh(){
+  const btn=document.getElementById('sw-done-btn'); if(!btn||!currentStore) return;
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    const r=await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.sweets&select=id&limit=1`);
+    if(r&&r.length) sweetsErledigtStyle(btn,true);
+  }catch(e){ console.error(e); }
+}
+async function sweetsMarkErledigt(){
+  const btn=document.getElementById('sw-done-btn'); if(!btn||!currentStore) return;
+  btn.disabled=true; btn.textContent='Wird gespeichert…';
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    const r=await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.sweets&select=id&limit=1`);
+    if(!(r&&r.length)){
+      await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:'sweets'}])});
+    }
+    sweetsErledigtStyle(btn,true);
+    showToast('✓ Sweets erledigt');
+  }catch(e){
+    console.error(e);
+    sweetsErledigtStyle(btn,false);
+    showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,100),true);
+  }
+}
+Object.assign(window,{sweetsMarkErledigt,sweetsErledigtRefresh});
 function sweetsOrderLocked(){
   if(activeOrderTab!=='sweets' || currentStore?.id==='zentrale') return false;
   const h=Number(new Intl.DateTimeFormat('en-GB',{hour:'numeric',hourCycle:'h23',timeZone:'Europe/Vienna'}).format(new Date()));
