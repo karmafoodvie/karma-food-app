@@ -3576,6 +3576,15 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
     </div>`;
   });
+  panelsHtml+=`<div id="dish-allergen-${idPrefix}sweets" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+    <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:8px;">🍰 SWEETS — Zutaten &amp; Allergene</div>
+    ${SWEETS_ZUTATEN.map(sw=>`<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--border);">
+      <div style="font-size:12px;font-weight:700;" data-no-translate>${sw.name}</div>
+      <div style="font-size:10px;color:var(--muted);margin:1px 0 4px;">${sw.info}${sw.allergene?` · ⚠️ Allergene: ${sw.allergene}`:''}</div>
+      <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(sw.zutaten)}</div>
+    </div>`).join('')}
+    <div style="font-size:10.5px;color:#92400E;background:#FFFBEB;border-radius:8px;padding:8px 10px;">⚠️ Alle Sweets &amp; Shop-Produkte können Spuren von Senf, Samen &amp; Nüssen enthalten.</div>
+  </div>`;
   const thirdsRow=`<div class="home-card" style="display:flex;padding:0;margin-bottom:6px;overflow:hidden;">
     <div onclick="toggleDishAllergeneCard('${idPrefix}reis')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:0.5px solid var(--border);">
       <div style="font-size:12px;font-weight:600;">Reis 🍚</div>
@@ -3585,7 +3594,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
       <div style="font-size:12px;font-weight:600;">Samosas 🥟</div>
       <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
-    <div onclick="window._waehrendHideFeedback=true;goTo('waehrend')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;">
+    <div onclick="toggleDishAllergeneCard('${idPrefix}sweets')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;">
       <div style="font-size:12px;font-weight:600;">Sweets 🍰</div>
       <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
@@ -4680,8 +4689,9 @@ function renderOrderSection(cats, label, color, icon){
       const allergLine=(allergInfo?.allergene_codes?.length)?`<div style="font-size:10px;color:#B45309;margin-top:2px;">⚠️ ${allergInfo.allergene_codes.map(c=>ALLERGEN_NAMES[c]||c).join(', ')}</div>`:'';
       // Zutaten + Haltbarkeit direkt anzeigen statt Link (27.08.26, Wunsch Tini — der Link zur
       // Zutaten&Allergene-Seite hat hier nicht gepasst, direkt hier ist praktischer).
-      const sweetInfo=SWEETS_ZUTATEN.find(s=>s.name===a.name);
-      const zutatenInline=sweetInfo?`<div style="font-size:10px;color:var(--sub);margin-top:3px;line-height:1.5;">${sweetInfo.zutaten}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">${sweetInfo.info}</div>`:'';
+      // 09.10.26 (Wunsch Tini): Zutaten gehören NICHT in die Bestellliste (hier zählt nur die Menge) —
+      // sie stehen jetzt auf der Startseite unter "Sweets 🍰 · Zutaten ansehen" (Während der Schicht).
+      const zutatenInline='';
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
           ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
