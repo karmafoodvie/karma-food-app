@@ -225,6 +225,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="v-catering" class="view"></div>
     <div id="v-feuerloescher" class="view"></div>
     <div id="v-messen" class="view"></div>
+    <div id="v-dienstplan" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
     <div id="v-waehrend" class="view"></div>
@@ -1191,7 +1192,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.109';
+const APP_VERSION = '6.99.110';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1930,11 +1931,11 @@ function goTo(v, noPush=false){
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
     else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
-    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen') navId='nav-org-management';
+    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan') navId='nav-org-management';
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle'};
+  const subs={feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1943,7 +1944,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -8246,6 +8247,13 @@ async function renderManagement(){
         <span class="org-btn-sub">Aufgaben mit Datum verknüpfen — erscheint direkt bei Michi im Info-Tab</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('dienstplan')" style="border-color:#2B3A67;">
+      <span class="org-btn-icon">🗓️</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#2B3A67;">Dienstplan</span>
+        <span class="org-btn-sub">Team per Drag &amp; Drop auf Tag und Standort ziehen</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('messen')" style="border-color:#F97316;">
       <span class="org-btn-icon">🎪</span>
       <div class="org-btn-text">
@@ -12395,6 +12403,197 @@ function renderDcTabContent(){
 // Home zurück zu "Schicht abschließen" navigieren, um den nächsten offenen Punkt zu sehen — bei
 // 5-8 Punkten viel unnötiges Hin- und Herklicken. Ist schichtendeReturnFlag gesetzt (siehe
 // renderSchichtende), führt der Zurück-Pfeil stattdessen direkt wieder dorthin.
+// ==== DIENSTPLAN (09.10.26, Wunsch Tini) — Organisation: Personen per Drag & Drop auf Tag × Standort ====
+const DP_SPALTEN=['1020','LB','BÖRSE','STADTPLATZ','SPRINGER'];
+const DP_TAGE=['Mo','Di','Mi','Do','Fr'];
+const DP_FARBEN=['#E94E1B','#2B3A67','#0F6E56','#B45309','#7C3AED','#DB2777','#0EA5E9','#65A30D','#D97706','#0D9488','#9333EA','#475569'];
+let dpWeek=null, dpPersonen=[], dpEintraege=[], dpSel=null, dpEdit=false, dpDrag=null;
+function dpFmt(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dpMonday(d){ const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
+function dpAddDays(iso,n){ const [y,m,d]=iso.split('-').map(Number); return dpFmt(new Date(y,m-1,d+n)); }
+function dpKW(iso){ const [y,m,d]=iso.split('-').map(Number); const t=new Date(Date.UTC(y,m-1,d)); t.setUTCDate(t.getUTCDate()+4-(t.getUTCDay()||7)); const y0=new Date(Date.UTC(t.getUTCFullYear(),0,1)); return Math.ceil(((t-y0)/86400000+1)/7); }
+function dpPerson(id){ return dpPersonen.find(p=>p.id===id); }
+function dpAvatar(p,size){
+  const s=size||30;
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:${s}px;height:${s}px;border-radius:50%;background:${p.farbe||'#475569'};color:#fff;font-weight:700;font-size:${Math.round(s*0.42)}px;flex-shrink:0;">${escAttr((p.name||'?').trim().charAt(0).toUpperCase())}</span>`;
+}
+async function renderDienstplan(){
+  const el=document.getElementById('v-dienstplan');
+  if(!dpWeek) dpWeek=dpFmt(dpMonday(new Date()));
+  const [pers, eintr]=await Promise.all([
+    api('dienstplan_personen?aktiv=eq.true&select=*&order=id.asc'),
+    api(`dienstplan_eintraege?woche=eq.${dpWeek}&select=*&order=id.asc`)
+  ]);
+  dpPersonen=pers||[]; dpEintraege=eintr||[];
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🗓️','Dienstplan','Person auf Tag und Standort ziehen. Eintrag in den Papierkorb ziehen = entfernen.','#2B3A67');
+  html+=`<div id="dp-body"></div>`;
+  el.innerHTML=html;
+  dpRenderBody();
+}
+function dpRenderBody(){
+  const body=document.getElementById('dp-body'); if(!body) return;
+  const kw=dpKW(dpWeek), ende=dpAddDays(dpWeek,4);
+  const lbl=iso=>{ const [y,m,d]=iso.split('-'); return d+'.'+m+'.'; };
+  let h=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <button onclick="dpNav(-7)" style="border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 14px;font-size:15px;cursor:pointer;">‹</button>
+    <div style="flex:1;text-align:center;"><div style="font-weight:700;font-size:15px;">KW ${kw}</div><div style="font-size:11px;color:var(--muted);">${lbl(dpWeek)} – ${lbl(ende)}</div></div>
+    <button onclick="dpNav(7)" style="border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 14px;font-size:15px;cursor:pointer;">›</button>
+  </div>`;
+  // Avatar-Leiste
+  h+=`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;">TEAM</div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="dpAddPerson()" style="border:1px solid var(--border);background:#fff;border-radius:8px;padding:4px 9px;font-size:11.5px;cursor:pointer;">＋ Person</button>
+        <button onclick="dpEdit=!dpEdit;dpRenderBody()" style="border:1px solid var(--border);background:${dpEdit?'#FEE2E2':'#fff'};border-radius:8px;padding:4px 9px;font-size:11.5px;cursor:pointer;">${dpEdit?'Fertig':'✎'}</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">${dpPersonen.map(p=>`<div data-dp-person="${p.id}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;width:56px;padding:5px 2px;border-radius:10px;border:2px solid ${dpSel===p.id?'#2B3A67':'transparent'};background:${dpSel===p.id?'#EEF2FF':'transparent'};touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;">
+      ${dpAvatar(p,34)}<span style="font-size:10.5px;font-weight:600;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escAttr(p.name)}</span>
+      ${dpEdit?`<span data-dp-delperson="${p.id}" style="position:absolute;top:-4px;right:-2px;background:#DC2626;color:#fff;border-radius:50%;width:18px;height:18px;font-size:12px;line-height:18px;text-align:center;cursor:pointer;">×</span>`:''}
+    </div>`).join('')}</div>
+  </div>`;
+  // Raster
+  h+=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:12px;background:#fff;"><table style="border-collapse:collapse;min-width:560px;width:100%;table-layout:fixed;">
+    <colgroup><col style="width:76px;">${DP_TAGE.map(()=>'<col>').join('')}</colgroup>
+    <thead><tr><th style="padding:8px 6px;"></th>${DP_TAGE.map((t,i)=>`<th style="padding:8px 4px;font-size:12px;border-left:1px solid var(--border);">${t}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${lbl(dpAddDays(dpWeek,i))}</div></th>`).join('')}</tr></thead><tbody>`;
+  DP_SPALTEN.forEach(sp=>{
+    h+=`<tr style="border-top:1px solid var(--border);"><td style="padding:8px 6px;font-size:11px;font-weight:700;vertical-align:top;word-break:break-word;">${sp}</td>`;
+    DP_TAGE.forEach((t,i)=>{
+      const tag=i+1;
+      const items=dpEintraege.filter(e=>e.tag===tag&&e.spalte===sp);
+      h+=`<td data-dp-cell data-tag="${tag}" data-spalte="${sp}" onclick="dpCellTap(${tag},'${sp}')" style="border-left:1px solid var(--border);padding:4px;vertical-align:top;min-height:54px;height:54px;${dpSel?'background:#F8FAFF;':''}">
+        ${items.map(e=>{const p=dpPerson(e.person_id); if(!p) return ''; return `<div data-dp-entry="${e.id}" data-person="${p.id}" style="display:flex;align-items:center;gap:4px;background:${p.farbe}1A;border:1px solid ${p.farbe}55;border-radius:14px;padding:2px 6px 2px 2px;margin-bottom:3px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;">${dpAvatar(p,18)}<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escAttr(p.name)}</span></div>`;}).join('')}
+      </td>`;
+    });
+    h+=`</tr>`;
+  });
+  h+=`</tbody></table></div>`;
+  h+=`<div id="dp-trash" style="margin-top:10px;border:2px dashed #FCA5A5;color:#B91C1C;border-radius:12px;padding:12px;text-align:center;font-size:12.5px;font-weight:600;">🗑️ Hierher ziehen = entfernen</div>
+  <div style="display:flex;gap:8px;margin-top:10px;">
+    <button onclick="dpCopyPrev()" style="flex:1;border:1px solid var(--border);background:#fff;border-radius:10px;padding:10px;font-size:12.5px;cursor:pointer;">📋 Vorwoche übernehmen</button>
+    <button onclick="dpClearWeek()" style="border:1px solid var(--border);background:#fff;border-radius:10px;padding:10px 14px;font-size:12.5px;cursor:pointer;">Woche leeren</button>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-top:8px;">Tipp: Alternativ erst eine Person antippen (wird markiert), dann ins gewünschte Feld tippen.</div>`;
+  body.innerHTML=h;
+  dpBindDrag();
+}
+function dpBindDrag(){
+  document.querySelectorAll('#dp-body [data-dp-person],#dp-body [data-dp-entry]').forEach(n=>{ n.onpointerdown=dpPointerDown; });
+  document.querySelectorAll('#dp-body [data-dp-delperson]').forEach(n=>{ n.onclick=ev=>{ev.stopPropagation(); dpDelPerson(Number(n.dataset.dpDelperson));}; n.onpointerdown=ev=>ev.stopPropagation(); });
+}
+function dpPointerDown(ev){
+  if(ev.button!==undefined && ev.button!==0) return;
+  if(ev.target.closest('[data-dp-delperson]')) return;
+  const n=ev.currentTarget;
+  dpDrag={node:n, person:Number(n.dataset.dpPerson||n.dataset.person), entry:n.dataset.dpEntry?Number(n.dataset.dpEntry):null, x0:ev.clientX, y0:ev.clientY, moved:false, ghost:null};
+  try{ n.setPointerCapture(ev.pointerId); }catch(e){}
+  n.onpointermove=dpPointerMove; n.onpointerup=dpPointerUp; n.onpointercancel=dpPointerCancel;
+}
+function dpTargetAt(x,y){
+  const g=dpDrag&&dpDrag.ghost; if(g) g.style.display='none';
+  const t=document.elementFromPoint(x,y);
+  if(g) g.style.display='';
+  if(!t) return {};
+  return {cell:t.closest('[data-dp-cell]'), trash:t.closest('#dp-trash')};
+}
+function dpPointerMove(ev){
+  const d=dpDrag; if(!d) return;
+  if(!d.moved){
+    if(Math.abs(ev.clientX-d.x0)+Math.abs(ev.clientY-d.y0)<7) return;
+    d.moved=true;
+    const p=dpPerson(d.person);
+    const g=document.createElement('div');
+    g.style.cssText='position:fixed;z-index:9999;pointer-events:none;display:flex;align-items:center;gap:6px;background:#fff;border:2px solid #2B3A67;border-radius:20px;padding:3px 10px 3px 3px;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:12.5px;font-weight:700;';
+    g.innerHTML=(p?dpAvatar(p,26)+escAttr(p.name):'');
+    document.body.appendChild(g); d.ghost=g; d.node.style.opacity='0.35';
+  }
+  d.ghost.style.left=(ev.clientX-20)+'px'; d.ghost.style.top=(ev.clientY-34)+'px';
+  document.querySelectorAll('#dp-body [data-dp-cell]').forEach(c=>{c.style.outline='';});
+  const tr=document.getElementById('dp-trash'); if(tr) tr.style.background='';
+  const {cell,trash}=dpTargetAt(ev.clientX,ev.clientY);
+  if(cell) cell.style.outline='2px solid #2B3A67';
+  if(trash&&d.entry) trash.style.background='#FEE2E2';
+  ev.preventDefault();
+}
+function dpPointerCancel(){ dpEndDrag(); }
+async function dpPointerUp(ev){
+  const d=dpDrag; if(!d) return;
+  if(!d.moved){ dpEndDrag();
+    if(!d.entry){ dpSel=(dpSel===d.person?null:d.person); dpRenderBody(); }
+    return;
+  }
+  const {cell,trash}=dpTargetAt(ev.clientX,ev.clientY);
+  dpEndDrag();
+  try{
+    if(trash && d.entry){ await dpRemoveEntry(d.entry); }
+    else if(cell){ await dpPlace(d.person, Number(cell.dataset.tag), cell.dataset.spalte, d.entry); }
+    else dpRenderBody();
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,100),true); renderDienstplan(); }
+}
+function dpEndDrag(){
+  const d=dpDrag; if(!d) return;
+  if(d.ghost) d.ghost.remove();
+  if(d.node){ d.node.style.opacity=''; d.node.onpointermove=d.node.onpointerup=d.node.onpointercancel=null; }
+  document.querySelectorAll('#dp-body [data-dp-cell]').forEach(c=>{c.style.outline='';});
+  const tr=document.getElementById('dp-trash'); if(tr) tr.style.background='';
+  dpDrag=null;
+}
+async function dpPlace(personId, tag, spalte, entryId){
+  if(dpEintraege.some(e=>e.person_id===personId&&e.tag===tag&&e.spalte===spalte&&e.id!==entryId)){ showToast('Ist dort schon eingetragen'); dpRenderBody(); return; }
+  if(entryId){
+    const e=dpEintraege.find(x=>x.id===entryId); if(!e){ dpRenderBody(); return; }
+    if(e.tag===tag&&e.spalte===spalte){ dpRenderBody(); return; }
+    e.tag=tag; e.spalte=spalte; dpRenderBody();
+    await api(`dienstplan_eintraege?id=eq.${entryId}`,{method:'PATCH',body:JSON.stringify({tag,spalte})});
+  }else{
+    const tmp={id:-Date.now(),woche:dpWeek,tag,spalte,person_id:personId};
+    dpEintraege.push(tmp); dpRenderBody();
+    const r=await api('dienstplan_eintraege',{method:'POST',body:JSON.stringify([{woche:dpWeek,tag,spalte,person_id:personId}])});
+    if(r&&r[0]){ tmp.id=r[0].id; dpRenderBody(); }
+  }
+}
+async function dpRemoveEntry(id){
+  dpEintraege=dpEintraege.filter(e=>e.id!==id); dpRenderBody();
+  if(id>0) await api(`dienstplan_eintraege?id=eq.${id}`,{method:'DELETE'});
+}
+async function dpCellTap(tag,spalte){
+  if(!dpSel) return;
+  try{ await dpPlace(dpSel,tag,spalte,null); }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); renderDienstplan(); }
+}
+function dpNav(n){ dpWeek=dpAddDays(dpWeek,n); dpSel=null; renderDienstplan(); }
+async function dpAddPerson(){
+  const name=(prompt('Name der Person?')||'').trim(); if(!name) return;
+  const farbe=DP_FARBEN[dpPersonen.length%DP_FARBEN.length];
+  try{ await api('dienstplan_personen',{method:'POST',body:JSON.stringify([{name,farbe}])}); renderDienstplan(); }
+  catch(e){ showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
+}
+async function dpDelPerson(id){
+  const p=dpPerson(id); if(!p) return;
+  if(!confirm(`${p.name} aus dem Team-Pool entfernen? (bestehende Pläne bleiben erhalten)`)) return;
+  try{ await api(`dienstplan_personen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({aktiv:false})}); if(dpSel===id) dpSel=null; renderDienstplan(); }
+  catch(e){ showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
+}
+async function dpCopyPrev(){
+  const prev=dpAddDays(dpWeek,-7);
+  const rows=await api(`dienstplan_eintraege?woche=eq.${prev}&select=tag,spalte,person_id`);
+  if(!rows||!rows.length){ showToast('Vorwoche ist leer'); return; }
+  if(dpEintraege.length && !confirm('Diese Woche wird mit der Vorwoche überschrieben. Fortfahren?')) return;
+  try{
+    await api(`dienstplan_eintraege?woche=eq.${dpWeek}`,{method:'DELETE'});
+    await api('dienstplan_eintraege',{method:'POST',body:JSON.stringify(rows.map(r=>({woche:dpWeek,tag:r.tag,spalte:r.spalte,person_id:r.person_id})))});
+    showToast('✓ Vorwoche übernommen'); renderDienstplan();
+  }catch(e){ showToast('Fehler: '+(e?.message||'').slice(0,80),true); renderDienstplan(); }
+}
+async function dpClearWeek(){
+  if(!dpEintraege.length) return;
+  if(!confirm('Alle Einträge dieser Woche löschen?')) return;
+  try{ await api(`dienstplan_eintraege?woche=eq.${dpWeek}`,{method:'DELETE'}); renderDienstplan(); }
+  catch(e){ showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
+}
+Object.assign(window,{dpNav,dpAddPerson,dpCopyPrev,dpClearWeek,dpCellTap,renderDienstplan});
+
 function backToHomeHtml(){
   if(schichtendeReturnFlag){
     return `<div onclick="schichtendeWizard=null;schichtendeReturnFlag=false;goTo('schichtende')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
