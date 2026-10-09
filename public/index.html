@@ -10878,7 +10878,7 @@ async function renderBroadcast(){
   html+=pageHeaderHtml('📣','Nachricht an Stores','An alle Filialen, das Team, den Transporter oder eine bestimmte Filiale.','#2B3A67');
   html+=`<div class="card" style="padding:14px;">
     <div style="font-weight:500;margin-bottom:8px;">An wen?</div>
-    <select id="bc-target" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
+    <select id="bc-target" onchange="document.getElementById('bc-kn-box').style.display=this.value==='team'?'block':'none'" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
       <option value="">📢 Alle Filialen</option>
       <option value="team">👥 Team (Küche)</option>
       <option value="transporter">🚚 Transporter</option>
@@ -10893,6 +10893,13 @@ async function renderBroadcast(){
     </select>
     <div style="font-weight:500;margin-bottom:8px;">Nachricht</div>
     <textarea id="bc-message" placeholder="z.B. Bitte morgen extra Servietten mitbestellen..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;min-height:100px;resize:vertical;font-family:inherit;box-sizing:border-box;margin-bottom:12px;"></textarea>
+    <div id="bc-kn-box" style="display:none;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#5B21B6;cursor:pointer;"><input type="checkbox" id="bc-kn-on" onchange="document.getElementById('bc-kn-date-wrap').style.display=this.checked?'block':'none'"> 🍽️ Zusätzlich als Tageshinweis in der Küche anzeigen (wie Catering)</label>
+      <div id="bc-kn-date-wrap" style="display:none;margin-top:8px;">
+        <div style="font-size:11.5px;color:var(--sub);margin-bottom:4px;">Für welchen Tag? Erscheint im Küchen-Tab „Morgen“ am Vortag. Erste Zeile der Nachricht = Titel, weitere Zeilen = Zusatzinfo.</div>
+        <input type="date" id="bc-kn-date" min="${new Date().toISOString().split('T')[0]}" style="width:100%;padding:10px;border:1px solid #DDD6FE;border-radius:8px;box-sizing:border-box;">
+      </div>
+    </div>
     <div style="font-weight:500;margin-bottom:6px;">Foto (optional)</div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Z.B. um zu zeigen, wie du dir ein Gericht/eine Idee vorstellst.</div>
     <input type="file" id="bc-photo-input" accept="image/*" onchange="previewBcPhoto(this)" style="margin-bottom:8px;">
@@ -10958,8 +10965,15 @@ async function sendBroadcast(){
   const antwortTyp=document.getElementById('bc-antwort-typ')?.value||'freitext';
   if(!message){ showToast('Bitte Nachricht eingeben'); return; }
   try{
+    const knOn=rawTarget==='team' && document.getElementById('bc-kn-on')?.checked;
+    const knDate=document.getElementById('bc-kn-date')?.value||'';
+    if(knOn && !knDate){ showToast('Bitte Datum für den Tageshinweis wählen',true); return; }
     await api('org_broadcasts',{method:'POST',body:JSON.stringify([{message, target_store_id:target, created_by:name, show_until:showUntil, antwort_typ:antwortTyp, photo_url:_bcPhotoDataUrl}])});
-    showToast('✔ Nachricht gesendet');
+    if(knOn){
+      const lines=message.split('\n').map(x=>x.trim()).filter(Boolean);
+      await api('kitchen_notices',{method:'POST',body:JSON.stringify([{datum:knDate,icon:'📌',titel:lines[0]||message,untertitel:lines.slice(1).join(' · ')||null,created_by:name}])});
+    }
+    showToast(knOn?'✔ Nachricht gesendet + Tageshinweis angelegt':'✔ Nachricht gesendet');
     removeBcPhoto();
     renderBroadcast();
   }catch(e){console.error(e);showToast('Fehler beim Senden');}
@@ -17142,6 +17156,14 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     <span style="font-size:20px;">🍽️</span>
     <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:700;color:#5B21B6;">Catering: ${escAttr(c.kunde)}${c.personen?' · '+c.personen+' PAX':''}</div><div style="font-size:10.5px;color:var(--sub);">${c.ankunft?'Ankunft '+escAttr(c.ankunft)+' · ':''}<a href="#" onclick="goTo('catering');return false;" style="color:#5B21B6;">Details & Packliste</a></div></div>
     <button onclick="openCateringPdf(${c.id})" style="border:none;background:#7C3AED;color:#fff;border-radius:8px;padding:7px 10px;font-size:11.5px;font-weight:700;cursor:pointer;">📄 PDF</button>
+  </div>`; });
+  // 09.10.26 (Wunsch Tini): Küchen-Hinweise der Organisation (z.B. "12× Massaman Curry für Schrankerl") —
+  // exakt im Design des Catering-Hinweises, nur ohne PDF-Button. Werden über "Nachricht an Stores → Team (Küche)"
+  // mit Haken "Als Tageshinweis" angelegt.
+  const _kn=(await api(`kitchen_notices?status=eq.aktiv&datum=eq.${tomorrowStr}&select=id,icon,titel,untertitel&order=id.asc`).catch(()=>[]))||[];
+  _kn.forEach(n=>{ html+=`<div style="display:flex;align-items:center;gap:10px;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:10px;padding:9px 11px;margin-bottom:8px;">
+    <span style="font-size:20px;">${escAttr(n.icon||'📌')}</span>
+    <div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:700;color:#5B21B6;">${escAttr(n.titel)}</div>${n.untertitel?`<div style="font-size:10.5px;color:var(--sub);">${escAttr(n.untertitel)}</div>`:''}</div>
   </div>`; });
   html+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px;">
     <div style="display:flex;align-items:center;gap:8px;">
