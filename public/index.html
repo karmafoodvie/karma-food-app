@@ -1192,7 +1192,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.110';
+const APP_VERSION = '6.99.111';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2854,7 +2854,7 @@ async function zdSaveLocal(dishName, text, woche, tag, slot){
     } else {
       await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([payload])});
     }
-    showToast('✔ Gespeichert'+(autoCodes.length?' · Allergene automatisch erkannt: '+autoCodes.map(c=>ALLERGEN_NAMES[c]||c).join(', '):''));
+    showToast('✔ Gespeichert um '+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})+(autoCodes.length?' · Allergene automatisch erkannt: '+autoCodes.map(c=>ALLERGEN_NAMES[c]||c).join(', '):''));
   }catch(e){ showToast('Fehler: '+(e.message||'unbekannt')); }
 }
 
@@ -2951,7 +2951,8 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
   const closeModal=()=>overlay.remove();
   document.getElementById('zd-modal-close').addEventListener('click', closeModal);
   document.getElementById('zd-modal-cancel').addEventListener('click', closeModal);
-  overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+  // 12.10.26: Tippen neben das Fenster verwarf bisher still alle Änderungen (Küche dachte "angepasst").
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) showToast('Zum Schließen ✕ oder Abbrechen tippen — 💾 Speichern nicht vergessen'); });
 
   document.getElementById('zd-modal-save').addEventListener('click', async ()=>{
     const saveBtn=document.getElementById('zd-modal-save');
@@ -3560,6 +3561,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
     panelsHtml+=`<div id="dish-allergen-${idPrefix}${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
       <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
+      <button data-dish="${escAttr(d.name)}" onclick="zmOpen(this.dataset.dish)" style="margin-top:8px;font-size:11px;font-weight:600;color:#B45309;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;cursor:pointer;">⚠️ Zutat stimmt nicht</button>
     </div>`;
   });
 
@@ -3575,6 +3577,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
     panelsHtml+=`<div id="dish-allergen-${idPrefix}${d.slot}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
       <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(zutatenMerged)}</div>
+      <button data-dish="${escAttr(d.name)}" onclick="zmOpen(this.dataset.dish)" style="margin-top:8px;font-size:11px;font-weight:600;color:#B45309;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;cursor:pointer;">⚠️ Zutat stimmt nicht</button>
     </div>`;
   });
   panelsHtml+=`<div id="dish-allergen-${idPrefix}sweets" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
@@ -12594,6 +12597,61 @@ async function dpClearWeek(){
 }
 Object.assign(window,{dpNav,dpAddPerson,dpCopyPrev,dpClearWeek,dpCellTap,renderDienstplan});
 
+// ==== ZUTATEN-MELDUNGEN (12.10.26, Wunsch Tini) — Filiale meldet "Zutat stimmt nicht", Küche sieht es oben ====
+function zmOpen(dishName){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9998;display:flex;align-items:flex-end;';
+  const sh=document.createElement('div');
+  sh.style.cssText='background:#fff;border-radius:20px 20px 0 0;width:100%;padding:16px 16px 28px;';
+  sh.innerHTML=`<div style="font-size:15px;font-weight:700;" data-no-translate>${escAttr(dishName)}</div>
+    <div style="font-size:12px;color:var(--muted);margin:2px 0 10px;">Was stimmt in der Zutatenliste nicht? Geht sofort an die Küche.</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <button id="zm-fehlt" style="flex:1;padding:8px;border:1px solid var(--border);background:#fff;border-radius:8px;font-size:12px;cursor:pointer;">➕ fehlt</button>
+      <button id="zm-falsch" style="flex:1;padding:8px;border:1px solid var(--border);background:#fff;border-radius:8px;font-size:12px;cursor:pointer;">✖ falsch / nicht drin</button>
+    </div>
+    <textarea id="zm-text" rows="3" placeholder="z.B. fehlt: Weißkohl · falsch: Linsen (es sind Kichererbsen)" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button id="zm-cancel" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:12px;background:#fff;font-size:13px;cursor:pointer;">Abbrechen</button>
+      <button id="zm-send" style="flex:2;padding:12px;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">An Küche senden</button>
+    </div>`;
+  ov.appendChild(sh); document.body.appendChild(ov);
+  const ta=sh.querySelector('#zm-text');
+  const pre=t=>{ if(!ta.value.trim()) ta.value=t; else ta.value=ta.value.replace(/\s*$/,'')+'\n'+t; ta.focus(); };
+  sh.querySelector('#zm-fehlt').onclick=()=>pre('fehlt: ');
+  sh.querySelector('#zm-falsch').onclick=()=>pre('falsch: ');
+  sh.querySelector('#zm-cancel').onclick=()=>ov.remove();
+  sh.querySelector('#zm-send').onclick=async()=>{
+    const text=ta.value.trim();
+    if(!text){ showToast('Bitte kurz beschreiben, was nicht stimmt'); return; }
+    const b=sh.querySelector('#zm-send'); b.disabled=true; b.textContent='Wird gesendet…';
+    try{
+      await api('zutaten_meldungen',{method:'POST',body:JSON.stringify([{store_id:String(currentStore?.id||''),store_name:currentStore?.name||'',gericht:dishName,text}])});
+      ov.remove(); showToast('✔ Danke — die Küche ist informiert');
+    }catch(e){ console.error(e); b.disabled=false; b.textContent='An Küche senden'; showToast('Fehler beim Senden: '+(e?.message||'').slice(0,80),true); }
+  };
+}
+async function zmCardHtml(){
+  const rows=await api('zutaten_meldungen?status=eq.offen&select=*&order=id.desc&limit=20');
+  if(!rows||!rows.length) return '';
+  const ago=iso=>{ const m=Math.max(0,Math.round((Date.now()-new Date(iso).getTime())/60000)); return m<60?`vor ${m} Min`:(m<1440?`vor ${Math.round(m/60)} Std`:`vor ${Math.round(m/1440)} T`); };
+  return `<div id="zm-card" style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:12px;padding:12px;margin-bottom:12px;">
+    <div style="font-size:12px;font-weight:700;color:#B91C1C;margin-bottom:8px;">⚠️ ZUTATENLISTE — Meldungen aus den Filialen (${rows.length})</div>
+    ${rows.map(r=>`<div style="background:#fff;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+      <div style="font-size:12px;font-weight:700;" data-no-translate>${escAttr(r.gericht)}</div>
+      <div style="font-size:12.5px;margin:2px 0;white-space:pre-wrap;" data-no-translate>${escAttr(r.text)}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <span style="font-size:10.5px;color:var(--muted);">${escAttr(r.store_name||'')} · ${ago(r.created_at)}</span>
+        <button onclick="zmDone(${r.id})" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;">✓ Erledigt</button>
+      </div></div>`).join('')}
+    <div style="font-size:10.5px;color:#7F1D1D;">Zutatenliste anpassen, 💾 speichern, dann „Erledigt" tippen.</div>
+  </div>`;
+}
+async function zmDone(id){
+  try{ await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}); renderKitchen(); }
+  catch(e){ showToast('Fehler beim Speichern',true); }
+}
+Object.assign(window,{zmOpen,zmDone});
+
 function backToHomeHtml(){
   if(schichtendeReturnFlag){
     return `<div onclick="schichtendeWizard=null;schichtendeReturnFlag=false;goTo('schichtende')" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">
@@ -16631,6 +16689,7 @@ window.submitKitchenMonitoring=submitKitchenMonitoring;
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam</div>`;
+  html+=await zmCardHtml().catch(()=>'');
   // Für das Tab-Label: nächster Kochtermin = morgen, Sa/So übersprungen (an denen wird nicht gekocht)
   const nextCookDay=new Date();
   nextCookDay.setDate(nextCookDay.getDate()+1);
@@ -17676,11 +17735,13 @@ async function saveMenuDish(dishName, editKey){
     const ex=(await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}&select=id`).catch(()=>[]))[0];
     const payload={gericht:dishName,zutaten,allergene_codes:codes,verantwortlich:'Küchenchef',crew_bestaetigt:true,aktualisiert_am:new Date().toISOString()};
     if(ex){
-      await api(`allergene_rezepturen?id=eq.${ex.id}`,{method:'PATCH',body:JSON.stringify(payload)});
+      // 12.10.26: ALLE Zeilen mit diesem Gerichtnamen aktualisieren — es gibt Duplikate, und die
+      // Anzeige in den Filialen liest nicht zwingend dieselbe Zeile wie das Speichern.
+      await api(`allergene_rezepturen?gericht=eq.${encodeURIComponent(dishName)}&zkey=is.null`,{method:'PATCH',body:JSON.stringify(payload)});
     } else {
       await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([payload])});
     }
-    showToast(`✔ ${dishName} gespeichert`);
+    showToast(`✔ ${dishName} gespeichert um `+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'}));
     // Refresh the view
     renderKitchen();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
