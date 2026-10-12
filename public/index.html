@@ -1210,7 +1210,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.114';
+const APP_VERSION = '6.99.115';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3641,6 +3641,7 @@ async function fetchZutatenAllergenOverrideMaps(){
     if(r.zutaten){ zutatenMap[r.gericht]=r.zutaten; zutatenMap[normGerichtName(r.gericht)]=r.zutaten; if(r.zkey) zutatenMap[r.zkey]=r.zutaten; }
     if(r.allergene_codes?.length){ allergenMap[r.gericht]=r.allergene_codes; allergenMap[normGerichtName(r.gericht)]=r.allergene_codes; if(r.zkey) allergenMap[r.zkey]=r.allergene_codes; }
   });
+  window._zmLastSig=JSON.stringify([zutatenMap,(window._zmOffen||[]).map(r=>[r.id,r.typ,r.zutat])]);
   return {zutatenMap, allergenMap};
 }
 
@@ -12694,9 +12695,8 @@ function zmOpen(dishName){
       if(!zutat){ showToast(mode==='add'?'Bitte Zutat eintragen':'Bitte eine Zutat auswählen'); return; }
       const b=sh.querySelector('#zm-send'); b.disabled=true; b.textContent='Wird eingetragen…';
       try{
-        await api('zutaten_meldungen',{method:'POST',body:JSON.stringify([{store_id:String(currentStore?.id||''),store_name:currentStore?.name||'',gericht:dishName,typ:mode,zutat,basis,text:(mode==='add'?'➕ ':'➖ ')+zutat}])});
-        ov.remove(); showToast('✔ Eingetragen — die Küche bestätigt es noch');
-        if(typeof renderHome==='function' && currentView==='home') renderHome();
+        await zmSubmit(dishName,[{typ:mode,zutat}]);
+        ov.remove();
       }catch(e){ console.error(e); b.disabled=false; b.textContent='Eintragen'; showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
     };
   };
@@ -12704,6 +12704,17 @@ function zmOpen(dishName){
 }
 async function zmSubmit(gericht, items){
   const basis=(window._zmBasis||{})[gericht]||'';
+  await zmLoadOffen();
+  // Gegenteilige ältere Meldung zur selben Zutat (z.B. erst "+Kichererbsen", dann "−Kichererbsen")
+  // wird automatisch als überholt abgehakt; identische offene Meldung wird nicht doppelt angelegt.
+  const open=zmPending(gericht);
+  items=items.filter(it=>!open.some(r=>r.typ===it.typ && zutatSame(r.zutat,it.zutat)));
+  for(const it of items){
+    for(const r of open){ if(r.typ!==it.typ && zutatSame(r.zutat,it.zutat)){
+      await api(`zutaten_meldungen?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({status:'ueberholt',erledigt_am:new Date().toISOString()})}).catch(()=>{});
+    } }
+  }
+  if(!items.length){ showToast('Das ist schon eingetragen'); return; }
   await api('zutaten_meldungen',{method:'POST',body:JSON.stringify(items.map(it=>({store_id:String(currentStore?.id||''),store_name:currentStore?.name||'',gericht,typ:it.typ,zutat:it.zutat,basis,text:(it.typ==='add'?'➕ ':'➖ ')+it.zutat})))});
   showToast('✔ Eingetragen — die Küche bestätigt es noch');
   if(typeof renderHome==='function' && currentView==='home') renderHome();
@@ -12783,7 +12794,30 @@ async function zmDone(id){
   try{ await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}); renderKitchen(); }
   catch(e){ showToast('Fehler beim Speichern',true); }
 }
-Object.assign(window,{zmOpen,zmDone,zmConfirm,zmReject,zmTile,zmSubmit});
+// Auto-Refresh: bestätigt/ändert die Küche etwas, sieht die Filiale es nach spätestens 60 Sekunden —
+// ohne die Seite neu zu laden und ohne ein gerade geöffnetes Zutaten-Panel zuzuklappen.
+async function zmRefreshPanels(){
+  try{
+    const wraps=[...document.querySelectorAll('[id^="dish-allergen-panels-"]')];
+    if(!wraps.length || document.visibilityState!=='visible') return;
+    if(document.querySelector('#zm-send,#zt-swap,#zd-modal-save')) return; // gerade ein Eingabefenster offen
+    const prevSig=window._zmLastSig; // Stand der zuletzt angezeigten Daten (von der Startseite gesetzt)
+    const m=await fetchZutatenAllergenOverrideMaps();
+    if(prevSig===undefined || window._zmLastSig===prevSig) return;
+    wraps.forEach(w=>{
+      const prefix=w.id.replace('dish-allergen-panels-','');
+      const open=[...w.children].find(c=>c.style.display==='block');
+      const host=document.createElement('div');
+      host.innerHTML=renderTodayDishCardsHtml(m.zutatenMap,m.allergenMap,prefix);
+      const nw=host.querySelector('#'+CSS.escape('dish-allergen-panels-'+prefix));
+      if(!nw) return;
+      w.innerHTML=nw.innerHTML;
+      if(open){ const t=document.getElementById(open.id); if(t) t.style.display='block'; }
+    });
+  }catch(e){ console.error('zmRefreshPanels',e); }
+}
+if(!window._zmTimer){ window._zmTimer=setInterval(zmRefreshPanels,60000); }
+Object.assign(window,{zmOpen,zmDone,zmConfirm,zmReject,zmTile,zmSubmit,zmRefreshPanels});
 
 function backToHomeHtml(){
   if(schichtendeReturnFlag){
