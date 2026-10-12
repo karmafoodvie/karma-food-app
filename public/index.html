@@ -1192,7 +1192,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.112';
+const APP_VERSION = '6.99.113';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2452,7 +2452,10 @@ function _ztBuildGrid(text){
       const displayName=getEffectiveName(item);
       const enId=`zt-en-${_ztTileCounter++}`;
       pending.push({id:enId, text:displayName});
-      tiles+=`<div style="position:relative;width:100%;padding-bottom:100%;">
+      const _tap=window._ztTap;
+      const _tapAttr=_tap?` data-z="${escAttr(item)}" data-g="${escAttr(_tap.g)}" onclick="zmTile(this)"`:'';
+      const _isPendAdd=_tap&&_tap.add.has(item.toLowerCase());
+      tiles+=`<div${_tapAttr} style="position:relative;width:100%;padding-bottom:100%;${_tap?'cursor:pointer;':''}${_isPendAdd?'outline:2px dashed #F59E0B;outline-offset:1px;border-radius:10px;':''}">
         <div style="position:absolute;inset:0;background:${color};border-radius:9px;padding:5px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;overflow:hidden;${isA?'box-shadow:0 0 0 2.5px #FBBF24;':''}">
           <div style="width:16px;height:16px;flex-shrink:0;">${zutatIcon(item, kat)}</div>
           <span data-no-translate style="font-size:8.5px;font-weight:700;color:#fff;line-height:1.15;word-break:break-word;overflow-wrap:break-word;hyphens:auto;max-width:100%;">${displayName}</span>
@@ -12613,13 +12616,18 @@ function zmPending(gericht){ return (window._zmOffen||[]).filter(r=>r.gericht===
 function zmSplit(text){ const t=text||''; const i=t.indexOf('\n\n'); return i<0?{main:t,rest:''}:{main:t.slice(0,i),rest:t.slice(i)}; }
 function zmApplyList(text, list){
   if(!list||!list.length) return text;
-  const {main,rest}=zmSplit(text);
+  const sp=zmSplit(text); const main=sp.main; let rest=sp.rest;
   let items=main.split(',').map(s=>s.trim()).filter(Boolean);
   list.forEach(r=>{
     const z=(r.zutat||'').trim(); if(!z) return;
     const zl=z.toLowerCase();
     if(r.typ==='add'){ if(!items.some(x=>x.toLowerCase()===zl)) items.push(z); }
-    else if(r.typ==='remove'){ items=items.filter(x=>!x.toLowerCase().includes(zl)); }
+    else if(r.typ==='remove'){
+      items=items.filter(x=>!x.toLowerCase().includes(zl));
+      if(rest){ // auch im Dip/Sauce/Toppings-Teil entfernen (Überschrift "…:\n" bleibt erhalten)
+        rest=rest.split(',').map(tok=>{ const m=tok.match(/^([\s\S]*:\s*\n)([\s\S]*)$/); const head=m?m[1]:''; const body=(m?m[2]:tok); return body.trim().toLowerCase().includes(zl)?(head?head:null):tok; }).filter(t=>t!==null).join(',');
+      }
+    }
   });
   return items.join(', ')+rest;
 }
@@ -12631,7 +12639,9 @@ function zmPanelInner(gericht, zutatenMerged){
     ✏️ <b>Geändert von der Filiale — wartet auf Bestätigung der Küche</b><br>
     ${p.map(r=>`${r.typ==='add'?'➕':'➖'} <b data-no-translate>${escAttr(r.zutat)}</b> <span style="opacity:.8;">(${escAttr(r.store_name||'Filiale')}${r.created_at?', '+new Date(r.created_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'}):''})</span>`).join('<br>')}
   </div>`:'';
-  return banner+renderZutatenReadOnly(zmApplyList(zutatenMerged,p));
+  window._ztTap={g:gericht,add:new Set(p.filter(r=>r.typ==='add').map(r=>(r.zutat||'').trim().toLowerCase()))};
+  let inner=''; try{ inner=renderZutatenReadOnly(zmApplyList(zutatenMerged,p)); } finally { window._ztTap=null; }
+  return banner+(zutatenMerged||p.length?'<div style="font-size:10px;color:var(--muted);margin-bottom:6px;">👆 Zutat antippen = korrigieren</div>':'')+inner;
 }
 function zmOpen(dishName){
   const basis=(window._zmBasis||{})[dishName]||'';
@@ -12672,6 +12682,37 @@ function zmOpen(dishName){
     };
   };
   ov.appendChild(sh); document.body.appendChild(ov); draw();
+}
+async function zmSubmit(gericht, items){
+  const basis=(window._zmBasis||{})[gericht]||'';
+  await api('zutaten_meldungen',{method:'POST',body:JSON.stringify(items.map(it=>({store_id:String(currentStore?.id||''),store_name:currentStore?.name||'',gericht,typ:it.typ,zutat:it.zutat,basis,text:(it.typ==='add'?'➕ ':'➖ ')+it.zutat})))});
+  showToast('✔ Eingetragen — die Küche bestätigt es noch');
+  if(typeof renderHome==='function' && currentView==='home') renderHome();
+}
+function zmTile(el){
+  const gericht=el.dataset.g, item=el.dataset.z;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9998;display:flex;align-items:flex-end;';
+  const sh=document.createElement('div');
+  sh.style.cssText='background:#fff;border-radius:20px 20px 0 0;width:100%;padding:16px 16px 28px;';
+  sh.innerHTML=`<div style="font-size:11px;color:var(--muted);" data-no-translate>${escAttr(gericht)}</div>
+    <div style="font-size:17px;font-weight:700;margin:2px 0 12px;" data-no-translate>${escAttr(item)}</div>
+    <button id="zt-rem" style="width:100%;padding:12px;border:1.5px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:10px;">➖ Ist nicht im Gericht</button>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:5px;">…oder anders / stattdessen:</div>
+    <div style="display:flex;gap:8px;">
+      <input id="zt-new" type="text" placeholder="z.B. Kichererbsen" autocomplete="off" style="flex:1;min-width:0;padding:11px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
+      <button id="zt-swap" style="padding:11px 14px;border:none;background:var(--green);color:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Ersetzen</button>
+    </div>
+    <button id="zt-cancel" style="width:100%;margin-top:12px;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:10px;font-size:13px;cursor:pointer;">Abbrechen</button>`;
+  ov.appendChild(sh); document.body.appendChild(ov);
+  const go=async(items,btn)=>{ btn.disabled=true; try{ await zmSubmit(gericht,items); ov.remove(); }catch(e){ console.error(e); btn.disabled=false; showToast('Fehler: '+(e?.message||'').slice(0,80),true); } };
+  sh.querySelector('#zt-cancel').onclick=()=>ov.remove();
+  sh.querySelector('#zt-rem').onclick=e=>go([{typ:'remove',zutat:item}],e.currentTarget);
+  sh.querySelector('#zt-swap').onclick=e=>{
+    const n=(sh.querySelector('#zt-new').value||'').trim();
+    if(!n){ showToast('Bitte die richtige Zutat eintippen'); return; }
+    go([{typ:'remove',zutat:item},{typ:'add',zutat:n}],e.currentTarget);
+  };
 }
 async function zmCardHtml(){
   const rows=await api('zutaten_meldungen?status=eq.offen&select=*&order=id.desc&limit=30');
@@ -12723,7 +12764,7 @@ async function zmDone(id){
   try{ await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}); renderKitchen(); }
   catch(e){ showToast('Fehler beim Speichern',true); }
 }
-Object.assign(window,{zmOpen,zmDone,zmConfirm,zmReject});
+Object.assign(window,{zmOpen,zmDone,zmConfirm,zmReject,zmTile,zmSubmit});
 
 function backToHomeHtml(){
   if(schichtendeReturnFlag){
