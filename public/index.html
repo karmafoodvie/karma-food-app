@@ -499,7 +499,7 @@ const ZUTAT_EN_DE=[
   [/\bpowder\b/gi,'Pulver'],[/\bonions?\b/gi,'Zwiebel'],[/\btomatoes|tomato\b/gi,'Tomate'],
   [/\bcarrots?\b/gi,'Karotte'],[/\bgarlic\b/gi,'Knoblauch'],[/\bspinach\b/gi,'Spinat'],
   [/\beggplants?\b/gi,'Melanzani'],[/\bcauliflower\b/gi,'Karfiol'],[/\bcucumbers?\b/gi,'Gurke'],
-  [/\bpotato(es)?\b/gi,'Erdäpfel'],[/\bzucchini\b/gi,'Zucchini'],[/\bcabbage\b/gi,'Kohl'],
+  [/\bpotato(es)?\b/gi,'Erdäpfel'],[/\bzucchini\b/gi,'Zucchini'],[/\bwhite cabbage\b/gi,'Weisskraut'],[/\bcabbage\b/gi,'Weisskraut'],
   [/\bbroccoli\b/gi,'Brokkoli'],[/\bpumpkin\b/gi,'Kürbis'],[/\bcoriander leaves\b/gi,'Koriander frisch'],
   [/\bchickpeas?\b/gi,'Kichererbsen'],[/\blentils?\b/gi,'Linsen'],[/\bcoconut milk\b/gi,'Kokosmilch'],
   [/\bginger\b/gi,'Ingwer'],[/\blemon\b/gi,'Zitrone'],[/\blime\b/gi,'Limette']
@@ -538,6 +538,24 @@ function getEffectiveKat(name){
   const hit=findZutatMasterMatch(name);
   if(hit) return hit.kategorie;
   return guessZutatKat(name).toUpperCase();
+}
+// Feste englische Bezeichnung aus der Zutaten-Datenbank (Spalte name_en der Basis-Zutat) —
+// einheitlich für alle Synonyme (Fisolen = Buschbohnen = Green Beans …), statt Google-Übersetzung.
+function getEffectiveEn(name){
+  const hit=findZutatMasterMatch(name);
+  if(!hit) return null;
+  let base=hit;
+  if(hit.base_zutat_id){ base=(_zutatenMasterCache||[]).find(m=>m.id===hit.base_zutat_id)||hit; }
+  return base.name_en||null;
+}
+// Gleiche Zutat? (über Synonyme hinweg: Buschbohnen = Fisolen = Green Beans)
+function zutatSame(a,b){
+  const na=normalizeZutatName(a), nb=normalizeZutatName(b);
+  if(na===nb) return true;
+  const ha=findZutatMasterMatch(a), hb=findZutatMasterMatch(b);
+  if(!ha||!hb) return false;
+  const ra=ha.base_zutat_id||ha.id, rb=hb.base_zutat_id||hb.id;
+  return ra===rb;
 }
 function getEffectiveName(name){
   const hit=findZutatMasterMatch(name);
@@ -1192,7 +1210,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.113';
+const APP_VERSION = '6.99.114';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2451,7 +2469,7 @@ function _ztBuildGrid(text){
       const isA=masterHit ? (masterHit.allergene_codes?.length>0) : ALLERGEN_BOLD.some(w=>item.toLowerCase().includes(w));
       const displayName=getEffectiveName(item);
       const enId=`zt-en-${_ztTileCounter++}`;
-      pending.push({id:enId, text:displayName});
+      pending.push({id:enId, text:displayName, en:getEffectiveEn(item)});
       const _tap=window._ztTap;
       const _tapAttr=_tap?` data-z="${escAttr(item)}" data-g="${escAttr(_tap.g)}" onclick="zmTile(this)"`:'';
       const _isPendAdd=_tap&&_tap.add.has(item.toLowerCase());
@@ -2474,7 +2492,8 @@ function _ztBuildGrid(text){
   return {html, pending};
 }
 function _ztLoadTranslations(pending){
-  pending.forEach(({id,text})=>{
+  pending.forEach(({id,text,en:fixedEn})=>{
+    if(fixedEn){ waitForElAndSetText(id, async ()=>(fixedEn.toUpperCase()!==text.toUpperCase()?fixedEn:null)); return; }
     waitForElAndSetText(id, async ()=>{
       const en=await txToEnglish(text);
       return (en && en.toUpperCase()!==text.toUpperCase()) ? en : null;
@@ -12621,11 +12640,11 @@ function zmApplyList(text, list){
   list.forEach(r=>{
     const z=(r.zutat||'').trim(); if(!z) return;
     const zl=z.toLowerCase();
-    if(r.typ==='add'){ if(!items.some(x=>x.toLowerCase()===zl)) items.push(z); }
+    if(r.typ==='add'){ if(!items.some(x=>zutatSame(x,z))) items.push(z); }
     else if(r.typ==='remove'){
-      items=items.filter(x=>!x.toLowerCase().includes(zl));
+      items=items.filter(x=>!(x.toLowerCase().includes(zl)||zutatSame(x,z)));
       if(rest){ // auch im Dip/Sauce/Toppings-Teil entfernen (Überschrift "…:\n" bleibt erhalten)
-        rest=rest.split(',').map(tok=>{ const m=tok.match(/^([\s\S]*:\s*\n)([\s\S]*)$/); const head=m?m[1]:''; const body=(m?m[2]:tok); return body.trim().toLowerCase().includes(zl)?(head?head:null):tok; }).filter(t=>t!==null).join(',');
+        rest=rest.split(',').map(tok=>{ const m=tok.match(/^([\s\S]*:\s*\n)([\s\S]*)$/); const head=m?m[1]:''; const body=(m?m[2]:tok); return (body.trim().toLowerCase().includes(zl)||zutatSame(body.trim(),z))?(head?head:null):tok; }).filter(t=>t!==null).join(',');
       }
     }
   });
