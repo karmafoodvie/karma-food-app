@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.122';
+const APP_VERSION = '6.99.123';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8949,6 +8949,12 @@ async function renderTgBestellungHtml(){
   const DAY_LABEL={mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
   const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
 
+  // Jede Woche neu: Zählstände/„genug"/„bestellen" aus der Vorwoche werden ab Montag automatisch geleert
+  // (Bestellung läuft immer neu — Wunsch Tini 13.10.26). Artikel selbst bleiben bestehen.
+  try{
+    const _m=new Date(); _m.setHours(0,0,0,0); _m.setDate(_m.getDate()+(_m.getDay()===0?-6:1-_m.getDay()));
+    await api(`tg_artikel?aktualisiert_am=lt.${encodeURIComponent(_m.toISOString())}&or=(genug.eq.true,bestellen.eq.true,bestand_text.not.is.null,bestand.not.is.null)`,{method:'PATCH',body:JSON.stringify({bestand:null,bestand_text:null,genug:false,bestellen:false})});
+  }catch(e){ console.error('Wochen-Reset Wochenbestellung',e); }
   const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
   const doneN=items.filter(a=>tgHas(a)).length;
 
