@@ -226,6 +226,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="v-feuerloescher" class="view"></div>
     <div id="v-messen" class="view"></div>
     <div id="v-dienstplan" class="view"></div>
+    <div id="v-todos" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
     <div id="v-waehrend" class="view"></div>
@@ -1210,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.116';
+const APP_VERSION = '6.99.117';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1949,11 +1950,11 @@ function goTo(v, noPush=false){
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
     else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
-    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan') navId='nav-org-management';
+    else if(v==='management' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan' || v==='todos') navId='nav-org-management';
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan'};
+  const subs={feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -1962,7 +1963,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,todos:renderTodos,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -8274,6 +8275,13 @@ async function renderManagement(){
         <span class="org-btn-sub">Aufgaben mit Datum verknüpfen — erscheint direkt bei Michi im Info-Tab</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('todos')" style="border-color:#2B3A67;">
+      <span class="org-btn-icon">✅</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#2B3A67;">To-dos (Tini)</span>
+        <span class="org-btn-sub">Liste sammeln, per Drag &amp; Drop nach „Heute“ ziehen</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('dienstplan')" style="border-color:#2B3A67;">
       <span class="org-btn-icon">🗓️</span>
       <div class="org-btn-text">
@@ -12818,6 +12826,142 @@ async function zmRefreshPanels(){
 }
 if(!window._zmTimer){ window._zmTimer=setInterval(zmRefreshPanels,60000); }
 Object.assign(window,{zmOpen,zmDone,zmConfirm,zmReject,zmTile,zmSubmit,zmRefreshPanels});
+
+// ==== TO-DOS (13.10.26, Wunsch Tini) — Organisation: Liste links, "Heute" rechts, per Drag & Drop ====
+let tdItems=[], tdDrag=null;
+function tdToday(){ return dpFmt(new Date()); }
+async function renderTodos(){
+  const el=document.getElementById('v-todos');
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('✅','To-dos','Links sammeln, nach rechts ziehen = heute dran. Am nächsten Tag wandert Unerledigtes automatisch zurück in die Liste.','#2B3A67');
+  html+=`<div style="display:flex;gap:8px;margin-bottom:12px;">
+    <input id="td-new" type="text" placeholder="Neues To-do …" autocomplete="off" onkeydown="if(event.key==='Enter')tdAdd()" style="flex:1;min-width:0;padding:11px;border:1px solid var(--border);border-radius:10px;font-size:14px;">
+    <button onclick="tdAdd()" style="padding:11px 16px;border:none;background:var(--green);color:#fff;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">＋</button>
+  </div><div id="td-body"></div>`;
+  el.innerHTML=html;
+  await tdLoad();
+}
+async function tdLoad(){
+  const t=tdToday();
+  tdItems=(await api(`org_todos?or=(erledigt.eq.false,heute_datum.eq.${t})&select=*&order=pos.asc`))||[];
+  tdRenderBody();
+}
+function tdCols(){
+  const t=tdToday();
+  const heute=tdItems.filter(x=>x.heute_datum===t).sort((a,b)=>a.pos-b.pos);
+  const liste=tdItems.filter(x=>x.heute_datum!==t&&!x.erledigt).sort((a,b)=>a.pos-b.pos);
+  return {liste,heute};
+}
+function tdItemHtml(x,col){
+  const old=col==='liste'&&x.heute_datum; // war an einem früheren Tag schon "heute"
+  return `<div data-td-item="${x.id}" style="display:flex;align-items:flex-start;gap:6px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:8px 8px;margin-bottom:6px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;${x.erledigt?'opacity:.55;':''}">
+    ${col==='heute'?`<input type="checkbox" ${x.erledigt?'checked':''} data-td-check="${x.id}" style="width:18px;height:18px;margin-top:1px;flex-shrink:0;">`:''}
+    <div style="flex:1;min-width:0;font-size:13px;line-height:1.3;word-break:break-word;${x.erledigt?'text-decoration:line-through;':''}">${escAttr(x.text)}${old?'<div style="font-size:9.5px;color:#B45309;">von früher</div>':''}</div>
+    <span data-td-move="${x.id}" style="flex-shrink:0;font-size:15px;color:var(--muted);padding:0 3px;cursor:pointer;">${col==='liste'?'→':'←'}</span>
+    <span data-td-del="${x.id}" style="flex-shrink:0;font-size:14px;color:#B91C1C;padding:0 2px;cursor:pointer;">×</span>
+  </div>`;
+}
+function tdRenderBody(){
+  const b=document.getElementById('td-body'); if(!b) return;
+  const {liste,heute}=tdCols();
+  const todayLbl=new Date().toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
+  const done=heute.filter(x=>x.erledigt).length;
+  b.innerHTML=`<div style="display:flex;gap:8px;align-items:flex-start;">
+    <div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:6px;">📝 LISTE (${liste.length})</div>
+      <div data-td-col="liste" style="min-height:140px;padding:6px;border-radius:12px;background:#F5F5F4;border:1.5px dashed transparent;">${liste.map(x=>tdItemHtml(x,'liste')).join('')||'<div style="font-size:11px;color:var(--muted);padding:10px 4px;">Noch nichts — oben eintippen.</div>'}</div></div>
+    <div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;color:#0F6E56;letter-spacing:.04em;margin-bottom:6px;">☀️ HEUTE · ${todayLbl} (${done}/${heute.length})</div>
+      <div data-td-col="heute" style="min-height:140px;padding:6px;border-radius:12px;background:#ECFDF5;border:1.5px dashed transparent;">${heute.map(x=>tdItemHtml(x,'heute')).join('')||'<div style="font-size:11px;color:#0F6E56;padding:10px 4px;">Hierher ziehen →</div>'}</div></div>
+  </div>`;
+  b.querySelectorAll('[data-td-item]').forEach(n=>{ n.onpointerdown=tdPointerDown; });
+  b.querySelectorAll('[data-td-check]').forEach(n=>{ n.onpointerdown=e=>e.stopPropagation(); n.onchange=()=>tdToggle(Number(n.dataset.tdCheck),n.checked); });
+  b.querySelectorAll('[data-td-move]').forEach(n=>{ n.onpointerdown=e=>e.stopPropagation(); n.onclick=()=>{ const id=Number(n.dataset.tdMove); const it=tdItems.find(x=>x.id===id); tdMove(id,it.heute_datum===tdToday()?'liste':'heute',null); }; });
+  b.querySelectorAll('[data-td-del]').forEach(n=>{ n.onpointerdown=e=>e.stopPropagation(); n.onclick=()=>tdDel(Number(n.dataset.tdDel)); });
+}
+function tdPointerDown(e){
+  if(e.button!==undefined&&e.button!==0) return;
+  const n=e.currentTarget;
+  tdDrag={node:n,id:Number(n.dataset.tdItem),x0:e.clientX,y0:e.clientY,moved:false,ghost:null};
+  try{ n.setPointerCapture(e.pointerId); }catch(_){}
+  n.onpointermove=tdPointerMove; n.onpointerup=tdPointerUp; n.onpointercancel=tdEnd;
+}
+function tdTargetAt(x,y){
+  const g=tdDrag&&tdDrag.ghost; if(g) g.style.display='none';
+  const t=document.elementFromPoint(x,y); if(g) g.style.display='';
+  if(!t) return {};
+  const col=t.closest('[data-td-col]'); let item=t.closest('[data-td-item]');
+  if(item&&Number(item.dataset.tdItem)===tdDrag.id) item=null;
+  return {col,item};
+}
+function tdPointerMove(e){
+  const d=tdDrag; if(!d) return;
+  if(!d.moved){
+    if(Math.abs(e.clientX-d.x0)+Math.abs(e.clientY-d.y0)<7) return;
+    d.moved=true;
+    const it=tdItems.find(x=>x.id===d.id);
+    const g=document.createElement('div');
+    g.style.cssText='position:fixed;z-index:9999;pointer-events:none;max-width:210px;background:#fff;border:2px solid #2B3A67;border-radius:10px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.25);font-size:12.5px;font-weight:600;';
+    g.textContent=it?it.text:''; document.body.appendChild(g); d.ghost=g; d.node.style.opacity='.35';
+  }
+  d.ghost.style.left=(e.clientX-30)+'px'; d.ghost.style.top=(e.clientY-20)+'px';
+  document.querySelectorAll('[data-td-col]').forEach(c=>{c.style.borderColor='transparent';});
+  const {col}=tdTargetAt(e.clientX,e.clientY); if(col) col.style.borderColor='#2B3A67';
+  e.preventDefault();
+}
+function tdEnd(){
+  const d=tdDrag; if(!d) return;
+  if(d.ghost) d.ghost.remove();
+  if(d.node){ d.node.style.opacity=''; d.node.onpointermove=d.node.onpointerup=d.node.onpointercancel=null; }
+  document.querySelectorAll('[data-td-col]').forEach(c=>{c.style.borderColor='transparent';});
+  tdDrag=null;
+}
+async function tdPointerUp(e){
+  const d=tdDrag; if(!d) return;
+  if(!d.moved){ tdEnd(); return; }
+  const {col,item}=tdTargetAt(e.clientX,e.clientY);
+  let before=null;
+  if(item){ const r=item.getBoundingClientRect(); before=(e.clientY<r.top+r.height/2)?Number(item.dataset.tdItem):'after:'+item.dataset.tdItem; }
+  const id=d.id; tdEnd();
+  if(!col){ tdRenderBody(); return; }
+  await tdMove(id,col.dataset.tdCol,before);
+}
+async function tdMove(id,colName,before){
+  const it=tdItems.find(x=>x.id===id); if(!it) return;
+  const {liste,heute}=tdCols();
+  const target=(colName==='heute'?heute:liste).filter(x=>x.id!==id);
+  let idx=target.length;
+  if(typeof before==='number'){ idx=target.findIndex(x=>x.id===before); if(idx<0) idx=target.length; }
+  else if(typeof before==='string'){ const bid=Number(before.split(':')[1]); const k=target.findIndex(x=>x.id===bid); idx=k<0?target.length:k+1; }
+  const prev=target[idx-1], next=target[idx];
+  const pos=prev&&next?(prev.pos+next.pos)/2:(prev?prev.pos+1:(next?next.pos-1:Date.now()/1000));
+  const body={pos, heute_datum: colName==='heute'?tdToday():null};
+  if(colName==='liste'&&it.erledigt){ body.erledigt=false; body.erledigt_am=null; }
+  const old={pos:it.pos,heute_datum:it.heute_datum,erledigt:it.erledigt};
+  Object.assign(it,body); tdRenderBody();
+  try{ await api(`org_todos?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(body)}); }
+  catch(err){ console.error(err); Object.assign(it,old); tdRenderBody(); showToast('Fehler beim Speichern',true); }
+}
+async function tdAdd(){
+  const inp=document.getElementById('td-new'); const text=(inp.value||'').trim(); if(!text) return;
+  inp.value='';
+  try{
+    const r=await api('org_todos',{method:'POST',body:JSON.stringify([{text,pos:Date.now()/1000}])});
+    if(r&&r[0]) tdItems.push(r[0]); tdRenderBody(); inp.focus();
+  }catch(e){ console.error(e); inp.value=text; showToast('Fehler beim Speichern',true); }
+}
+async function tdToggle(id,checked){
+  const it=tdItems.find(x=>x.id===id); if(!it) return;
+  it.erledigt=checked; tdRenderBody();
+  try{ await api(`org_todos?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({erledigt:checked,erledigt_am:checked?new Date().toISOString():null})}); }
+  catch(e){ it.erledigt=!checked; tdRenderBody(); showToast('Fehler beim Speichern',true); }
+}
+async function tdDel(id){
+  const it=tdItems.find(x=>x.id===id); if(!it) return;
+  if(!confirm('„'+it.text+'“ löschen?')) return;
+  tdItems=tdItems.filter(x=>x.id!==id); tdRenderBody();
+  try{ await api(`org_todos?id=eq.${id}`,{method:'DELETE'}); }catch(e){ showToast('Fehler beim Löschen',true); tdLoad(); }
+}
+Object.assign(window,{renderTodos,tdAdd});
+
 
 function backToHomeHtml(){
   if(schichtendeReturnFlag){
