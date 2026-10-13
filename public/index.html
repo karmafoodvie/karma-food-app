@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.121';
+const APP_VERSION = '6.99.122';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8929,9 +8929,22 @@ function tgToggleOpenOnly(on){
 }
 window.tgToggleOpenOnly=tgToggleOpenOnly;
 
+// Wochenbestellung: bestellt wird immer fürs MENÜ DER FOLGEWOCHE (Shop) — Schrankerl dagegen
+// läuft in der laufenden Woche (Lieferung kommenden Freitag). Sa/So zählt schon zur nächsten Woche.
+function tgOrderDates(){
+  const iso=d=>{const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+  const now=new Date(); const wd=now.getDay(); // 0=So..6=Sa
+  const weekend=(wd===0||wd===6);
+  const mon=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  mon.setDate(mon.getDate()+(wd===0?-6:1-wd)); // Montag der laufenden Kalenderwoche
+  const sk=new Date(mon); if(weekend) sk.setDate(sk.getDate()+7);
+  const shop=new Date(sk); shop.setDate(shop.getDate()+7);
+  return {shopDate:iso(shop), skDate:iso(sk)};
+}
 async function renderTgBestellungHtml(){
-  const shopWoche = window.tgShopWoche || CURRENT_MENU_WOCHE;
-  const schrankerlWoche = window.tgSchrankerlWoche || getSchrankerlWoche();
+  const _od=tgOrderDates();
+  const shopWoche = window.tgShopWoche || getMenuWocheForDate(_od.shopDate);
+  const schrankerlWoche = window.tgSchrankerlWoche || getSchrankerlWoche(_od.skDate);
   const DAYS_ORDER=['mo','di','mi','do','fr'];
   const DAY_LABEL={mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag'};
   const WOCHE_COLORS = {1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
@@ -8995,7 +9008,7 @@ async function renderTgBestellungHtml(){
     </div>
   </div>`;
 
-  const menuData=getMenuDataForDate();
+  const menuData=getMenuDataForDate(_od.shopDate);
   html+=`<div class="card" style="padding:10px 14px;margin-bottom:14px;">
     <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Shop-Menü Woche ${shopWoche}</div>`;
   DAYS_ORDER.forEach(tag=>{
