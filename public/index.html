@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.120';
+const APP_VERSION = '6.99.121';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3057,6 +3057,11 @@ function getVeganToppingAusnahme(dishName){
 }
 // Liefert fertiges Badge-HTML fürs Vegan-Zeichen — berücksichtigt die Topping-Ausnahme, damit an
 // allen Stellen (Während der Schicht, Kochplan, ...) derselbe Hinweis erscheint.
+// Scharf-Badge (rot, Chilischote) — Gerichte, die ausdrücklich scharf sind
+function scharfBadgeHtml(dishName){
+  if(!/KASHMIRI/i.test(dishName||'')) return '';
+  return '<span style="font-size:10px;background:#FEE2E2;color:#B91C1C;padding:1px 6px;border-radius:20px;font-weight:700;">🌶️ Scharf</span>';
+}
 function veganBadgeHtml(dishName, allergenMain, zutatenText){
   // Echte Zutaten-Erkennung hat Vorrang (21.09.26) — Milch(G)/Eier(C)/Fisch(D)/Krebstiere(B)/
   // Weichtiere(R) aus der berechneten Zutatenliste prüfen, statt dem (meist leeren) Array zu vertrauen.
@@ -3570,7 +3575,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
         <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
         <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
         ${getDishHinweis(d.name)?`<div style="font-size:9.5px;font-weight:700;color:#C2410C;margin-top:3px;line-height:1.25;">🌶️ ${getDishHinweis(d.name)}</div>`:''}
-        <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes, zutatenMerged)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes, zutatenMerged)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}${scharfBadgeHtml(d.name)}</div>
       </div>
       <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
         <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${(()=>{
@@ -13329,6 +13334,7 @@ async function renderWaehrend(){
       const badges=[
         veganBadgeHtml(d.name, mainCodes),
         glutenfreiBadgeHtml(d.name, mainCodes),
+        scharfBadgeHtml(d.name),
         ...mainCodes.map(c=>`<span class="badge" style="background:var(--green-light);color:var(--green);">${c}</span>`),
         ...dressingCodes.map(c=>`<span class="badge" style="background:#FEF3C7;color:#92400E;">${c} (Dressing)</span>`)
       ].filter(Boolean).join(' ');
@@ -17162,7 +17168,7 @@ async function renderKitchen(){
                 <div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap;">
                   ${allergenMain.length?`<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:20px;font-weight:600;">⚠️ ${allergenMain.join(', ')}${allergenDressing.length?` · Dressing: ${allergenDressing.join(', ')}`:''}</span>`:allergenChipsHtml(zutaten)}
                   ${veganBadgeHtml(dish.name, allergenMain, zutaten)}
-                  ${glutenfreiBadgeHtml(dish.name, allergenMain, zutaten)}
+                  ${glutenfreiBadgeHtml(dish.name, allergenMain, zutaten)}${scharfBadgeHtml(dish.name)}
                 </div>
               </div>
               <span style="color:var(--muted);font-size:14px;">›</span>
