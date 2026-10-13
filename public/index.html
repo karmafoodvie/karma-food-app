@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.119';
+const APP_VERSION = '6.99.120';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3182,9 +3182,16 @@ function dishImgHtml(name, size=36, style=''){
 }
 
 // Emoji-Fallback (bleibt für Stellen wo kein Foto da ist)
+// Servier-Hinweise je Gericht (erscheint in den Gerichtekarten unter dem Namen)
+function getDishHinweis(name){
+  const n=(name||'').toUpperCase();
+  if(/KASHMIRI KOKOS/.test(n)) return 'Chili Crisp dazu servieren';
+  return '';
+}
 function getDishEmoji(name){
   if(!name) return '🍽️';
   const n=name.toUpperCase();
+  if(/KASHMIRI/.test(n)) return '🌶️';
   if(/LASAGNE/.test(n)) return '🫕';
   if(/BIRYANI/.test(n)) return '🍚';
   if(/\bDAL\b|LINSEN/.test(n)) return '🫘';
@@ -3562,6 +3569,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
         ${dishVisual}
         <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
         <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
+        ${getDishHinweis(d.name)?`<div style="font-size:9.5px;font-weight:700;color:#C2410C;margin-top:3px;line-height:1.25;">🌶️ ${getDishHinweis(d.name)}</div>`:''}
         <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes, zutatenMerged)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}</div>
       </div>
       <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
@@ -3577,6 +3585,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
     // volle-Breite-Bereich darunter — sonst kann sich die Zutatenliste nie richtig ausdehnen.
     panelsHtml+=`<div id="dish-allergen-${idPrefix}${i}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
       <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
+      ${getDishHinweis(d.name)?`<div style="font-size:11px;font-weight:700;color:#C2410C;background:#FFF7ED;border-radius:6px;padding:5px 8px;margin-bottom:6px;">🌶️ ${getDishHinweis(d.name)}</div>`:''}
       <div style="font-size:10.5px;line-height:1.6;">${zmPanelInner(d.name,zutatenMerged)}</div>
       <button data-dish="${escAttr(d.name)}" onclick="zmOpen(this.dataset.dish)" style="margin-top:8px;font-size:11px;font-weight:600;color:#B45309;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;cursor:pointer;">⚠️ Zutat stimmt nicht</button>
     </div>`;
