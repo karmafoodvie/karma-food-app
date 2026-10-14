@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.123';
+const APP_VERSION = '6.99.124';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18883,7 +18883,7 @@ async function renderCatering(){
   _cateringList=rows||[];
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🍽️','Catering','Produktionspläne — ersetzt die PDFs in der WhatsApp-Gruppe','#0F6E56');
-  if(cateringCanEdit()) html+=`<button onclick="showCateringForm()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">➕ Neues Catering eintragen</button>`;
+  if(cateringCanEdit()) html+=`<div style="display:flex;gap:8px;margin-bottom:14px;"><button onclick="showCateringForm()" style="flex:1;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;">➕ Neues Catering</button><button onclick="document.getElementById('cat-pdf-in').click()" title="Produktionsplan als PDF hochladen" style="flex:1;padding:11px;border:1.5px solid #0F6E56;border-radius:10px;background:#fff;color:#0F6E56;font-size:13.5px;font-weight:700;cursor:pointer;">📤 PDF hochladen</button><input id="cat-pdf-in" type="file" accept="application/pdf,.pdf" style="display:none;" onchange="cateringImportPdf(this)"></div>`;
   if(!_cateringList.length) html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine anstehenden Caterings.</div>`;
   _cateringList.forEach(c=>{
     const left=(c.packliste||[]).filter(p=>!p.done).length;
@@ -18978,23 +18978,24 @@ function copyCateringText(id){
   (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>showToast('✓ Kopiert — in WhatsApp einfügen')).catch(()=>{ window.prompt('Text kopieren:',t); });
 }
 function closeCateringForm(){ document.getElementById('catering-modal')?.remove(); }
-function showCateringForm(id){
+function showCateringForm(id,prefill){
   closeCateringForm();
   const c=id?_cateringList.find(x=>x.id===id):null;
+  const p=c||prefill||null; // p = Werte fürs Formular (bestehend oder aus PDF-Import)
   const inp=(i,l,v,ph='',type='text')=>`<label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">${l}</label><input id="cf-${i}" type="${type}" value="${escAttr(v||'')}" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;">`;
   const ta=(i,l,v,ph='',rows=3)=>`<label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">${l}</label><textarea id="cf-${i}" rows="${rows}" placeholder="${ph}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;">${escAttr(v||'')}</textarea>`;
   const ov=document.createElement('div'); ov.id='catering-modal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;';
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:18px;margin:auto;">
-    <div style="font-size:16px;font-weight:800;margin-bottom:2px;">${c?'✏️ Catering bearbeiten':'➕ Neues Catering'}</div>
-    ${inp('kunde','Kunde / Veranstaltung *',c?.kunde,'z.B. ÖGUT')}
-    <div style="display:flex;gap:8px;"><div style="flex:1;">${inp('datum','Datum *',c?.datum,'','date')}</div><div style="flex:1;">${inp('personen','Personen (PAX)',c?.personen,'25','number')}</div></div>
-    ${inp('ort','Ort',c?.ort,'Straße, PLZ Wien')}
-    <div style="display:flex;gap:8px;"><div style="flex:1;">${inp('ankunft','Ankunft Location',c?.ankunft,'11:30')}</div><div style="flex:1;">${inp('kontakt','Kontakt vor Ort',c?.kontakt,'Name + Tel.')}</div></div>
-    ${ta('hinweis','Wichtiger Hinweis (rot, leer lassen = keiner)',c?c.hinweis:CATERING_DEFAULT_HINWEIS,'',2)}
-    ${ta('menue','Menü — ein Gericht pro Zeile (Abschnitt: „## Frühstück 08:15“)',(c?.menue||[]).join('\n'),'Green Power Pesto Veggie Lasagne mit Salat\nSüßkartoffel Linsen Dal mit Reis',4)}
-    ${ta('extras','Dazu (Komma getrennt)',(c?.extras||[]).join(', '),'Limetten, Kräuter, Mangochilisauce',2)}
-    ${ta('pack','Packliste — ein Punkt pro Zeile',(c?c.packliste.map(p=>p.t):['Ausgedruckte Menüs']).join('\n'),'',4)}
+    <div style="font-size:16px;font-weight:800;margin-bottom:2px;">${c?'✏️ Catering bearbeiten':(prefill?'📤 Aus PDF übernommen — bitte prüfen':'➕ Neues Catering')}</div>
+    ${inp('kunde','Kunde / Veranstaltung *',p?.kunde,'z.B. ÖGUT')}
+    <div style="display:flex;gap:8px;"><div style="flex:1;">${inp('datum','Datum *',p?.datum,'','date')}</div><div style="flex:1;">${inp('personen','Personen (PAX)',p?.personen,'25','number')}</div></div>
+    ${inp('ort','Ort',p?.ort,'Straße, PLZ Wien')}
+    <div style="display:flex;gap:8px;"><div style="flex:1;">${inp('ankunft','Ankunft Location',p?.ankunft,'11:30')}</div><div style="flex:1;">${inp('kontakt','Kontakt vor Ort',p?.kontakt,'Name + Tel.')}</div></div>
+    ${ta('hinweis','Wichtiger Hinweis (rot, leer lassen = keiner)',p?(p.hinweis||''):CATERING_DEFAULT_HINWEIS,'',2)}
+    ${ta('menue','Menü — ein Gericht pro Zeile (Abschnitt: „## Frühstück 08:15“)',(p?.menue||[]).join('\n'),'Green Power Pesto Veggie Lasagne mit Salat\nSüßkartoffel Linsen Dal mit Reis',4)}
+    ${ta('extras','Dazu (Komma getrennt)',(p?.extras||[]).join(', '),'Limetten, Kräuter, Mangochilisauce',2)}
+    ${ta('pack','Packliste — ein Punkt pro Zeile',(p?(p.packliste||[]).map(x=>x.t):['Ausgedruckte Menüs']).join('\n'),'',4)}
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button onclick="closeCateringForm()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);font-size:13px;cursor:pointer;">Abbrechen</button>
       <button id="cf-save" onclick="saveCatering(${id||'null'})" style="flex:2;padding:11px;border:none;border-radius:10px;background:#0F6E56;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Speichern ✓</button>
@@ -19025,7 +19026,64 @@ async function cancelCatering(id){
   try{ await api(`caterings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'abgesagt',updated_at:new Date().toISOString()})}); closeCateringForm(); showToast('Entfernt'); await renderCatering(); }
   catch(e){ console.error(e); showToast('Fehler',true); }
 }
-Object.assign(window,{showCateringDetail,toggleCateringPack,copyCateringText,showCateringForm,closeCateringForm,saveCatering,cancelCatering});
+
+// ── PDF-Import (14.10.26): Produktionsplan-PDF hochladen → Felder werden ausgelesen, Formular zur Kontrolle ──
+function _loadPdfJs(){
+  return new Promise((res,rej)=>{
+    if(window.pdfjsLib) return res(window.pdfjsLib);
+    const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    sc.onload=()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; res(window.pdfjsLib); };
+    sc.onerror=()=>rej(new Error('pdf.js nicht ladbar')); document.head.appendChild(sc);
+  });
+}
+async function pdfToLines(buf){
+  const pdfjs=await _loadPdfJs(); const pdf=await pdfjs.getDocument({data:buf}).promise; const out=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const tc=await (await pdf.getPage(p)).getTextContent(); const rows=[];
+    tc.items.forEach(it=>{ if(!it.str||!it.str.trim()) return; const y=it.transform[5], x=it.transform[4]; let r=rows.find(z=>Math.abs(z.y-y)<2.5); if(!r){ r={y,it:[]}; rows.push(r); } r.it.push({x,t:it.str}); });
+    rows.sort((a,b)=>b.y-a.y).forEach(r=>{ r.it.sort((a,b)=>a.x-b.x); out.push(r.it.map(i=>i.t).join(' ').replace(/\s+/g,' ').trim()); });
+  }
+  return out.filter(Boolean);
+}
+function parseCateringLines(lines){
+  const r={kunde:'',datum:'',ort:'',ankunft:'',kontakt:'',personen:null,hinweis:'',menue:[],extras:[],packliste:[]};
+  const FACT=[['datum',/^Veranstaltungsdatum\s+(.+)/i],['ort',/^Ort\s+(.+)/i],['ankunft',/^Ankunft(?: Location)?\s+(.+)/i],['kontakt',/^Kontakt(?: vor Ort)?\s+(.+)/i],['personen',/^Personen\s+(\d+)/i]];
+  let i=0; while(i<lines.length && /^CATERING/i.test(lines[i])) i++;
+  if(i<lines.length && !FACT.some(f=>f[1].test(lines[i]))) r.kunde=lines[i++];
+  let mode='head'; const title=t=>t.toLowerCase().replace(/(^|[\s·-])([a-zäöüß])/g,(m,a,b)=>a+b.toUpperCase());
+  for(;i<lines.length;i++){
+    const l=lines[i];
+    if(/^Karma Food\s*[–-]\s*Produktionsplan/i.test(l)) continue;
+    if(/^PACKLISTE/i.test(l)){ mode='pack'; continue; }
+    if(mode==='pack'){ if(/^Abhaken/i.test(l)) continue; const m=l.match(/^\[[ xX✓]?\]\s*(.+)/); if(m) r.packliste.push({t:m[1].trim(),done:false}); continue; }
+    if(mode==='head'){
+      const f=FACT.find(f=>f[1].test(l));
+      if(f){ const v=l.match(f[1])[1].trim(); if(f[0]==='personen') r.personen=parseInt(v,10); else r[f[0]]=v; continue; }
+      if(/^LUNCH\b|^\d{1,2}[.:]\d{2}\b/.test(l) || (/^[^a-zäöüß]{3,40}$/.test(l)&&/[A-ZÄÖÜ]{3}/.test(l)&&!/ACHTUNG|NUR |KEIN/.test(l))) mode='menu'; // erste Abschnittsüberschrift
+      else { r.hinweis+=(r.hinweis?' ':'')+l.replace(/^[⚠️\s]+/,''); continue; }
+    }
+    // Menü
+    if(/^LUNCH(\s*·\s*\d+\s*PAX)?$/i.test(l)) continue;
+    if(/^[^a-zäöüß]{3,40}$/.test(l)&&/[A-ZÄÖÜ]{3}/.test(l)){ r.menue.push('## '+title(l.replace(/(\d{1,2})\.(\d{2})$/,'$1:$2'))); continue; }
+    const plus=l.match(/^Plus\s+(?:Toppings\s*)?\(?(.+?)\)?$/i); if(plus){ r.extras.push(...plus[1].split(',').map(x=>x.trim()).filter(Boolean)); continue; }
+    r.menue.push(l.replace(/\s*[:：]$/,''));
+  }
+  // Datum "Do 08.10.2026" / "08.10.2026" → ISO
+  const dm=(r.datum||'').match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})?/); if(dm){ const y=dm[3]?(dm[3].length===2?'20'+dm[3]:dm[3]):String(new Date().getFullYear()); r.datum=`${y}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`; } else r.datum='';
+  return r;
+}
+async function cateringImportPdf(inp){
+  const f=inp.files&&inp.files[0]; inp.value=''; if(!f) return;
+  showToast('PDF wird gelesen…');
+  try{
+    const lines=await pdfToLines(await f.arrayBuffer());
+    const r=parseCateringLines(lines);
+    if(!r.kunde && !r.menue.length) throw new Error('nichts erkannt');
+    if(!r.datum) r.datum=new Date().toISOString().split('T')[0]; // Datum fehlt im PDF → heute vorbelegt, bitte prüfen
+    showCateringForm(null,r);
+  }catch(e){ console.error(e); showToast('PDF konnte nicht gelesen werden — bitte „Neues Catering“ nutzen',true); }
+}
+Object.assign(window,{showCateringDetail,toggleCateringPack,copyCateringText,showCateringForm,closeCateringForm,saveCatering,cancelCatering,cateringImportPdf});
 
 async function renderTeamFeedback(){
   const el=document.getElementById('v-teamFeedback');
