@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.124';
+const APP_VERSION = '6.99.125';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8903,7 +8903,7 @@ function tgArtikelRowHtml(a, extraLabel){
   const has=tgHas(a);
   const txt=a.bestand_text!=null?a.bestand_text:(a.bestand!=null?a.bestand:'');
   return `<div class="tg-row" data-id="${a.id}" data-has="${has?1:0}" data-genug="${a.genug?1:0}" data-bestellen="${a.bestellen?1:0}" style="display:flex;align-items:center;gap:5px;padding:7px 8px;border-bottom:1px solid var(--border);${a.bestellen?'background:#FFF7ED;':(a.genug?'background:#F0FDF4;':'')}">
-    <div style="flex:1;min-width:0;font-size:12.5px;" data-no-translate>${a.name}${extraLabel||''}</div>
+    <div data-name="${escAttr(a.name)}" style="flex:1;min-width:0;font-size:12.5px;">${a.name}${extraLabel||''}</div>
     <input type="text" inputmode="text" value="${escAttr(String(txt))}" placeholder="–" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:70px;text-align:center;border:1.5px solid ${has?'#86EFAC':'var(--border)'};background:${has?'#F0FDF4':'#fff'};border-radius:8px;font-size:13px;padding:6px 2px;">
     <button class="tg-genug" onclick="toggleTgGenug(${a.id})" title="Wir haben genug" style="flex-shrink:0;border:1.5px solid ${a.genug?'#16A34A':'var(--border)'};background:${a.genug?'#16A34A':'#fff'};color:${a.genug?'#fff':'var(--sub)'};border-radius:8px;padding:6px 6px;font-size:11px;font-weight:700;cursor:pointer;">✓ genug</button>
     <button class="tg-bestellen" onclick="toggleTgBestellen(${a.id})" title="Muss bestellt werden" style="flex-shrink:0;border:1.5px solid ${a.bestellen?'#EA580C':'var(--border)'};background:${a.bestellen?'#EA580C':'#fff'};color:${a.bestellen?'#fff':'var(--sub)'};border-radius:8px;padding:6px 6px;font-size:11px;font-weight:700;cursor:pointer;">🛒 bestellen</button>
@@ -8914,8 +8914,8 @@ function tgArtikelRowHtml(a, extraLabel){
 function tgUpdateProgress(){
   const rows=[...document.querySelectorAll('.tg-row')]; if(!rows.length) return;
   const done=rows.filter(r=>r.dataset.has==='1').length;
-  const el=document.getElementById('tg-progress'); if(el) el.textContent=`${done} / ${rows.length} gezählt`;
-  const nb=rows.filter(r=>r.dataset.bestellen==='1').length; const be=document.getElementById('tg-best-count'); if(be) be.textContent=nb?`🛒 ${nb} zu bestellen`:'🛒 Liste';
+  const el=document.getElementById('tg-progress'); if(el){ el.textContent=`${done} / ${rows.length} gezählt`; if(lang!=='de') tx('gezählt').then(t=>{ el.textContent=`${done} / ${rows.length} ${t}`; }); }
+  const nb=rows.filter(r=>r.dataset.bestellen==='1').length; const be=document.getElementById('tg-best-count'); if(be){ be.textContent=nb?`🛒 ${nb} zu bestellen`:'🛒 Liste'; if(lang!=='de'&&nb) tx('zu bestellen').then(t=>{ be.textContent=`🛒 ${nb} ${t}`; }); }
   const bar=document.getElementById('tg-bar'); if(bar) bar.style.width=Math.round(done/rows.length*100)+'%';
   document.querySelectorAll('.tg-kat').forEach(k=>{
     const rs=[...k.querySelectorAll('.tg-row')]; const d=rs.filter(r=>r.dataset.has==='1').length;
@@ -8983,7 +8983,7 @@ async function renderTgBestellungHtml(){
     const katItems=items.filter(a=>a.kategorie===kat).sort((x,y)=>String(x.name).localeCompare(String(y.name),'de',{sensitivity:'base',numeric:true}));
     if(!katItems.length) return;
     const d=katItems.filter(a=>tgHas(a)).length;
-    html+=`<details class="tg-kat card" open style="padding:0;margin-bottom:8px;overflow:hidden;">
+    html+=`<details class="tg-kat card" data-kat="${escAttr(kat.toUpperCase())}" open style="padding:0;margin-bottom:8px;overflow:hidden;">
       <summary style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--sub);background:var(--surface-1);cursor:pointer;list-style:none;"><span>${kat.toUpperCase()}</span><span class="tg-kat-count" style="font-size:11px;font-weight:700;color:${d===katItems.length?'#16A34A':'var(--muted)'};">${d}/${katItems.length}</span></summary>
       ${katItems.map(a=>tgArtikelRowHtml(a)).join('')}
     </details>`;
@@ -9103,8 +9103,8 @@ async function tgSendAsana(){
   const test=document.getElementById('tg-asana-test')?.checked===true;
   if(!test && !confirm(`Komplette Wochenbestellung (${allRows.length} Artikel, davon ${nBest} 🛒 zu bestellen) jetzt als Aufgabe an Simone schicken?`)) return;
   const artikel=allRows.map(r=>({
-    name:r.children[0].textContent.trim(),
-    kategorie:(r.closest('.tg-kat')?.querySelector('summary span')?.textContent||'Sonstiges').trim(),
+    name:(r.children[0].dataset.name||r.children[0].textContent).trim(),
+    kategorie:(r.closest('.tg-kat')?.dataset.kat||r.closest('.tg-kat')?.querySelector('summary span')?.textContent||'Sonstiges').trim(),
     bestand:(r.querySelector('input')?.value||'').trim(),
     genug:r.dataset.genug==='1',
     bestellen:r.dataset.bestellen==='1'
@@ -9122,7 +9122,7 @@ Object.assign(window,{tgSendAsana,tgAsanaBtnRefresh,tgAsanaTestMode});
 function tgCopyBestellliste(){
   const rows=[...document.querySelectorAll('.tg-row[data-bestellen="1"]')];
   if(!rows.length){ showToast('Noch nichts zum Bestellen markiert',true); return; }
-  const txt='Wochenbestellung Transgourmet:\n'+rows.map(r=>{ const n=r.children[0].textContent.trim(); const v=r.querySelector('input')?.value.trim(); return '• '+n+(v?' (Bestand: '+v+')':''); }).join('\n');
+  const txt='Wochenbestellung Transgourmet:\n'+rows.map(r=>{ const n=(r.children[0].dataset.name||r.children[0].textContent).trim(); const v=r.querySelector('input')?.value.trim(); return '• '+n+(v?' (Bestand: '+v+')':''); }).join('\n');
   (navigator.clipboard?.writeText(txt)||Promise.reject()).then(()=>showToast('✓ Bestellliste kopiert ('+rows.length+')')).catch(()=>{ prompt('Bestellliste kopieren:',txt); });
 }
 window.tgCopyBestellliste=tgCopyBestellliste;
