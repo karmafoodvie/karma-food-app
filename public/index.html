@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.130';
+const APP_VERSION = '6.99.131';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13306,28 +13306,37 @@ function dailyCheckLieferungHtml(fcRows,supRows,wek,wekPrev){
         const prevOwn=wekPrev?.temperaturen?.[r.name];
         const fb=(tval!==undefined&&tval!=='')?tval:(exception?(prevOwn??''):(wek?.temperatur ?? wekPrev?.temperatur ?? ''));
         tempHtml=`<div id="wek-temp-row-${k}" data-max="${exception?exception.max:''}" data-dishrow="${escAttr(r.name)}" style="display:flex;align-items:center;gap:5px;margin-left:auto;">
-          <span style="font-size:13px;">${exception?'❄️':'🌡️'}</span>
-          <input id="wek-temp-${k}" data-dish="${escAttr(r.name)}" type="number" inputmode="decimal" step="0.1" oninput="checkWareneingangTemp();dlTempPaint(this)" value="${fb}" placeholder="°C" style="width:50px;text-align:center;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;padding:4px 3px;">
-          <span style="font-size:10px;color:var(--muted);">${exception?'max '+exception.max+'°':'°C'}</span>
+          <span style="font-size:12px;">${exception?'❄️':'🌡️'}</span>
+          <input id="wek-temp-${k}" data-dish="${escAttr(r.name)}" type="number" inputmode="decimal" step="0.1" oninput="checkWareneingangTemp();dlTempPaint(this)" value="${fb}" placeholder="°C" style="width:46px;text-align:center;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;padding:4px 3px;">
+          ${exception?`<span style="font-size:9px;color:#0369A1;">max ${exception.max}°</span>`:''}
         </div>`;
       }
     }
-    return `<div class="dl-row" id="dl-row-${i}" data-kind="${r.kind}" data-name="${escAttr(r.name)}" data-groesse="${r.groesse}" data-exp="${r.exp}" data-state="${state}" style="border-radius:10px;padding:6px 8px 6px 10px;margin-top:5px;border:1.5px solid var(--border);border-left-width:4px;background:var(--card);transition:background .15s,border-color .15s;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        ${icon}
-        <div style="flex:1;min-width:0;" data-no-translate>
-          <div style="font-size:12.5px;font-weight:600;line-height:1.2;">${r.name}${dlSizeLabel(r.name,r.groesse)}</div>
-          <div id="dl-sub-${i}" style="font-size:10px;color:var(--muted);">bestellt: ${formatQty(r.exp)}${isDish?' Behälter':''}</div>
-        </div>
-        <button type="button" onclick="dlConfirmRow(${i})" id="dl-btn-${i}" aria-label="stimmt" style="width:34px;height:34px;flex-shrink:0;border-radius:50%;border:2px solid var(--border);background:var(--card);font-size:16px;font-weight:700;cursor:pointer;padding:0;">✓</button>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;">
-        <div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);" id="dl-step-${i}">
+    const btn=`<button type="button" onclick="dlConfirmRow(${i})" id="dl-btn-${i}" aria-label="stimmt" style="width:32px;height:32px;flex-shrink:0;border-radius:50%;border:2px solid var(--border);background:var(--card);font-size:15px;font-weight:700;cursor:pointer;padding:0;">✓</button>`;
+    const stepper=`<div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card);flex-shrink:0;" id="dl-step-${i}">
           <button type="button" onclick="dlStep(${i},-0.5)" style="${stepBtn}">−</button>
-          <input type="number" inputmode="decimal" step="0.5" min="0" value="${val}" oninput="dlQtyInput(${i})" style="width:38px;text-align:center;border:none;font-size:14px;font-weight:700;padding:3px 0;background:transparent;">
+          <input type="number" inputmode="decimal" step="0.5" min="0" value="${val}" oninput="dlQtyInput(${i})" style="width:34px;text-align:center;border:none;font-size:14px;font-weight:700;padding:3px 0;background:transparent;">
           <button type="button" onclick="dlStep(${i},0.5)" style="${stepBtn}">+</button>
-        </div>
-        ${tempHtml}
+        </div>`;
+    const attrs=`class="dl-row" id="dl-row-${i}" data-kind="${r.kind}" data-name="${escAttr(r.name)}" data-groesse="${r.groesse}" data-exp="${r.exp}" data-state="${state}"`;
+    const box='border-radius:10px;padding:6px 8px 6px 10px;margin-top:5px;border:1.5px solid var(--border);border-left-width:4px;background:var(--card);transition:background .15s,border-color .15s;';
+    if(!isDish){
+      // Beilagen: alles in EINER Zeile (Name · Menge · ✓)
+      return `<div ${attrs} style="${box}display:flex;align-items:center;gap:8px;">
+        ${icon}
+        <div style="flex:1;min-width:0;font-size:12.5px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-no-translate>${r.name}<span id="dl-sub-${i}" style="display:none;"></span></div>
+        ${stepper}${btn}
+      </div>`;
+    }
+    // Tagesgerichte: 2 Zeilen — Name / Info · Menge · Temperatur · ✓
+    return `<div ${attrs} style="${box}">
+      <div style="display:flex;align-items:center;gap:8px;" data-no-translate>
+        ${icon}
+        <div style="font-size:12.5px;font-weight:600;line-height:1.2;">${r.name}${dlSizeLabel(r.name,r.groesse)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+        <div id="dl-sub-${i}" style="flex:1;min-width:0;font-size:10px;color:var(--muted);line-height:1.15;">bestellt: ${formatQty(r.exp)}</div>
+        ${stepper}${tempHtml}${btn}
       </div>
     </div>`;
   };
@@ -13357,15 +13366,15 @@ function dlPaintRow(i){
   if(st==='ok'){
     row.style.background='#F0FDF4'; row.style.borderColor='#86EFAC'; row.style.borderLeftColor='#22C55E';
     btn.textContent='✓'; btn.style.background='#22C55E'; btn.style.color='#fff'; btn.style.borderColor='#22C55E';
-    step.style.borderColor='#86EFAC'; sub.style.color='#15803D'; sub.textContent='✓ angekommen: '+formatQty(cur)+unit;
+    step.style.borderColor='#86EFAC'; sub.style.color='#15803D'; sub.textContent='✓ angekommen';
   } else if(st==='diff'){
     row.style.background='#FFF7ED'; row.style.borderColor='#FDBA74'; row.style.borderLeftColor='#F97316';
     btn.textContent='✎'; btn.style.background='#F97316'; btn.style.color='#fff'; btn.style.borderColor='#F97316';
-    step.style.borderColor='#F97316'; sub.style.color='#C2410C'; sub.textContent='⚠ geliefert '+formatQty(cur)+' statt '+formatQty(exp)+unit;
+    step.style.borderColor='#F97316'; sub.style.color='#C2410C'; sub.textContent='⚠ '+formatQty(cur)+' statt '+formatQty(exp);
   } else {
     row.style.background='var(--card)'; row.style.borderColor='var(--border)'; row.style.borderLeftColor='#CBD5E1';
     btn.textContent='✓'; btn.style.background='var(--card)'; btn.style.color='#94A3B8'; btn.style.borderColor='var(--border)';
-    step.style.borderColor='var(--border)'; sub.style.color='var(--muted)'; sub.textContent='bestellt: '+formatQty(exp)+unit;
+    step.style.borderColor='var(--border)'; sub.style.color='var(--muted)'; sub.textContent='bestellt: '+formatQty(exp);
   }
   dlProgress();
 }
