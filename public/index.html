@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.128';
+const APP_VERSION = '6.99.129';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13288,12 +13288,16 @@ function dailyCheckLieferungHtml(fcRows,supRows,wek,wekPrev){
   const prev=Array.isArray(wek?.lieferung_abgleich)?wek.lieferung_abgleich:null;
   const existingTemps=wek?.temperaturen||{};
   let tIdx=0; const seenDish={};
+  const stepBtn='width:34px;height:36px;border:none;background:transparent;font-size:20px;font-weight:600;cursor:pointer;color:var(--sub);padding:0;';
   const rowHtml=(r,i)=>{
     const p=prev?prev.find(x=>x.name===r.name&&(x.groesse||'')===r.groesse&&x.kind===r.kind):null;
     const val=p?p.geliefert:r.exp;
     const state=p?(val===r.exp?'ok':'diff'):'';
+    const isDish=r.kind==='dish';
+    const img=!isDish?(typeof KITCHEN_SUPPLY_IMAGES!=='undefined'?KITCHEN_SUPPLY_IMAGES[r.name]:null):null;
+    const icon=isDish?`<span style="font-size:24px;flex-shrink:0;">${dishIcon(r.name)}</span>`:(img?`<img src="${img}" alt="" style="width:30px;height:30px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:'<span style="font-size:24px;flex-shrink:0;">🥗</span>');
     let tempHtml='';
-    if(r.kind==='dish'){
+    if(isDish){
       if(!seenDish[r.name]){
         seenDish[r.name]=1;
         const k=tIdx++;
@@ -13301,58 +13305,109 @@ function dailyCheckLieferungHtml(fcRows,supRows,wek,wekPrev){
         const tval=existingTemps[r.name];
         const prevOwn=wekPrev?.temperaturen?.[r.name];
         const fb=(tval!==undefined&&tval!=='')?tval:(exception?(prevOwn??''):(wek?.temperatur ?? wekPrev?.temperatur ?? ''));
-        tempHtml=`<div id="wek-temp-row-${k}" data-max="${exception?exception.max:''}" data-dishrow="${escAttr(r.name)}" style="display:flex;flex-direction:column;align-items:center;">
-          <input id="wek-temp-${k}" data-dish="${escAttr(r.name)}" type="number" inputmode="decimal" step="0.1" oninput="checkWareneingangTemp()" value="${fb}" placeholder="°C" style="width:54px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 3px;">
-          ${exception?`<div style="font-size:9px;color:#0369A1;">❄️ max ${exception.max}°</div>`:''}
+        tempHtml=`<div id="wek-temp-row-${k}" data-max="${exception?exception.max:''}" data-dishrow="${escAttr(r.name)}" style="display:flex;align-items:center;gap:5px;margin-left:auto;">
+          <span style="font-size:15px;">${exception?'❄️':'🌡️'}</span>
+          <input id="wek-temp-${k}" data-dish="${escAttr(r.name)}" type="number" inputmode="decimal" step="0.1" oninput="checkWareneingangTemp();dlTempPaint(this)" value="${fb}" placeholder="°C" style="width:58px;text-align:center;border:2px solid var(--border);border-radius:9px;font-size:15px;font-weight:600;padding:7px 3px;">
+          <span style="font-size:11px;color:var(--muted);">${exception?'max '+exception.max+'°':'°C'}</span>
         </div>`;
-      } else tempHtml='<div style="width:54px;"></div>';
+      }
     }
-    return `<div class="dl-row" id="dl-row-${i}" data-kind="${r.kind}" data-name="${escAttr(r.name)}" data-groesse="${r.groesse}" data-exp="${r.exp}" data-state="${state}" style="display:flex;align-items:center;gap:6px;padding:8px 0;border-top:0.5px solid var(--border);">
-      <div style="flex:1;min-width:0;" data-no-translate>
-        <div style="font-size:12.5px;font-weight:500;line-height:1.25;">${r.name}${dlSizeLabel(r.name,r.groesse)}</div>
-        <div style="font-size:10.5px;color:var(--muted);">bestellt: ${formatQty(r.exp)}${r.kind==='dish'?' Behälter':''}</div>
+    return `<div class="dl-row" id="dl-row-${i}" data-kind="${r.kind}" data-name="${escAttr(r.name)}" data-groesse="${r.groesse}" data-exp="${r.exp}" data-state="${state}" style="border-radius:12px;padding:10px 10px 10px 12px;margin-top:8px;border:1.5px solid var(--border);border-left-width:5px;background:var(--card);transition:background .15s,border-color .15s;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        ${icon}
+        <div style="flex:1;min-width:0;" data-no-translate>
+          <div style="font-size:13.5px;font-weight:600;line-height:1.25;">${r.name}${dlSizeLabel(r.name,r.groesse)}</div>
+          <div id="dl-sub-${i}" style="font-size:11px;color:var(--muted);">bestellt: ${formatQty(r.exp)}${isDish?' Behälter':''}</div>
+        </div>
+        <button type="button" onclick="dlConfirmRow(${i})" id="dl-btn-${i}" aria-label="stimmt" style="width:44px;height:44px;flex-shrink:0;border-radius:50%;border:2px solid var(--border);background:var(--card);font-size:20px;font-weight:700;cursor:pointer;padding:0;">✓</button>
       </div>
-      <input type="number" inputmode="decimal" step="0.5" min="0" value="${val}" oninput="dlQtyInput(${i})" style="width:48px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 3px;">
-      ${tempHtml}
-      <button type="button" onclick="dlConfirmRow(${i})" id="dl-btn-${i}" style="width:34px;height:34px;flex-shrink:0;border-radius:8px;border:1.5px solid var(--border);background:var(--card);font-size:15px;cursor:pointer;padding:0;">✓</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;border:2px solid var(--border);border-radius:10px;overflow:hidden;background:var(--card);" id="dl-step-${i}">
+          <button type="button" onclick="dlStep(${i},-0.5)" style="${stepBtn}">−</button>
+          <input type="number" inputmode="decimal" step="0.5" min="0" value="${val}" oninput="dlQtyInput(${i})" style="width:46px;text-align:center;border:none;font-size:16px;font-weight:700;padding:6px 0;background:transparent;">
+          <button type="button" onclick="dlStep(${i},0.5)" style="${stepBtn}">+</button>
+        </div>
+        ${tempHtml}
+      </div>
     </div>`;
   };
   const idx=rows.map((r,i)=>i);
   const dishIdx=idx.filter(i=>rows[i].kind==='dish'), supIdx=idx.filter(i=>rows[i].kind==='sup');
-  const hdr=(t,withTemp)=>`<div style="display:flex;align-items:center;gap:6px;margin:12px 0 2px;font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">
-      <div style="flex:1;">${t}</div><div style="width:48px;text-align:center;">Menge</div>${withTemp?'<div style="width:54px;text-align:center;">🌡️ °C</div>':''}<div style="width:34px;text-align:center;">OK</div></div>`;
-  setTimeout(()=>{rows.forEach((_,i)=>dlPaintRow(i)); checkWareneingangTemp();},0);
+  const hdr=(t,sub,col,bg)=>`<div style="margin:16px 0 0;padding:8px 12px;border-radius:10px;background:${bg};display:flex;align-items:baseline;gap:8px;">
+      <span style="font-size:13px;font-weight:800;color:${col};">${t}</span><span style="font-size:11px;color:${col};opacity:.8;">${sub}</span></div>`;
+  setTimeout(()=>{rows.forEach((_,i)=>dlPaintRow(i)); document.querySelectorAll('[id^="wek-temp-"]:not([id^="wek-temp-row"])').forEach(dlTempPaint); checkWareneingangTemp(); dlProgress();},0);
   return `<div class="section-lbl" style="color:var(--green);">📦 Lieferung gegenkontrollieren</div>
     <div class="card" id="dl-card" style="padding:14px;border:1.5px solid var(--green);">
-      <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">Ist alles angekommen? Pro Zeile ✓ antippen — oder die tatsächlich gelieferte Menge eintragen, dann werden alle Listen automatisch angepasst. Bei den Tagesgerichten bitte auch die Temperatur eintragen (über 65°).</div>
-      <button type="button" onclick="dlConfirmAll()" style="width:100%;padding:9px;border-radius:8px;border:1.5px solid var(--green);background:var(--green-light);color:var(--green);font-size:13px;font-weight:600;cursor:pointer;">✓ Alles stimmt</button>
-      ${dishIdx.length?hdr('🍽️ Tagesgerichte',true)+dishIdx.map(i=>rowHtml(rows[i],i)).join(''):''}
-      ${supIdx.length?hdr('🥗 Beilagen',false)+supIdx.map(i=>rowHtml(rows[i],i)).join(''):''}
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <div style="flex:1;height:8px;border-radius:6px;background:var(--border);overflow:hidden;"><div id="dl-bar" style="height:100%;width:0;background:var(--green);transition:width .2s;"></div></div>
+        <div id="dl-count" style="font-size:12px;font-weight:700;color:var(--sub);white-space:nowrap;"></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">Alles angekommen? ✓ antippen — oder Menge mit − / + korrigieren, dann passen sich alle Listen an.</div>
+      <button type="button" onclick="dlConfirmAll()" style="width:100%;padding:12px;border-radius:12px;border:none;background:var(--green);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;">✓ Alles stimmt – alles angekommen</button>
+      ${dishIdx.length?hdr('🍽️ Tagesgerichte','Menge + Temperatur (über 65°)','#9A3412','#FFEDD5')+dishIdx.map(i=>rowHtml(rows[i],i)).join(''):''}
+      ${supIdx.length?hdr('🥗 Beilagen','nur Menge','#166534','#DCFCE7')+supIdx.map(i=>rowHtml(rows[i],i)).join(''):''}
     </div>`;
 }
 function dlPaintRow(i){
   const row=document.getElementById('dl-row-'+i); if(!row) return;
-  const st=row.dataset.state, btn=document.getElementById('dl-btn-'+i), inp=row.querySelector('input');
-  if(st==='ok'){ btn.textContent='✓'; btn.style.background='var(--green)'; btn.style.color='#fff'; btn.style.borderColor='var(--green)'; inp.style.borderColor='var(--green)'; }
-  else if(st==='diff'){ btn.textContent='✎'; btn.style.background='#FFF7ED'; btn.style.color='#C2410C'; btn.style.borderColor='#F97316'; inp.style.borderColor='#F97316'; }
-  else { btn.textContent='✓'; btn.style.background='var(--card)'; btn.style.color='var(--muted)'; btn.style.borderColor='var(--border)'; inp.style.borderColor='var(--border)'; }
+  const st=row.dataset.state, btn=document.getElementById('dl-btn-'+i), inp=row.querySelector('.dl-row input[type=number]')||row.querySelector('input');
+  const sub=document.getElementById('dl-sub-'+i), step=document.getElementById('dl-step-'+i);
+  const exp=row.dataset.exp, cur=parseFloat(String(row.querySelector('#dl-step-'+i+' input').value).replace(',','.'));
+  const unit=row.dataset.kind==='dish'?' Behälter':'';
+  if(st==='ok'){
+    row.style.background='#F0FDF4'; row.style.borderColor='#86EFAC'; row.style.borderLeftColor='#22C55E';
+    btn.textContent='✓'; btn.style.background='#22C55E'; btn.style.color='#fff'; btn.style.borderColor='#22C55E';
+    step.style.borderColor='#86EFAC'; sub.style.color='#15803D'; sub.textContent='✓ angekommen: '+formatQty(cur)+unit;
+  } else if(st==='diff'){
+    row.style.background='#FFF7ED'; row.style.borderColor='#FDBA74'; row.style.borderLeftColor='#F97316';
+    btn.textContent='✎'; btn.style.background='#F97316'; btn.style.color='#fff'; btn.style.borderColor='#F97316';
+    step.style.borderColor='#F97316'; sub.style.color='#C2410C'; sub.textContent='⚠ geliefert '+formatQty(cur)+' statt '+formatQty(exp)+unit;
+  } else {
+    row.style.background='var(--card)'; row.style.borderColor='var(--border)'; row.style.borderLeftColor='#CBD5E1';
+    btn.textContent='✓'; btn.style.background='var(--card)'; btn.style.color='#94A3B8'; btn.style.borderColor='var(--border)';
+    step.style.borderColor='var(--border)'; sub.style.color='var(--muted)'; sub.textContent='bestellt: '+formatQty(exp)+unit;
+  }
+  dlProgress();
+}
+function dlProgress(){
+  const rows=[...document.querySelectorAll('.dl-row')]; if(!rows.length) return;
+  const done=rows.filter(r=>r.dataset.state).length, diff=rows.filter(r=>r.dataset.state==='diff').length;
+  const bar=document.getElementById('dl-bar'), c=document.getElementById('dl-count');
+  if(bar){ bar.style.width=(done/rows.length*100)+'%'; bar.style.background=diff?'#F97316':'var(--green)'; }
+  if(c) c.textContent=done+' / '+rows.length+' bestätigt'+(diff?' · '+diff+' abweichend':'');
+}
+function dlTempPaint(inp){
+  if(!inp||!inp.id||!inp.id.startsWith('wek-temp-')||inp.id.startsWith('wek-temp-row')) return;
+  const v=parseFloat(String(inp.value).replace(',','.')); const max=inp.closest('[data-max]')?.dataset.max;
+  let c='var(--border)',bg='var(--card)';
+  if(!isNaN(v)){
+    const bad=max?(v>parseFloat(max)):(v<65);
+    c=bad?'#EF4444':'#22C55E'; bg=bad?'#FEF2F2':'#F0FDF4';
+  }
+  inp.style.borderColor=c; inp.style.background=bg;
+}
+function dlStep(i,d){
+  const inp=document.querySelector('#dl-step-'+i+' input');
+  const cur=parseFloat(String(inp.value).replace(',','.'))||0;
+  inp.value=Math.max(0,Math.round((cur+d)*2)/2);
+  dlQtyInput(i);
 }
 function dlSyncChip(i){
   // Menge 0 geliefert → Gericht braucht keine Temperatur (kommt ja nicht an)
   const row=document.getElementById('dl-row-'+i); if(!row||row.dataset.kind!=='dish') return;
   const name=row.dataset.name;
-  const total=[...document.querySelectorAll('.dl-row[data-kind="dish"]')].filter(r=>r.dataset.name===name).reduce((a,r)=>a+(parseFloat(String(r.querySelector('input').value).replace(',','.'))||0),0);
+  const total=[...document.querySelectorAll('.dl-row[data-kind="dish"]')].filter(r=>r.dataset.name===name).reduce((a,r)=>a+(parseFloat(String(r.querySelector('[id^="dl-step-"] input').value).replace(',','.'))||0),0);
   document.querySelectorAll('[id^="wek-temp-row-"]').forEach(w=>{ if(w.dataset.dishrow===name) w.style.display=total===0?'none':'flex'; });
   checkWareneingangTemp();
 }
 function dlQtyInput(i){
-  const row=document.getElementById('dl-row-'+i); const v=parseFloat(String(row.querySelector('input').value).replace(',','.'));
+  const row=document.getElementById('dl-row-'+i); const v=parseFloat(String(row.querySelector('#dl-step-'+i+' input').value).replace(',','.'));
   if(isNaN(v)||v<0){ row.dataset.state=''; }
   else row.dataset.state=(v===parseFloat(row.dataset.exp))?'ok':'diff';
   dlPaintRow(i); dlSyncChip(i);
 }
 function dlConfirmRow(i){
-  const row=document.getElementById('dl-row-'+i); const inp=row.querySelector('input');
+  const row=document.getElementById('dl-row-'+i); const inp=row.querySelector('#dl-step-'+i+' input');
   const v=parseFloat(String(inp.value).replace(',','.'));
   if(isNaN(v)||v<0){ inp.value=row.dataset.exp; row.dataset.state='ok'; }
   else row.dataset.state=(v===parseFloat(row.dataset.exp))?'ok':'diff';
@@ -13367,7 +13422,7 @@ function dlCollect(){
   const out=[]; let open=null;
   rows.forEach(r=>{
     if(!r.dataset.state){ open=open||r.dataset.name; return; }
-    out.push({kind:r.dataset.kind,name:r.dataset.name,groesse:r.dataset.groesse||'',erwartet:parseFloat(r.dataset.exp),geliefert:parseFloat(String(r.querySelector('input').value).replace(',','.'))});
+    out.push({kind:r.dataset.kind,name:r.dataset.name,groesse:r.dataset.groesse||'',erwartet:parseFloat(r.dataset.exp),geliefert:parseFloat(String(r.querySelector('[id^="dl-step-"] input').value).replace(',','.'))});
   });
   return {rows:out, open};
 }
