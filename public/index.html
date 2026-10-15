@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.126';
+const APP_VERSION = '6.99.127';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -13161,12 +13161,14 @@ async function renderDailyCheck(){
     return;
   }
   const today=new Date().toISOString().split('T')[0];
-  const [wekRows,reinRows,kuehlRows,wekPrevRows,kuehlPrevRows]=await Promise.all([
+  const [wekRows,reinRows,kuehlRows,wekPrevRows,kuehlPrevRows,dlFcRows,dlSupRows]=await Promise.all([
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temperatur,temperaturen&order=datum.desc&limit=1`).catch(()=>[]),
-    api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temp_klein,temp_gross&order=datum.desc&limit=1`).catch(()=>[])
+    api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temp_klein,temp_gross&order=datum.desc&limit=1`).catch(()=>[]),
+    api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${today}&qty=gt.0&select=dish_name,qty,groesse&order=dish_name.asc`).catch(()=>[]),
+    api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${today}&qty=gt.0&select=article_name,qty&order=article_name.asc`).catch(()=>[])
   ]);
   const wek=(wekRows||[])[0];
   const wareOkDefault=!wek || wek.ware_ok!==false;
@@ -13191,6 +13193,7 @@ async function renderDailyCheck(){
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Schritt 2 von 2</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Beide Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
 
+    ${dailyCheckLieferungHtml(dlFcRows,dlSupRows,wek)}
     <div class="section-lbl" style="color:var(--green);">🌡️ Wareneingangskontrolle</div>
     <div class="card" style="padding:14px;border:1.5px solid var(--green);overflow:visible;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Lieferant: <strong style="color:var(--sub);" data-no-translate>${FIXER_LIEFERANT}</strong></div>
@@ -13265,8 +13268,109 @@ async function renderDailyCheck(){
   translateEl(el);
 }
 
+// ── Lieferung gegenkontrollieren (Start your shift) ─────────────────────────────────────────
+// Spiegelt die für HEUTE bestellten Mengen der Filiale (forecast_qty + Beilagen aus
+// kitchen_supply_today). Pro Zeile: "✓ stimmt" oder die tatsächlich angekommene Menge eintragen.
+// Abweichungen werden beim Speichern direkt in forecast_qty / kitchen_supply_today geschrieben —
+// dieselben Tabellen, aus denen Packliste, Organisation, Küche und Endkontrolle lesen, d.h. alle
+// Listen sind damit automatisch angepasst.
+function dlSizeLabel(dish,g){
+  if(!g||g==='gross') return dish.includes('Lasagne')?' · Groß':'';
+  const m={mittel:'Mittel',klein:'Klein'};
+  return ' · '+(m[g]||g);
+}
+function dailyCheckLieferungHtml(fcRows,supRows,wek){
+  const rows=[];
+  (fcRows||[]).forEach(f=>rows.push({kind:'dish',name:f.dish_name,groesse:f.groesse||'',exp:parseFloat(f.qty)}));
+  (supRows||[]).forEach(f=>rows.push({kind:'sup',name:f.article_name,groesse:'',exp:parseFloat(f.qty)}));
+  if(!rows.length) return '';
+  const prev=Array.isArray(wek?.lieferung_abgleich)?wek.lieferung_abgleich:null;
+  const unit=r=>r.kind==='dish'?'Behälter':'';
+  const rowHtml=rows.map((r,i)=>{
+    const p=prev?prev.find(x=>x.name===r.name&&(x.groesse||'')===r.groesse&&x.kind===r.kind):null;
+    // Nach erneutem Öffnen: schon bestätigte Zeile zeigt die damals gespeicherte Menge
+    const val=p?p.geliefert:r.exp;
+    const state=p?(val===r.exp?'ok':'diff'):'';
+    return `<div class="dl-row" id="dl-row-${i}" data-kind="${r.kind}" data-name="${escAttr(r.name)}" data-groesse="${r.groesse}" data-exp="${r.exp}" data-state="${state}" style="display:flex;align-items:center;gap:8px;padding:9px 0;border-top:0.5px solid var(--border);">
+      <div style="flex:1;min-width:0;" data-no-translate>
+        <div style="font-size:13px;font-weight:500;">${r.name}${dlSizeLabel(r.name,r.groesse)}</div>
+        <div style="font-size:11px;color:var(--muted);">bestellt: ${formatQty(r.exp)} ${unit(r)}</div>
+      </div>
+      <input type="number" inputmode="decimal" step="0.5" min="0" value="${val}" oninput="dlQtyInput(${i})" style="width:58px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+      <button type="button" onclick="dlConfirmRow(${i})" id="dl-btn-${i}" style="padding:7px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);font-size:12px;cursor:pointer;white-space:nowrap;">✓ stimmt</button>
+    </div>`;
+  }).join('');
+  setTimeout(()=>rows.forEach((_,i)=>dlPaintRow(i)),0);
+  return `<div class="section-lbl" style="color:var(--green);">📦 Lieferung gegenkontrollieren</div>
+    <div class="card" id="dl-card" style="padding:14px;border:1.5px solid var(--green);">
+      <div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Ist alles angekommen? Pro Zeile „✓ stimmt“ antippen — oder die tatsächlich gelieferte Menge eintragen (dann werden alle Listen automatisch angepasst).</div>
+      <button type="button" onclick="dlConfirmAll()" style="width:100%;padding:9px;border-radius:8px;border:1.5px solid var(--green);background:var(--green-light);color:var(--green);font-size:13px;font-weight:600;cursor:pointer;margin-bottom:4px;">✓ Alles stimmt</button>
+      ${rowHtml}
+    </div>`;
+}
+function dlPaintRow(i){
+  const row=document.getElementById('dl-row-'+i); if(!row) return;
+  const st=row.dataset.state, btn=document.getElementById('dl-btn-'+i), inp=row.querySelector('input');
+  if(st==='ok'){ btn.textContent='✓ angekommen'; btn.style.cssText+=';background:var(--green);color:#fff;border-color:var(--green);'; inp.style.borderColor='var(--green)'; }
+  else if(st==='diff'){ btn.textContent='✎ abweichend'; btn.style.cssText+=';background:#FFF7ED;color:#C2410C;border-color:#F97316;'; inp.style.borderColor='#F97316'; }
+  else { btn.textContent='✓ stimmt'; btn.style.background='var(--card)'; btn.style.color='inherit'; btn.style.borderColor='var(--border)'; inp.style.borderColor='var(--border)'; }
+}
+function dlSyncChip(i){
+  // Menge 0 geliefert → Gericht in der Temperaturliste abwählen (kommt ja nicht an)
+  const row=document.getElementById('dl-row-'+i); if(!row||row.dataset.kind!=='dish') return;
+  const name=row.dataset.name; const q=parseFloat(row.querySelector('input').value);
+  const others=[...document.querySelectorAll('.dl-row[data-kind="dish"]')].filter(r=>r.dataset.name===name);
+  const total=others.reduce((a,r)=>a+(parseFloat(r.querySelector('input').value)||0),0);
+  [...document.querySelectorAll('#wek-ware-chips div')].forEach(c=>{
+    if(c.textContent.trim()!==name) return;
+    const sel=c.style.color==='var(--green)'||c.style.color==='rgb(15, 110, 86)';
+    if((total===0&&sel)||(total>0&&!sel&&row.dataset.state==='ok')) c.click();
+  });
+}
+function dlQtyInput(i){
+  const row=document.getElementById('dl-row-'+i); const v=parseFloat(String(row.querySelector('input').value).replace(',','.'));
+  if(isNaN(v)||v<0){ row.dataset.state=''; }
+  else row.dataset.state=(v===parseFloat(row.dataset.exp))?'ok':'diff';
+  dlPaintRow(i); dlSyncChip(i);
+}
+function dlConfirmRow(i){
+  const row=document.getElementById('dl-row-'+i); const inp=row.querySelector('input');
+  const v=parseFloat(String(inp.value).replace(',','.'));
+  if(isNaN(v)||v<0){ inp.value=row.dataset.exp; row.dataset.state='ok'; }
+  else row.dataset.state=(v===parseFloat(row.dataset.exp))?'ok':'diff';
+  dlPaintRow(i); dlSyncChip(i);
+}
+function dlConfirmAll(){
+  document.querySelectorAll('.dl-row').forEach((r,i)=>{ if(r.dataset.state!=='diff') dlConfirmRow(i); });
+}
+// Liest die Lieferkontrolle; null = noch nicht alles bestätigt
+function dlCollect(){
+  const rows=[...document.querySelectorAll('.dl-row')];
+  const out=[]; let open=null;
+  rows.forEach(r=>{
+    if(!r.dataset.state){ open=open||r.dataset.name; return; }
+    out.push({kind:r.dataset.kind,name:r.dataset.name,groesse:r.dataset.groesse||'',erwartet:parseFloat(r.dataset.exp),geliefert:parseFloat(String(r.querySelector('input').value).replace(',','.'))});
+  });
+  return {rows:out, open};
+}
+async function dlApplyDiffs(rows,today){
+  const who=currentStore.name;
+  for(const r of rows){
+    if(r.geliefert===r.erwartet) continue;
+    const now=new Date().toISOString();
+    if(r.kind==='dish'){
+      const g=r.groesse?`groesse=eq.${encodeURIComponent(r.groesse)}`:'groesse=is.null';
+      await api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${today}&dish_name=eq.${encodeURIComponent(r.name)}&${g}`,{method:'PATCH',body:JSON.stringify({qty:r.geliefert,changed_by:who,changed_at:now,change_reason:`Wareneingang: geliefert ${r.geliefert} statt ${r.erwartet}`})});
+    } else {
+      await api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${today}&article_name=eq.${encodeURIComponent(r.name)}`,{method:'PATCH',body:JSON.stringify({qty:r.geliefert,is_adjusted:true,changed_by:who,changed_at:now})});
+    }
+  }
+}
+
 async function saveDailyCheckAll(){
   const today=new Date().toISOString().split('T')[0];
+  const dl=dlCollect();
+  if(dl.open){ showToast('Bitte Lieferung bestätigen: '+dl.open+' (oder „Alles stimmt“)'); document.getElementById('dl-card')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
   const tempRows=[...document.querySelectorAll('[id^="wek-temp-row-"]')].filter(r=>r.style.display!=='none');
   if(!tempRows.length){ showToast('Bitte mindestens eine angelieferte Ware auswählen'); return; }
   const temperaturen={};
@@ -13302,10 +13406,11 @@ async function saveDailyCheckAll(){
   const ware=getSelectedWaren()||'';
   const wareOk=document.getElementById('wek-ware-ok-box')?.dataset.value==='1';
   try{
+    await dlApplyDiffs(dl.rows,today);
     await Promise.all([
       (async()=>{
         await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
-        await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:minTemp,temperaturen,massnahme:massnahme||null,mitarbeiter:currentStore.name}])});
+        await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:minTemp,temperaturen,massnahme:massnahme||null,mitarbeiter:currentStore.name,lieferung_abgleich:dl.rows.length?dl.rows:null}])});
       })(),
       (async()=>{
         await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
