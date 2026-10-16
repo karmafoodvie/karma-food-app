@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.133';
+const APP_VERSION = '6.99.134';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -16251,8 +16251,14 @@ async function renderStoreSamosaTab(el, tabHtml){
   let html=tabHtml;
   // Freitags (einziger Bestelltag) direkt auf "Nächste Woche" öffnen — sonst landen die Stores auf der
   // gesperrten laufenden Woche und merken nicht, dass sie die kommende Woche selbst eintragen können.
+  // Ist die kommende Woche schon an den Produzenten geschickt (gesperrt), direkt auf die Woche danach springen.
   { const _td=new Date().toISOString().split('T')[0];
-    if(new Date().getDay()===5 && _samosaAutoDay!==_td){ _samosaWeekOffset=1; _samosaAutoDay=_td; } }
+    if(new Date().getDay()===5 && _samosaAutoDay!==_td){
+      _samosaAutoDay=_td; _samosaWeekOffset=1;
+      const _lk=await api('samosa_lock?select=locked_until_monday&order=locked_until_monday.desc&limit=1').catch(()=>[]);
+      const _lu=_lk?.[0]?.locked_until_monday;
+      if(_lu && getWeekdayDates(1)[1]<=_lu) _samosaWeekOffset=2;
+    } }
   html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Menge für Mo–Do eintragen. Wird von der Vorwoche übernommen, solange nichts geändert wird — bitte prüfen und anpassen, wenn's diese Woche anders sein soll.</div>`;
 
   const weekDates=getWeekdayDates(_samosaWeekOffset||0);
