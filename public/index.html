@@ -1211,7 +1211,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.131';
+const APP_VERSION = '6.99.132';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6954,7 +6954,7 @@ async function renderForecastOrderTab(el, tabHtml){
   // Freitags-Hinweis auf die Samosa-Bestellung — die läuft ja separat, wird aber leicht vergessen,
   // wenn man nur im Forecast unterwegs ist (16.09.26, Wunsch Tini).
   if(new Date().getDay()===5){
-    html+=`<div onclick="activeOrderTab='samosas';renderOrder();" style="background:#FFF4E5;border:1.5px solid #F59E0B;border-radius:12px;padding:12px 14px;margin-top:14px;cursor:pointer;">
+    html+=`<div onclick="activeOrderTab='samosas';_samosaWeekOffset=1;_samosaAutoDay=new Date().toISOString().split('T')[0];renderOrder();" style="background:#FFF4E5;border:1.5px solid #F59E0B;border-radius:12px;padding:12px 14px;margin-top:14px;cursor:pointer;">
       <div style="font-size:13px;font-weight:700;color:#78350F;">🥟 Nicht vergessen: Samosa-Bestellung für nächste Woche</div>
       <div style="font-size:11px;color:#78350F;margin-top:3px;text-decoration:underline;">Jetzt eintragen →</div>
     </div>`;
@@ -16241,6 +16241,7 @@ function getWeekDates(offset){
 }
 function isoDate(d){return d.toISOString().split('T')[0];}
 let _samosaWeekOffset=0; // 21.08.26, Wunsch Tini: letzte/nächste Woche ansehbar
+let _samosaAutoDay=''; // Tag, an dem die Store-Ansicht freitags schon automatisch auf "Nächste Woche" gesprungen ist
 
 // Store-seitige Samosa-Ansicht (26.08.26, Wunsch Tini) — bisher war Samosas nur zentral bei
 // Transporter sichtbar, Filialen hatten keine eigene, klare Stelle dafür und haben's oft vergessen
@@ -16248,6 +16249,10 @@ let _samosaWeekOffset=0; // 21.08.26, Wunsch Tini: letzte/nächste Woche ansehba
 // die Transporter-Tabelle (samosa_today/samosa_baseline, Vorwoche als Ausgangsbasis).
 async function renderStoreSamosaTab(el, tabHtml){
   let html=tabHtml;
+  // Freitags (einziger Bestelltag) direkt auf "Nächste Woche" öffnen — sonst landen die Stores auf der
+  // gesperrten laufenden Woche und merken nicht, dass sie die kommende Woche selbst eintragen können.
+  { const _td=new Date().toISOString().split('T')[0];
+    if(new Date().getDay()===5 && _samosaAutoDay!==_td){ _samosaWeekOffset=1; _samosaAutoDay=_td; } }
   html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Menge für Mo–Do eintragen. Wird von der Vorwoche übernommen, solange nichts geändert wird — bitte prüfen und anpassen, wenn's diese Woche anders sein soll.</div>`;
 
   const weekDates=getWeekdayDates(_samosaWeekOffset||0);
@@ -16292,9 +16297,12 @@ async function renderStoreSamosaTab(el, tabHtml){
   } else if(copyLocked){
     html+=`<div style="background:#FEF3C7;border:1px solid #FBBF24;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#78350F;">🔒 Diese Woche wurde schon an den Produzenten bestellt und kann nicht mehr geändert werden. Bitte für die übernächste Woche planen.</div>`;
   } else if(notFridayWindow){
-    html+=`<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1E3A8A;">🗓️ Samosas können nur <strong>freitags</strong> für die <strong>kommende Woche</strong> bestellt werden. ${isFriday?'Bitte bei "Nächste Woche" eintragen.':'Komm am Freitag wieder vorbei, um für nächste Woche zu bestellen.'}</div>`;
+    html+=`<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#1E3A8A;">🗓️ Samosas können nur <strong>freitags</strong> für die <strong>kommende Woche</strong> bestellt werden. ${isFriday?`<div style="margin-top:8px;"><button onclick="_samosaWeekOffset=1;renderOrder();" style="padding:9px 14px;border:none;border-radius:9px;background:#2563EB;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🥟 Jetzt für nächste Woche eintragen →</button></div>`:`Nächste Bestellung: <strong>Freitag, ${(()=>{const d=new Date();d.setDate(d.getDate()+((5-d.getDay()+7)%7||7));return d.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});})()}</strong> — dann trägst du hier die Mengen für die ganze nächste Woche ein.`}</div>`;
   }
 
+  if(!thisWeekLocked){
+    html+=`<div style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#065F46;">✅ <strong>Heute ist Bestelltag!</strong> Mengen für Mo–Do der kommenden Woche prüfen und direkt hier ändern — gespeichert wird sofort.</div>`;
+  }
   [1,2,3,4].forEach(wd=>{
     const b=baseline.find(x=>x.weekday===wd);
     const dateStr=weekDates[wd];
