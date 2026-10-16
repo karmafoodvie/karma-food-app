@@ -496,14 +496,24 @@ function findOverrideByName(overrideMap, name){
 // Englische Zutatennamen (z.B. "Bell pepper" = Paprika) vor Matching/Kategorisierung ins Deutsche
 // übersetzen — sonst landen sie in "Sonstiges", weil Datenbank und Regeln nur deutsche Namen kennen.
 const ZUTAT_EN_DE=[
-  [/\b(red |green |yellow |orange )?bell peppers?\b/gi,'Paprika'],[/\bcapsicums?\b/gi,'Paprika'],
-  [/\bpowder\b/gi,'Pulver'],[/\bonions?\b/gi,'Zwiebel'],[/\btomatoes|tomato\b/gi,'Tomate'],
-  [/\bcarrots?\b/gi,'Karotte'],[/\bgarlic\b/gi,'Knoblauch'],[/\bspinach\b/gi,'Spinat'],
-  [/\beggplants?\b/gi,'Melanzani'],[/\bcauliflower\b/gi,'Karfiol'],[/\bcucumbers?\b/gi,'Gurke'],
-  [/\bpotato(es)?\b/gi,'Erdäpfel'],[/\bzucchini\b/gi,'Zucchini'],[/\bwhite cabbage\b/gi,'Weisskraut'],[/\bcabbage\b/gi,'Weisskraut'],
-  [/\bbroccoli\b/gi,'Brokkoli'],[/\bpumpkin\b/gi,'Kürbis'],[/\bcoriander leaves\b/gi,'Koriander frisch'],
-  [/\bchickpeas?\b/gi,'Kichererbsen'],[/\blentils?\b/gi,'Linsen'],[/\bcoconut milk\b/gi,'Kokosmilch'],
-  [/\bginger\b/gi,'Ingwer'],[/\blemon\b/gi,'Zitrone'],[/\blime\b/gi,'Limette']
+  [/\b(red |green |yellow |orange )?bell[- ]?peppers?\b/gi,'Paprika'],[/\b(red|green|yellow|orange) peppers?\b/gi,'Paprika'],[/\bcapsicums?\b/gi,'Paprika'],
+  [/\bpowder\b/gi,'Pulver'],[/\bonions?\b/gi,'Zwiebel'],[/\bspring onions?\b|\bscallions?\b/gi,'Jungzwiebel'],[/\btomatoes|tomato\b/gi,'Tomate'],
+  [/\bcarrots?\b/gi,'Karotten'],[/\bgarlic\b/gi,'Knoblauch'],[/\bspinach\b/gi,'Spinat'],
+  [/\beggplants?\b|\baubergines?\b/gi,'Aubergine'],[/\bcauliflower\b/gi,'Blumenkohl'],[/\bcucumbers?\b/gi,'Gurke'],
+  [/\bsweet potato(es)?\b/gi,'Süßkartoffeln'],[/\bpotato(es)?\b/gi,'Kartoffeln'],[/\bzucchini\b|\bcourgettes?\b/gi,'Zucchini'],[/\bwhite cabbage\b/gi,'Weißkohl'],[/\bcabbage\b/gi,'Weißkohl'],
+  [/\bbroccoli\b/gi,'Brokkoli'],[/\bpumpkin\b/gi,'Kürbis'],[/\bcoriander leaves\b|\bfresh coriander\b|\bcilantro\b/gi,'Koriander frisch'],
+  [/\bchickpeas?\b/gi,'Kichererbsen'],[/\blentils?\b/gi,'Linsen'],[/\bgreen peas\b|\bpeas\b/gi,'Erbsen'],[/\bgreen beans?\b/gi,'Buschbohnen'],[/\bkidney beans?\b/gi,'Kidneybohnen'],
+  [/\bcoconut milk\b/gi,'Kokosmilch'],[/\bginger\b/gi,'Ingwer'],[/\blemon juice\b/gi,'Zitronensaft'],[/\blime juice\b/gi,'Limettensaft'],[/\blemon\b/gi,'Zitrone'],[/\blime\b/gi,'Limette'],
+  [/\bcashews?( nuts?)?\b/gi,'Cashewkerne'],[/\bpeanuts?\b/gi,'Erdnüsse'],[/\bcelery\b/gi,'Sellerie'],[/\bmushrooms?\b/gi,'Champignons'],[/\bradish\b/gi,'Rettich'],
+  [/\bturmeric\b/gi,'Kurkuma'],[/\bcumin\b/gi,'Kreuzkümmel'],[/\bcinnamon\b/gi,'Zimt'],[/\bcloves\b/gi,'Nelken'],[/\bcardamom\b/gi,'Kardamom'],
+  [/\bparsley\b/gi,'Petersilie'],[/\bmint\b/gi,'Minze'],[/\bsalt\b/gi,'Salz'],[/\bblack pepper\b/gi,'Pfeffer'],[/\boil\b/gi,'Öl'],[/\bcorn\b/gi,'Mais']
+];
+// Bekannte Fehlübersetzungen der automatischen Übersetzung (Google) — werden nach der Übersetzung
+// repariert, damit z.B. "Bell pepper" nie als "Glockenpfeffer" in der Zutatenliste landet.
+const ZUTAT_MT_REPAIR=[
+  [/glocken\s*(pfeffer|papier|paprika)|bell\s*papier|glockenpaprika|klingel\s*pfeffer|paprika\s*schote\s*pfeffer/gi,'Paprika'],
+  [/karliblume|kalikohl|blumenkohl\s*kohl|blume\s*kohl/gi,'Blumenkohl'],
+  [/hör zu/gi,'']
 ];
 function zutatEnToDe(name){
   let n=String(name||'');
@@ -1211,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.134';
+const APP_VERSION = '6.99.135';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1316,7 +1326,20 @@ async function txFixed(text, sourceLang, targetLang){
     return tCache[key];
   }catch{ return text; }
 }
-async function txToGerman(text){ return txFixed(text,'auto','de'); }
+async function txToGerman(text){
+  // 16.10.26: Erst Zutaten-Glossar (Bell pepper → Paprika, Cauliflower → Blumenkohl …), dann nur wenn nötig
+  // die automatische Übersetzung — und deren bekannte Fehler hinterher reparieren. Vorher wurde
+  // "Bell pepper" zu "Glockenpfeffer" und landete nie bei Gemüse.
+  const t=String(text||'').trim(); if(t.length<2) return text;
+  const g=zutatEnToDe(t).trim();
+  const master=(typeof _zutatenMasterCache!=='undefined'&&_zutatenMasterCache)||[];
+  const hit=master.find(m=>m.name.toUpperCase()===g.toUpperCase());
+  if(g!==t && hit) return g;                         // Glossar hat vollständig getroffen
+  if(hit) return t;                                  // steht schon exakt in der Zutaten-Datenbank → nicht anfassen
+  let r=await txFixed(g,'auto','de');
+  ZUTAT_MT_REPAIR.forEach(([re,rep])=>{ r=r.replace(re,rep); });
+  return r.replace(/\s{2,}/g,' ').trim()||t;
+}
 async function txToEnglish(text){ return txFixed(text,'de','en'); }
 
 // ---- TRANSLATE ----
@@ -12776,6 +12799,7 @@ async function zmSubmit(gericht, items){
     } }
   }
   if(!items.length){ showToast('Das ist schon eingetragen'); return; }
+  for(const it of items){ if(it.typ==='add'){ try{ it.zutat=await txToGerman(it.zutat); }catch(e){} } }
   await api('zutaten_meldungen',{method:'POST',body:JSON.stringify(items.map(it=>({store_id:String(currentStore?.id||''),store_name:currentStore?.name||'',gericht,typ:it.typ,zutat:it.zutat,basis,text:(it.typ==='add'?'➕ ':'➖ ')+it.zutat})))});
   showToast('✔ Eingetragen — die Küche bestätigt es noch');
   if(typeof renderHome==='function' && currentView==='home') renderHome();
