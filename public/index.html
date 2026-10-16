@@ -1221,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.135';
+const APP_VERSION = '6.99.136';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2575,6 +2575,104 @@ function levenshteinDistance(a,b){
   return prev[n];
 }
 
+
+// ══ ZUTATEN NUR AUS DER LISTE (16.10.26, Wunsch Tini) ═══════════════════════════════════════════
+// Zutaten dürfen nur aus der Zutaten-Datenbank (zutaten_master) kommen — keine freien Schreibweisen,
+// keine Buchstabendreher. Eingabe wird (1) per Glossar/Übersetzung ins Deutsche gebracht, (2) exakt
+// gegen die Liste geprüft, (3) bei Tippfehlern (Buchstabendreher, 1–2 Zeichen daneben) automatisch
+// auf den richtigen Listeneintrag korrigiert, (4) sonst mit Vorschlägen abgefragt. Gibt es die Zutat
+// wirklich noch nicht: Küche legt sie direkt neu an, Filialen schicken eine Anfrage an die Küche.
+function zutatDist(a,b){ // Damerau/OSA: Buchstabendreher zählen nur 1
+  const m=a.length,n=b.length; if(!m) return n; if(!n) return m;
+  const d=[]; for(let i=0;i<=m;i++){ d[i]=[i]; } for(let j=0;j<=n;j++) d[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++){
+    const c=a[i-1]===b[j-1]?0:1;
+    d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+c);
+    if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) d[i][j]=Math.min(d[i][j],d[i-2][j-2]+1);
+  }
+  return d[m][n];
+}
+function zutatPretty(name){ const t=String(name||'').trim(); return t? t.charAt(0).toUpperCase()+t.slice(1).toLowerCase() : t; }
+function zutatMatchList(text, master){
+  const q=normalizeZutatName(text); if(!q) return {exact:null,best:[],sugg:[]};
+  const scored=master.map(m=>({m, n:normalizeZutatName(m.name)}));
+  const exact=scored.find(x=>x.n===q);
+  if(exact) return {exact:exact.m,best:[],sugg:[]};
+  const tol=q.length<=4?0:(q.length<=7?1:2);
+  const withD=scored.map(x=>({m:x.m,d:zutatDist(q,x.n),sub:(x.n.includes(q)||q.includes(x.n))&&Math.min(x.n.length,q.length)>=4})).sort((a,b)=>a.d-b.d);
+  const best=withD.filter(x=>x.d<=tol);
+  const sugg=withD.filter(x=>x.d<=Math.max(tol,3)||x.sub).slice(0,6).map(x=>x.m);
+  return {exact:null,best,sugg};
+}
+// Ergebnis: {ok:true,name,corrected} | {ok:false,sugg:[namen]}
+async function zutatResolve(raw){
+  const master=await getZutatenMaster();
+  const base=zutatEnToDe(String(raw||'').trim()).trim();
+  let r=zutatMatchList(base,master);
+  if(r.exact) return {ok:true,name:zutatPretty(r.exact.name),corrected:normalizeZutatName(r.exact.name)!==normalizeZutatName(raw)};
+  const uniq=[...new Set(r.best.map(x=>x.m.base_zutat_id||x.m.id))];
+  if(r.best.length && uniq.length===1 && (r.best.length===1 || r.best[0].d<r.best[1].d)) return {ok:true,name:zutatPretty(r.best[0].m.name),corrected:true};
+  // Fremdsprache/unbekanntes Wort: einmal übersetzen und nochmal prüfen
+  try{
+    const de=(await txToGerman(raw)).trim();
+    if(de && normalizeZutatName(de)!==normalizeZutatName(base)){
+      const r2=zutatMatchList(de,master);
+      if(r2.exact) return {ok:true,name:zutatPretty(r2.exact.name),corrected:true};
+      const u2=[...new Set(r2.best.map(x=>x.m.base_zutat_id||x.m.id))];
+      if(r2.best.length && u2.length===1 && (r2.best.length===1||r2.best[0].d<r2.best[1].d)) return {ok:true,name:zutatPretty(r2.best[0].m.name),corrected:true};
+      r.sugg=[...r.sugg,...r2.sugg];
+    }
+  }catch(e){}
+  const seen=new Set(); const sugg=[];
+  r.sugg.forEach(m=>{ const k=normalizeZutatName(m.name); if(!seen.has(k)){ seen.add(k); sugg.push(zutatPretty(m.name)); } });
+  return {ok:false,sugg:sugg.slice(0,6)};
+}
+// Auswahl-Dialog für eine Zutat, die es (so) nicht gibt. Gibt Promise zurück:
+//   {name}   → gewählte Zutat aus der Liste
+//   {neu:true,name} → neue Zutat wurde angelegt (Küche) bzw. angefragt (Filiale)
+//   null     → abgebrochen
+function zutatChooser(raw, opts={}){
+  const kitchen=!!opts.allowCreate;
+  return zutatResolve(raw).then(res=>{
+    if(res.ok) return {name:res.name,corrected:res.corrected};
+    return new Promise(resolve=>{
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10050;display:flex;align-items:flex-end;';
+      const sh=document.createElement('div');
+      sh.style.cssText='background:#fff;border-radius:20px 20px 0 0;width:100%;max-height:88vh;overflow-y:auto;padding:16px 16px 26px;';
+      const sugg=res.sugg||[];
+      sh.innerHTML=`<div style="font-size:11px;color:var(--muted);">Zutat nicht in der Liste</div>
+        <div style="font-size:17px;font-weight:700;margin:2px 0 8px;" data-no-translate>„${escAttr(raw)}“</div>
+        ${sugg.length?`<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Meinst du eine davon?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">${sugg.map((n,i)=>`<button data-i="${i}" class="zc-s" style="padding:9px 13px;border:1.5px solid #1D5E3A;background:#ECFDF5;color:#14532D;border-radius:18px;font-size:13px;font-weight:600;cursor:pointer;" data-no-translate>${escAttr(n)}</button>`).join('')}</div>`
+        :`<div style="font-size:12px;color:var(--sub);margin-bottom:10px;">Dazu gibt es keinen ähnlichen Eintrag in der Zutatenliste.</div>`}
+        <div style="border-top:1px solid var(--border);padding-top:10px;">
+          <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">${kitchen?'Gibt es die Zutat wirklich noch nicht?':'Fehlt die Zutat wirklich in der Liste?'}</div>
+          <button id="zc-new" style="width:100%;padding:11px;border:1.5px solid #D97706;background:#FFFBEB;color:#92400E;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">🆕 ${kitchen?'Neu in die Zutatenliste aufnehmen':'Neue Zutat bei der Küche anfragen'}</button>
+        </div>
+        <button id="zc-cancel" style="width:100%;margin-top:10px;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:10px;font-size:13px;cursor:pointer;">Abbrechen</button>`;
+      ov.appendChild(sh); document.body.appendChild(ov);
+      const done=v=>{ ov.remove(); resolve(v); };
+      sh.querySelectorAll('.zc-s').forEach(b=>b.onclick=()=>done({name:sugg[Number(b.dataset.i)],corrected:true}));
+      sh.querySelector('#zc-cancel').onclick=()=>done(null);
+      sh.querySelector('#zc-new').onclick=async()=>{
+        const nm=zutatPretty(zutatEnToDe(raw).trim());
+        try{
+          if(kitchen){
+            const kat=guessZutatKat(nm).toUpperCase();
+            await api('zutaten_master',{method:'POST',body:JSON.stringify([{name:nm.toUpperCase(),kategorie:kat,allergene_codes:[],erstellt_von:currentStore?.name||'Küche'}])});
+            invalidateZutatenMasterCache(); _zutatenIndexCache=null;
+            showToast('✔ „'+nm+'“ neu in der Liste (Kategorie '+kat+')');
+            done({name:nm,neu:true});
+          } else {
+            done({name:nm,anfrage:true});
+          }
+        }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
+      };
+    });
+  });
+}
+
 let _zutatenIndexCache=null;
 // Baut EINEN vereinheitlichten, deduplizierten Zutaten-Index:
 // 1) zutaten_master ist führend (saubere, kuratierte Basis inkl. Varianten-Verknüpfung)
@@ -2796,8 +2894,17 @@ async function zdCollectItems(editor){
     const val=(span&&span.textContent.trim())||(input&&input.value.trim());
     if(val) raw.push(val);
   });
-  const normalized=await Promise.all(raw.map(v=>txToGerman(v).catch(()=>v)));
-  return normalized;
+  let orig=[]; try{ orig=JSON.parse(editor.dataset.orig||'[]'); }catch(e){}
+  const out=[];
+  for(const v of raw){
+    // Unverändert aus dem bestehenden Rezept → so lassen (auch wenn alt/uneinheitlich, das räumt das Zusammenführen-Tool auf)
+    if(orig.includes(normalizeZutatName(v))){ out.push(v); continue; }
+    // Neu oder geändert → muss in der Zutatenliste stehen (Tippfehler werden korrigiert)
+    const r=await zutatChooser(v,{allowCreate:true});
+    if(!r) return null; // abgebrochen → nichts speichern
+    out.push(r.name);
+  }
+  return out;
 }
 
 // Blur handler — marks row dirty
@@ -2810,6 +2917,7 @@ window.zdRowBlur=zdRowBlur;
 // Attach event listeners to a rendered zd-editor div
 function zdAttach(editor){
   if(!editor) return;
+  if(!editor.dataset.orig){ try{ editor.dataset.orig=JSON.stringify([...editor.querySelectorAll('.zd-row [contenteditable]')].map(sp=>normalizeZutatName(sp.textContent))); }catch(e){} }
   // Delete buttons
   editor.querySelectorAll('.zd-del').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -3000,7 +3108,8 @@ function openZutatenEditor(dishName, currentText, woche, tag, slot){
     const mainEditorEl=body.querySelector('.zd-editor');
     const mainItems=await zdCollectItems(mainEditorEl);
     const extraEditorEl=document.getElementById('zd-extra-wrap').querySelector('.zd-editor');
-    const extraItems=extraEditorEl?await zdCollectItems(extraEditorEl):[];
+    const extraItems=mainItems&&extraEditorEl?await zdCollectItems(extraEditorEl):[];
+    if(mainItems===null || extraItems===null){ saveBtn.disabled=false; saveBtn.textContent='💾 Speichern'; showToast('Nicht gespeichert — bitte Zutat aus der Liste wählen'); return; }
     const newText=mainItems.join(', ')+(extraItems.length?('\n\nDIP/SAUCE/TOPPINGS:\n'+extraItems.join(', ')):'');
     closeModal();
     // "Global speichern" wurde am 31.07.26 entfernt (hat Zutaten fälschlich in andere Gerichte
@@ -12770,6 +12879,7 @@ function zmOpen(dishName){
       <button id="zm-cancel" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:12px;background:#fff;font-size:13px;cursor:pointer;">Abbrechen</button>
       <button id="zm-send" style="flex:2;padding:12px;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Eintragen</button>
     </div>`;
+    if(mode==='add') attachZutatenAutocomplete(sh.querySelector('#zm-name'));
     sh.querySelector('#zm-m-add').onclick=()=>{mode='add';draw();};
     sh.querySelector('#zm-m-rem').onclick=()=>{mode='remove';draw();};
     sh.querySelectorAll('.zm-chip').forEach(b=>{b.onclick=()=>{sel=Number(b.dataset.i);draw();};});
@@ -12779,7 +12889,8 @@ function zmOpen(dishName){
       if(!zutat){ showToast(mode==='add'?'Bitte Zutat eintragen':'Bitte eine Zutat auswählen'); return; }
       const b=sh.querySelector('#zm-send'); b.disabled=true; b.textContent='Wird eingetragen…';
       try{
-        await zmSubmit(dishName,[{typ:mode,zutat}]);
+        const ok=await zmSubmit(dishName,[{typ:mode,zutat}]);
+        if(ok===false){ b.disabled=false; b.textContent='Eintragen'; return; }
         ov.remove();
       }catch(e){ console.error(e); b.disabled=false; b.textContent='Eintragen'; showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
     };
@@ -12788,21 +12899,29 @@ function zmOpen(dishName){
 }
 async function zmSubmit(gericht, items){
   const basis=(window._zmBasis||{})[gericht]||'';
+  // Neue/ergänzte Zutaten nur aus der Zutatenliste: Tippfehler werden korrigiert, sonst Auswahl; fehlt sie wirklich → Anfrage an Küche
+  const neuReq=[];
+  for(const it of items){
+    if(it.typ!=='add') continue;
+    const r=await zutatChooser(it.zutat,{allowCreate:false});
+    if(!r) return false; // abgebrochen
+    if(r.anfrage){ it.typ='neu'; it.zutat=r.name; neuReq.push(it); } else { it.zutat=r.name; }
+  }
   await zmLoadOffen();
   // Gegenteilige ältere Meldung zur selben Zutat (z.B. erst "+Kichererbsen", dann "−Kichererbsen")
   // wird automatisch als überholt abgehakt; identische offene Meldung wird nicht doppelt angelegt.
   const open=zmPending(gericht);
-  items=items.filter(it=>!open.some(r=>r.typ===it.typ && zutatSame(r.zutat,it.zutat)));
+  items=items.filter(it=>it.typ==='neu' || !open.some(r=>r.typ===it.typ && zutatSame(r.zutat,it.zutat)));
   for(const it of items){
     for(const r of open){ if(r.typ!==it.typ && zutatSame(r.zutat,it.zutat)){
       await api(`zutaten_meldungen?id=eq.${r.id}`,{method:'PATCH',body:JSON.stringify({status:'ueberholt',erledigt_am:new Date().toISOString()})}).catch(()=>{});
     } }
   }
   if(!items.length){ showToast('Das ist schon eingetragen'); return; }
-  for(const it of items){ if(it.typ==='add'){ try{ it.zutat=await txToGerman(it.zutat); }catch(e){} } }
-  await api('zutaten_meldungen',{method:'POST',body:JSON.stringify(items.map(it=>({store_id:String(currentStore?.id||''),store_name:currentStore?.name||'',gericht,typ:it.typ,zutat:it.zutat,basis,text:(it.typ==='add'?'➕ ':'➖ ')+it.zutat})))});
-  showToast('✔ Eingetragen — die Küche bestätigt es noch');
+  await api('zutaten_meldungen',{method:'POST',body:JSON.stringify(items.map(it=>({store_id:String(currentStore?.id||''),store_name:currentStore?.name||'',gericht,typ:it.typ,zutat:it.zutat,basis,text:(it.typ==='add'?'➕ ':(it.typ==='neu'?'🆕 Neue Zutat gewünscht: ':'➖ '))+it.zutat})))});
+  showToast(neuReq.length?'✔ Angefragt — die Küche nimmt „'+neuReq[0].zutat+'“ neu auf':'✔ Eingetragen — die Küche bestätigt es noch');
   if(typeof renderHome==='function' && currentView==='home') renderHome();
+  return true;
 }
 function zmTile(el){
   const gericht=el.dataset.g, item=el.dataset.z;
@@ -12820,7 +12939,8 @@ function zmTile(el){
     </div>
     <button id="zt-cancel" style="width:100%;margin-top:12px;padding:11px;border:1.5px solid var(--border);background:#fff;border-radius:10px;font-size:13px;cursor:pointer;">Abbrechen</button>`;
   ov.appendChild(sh); document.body.appendChild(ov);
-  const go=async(items,btn)=>{ btn.disabled=true; try{ await zmSubmit(gericht,items); ov.remove(); }catch(e){ console.error(e); btn.disabled=false; showToast('Fehler: '+(e?.message||'').slice(0,80),true); } };
+  const go=async(items,btn)=>{ btn.disabled=true; try{ const ok=await zmSubmit(gericht,items); if(ok===false){ btn.disabled=false; return; } ov.remove(); }catch(e){ console.error(e); btn.disabled=false; showToast('Fehler: '+(e?.message||'').slice(0,80),true); } };
+  attachZutatenAutocomplete(sh.querySelector('#zt-new'));
   sh.querySelector('#zt-cancel').onclick=()=>ov.remove();
   sh.querySelector('#zt-rem').onclick=e=>go([{typ:'remove',zutat:item}],e.currentTarget);
   sh.querySelector('#zt-swap').onclick=e=>{
@@ -12839,12 +12959,13 @@ async function zmCardHtml(){
     ${rows.map(r=>{ const typed=(r.typ==='add'||r.typ==='remove');
       return `<div style="background:#fff;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
       <div style="font-size:12px;font-weight:700;" data-no-translate>${escAttr(r.gericht)}</div>
-      <div style="font-size:13px;margin:2px 0;" data-no-translate>${typed?(r.typ==='add'?'➕ ergänzt: ':'➖ entfernt: ')+'<b>'+escAttr(r.zutat)+'</b>':escAttr(r.text)}</div>
+      <div style="font-size:13px;margin:2px 0;" data-no-translate>${typed?(r.typ==='add'?'➕ ergänzt: ':'➖ entfernt: ')+'<b>'+escAttr(r.zutat)+'</b>':(r.typ==='neu'?'🆕 Zutat fehlt in der Liste: <b>'+escAttr(r.zutat)+'</b>':escAttr(r.text))}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
         <span style="font-size:10.5px;color:var(--muted);">${escAttr(r.store_name||'')} · ${ago(r.created_at)}</span>
         <span style="display:flex;gap:6px;">
+          ${r.typ==='neu'?`<button onclick="zmDone(${r.id})" style="background:#fff;color:#B91C1C;border:1px solid #FCA5A5;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;">Ablehnen</button><button onclick="zmNeuConfirm(${r.id})" style="background:#D97706;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;">🆕 Neu aufnehmen &amp; übernehmen</button>`:''}
           ${typed?`<button onclick="zmReject(${r.id})" style="background:#fff;color:#B91C1C;border:1px solid #FCA5A5;border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;">Zurücknehmen</button>`:''}
-          <button onclick="${typed?`zmConfirm(${r.id})`:`zmDone(${r.id})`}" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;">${typed?'✓ Stimmt':'✓ Erledigt'}</button>
+          ${r.typ==='neu'?'':`<button onclick="${typed?`zmConfirm(${r.id})`:`zmDone(${r.id})`}" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;">${typed?'✓ Stimmt':'✓ Erledigt'}</button>`}
         </span>
       </div></div>`;}).join('')}
   </div>`;
@@ -12869,6 +12990,20 @@ async function zmConfirm(id){
     await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'bestaetigt',erledigt_am:new Date().toISOString()})});
     showToast('✔ Übernommen um '+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'}));
     renderKitchen();
+  }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
+}
+async function zmNeuConfirm(id){
+  try{
+    const r=(await api(`zutaten_meldungen?id=eq.${id}&select=*`))[0]; if(!r) return;
+    const nm=zutatPretty(r.zutat);
+    const master=await getZutatenMaster();
+    if(!master.some(m=>normalizeZutatName(m.name)===normalizeZutatName(nm))){
+      const kat=guessZutatKat(nm).toUpperCase();
+      await api('zutaten_master',{method:'POST',body:JSON.stringify([{name:nm.toUpperCase(),kategorie:kat,allergene_codes:[],erstellt_von:'Küche (Anfrage '+(r.store_name||'')+')'}])});
+      invalidateZutatenMasterCache(); if(typeof _zutatenIndexCache!=='undefined') _zutatenIndexCache=null;
+    }
+    await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({typ:'add',zutat:nm,text:'➕ '+nm})});
+    await zmConfirm(id);
   }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
 }
 async function zmReject(id){
