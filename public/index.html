@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.155';
+const APP_VERSION = '6.99.156';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -19007,6 +19007,30 @@ async function sgBestellHtml(){
       <td style="text-align:center;font-size:11px;font-weight:700;"><span style="padding:3px 9px;border-radius:99px;background:${stt.bg};color:${stt.c};">${stt.t}</span></td></tr>`; }).join('')}
     </tbody></table></div>
     <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Mindestbestellwert: ${sgFmt(min)} je Bestellstelle und Tag · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div></div>`;
+  {
+    const nm={}; stellen.forEach(s=>nm[s.id]=s.name);
+    const alle=(d.bestellungen||[]).filter(r=>r.stelle_id).slice().sort((x,y)=>(nm[x.stelle_id]||'').localeCompare(nm[y.stelle_id]||'','de')||String(x.created_at).localeCompare(String(y.created_at)));
+    h+=`<div class="card" style="padding:14px;margin-bottom:14px;"><div style="font-size:12px;font-weight:700;margin-bottom:8px;">📋 Alle Anmeldungen ${dl(d.datum)} — Institution · Gericht · Durchwahl</div>`;
+    if(!alle.length) h+=`<div style="font-size:12px;color:var(--muted);">Noch keine Anmeldungen für diesen Tag.</div>`;
+    else{
+      h+=`<div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Institution</th><th style="text-align:left;">Gericht</th><th>Anz.</th><th style="text-align:left;">Durchwahl / Name</th><th>€</th><th></th></tr></thead><tbody>`;
+      alle.forEach(r=>{
+        const its=(r.items&&r.items.length)?r.items:[{name:'–',anzahl:0}];
+        its.forEach((i,ix)=>{
+          const first=ix===0, last=ix===its.length-1;
+          h+=`<tr style="${r.storniert?'opacity:.45;text-decoration:line-through;':''}${last?'border-bottom:2px solid var(--border);':''}">
+            <td style="font-size:12px;font-weight:700;text-align:left;">${first?escAttr(nm[r.stelle_id]||'?'):''}</td>
+            <td style="font-size:12px;text-align:left;">${escAttr(i.name)}${last&&r.notiz?`<div style="font-size:10.5px;color:var(--muted);">📝 ${escAttr(r.notiz)}</div>`:''}</td>
+            <td style="text-align:center;font-size:12.5px;font-weight:700;">${i.anzahl}×</td>
+            <td style="font-size:12.5px;font-weight:700;text-align:left;">${first?escAttr(r.name):''}${first&&r.zahlung?`<div style="font-size:10px;font-weight:400;color:var(--muted);">${zl[r.zahlung]}</div>`:''}</td>
+            <td style="text-align:center;font-size:12px;">${first?sgFmt(r.summe):''}</td>
+            <td style="text-align:center;">${first?`<button onclick="sgStorno(${r.id},${r.storniert?'false':'true'})" style="background:none;border:none;cursor:pointer;font-size:13px;" title="${r.storniert?'Wiederherstellen':'Stornieren'}">${r.storniert?'↩️':'🗑'}</button>`:''}</td></tr>`;
+        });
+      });
+      h+=`</tbody></table></div>`;
+    }
+    h+=`</div>`;
+  }
   stellen.forEach(s=>{
     const rows=von(s.id), akt=sgAktiv(rows), sum=sgSumme(rows), port=sgPortionen(rows);
     const agg={}; akt.forEach(r=>(r.items||[]).forEach(i=>{ agg[i.name]=(agg[i.name]||0)+i.anzahl; }));
@@ -19016,14 +19040,6 @@ async function sgBestellHtml(){
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${akt.length} Anmeldung(en) · ${sgFmt(sum)} · ${port} Portionen</div>`;
     if(Object.keys(agg).length) h+=`<div style="font-size:12.5px;background:var(--surface-1);border-radius:8px;padding:8px 10px;margin-bottom:8px;">${Object.entries(agg).map(([n,a])=>`<b>${a}×</b> ${escAttr(n)}`).join('<br>')}</div>`;
     if(rows.length){
-      h+=`<div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Name / Durchwahl</th><th style="text-align:left;">Bestellt</th><th>€</th><th></th></tr></thead><tbody>`;
-      rows.forEach(r=>{
-        h+=`<tr style="${r.storniert?'opacity:.45;text-decoration:line-through;':''}"><td style="font-size:12px;">${escAttr(r.name)}${r.zahlung?`<div style="font-size:10px;color:var(--muted);">${zl[r.zahlung]}</div>`:''}</td>
-          <td style="font-size:11.5px;">${(r.items||[]).map(i=>`${i.anzahl}× ${escAttr(i.name)}`).join('<br>')}${r.notiz?`<div style="font-size:10.5px;color:var(--muted);">📝 ${escAttr(r.notiz)}</div>`:''}</td>
-          <td style="text-align:center;font-size:12px;">${sgFmt(r.summe)}</td>
-          <td style="text-align:center;"><button onclick="sgStorno(${r.id},${r.storniert?'false':'true'})" style="background:none;border:none;cursor:pointer;font-size:13px;" title="${r.storniert?'Wiederherstellen':'Stornieren'}">${r.storniert?'↩️':'🗑'}</button></td></tr>`;
-      });
-      h+=`</tbody></table></div>`;
       if(/^stadtgemeinde$/i.test(s.name) && d.datum<=d.heute) h+=`<button onclick="sgUebernehmen(${s.id})" style="width:100%;margin-top:10px;padding:9px;border:1px solid #059669;border-radius:8px;background:#fff;color:#059669;font-size:12.5px;font-weight:600;cursor:pointer;">${port} Portionen + Datum ins Formular übernehmen ↓</button>`;
     } else h+=`<div style="font-size:12px;color:var(--muted);">Noch keine Anmeldungen für diesen Tag.</div>`;
     h+=`<div style="display:flex;gap:6px;margin-top:10px;"><input readonly value="${escAttr(sgLink(s.token))}" onclick="this.select()" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:7px;font-size:11px;box-sizing:border-box;">
