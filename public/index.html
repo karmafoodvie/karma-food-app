@@ -1221,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.139';
+const APP_VERSION = '6.99.140';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5918,6 +5918,7 @@ async function getForecastSettings(storeId){
 function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings){
   let pct = 0;
   const reasons = [];
+  let calText='', calBasis=''; // nur Feiertag/Ferien — für die Tages-Info in der Operations-Ansicht
   // Prozentwert immer mit ausschreiben ("Sommerferien −29%") statt nur das Ereignis zu nennen —
   // sonst ist nicht nachvollziehbar, WARUM ein Vorschlag höher oder niedriger ausfällt.
   const fmtPct=(p)=>!p?'':` ${p>0?'+':'−'}${Math.abs(Math.round(p))}%`;
@@ -5939,6 +5940,7 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
   if(feiertag){
     pct += settings.feiertag_pct;
     reasons.push(`🎉 ${feiertag.label}${fmtPct(settings.feiertag_pct)}`);
+    calText=`🎉 ${feiertag.label}${fmtPct(settings.feiertag_pct)}`;
   }
 
   const ferien = calendarEvents.find(e=>e.event_type==='ferien' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
@@ -5949,6 +5951,8 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
     const fp=fa?fa.pct:settings.ferien_pct;
     pct += fp;
     reasons.push(`🏖️ ${ferien.label}${fmtPct(fp)}${fa?.basis?` (${fa.basis})`:''}`);
+    calText=`🏖️ ${ferien.label}${fmtPct(fp)}`;
+    calBasis=fa?.basis||'';
   }
 
   const sondertag = calendarEvents.find(e=>e.event_type==='sondertag' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
@@ -5956,7 +5960,7 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
     reasons.push(`📌 ${sondertag.label}`);
   }
 
-  return {pct, reason: reasons.join(' · ')};
+  return {pct, reason: reasons.join(' · '), calText, calBasis};
 }
 
 // Ordnet einen (ggf. beschreibenden) Gerichtnamen der generischen Verkaufs-Kategorie zu,
@@ -9996,11 +10000,13 @@ async function renderOrgStoreForecast(){
   // vergangene Termine!). Daher hier hart deckeln, unabhängig vom angezeigten Wochenende.
   const histWeatherTo=(toDate<dateMinusDays(todayStr,2))?toDate:dateMinusDays(todayStr,2);
 
-  const [fcRows, dispRows, weatherHistMap, weatherFutureMap]=await Promise.all([
+  const [fcRows, dispRows, weatherHistMap, weatherFutureMap, orgCalEvents, orgFcSettings]=await Promise.all([
     api(`forecast_qty?store_id=eq.${orgPlanStore}&forecast_date=gte.${histFrom}&forecast_date=lte.${toDate}&select=forecast_date,dish_name,qty,groesse,status,source,changed_by&limit=8000`).catch(()=>[]),
     api(`disposal?store_id=eq.${orgPlanStore}&disposal_date=gte.${histFrom}&select=disposal_date,dish_name,slot,leftover_qty,sold_out_time&limit=8000`).catch(()=>[]),
     (histFrom<=histWeatherTo?fetchHistoricalWeather(orgPlanStore, histFrom, histWeatherTo):Promise.resolve({})).catch(()=>({})),
-    (toDate>=todayStr?fetchWeatherForStore(orgPlanStore, todayStr, toDate):Promise.resolve({})).catch(()=>({}))
+    (toDate>=todayStr?fetchWeatherForStore(orgPlanStore, todayStr, toDate):Promise.resolve({})).catch(()=>({})),
+    getCalendarEvents().catch(()=>[]),
+    getForecastSettings(orgPlanStore).catch(()=>({weather_sunny_pct:0,weather_rain_pct:0,feiertag_pct:0,ferien_pct:0}))
   ]);
   // Wetter für die angezeigte Woche: Vergangenheit aus dem Archiv, heute/Zukunft aus der Vorhersage —
   // damit in der Wochentabelle selbst (nicht nur im "Frühere Termine"-Fenster) das Wetter sichtbar ist.
@@ -10085,8 +10091,12 @@ async function renderOrgStoreForecast(){
       const icon=(t>=22&&(precip??0)<(dw.precipSum!=null?1:30))?'☀️':((precip??0)>=(dw.precipSum!=null?5:60)?'🌧️':'⛅');
       dwBadge=`<div style="font-size:10px;color:var(--muted);font-weight:400;margin-top:2px;white-space:nowrap;">${icon} ${t}°C</div>`;
     }
+    // Ferien-/Feiertags-Abschlag dieses Tages für die gewählte Filiale (inkl. Datenbasis), damit sichtbar
+    // ist, warum die grauen Schätzungen niedriger ausfallen. Ohne Wetter (kommt oben schon als Badge).
+    const calMod=getDayModifiers(dateStr, orgPlanStore, {}, orgCalEvents||[], orgFcSettings);
+    const calBadge=calMod.calText?`<div title="${escAttr(calMod.calBasis||'')}" style="font-size:9.5px;color:#B45309;font-weight:600;line-height:1.25;margin-top:3px;">${calMod.calText}${calMod.calBasis?`<div style="font-size:8.5px;color:var(--muted);font-weight:400;">Basis ${escAttr(calMod.calBasis.split(': ').pop())} %</div>`:''}</div>`:'';
     html+=`<tr style="${isToday?'background:#EFF6FF;':''}">
-      <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}${dwBadge}</td>`;
+      <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}${dwBadge}${calBadge}</td>`;
     cols.forEach((dish,ci)=>{
       if(!dish){ html+='<td style="color:var(--border);">·</td>'; return; }
       const cat=mapDishNameToCategory(dish);
@@ -10244,10 +10254,20 @@ async function renderOrgStoreForecast(){
       // statt als Extra-Zeile) — nutzt die "hist"-Historie, die hier ohnehin schon für die
       // Detailansicht geladen wird. 21.09.26 überarbeitet: Durchschnitt der letzten 3 Termine statt
       // nur des letzten (Tinis eigentliche Logik), Entsorgung/Sold-out über alle 3 gewichtet.
-      const last3Reg=hist.filter(h=>h.qty!=null).slice(0,3);
+      // 21.10.26 (Wunsch Tini): Auch für NEUE Gerichtsnamen (Herbst-Menü) eine Schätzung — dann aus der
+      // Kategorie am selben Wochentag (histWeekday), klar als solche beschriftet. Außerdem wird der
+      // Ferien-/Feiertags-Effekt der Vergleichstage herausgerechnet und der des Zieltags aufgeschlagen
+      // (sonst käme für Herbstferien dieselbe Menge wie an einem normalen Dienstag).
+      let last3Reg=hist.filter(h=>h.qty!=null).slice(0,3);
+      let catFallback=false;
+      if(!last3Reg.length){ last3Reg=histWeekday.filter(h=>h.qty!=null).slice(0,3); catFallback=last3Reg.length>0; }
       let suggRegQty=null, suggRegReason='';
       if(last3Reg.length){
-        const avgQty=last3Reg.reduce((a,h)=>a+h.qty,0)/last3Reg.length;
+        const calT=getDayModifiers(dateStr, orgPlanStore, {}, orgCalEvents||[], orgFcSettings);
+        const avgQty=last3Reg.reduce((a,h)=>{
+          const cp=getDayModifiers(h.date, orgPlanStore, {}, orgCalEvents||[], orgFcSettings).pct;
+          return a+h.qty/Math.max(0.1,1+cp/100);
+        },0)/last3Reg.length*Math.max(0.1,1+calT.pct/100);
         const soldOutN=last3Reg.filter(h=>h.soldOutTime).length;
         const highLeftoverN=last3Reg.filter(h=>(h.leftover||0)>4).length;
         suggRegQty=avgQty;
@@ -10256,6 +10276,9 @@ async function renderOrgStoreForecast(){
         else if(highLeftoverN>=2){ suggRegQty=Math.max(0.25,Math.round((avgQty-0.5)*4)/4); suggRegReason=`meist viel übrig (Ø letzte ${last3Reg.length})`; }
         else if(highLeftoverN===1){ suggRegQty=Math.max(0.25,Math.round((avgQty-0.25)*4)/4); suggRegReason=`teils viel übrig (Ø letzte ${last3Reg.length})`; }
         else { suggRegQty=Math.round(avgQty*4)/4; suggRegReason=`Ø letzte ${last3Reg.length} Termine`; }
+        suggRegQty=Math.max(0.25,suggRegQty);
+        if(catFallback) suggRegReason=`anderes Gericht, Kategorie ${cat}, gleicher Wochentag: ${suggRegReason}`;
+        if(calT.pct!==0) suggRegReason+=` · ${calT.calText||('Kalender '+calT.pct+'%')}`;
       }
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         ${dishLabelHtml}
