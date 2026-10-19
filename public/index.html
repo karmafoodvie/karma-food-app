@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.160';
+const APP_VERSION = '6.99.161';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -19028,26 +19028,17 @@ async function sgBestellHtml(){
         });
       });
       h+=`</tbody></table></div>`;
+      const sg=stellen.find(s=>/^stadtgemeinde$/i.test(s.name));
+      if(sg && d.datum<=d.heute && sgAktiv(von(sg.id)).length) h+=`<button onclick="sgUebernehmen(${sg.id})" style="width:100%;margin-top:10px;padding:9px;border:1px solid #059669;border-radius:8px;background:#fff;color:#059669;font-size:12.5px;font-weight:600;cursor:pointer;">Stadtgemeinde: ${sgPortionen(von(sg.id))} Portionen + Datum ins Formular oben übernehmen ↑</button>`;
     }
     h+=`</div>`;
   }
-  stellen.forEach(s=>{
-    const rows=von(s.id), akt=sgAktiv(rows), sum=sgSumme(rows), port=sgPortionen(rows);
-    const agg={}; akt.forEach(r=>(r.items||[]).forEach(i=>{ agg[i.name]=(agg[i.name]||0)+i.anzahl; }));
-    h+=`<div class="card" style="padding:14px;margin-bottom:14px;${s.aktiv?'':'opacity:.6;'}">
-      <div style="font-size:12.5px;font-weight:700;margin-bottom:2px;">${escAttr(s.name)}${s.aktiv?'':' (pausiert)'}</div>
-      <div style="font-size:11.5px;margin-bottom:4px;">${s.adresse?`📍 ${escAttr(s.adresse)}`:`<span style="color:#B45309;">⚠️ Adresse fehlt</span>`} <a onclick="sgAdresse(${s.id},'${escForInlineHandler(s.adresse||'')}')" style="color:var(--muted);cursor:pointer;">✏️</a></div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${akt.length} Anmeldung(en) · ${sgFmt(sum)} · ${port} Portionen</div>`;
-    if(Object.keys(agg).length) h+=`<div style="font-size:12.5px;background:var(--surface-1);border-radius:8px;padding:8px 10px;margin-bottom:8px;">${Object.entries(agg).map(([n,a])=>`<b>${a}×</b> ${escAttr(n)}`).join('<br>')}</div>`;
-    if(rows.length){
-      if(/^stadtgemeinde$/i.test(s.name) && d.datum<=d.heute) h+=`<button onclick="sgUebernehmen(${s.id})" style="width:100%;margin-top:10px;padding:9px;border:1px solid #059669;border-radius:8px;background:#fff;color:#059669;font-size:12.5px;font-weight:600;cursor:pointer;">${port} Portionen + Datum ins Formular übernehmen ↓</button>`;
-    } else h+=`<div style="font-size:12px;color:var(--muted);">Noch keine Anmeldungen für diesen Tag.</div>`;
-    h+=`<div style="display:flex;gap:10px;margin-top:8px;font-size:11px;"><a onclick="sgStelleAktiv(${s.id},${!s.aktiv})" style="color:var(--muted);cursor:pointer;">${s.aktiv?'⏸ pausieren':'▶ wieder aktivieren'}</a></div></div>`;
-  });
   // Einstellungen
   const st=(d.config.stufen||[]).slice().sort((a,b)=>a.ab<b.ab?-1:1);
   h+=`<details class="card" style="padding:14px;margin-bottom:14px;"><summary style="font-size:12px;font-weight:700;cursor:pointer;">⚙️ Einstellungen (Bestellstellen, Mindestbetrag, Preise, Schluss)</summary>
-    <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Neue Bestellstelle (bekommt einen eigenen Link)</div>
+    <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Bestellstellen (Adresse für die Lieferung)</div>
+    ${stellen.map(s=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;${s.aktiv?'':'opacity:.55;'}"><b style="min-width:92px;">${escAttr(s.name)}</b><span style="flex:1;min-width:0;">${s.adresse?`📍 ${escAttr(s.adresse)}`:`<span style="color:#B45309;">⚠️ Adresse fehlt</span>`} <a onclick="sgAdresse(${s.id},'${escForInlineHandler(s.adresse||'')}')" style="color:var(--muted);cursor:pointer;">✏️</a></span><a onclick="sgStelleAktiv(${s.id},${!s.aktiv})" style="color:var(--muted);cursor:pointer;white-space:nowrap;">${s.aktiv?'⏸ pausieren':'▶ aktivieren'}</a></div>`).join('')}
+    <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Neue Bestellstelle</div>
     <div style="display:flex;gap:6px;"><input id="sgc-neu" placeholder="Name der Bestellstelle" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"><button onclick="sgStelleNeu()" style="padding:7px 10px;border:none;border-radius:7px;background:#059669;color:#fff;font-size:12px;cursor:pointer;">Anlegen</button></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
       <div style="flex:1;min-width:110px;"><label style="font-size:10px;color:var(--muted);display:block;">Mindestbetrag € (Standard)</label><input id="sgc-min" type="number" step="0.5" value="${d.config.min_betrag}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div>
@@ -19107,9 +19098,8 @@ window.sgStelleNeu=sgStelleNeu; window.sgStelleAktiv=sgStelleAktiv; window.sgTok
 
 async function stadtgemeindeBodyHtml(){
   const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
-  let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Bestellte Portionen und Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
-  html+=await sgBestellHtml();
-  // Neuer Eintrag
+  let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Bestellte Portionen und Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag oben (manuell), dann die Anmeldungen per Link, darunter die Übersicht nach Monat.</div>`;
+  // Neuer Eintrag (manuell — aktuell trägt Everton die Menge/Zahlung selbst ein)
   const heute=new Date().toISOString().split('T')[0];
   html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
     <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neuer Eintrag</div>
@@ -19133,6 +19123,7 @@ async function stadtgemeindeBodyHtml(){
     </div>
     <button onclick="addStadtgemeindeZahlung()" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Speichern ✓</button>
   </div>`;
+  html+=await sgBestellHtml();
 
   // Nach Monat gruppieren, wie im Sheet — neuester Monat zuerst
   const byMonat={};
