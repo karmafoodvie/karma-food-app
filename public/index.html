@@ -1221,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.141';
+const APP_VERSION = '6.99.142';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18787,16 +18787,23 @@ window.closeZutatenManager=closeZutatenManager;
 let teamTab='sweets';
 function switchTeamTab(t){ teamTab=t; renderSweets(); }
 
+// Seite ist an zwei Stellen erreichbar (eigene Ansicht + Reiter im Everton-Bereich) — neu laden, wo man gerade ist
+function sgRefresh(){
+  if(teamTab==='stadtgemeinde' && document.getElementById('v-sweets')?.classList.contains('show')) renderSweets();
+  else renderStadtgemeinde();
+}
 async function addStadtgemeindeZahlung(){
   const datum=document.getElementById('sg-datum')?.value;
   const sodexo=parseFloat(document.getElementById('sg-sodexo')?.value||'0')||0;
   const cash=parseFloat(document.getElementById('sg-cash')?.value||'0')||0;
   if(!datum){ showToast('Bitte ein Datum wählen',true); return; }
-  if(sodexo===0 && cash===0){ showToast('Bitte einen Betrag eintragen',true); return; }
+  const portionen=parseInt(document.getElementById('sg-portionen')?.value||'',10);
+  const hatPortionen=Number.isFinite(portionen)&&portionen>0;
+  if(sodexo===0 && cash===0 && !hatPortionen){ showToast('Bitte Portionen oder einen Betrag eintragen',true); return; }
   try{
-    await api('stadtgemeinde_zahlungen',{method:'POST',body:JSON.stringify([{datum,sodexo_pluxee:sodexo,cash}])});
+    await api('stadtgemeinde_zahlungen',{method:'POST',body:JSON.stringify([{datum,sodexo_pluxee:sodexo,cash,portionen:hatPortionen?portionen:null}])});
     showToast('✓ Gespeichert');
-    renderStadtgemeinde();
+    sgRefresh();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.addStadtgemeindeZahlung=addStadtgemeindeZahlung;
@@ -18805,7 +18812,7 @@ async function deleteStadtgemeindeZahlung(id){
   if(!confirm('Diesen Eintrag wirklich löschen?')) return;
   try{
     await api(`stadtgemeinde_zahlungen?id=eq.${id}`,{method:'DELETE'});
-    renderStadtgemeinde();
+    sgRefresh();
   }catch(e){console.error(e);showToast('Fehler beim Löschen: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.deleteStadtgemeindeZahlung=deleteStadtgemeindeZahlung;
@@ -18930,15 +18937,19 @@ window.toggleArtikelFreigabe=toggleArtikelFreigabe;
 
 async function stadtgemeindeBodyHtml(){
   const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
-  let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
+  let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Bestellte Portionen und Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
   // Neuer Eintrag
   const heute=new Date().toISOString().split('T')[0];
   html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
-    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neue Zahlung</div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neuer Eintrag</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <div style="flex:1;min-width:110px;">
         <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Datum</label>
         <input type="date" id="sg-datum" value="${heute}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+      </div>
+      <div style="flex:1;min-width:90px;">
+        <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Portionen bestellt</label>
+        <input type="number" step="1" min="0" inputmode="numeric" id="sg-portionen" placeholder="0" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
       </div>
       <div style="flex:1;min-width:90px;">
         <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">Sodexo/Pluxee €</label>
@@ -18967,15 +18978,17 @@ async function stadtgemeindeBodyHtml(){
     const einträge=byMonat[m].sort((a,b)=>b.datum.localeCompare(a.datum));
     const monatLabel=new Date(m+'-01').toLocaleDateString('de-AT',{month:'long',year:'numeric'});
     const monatSumme=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
-    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;">${monatLabel} — Σ €${monatSumme.toFixed(2)}</div>`;
+    const monatPort=einträge.reduce((s,r)=>s+(r.portionen||0),0);
+    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;">${monatLabel} — Σ €${monatSumme.toFixed(2)}${monatPort?` · ${monatPort} Portionen`:''}</div>`;
     html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
-      <th style="text-align:left;">Datum</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
+      <th style="text-align:left;">Datum</th><th>Portionen</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
     </tr></thead><tbody>`;
     einträge.forEach(r=>{
       const total=(r.sodexo_pluxee||0)+(r.cash||0);
       const dl=new Date(r.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
       html+=`<tr>
         <td style="font-size:12px;">${dl}</td>
+        <td style="text-align:center;font-size:12px;font-weight:600;">${r.portionen??'–'}</td>
         <td style="text-align:center;font-size:12px;">€${(r.sodexo_pluxee||0).toFixed(2)}</td>
         <td style="text-align:center;font-size:12px;">€${(r.cash||0).toFixed(2)}</td>
         <td style="text-align:center;font-size:12px;font-weight:700;color:#059669;">€${total.toFixed(2)}</td>
@@ -19852,7 +19865,7 @@ async function renderSweets(){
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Rezepte')}${ttab('grundreinigung','🧹 Grundreinigung')}${ttab('bestellen','📦 Bestellen')}</div>`;
+  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Rezepte')}${ttab('grundreinigung','🧹 Grundreinigung')}${ttab('bestellen','📦 Bestellen')}${ttab('stadtgemeinde','🏛️ Stadtgemeinde')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   // WICHTIG (korrigiert): Anders als beim Transporter packt das Sweets-Team AM SELBEN TAG ein
@@ -19873,6 +19886,13 @@ async function renderSweets(){
   const sweetsDateLabel=sweetsViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
 
   let html=tabsHtml;
+
+  if(teamTab==='stadtgemeinde'){
+    html+=await stadtgemeindeBodyHtml();
+    el.innerHTML=html;
+    translateEl(el);
+    return;
+  }
 
   if(teamTab==='grundreinigung'){
     html+=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Tiefenreinigung Stores — Fälligkeit alle ${GRUNDREINIGUNG_TAGE_FAELLIG} Tage.</div>`;
