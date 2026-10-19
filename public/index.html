@@ -171,6 +171,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
      Erreichbar über ?feedback=1 in der URL, z.B. als Shopify-Button verlinkt. Bewusst KEINE
      Personendaten (kein Name/E-Mail/Login) — nur Bewertung + optionale Tags + optionaler Kommentar. -->
 <div id="public-feedback" style="display:none;min-height:100vh;background:#1a1a18;"></div>
+<!-- ÖFFENTLICHE STADTGEMEINDE-ANMELDUNG (19.10.26) — ?bestellen=1&k=TOKEN, ohne Login. Schreibt nur über die Edge Function. -->
+<div id="public-bestellen" style="display:none;min-height:100vh;background:#1a1a18;"></div>
 
 <div id="app" style="display:none;flex-direction:column;min-height:100vh;">
   <div id="topbar">
@@ -1221,7 +1223,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.142';
+const APP_VERSION = '6.99.143';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1772,6 +1774,11 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('login-screen').style.display='none';
     document.getElementById('public-feedback').style.display='block';
     renderPublicFeedback();
+  }
+  if(_params.get('bestellen')==='1'){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('public-bestellen').style.display='block';
+    renderPublicBestellen();
   }
 });
 
@@ -18935,9 +18942,182 @@ async function toggleArtikelFreigabe(articleId, storeId, currentlyFreigegeben){
 }
 window.toggleArtikelFreigabe=toggleArtikelFreigabe;
 
+// ==== STADTGEMEINDE-ANMELDUNG (19.10.26) ====
+// Öffentliche Seite ?bestellen=1&k=TOKEN: Mitarbeitende der Stadtgemeinde melden sich bis zum
+// Anmeldeschluss (Standard 11:45) für die Lieferung an. Schreiben/Lesen läuft NUR über die Edge
+// Function 'stadtgemeinde-bestellung' (Tabellen sind per RLS gesperrt; Schluss, Mindestbetrag über alle
+// Anmeldungen eines Tages und Preise gelten serverseitig). Die App (Everton) sieht die Liste im Reiter
+// Stadtgemeinde. Der Mindestbetrag ist eine Einstellung (inkl. Stufen "ab Datum"), kein Code.
+const SG_FN = `${SUPABASE_URL}/functions/v1/stadtgemeinde-bestellung`;
+const SG_HDR = {'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'};
+const SG_SLOT_LABEL = {gericht1:'Gericht 1', gericht2:'Gericht 2', gericht3:'Gericht 3', salat:'Salat'};
+const sgFmt = n => (Math.round(Number(n)*100)/100).toFixed(2).replace('.',',')+' €';
+async function sgCall(qs, body){
+  const r = await fetch(SG_FN+(qs||''), body?{method:'POST',headers:SG_HDR,body:JSON.stringify(body)}:{headers:SG_HDR});
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||('Fehler '+r.status));
+  return d;
+}
+
+// ---- Öffentliche Anmeldeseite ----
+let _sbInfo=null, _sbMenu=[], _sbCart={}, _sbToken='';
+async function renderPublicBestellen(){
+  const el=document.getElementById('public-bestellen');
+  _sbToken=new URLSearchParams(location.search).get('k')||'';
+  _sbCart={};
+  const shell=inner=>{ el.innerHTML=`<div style="max-width:480px;margin:0 auto;padding:28px 18px 40px;min-height:100vh;box-sizing:border-box;">
+    <div style="text-align:center;margin-bottom:22px;">
+      <div style="color:#D4FF3F;font-family:'Boldonse',sans-serif;font-weight:400;font-size:22px;letter-spacing:1px;">KARMA FOOD</div>
+      <div style="color:#fff;font-size:14px;margin-top:6px;opacity:0.85;">Lieferung Stadtgemeinde 🛵</div>
+    </div>${inner}</div>`; };
+  shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;color:#666;font-size:13px;">Wird geladen…</div>`);
+  try{
+    _sbInfo=await sgCall(`?k=${encodeURIComponent(_sbToken)}`);
+  }catch(e){
+    shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;font-size:14px;">Dieser Link ist nicht gültig. Bitte den aktuellen Link von uns verwenden.</div>`);
+    return;
+  }
+  try{ await loadMenuTausch(); await applyMenuOverrides(); }catch(e){ console.error(e); }
+  const preise=_sbInfo.preise||{};
+  _sbMenu=getMenuForDate(_sbInfo.datum).filter(e=>preise[e.slot]>0 && SG_SLOT_LABEL[e.slot]);
+  if(!_sbInfo.offen){
+    shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;">
+      <div style="font-size:34px;margin-bottom:8px;">⏰</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Anmeldung für heute geschlossen</div>
+      <div style="font-size:13px;color:#666;">${escAttr(_sbInfo.grund||'')}<br>Am nächsten Liefertag geht's wieder bis ${escAttr(_sbInfo.cutoff)} Uhr.</div></div>`);
+    return;
+  }
+  if(!_sbMenu.length){
+    shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;font-size:14px;">Die Anmeldung wird gerade eingerichtet. Bitte später nochmal versuchen.</div>`);
+    return;
+  }
+  sbDraw(shell);
+}
+function sbCartSum(){ return _sbMenu.reduce((s,e)=>s+(_sbCart[e.slot]||0)*(_sbInfo.preise[e.slot]||0),0); }
+function sbDraw(shell){
+  shell=shell||(inner=>{ const w=document.querySelector('#public-bestellen > div'); if(w){ const h=w.firstElementChild.outerHTML; w.innerHTML=h+inner; } });
+  const min=_sbInfo.min, bisher=_sbInfo.summe_heute, mein=sbCartSum();
+  const gesamt=bisher+mein, pct=Math.min(100,Math.round(gesamt/min*100)), ok=gesamt>=min;
+  const rows=_sbMenu.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #eee;">
+    <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#222;">${escAttr(e.name)}</div>
+      <div style="font-size:11.5px;color:#888;">${SG_SLOT_LABEL[e.slot]} · ${sgFmt(_sbInfo.preise[e.slot])}</div></div>
+    <button onclick="sbChg('${e.slot}',-1)" style="width:34px;height:34px;border-radius:50%;border:1px solid #ddd;background:#fff;font-size:18px;cursor:pointer;">−</button>
+    <div style="width:22px;text-align:center;font-size:15px;font-weight:700;">${_sbCart[e.slot]||0}</div>
+    <button onclick="sbChg('${e.slot}',1)" style="width:34px;height:34px;border-radius:50%;border:none;background:#D4FF3F;font-size:18px;font-weight:700;cursor:pointer;">+</button></div>`).join('');
+  const keepName=document.getElementById('sb-name')?.value||'', keepZ=document.querySelector('input[name=sb-z]:checked')?.value||'';
+  shell(`<div style="background:#fff;border-radius:18px;padding:20px 18px;">
+    <div style="font-size:12px;color:#666;margin-bottom:8px;">Anmeldung bis <b>${escAttr(_sbInfo.cutoff)} Uhr</b>. Wir liefern ab einem Gesamt-Bestellwert von <b>${sgFmt(min)}</b> (alle Anmeldungen von heute zusammen).</div>
+    <div style="background:#f4f4f1;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px;"><span>Heute bisher (inkl. deiner Auswahl)</span><b>${sgFmt(gesamt)}</b></div>
+      <div style="height:8px;background:#e3e3df;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${ok?'#1D9E75':'#E94E1B'};"></div></div>
+      <div style="font-size:12px;margin-top:6px;color:${ok?'#1D9E75':'#B4380F'};font-weight:600;">${ok?'Lieferung steht ✓':`Noch ${sgFmt(min-gesamt)} bis zur Lieferung — frag gern Kolleg:innen!`}</div></div>
+    ${rows}
+    <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin:12px 0;"><span>Deine Bestellung</span><span>${sgFmt(mein)}</span></div>
+    <input id="sb-name" value="${escAttr(keepName)}" placeholder="Dein Name (z.B. Vorname + Abteilung)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:10px;">
+    <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;color:#444;">
+      <label><input type="radio" name="sb-z" value="sodexo" ${keepZ==='sodexo'?'checked':''}> Sodexo/Pluxee</label>
+      <label><input type="radio" name="sb-z" value="bar" ${keepZ==='bar'?'checked':''}> Bar</label></div>
+    <button id="sb-send" onclick="sbSubmit()" ${mein>0?'':'disabled'} style="width:100%;padding:13px;border:none;border-radius:10px;background:${mein>0?'#1a1a18':'#bbb'};color:#D4FF3F;font-size:14px;font-weight:700;cursor:pointer;">Verbindlich anmelden</button>
+    <div id="sb-err" style="color:#B4380F;font-size:12px;text-align:center;margin-top:8px;"></div>
+  </div>`);
+}
+function sbChg(slot,d){ _sbCart[slot]=Math.max(0,Math.min(20,(_sbCart[slot]||0)+d)); sbDraw(); }
+async function sbSubmit(){
+  const name=document.getElementById('sb-name').value.trim();
+  const err=document.getElementById('sb-err');
+  if(name.length<2){ err.textContent='Bitte einen Namen angeben.'; return; }
+  const items=_sbMenu.filter(e=>_sbCart[e.slot]>0).map(e=>({slot:e.slot,name:e.name,anzahl:_sbCart[e.slot]}));
+  if(!items.length) return;
+  const z=document.querySelector('input[name=sb-z]:checked')?.value||null;
+  const btn=document.getElementById('sb-send'); btn.disabled=true; btn.textContent='Wird gesendet…';
+  try{
+    const r=await sgCall('',{k:_sbToken,name,items,zahlung:z});
+    const w=document.querySelector('#public-bestellen > div'); const h=w.firstElementChild.outerHTML;
+    w.innerHTML=h+`<div style="background:#fff;border-radius:18px;padding:24px 18px;text-align:center;">
+      <div style="font-size:36px;margin-bottom:6px;">✅</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Danke, ${escAttr(name)}!</div>
+      <div style="font-size:13px;color:#444;margin-bottom:10px;">${items.map(i=>`${i.anzahl}× ${escAttr(i.name)}`).join('<br>')}<br><b>${sgFmt(r.summe)}</b></div>
+      <div style="font-size:13px;font-weight:600;color:${r.lieferbar?'#1D9E75':'#B4380F'};">${r.lieferbar?'Die Lieferung für heute steht ✓':`Aktuell ${sgFmt(r.summe_heute)} von ${sgFmt(r.min)} — es fehlen noch ${sgFmt(r.min-r.summe_heute)}.`}</div>
+      <button onclick="renderPublicBestellen()" style="margin-top:16px;padding:10px 16px;border:1px solid #ddd;border-radius:9px;background:#fff;font-size:13px;cursor:pointer;">Noch eine Anmeldung</button></div>`;
+  }catch(e){ err.textContent=e.message; btn.disabled=false; btn.textContent='Verbindlich anmelden'; }
+}
+window.renderPublicBestellen=renderPublicBestellen; window.sbChg=sbChg; window.sbSubmit=sbSubmit;
+
+// ---- App-Seite (Everton): Liste heute + Einstellungen ----
+let _sgListe=null;
+function sgPortionen(rows){ return (rows||[]).filter(r=>!r.storniert).reduce((s,r)=>s+(r.items||[]).reduce((a,i)=>a+(i.anzahl||0),0),0); }
+async function sgBestellHtml(){
+  let d;
+  try{ d=await sgCall('?action=list'); }catch(e){ return `<div class="card" style="padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);">Anmeldungen konnten nicht geladen werden (${escAttr(e.message)}).</div>`; }
+  _sgListe=d;
+  const rows=d.bestellungen||[], aktiv=rows.filter(r=>!r.storniert);
+  const summe=aktiv.reduce((s,r)=>s+Number(r.summe),0), min=d.min_heute, ok=summe>=min;
+  const port=sgPortionen(rows);
+  const agg={}; aktiv.forEach(r=>(r.items||[]).forEach(i=>{ agg[i.name]=(agg[i.name]||0)+i.anzahl; }));
+  const link=`${location.origin}/?bestellen=1&k=${d.config.token}`;
+  const zl={sodexo:'Sodexo',bar:'Bar'};
+  let h=`<div class="card" style="padding:14px;margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="font-size:12px;font-weight:700;">📥 Anmeldungen heute</div>
+      <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:${ok?'#DCFCE7':'#FEE2E2'};color:${ok?'#166534':'#991B1B'};">${ok?'Lieferung steht ✓':`noch ${sgFmt(min-summe)} bis ${sgFmt(min)}`}</span></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${aktiv.length} Anmeldung(en) · ${sgFmt(summe)} · ${port} Portionen · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div>`;
+  if(Object.keys(agg).length) h+=`<div style="font-size:12.5px;background:var(--surface-1);border-radius:8px;padding:8px 10px;margin-bottom:8px;">${Object.entries(agg).map(([n,a])=>`<b>${a}×</b> ${escAttr(n)}`).join('<br>')}</div>`;
+  if(rows.length){
+    h+=`<div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Name</th><th style="text-align:left;">Bestellt</th><th>€</th><th></th></tr></thead><tbody>`;
+    rows.forEach(r=>{
+      h+=`<tr style="${r.storniert?'opacity:.45;text-decoration:line-through;':''}"><td style="font-size:12px;">${escAttr(r.name)}${r.zahlung?`<div style="font-size:10px;color:var(--muted);">${zl[r.zahlung]}</div>`:''}</td>
+        <td style="font-size:11.5px;">${(r.items||[]).map(i=>`${i.anzahl}× ${escAttr(i.name)}`).join('<br>')}</td>
+        <td style="text-align:center;font-size:12px;">${sgFmt(r.summe)}</td>
+        <td style="text-align:center;"><button onclick="sgStorno(${r.id},${r.storniert?'false':'true'})" style="background:none;border:none;cursor:pointer;font-size:13px;" title="${r.storniert?'Wiederherstellen':'Stornieren'}">${r.storniert?'↩️':'🗑'}</button></td></tr>`;
+    });
+    h+=`</tbody></table></div>
+    <button onclick="sgUebernehmen()" style="width:100%;margin-top:10px;padding:9px;border:1px solid #059669;border-radius:8px;background:#fff;color:#059669;font-size:12.5px;font-weight:600;cursor:pointer;">${port} Portionen + Datum ins Formular übernehmen ↓</button>`;
+  } else h+=`<div style="font-size:12px;color:var(--muted);">Noch keine Anmeldungen heute.</div>`;
+  h+=`<div style="display:flex;gap:6px;margin-top:10px;"><input readonly value="${escAttr(link)}" onclick="this.select()" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:7px;font-size:11px;box-sizing:border-box;">
+    <button onclick="sgCopyLink()" style="padding:7px 10px;border:none;border-radius:7px;background:#059669;color:#fff;font-size:12px;cursor:pointer;">Link kopieren</button></div>`;
+  // Einstellungen
+  const st=(d.config.stufen||[]).slice().sort((a,b)=>a.ab<b.ab?-1:1);
+  const P=d.config.preise||{};
+  h+=`<details style="margin-top:12px;"><summary style="font-size:12px;font-weight:700;cursor:pointer;">⚙️ Einstellungen (Mindestbetrag, Preise, Schluss)</summary>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <div style="flex:1;min-width:110px;"><label style="font-size:10px;color:var(--muted);display:block;">Mindestbetrag € (Standard)</label><input id="sgc-min" type="number" step="0.5" value="${d.config.min_betrag}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div>
+      <div style="flex:1;min-width:110px;"><label style="font-size:10px;color:var(--muted);display:block;">Anmeldeschluss (hh:mm)</label><input id="sgc-cut" value="${escAttr(d.config.cutoff)}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div></div>
+    <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Stufen — ab diesem Datum gilt dieser Mindestbetrag (z.B. ab 01.12. → 35 €). Eine Zeile pro Stufe: <code>2026-12-01=35</code></div>
+    <textarea id="sgc-stufen" rows="3" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;font-size:12px;">${st.map(s=>`${s.ab}=${s.betrag}`).join('\n')}</textarea>
+    <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Preise pro Gericht (€) — nur Gerichte mit Preis erscheinen auf der Seite:</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">${Object.keys(SG_SLOT_LABEL).map(k=>`<div style="flex:1;min-width:80px;"><label style="font-size:10px;color:var(--muted);display:block;">${SG_SLOT_LABEL[k]}</label><input id="sgc-p-${k}" type="number" step="0.1" value="${P[k]??''}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div>`).join('')}</div>
+    <button onclick="sgSaveConfig()" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">Einstellungen speichern ✓</button></details></div>`;
+  return h;
+}
+function sgRefreshAfter(){ if(typeof sgRefresh==='function') sgRefresh(); }
+async function sgStorno(id,storno){
+  if(storno && !confirm('Diese Anmeldung stornieren?')) return;
+  try{ await sgCall('',{action:storno?'storno':'wiederherstellen',id}); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); }
+}
+function sgCopyLink(){
+  const link=`${location.origin}/?bestellen=1&k=${_sgListe?.config?.token||''}`;
+  (navigator.clipboard?.writeText(link)||Promise.reject()).then(()=>showToast('✓ Link kopiert')).catch(()=>showToast('Bitte den Link im Feld markieren und kopieren',true));
+}
+function sgUebernehmen(){
+  const p=document.getElementById('sg-portionen'), d=document.getElementById('sg-datum');
+  if(p) p.value=sgPortionen(_sgListe?.bestellungen); if(d && _sgListe?.datum) d.value=_sgListe.datum;
+  p?.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function sgSaveConfig(){
+  const stufen=(document.getElementById('sgc-stufen').value||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{ const [ab,b]=l.split('='); return {ab:(ab||'').trim(),betrag:Number((b||'').replace(',','.'))}; });
+  if(stufen.some(s=>!/^\d{4}-\d\d-\d\d$/.test(s.ab)||!(s.betrag>=0))){ showToast('Stufen bitte als 2026-12-01=35 eintragen',true); return; }
+  const preise={}; Object.keys(SG_SLOT_LABEL).forEach(k=>{ const v=parseFloat(document.getElementById('sgc-p-'+k).value); if(v>0) preise[k]=v; });
+  try{
+    await sgCall('',{action:'config',min_betrag:parseFloat(document.getElementById('sgc-min').value),cutoff:document.getElementById('sgc-cut').value.trim(),stufen,preise});
+    showToast('✓ Gespeichert'); sgRefreshAfter();
+  }catch(e){ showToast('Fehler: '+e.message,true); }
+}
+window.sgStorno=sgStorno; window.sgCopyLink=sgCopyLink; window.sgUebernehmen=sgUebernehmen; window.sgSaveConfig=sgSaveConfig;
+
 async function stadtgemeindeBodyHtml(){
   const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
   let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Bestellte Portionen und Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag unten, Übersicht nach Monat darunter.</div>`;
+  html+=await sgBestellHtml();
   // Neuer Eintrag
   const heute=new Date().toISOString().split('T')[0];
   html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
@@ -20239,7 +20419,7 @@ window.addEventListener('online',()=>{});
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
 // nicht URL-spezifisch) automatisch einloggen und die interne App zeigen, obwohl Kund:innen nur
 // das Feedback-Formular sehen sollen. Bug gefunden 20.08.26 — initLogin() lief bisher immer.
-const _isPublicFeedbackRoute = new URLSearchParams(window.location.search).get('feedback')==='1';
+const _isPublicFeedbackRoute = new URLSearchParams(window.location.search).get('feedback')==='1' || new URLSearchParams(window.location.search).get('bestellen')==='1';
 if(!_isPublicFeedbackRoute){
   initLogin().catch(console.error);
 }
