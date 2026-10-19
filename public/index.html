@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.243';
+const APP_VERSION='6.99.244';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10935,6 +10935,7 @@ async function renderOrgStoreForecast(){
     <thead><tr><th style="text-align:left;font-size:10.5px;">Tag</th>${isHerbstWeek?'':'<th style="font-size:10.5px;">Salat</th>'}<th style="font-size:10.5px;">Gericht 1</th><th style="font-size:10.5px;">Gericht 2</th>${isHerbstWeek?'<th style="font-size:10.5px;">Gericht 3</th>':''}<th style="font-size:10.5px;">Reis</th></tr></thead><tbody>`;
 
   window._orgDetailData={};
+  const orgEstLogRows=[]; // Schätzungen dieser Ansicht -> forecast_suggestion_log (einmalig je Filiale/Tag/Gericht)
   for(let d=1; d<=5; d++){
     const dateStr=wd[d];
     const wdStr=WEEKDAYS[d-1]?.k;
@@ -11143,12 +11144,13 @@ async function renderOrgStoreForecast(){
         if(catFallback) suggRegReason=`anderes Gericht, Kategorie ${cat}, gleicher Wochentag: ${suggRegReason}`;
         if(calT.pct!==0) suggRegReason+=` · ${calT.calText||('Kalender '+calT.pct+'%')}`;
       }
+      if(suggRegQty!=null && dateStr>todayStr) orgEstLogRows.push({store_id:orgPlanStore, forecast_date:dateStr, dish_name:dish, category:cat, suggested_qty:suggRegQty, suggestion_reason:suggRegReason.slice(0,500)});
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         ${dishLabelHtml}
         <input type="text" inputmode="decimal" step="0.25" value="${cur!=null?cur:''}" placeholder="${suggRegQty!=null?formatQty(suggRegQty):'–'}" title="${suggRegQty!=null?escAttr('KI-Schätzung: '+formatQty(suggRegQty)+' ('+suggRegReason+')'):''}"
-          data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg=""
+          data-store="${orgPlanStore}" data-dish="${escAttr(dish)}" data-date="${dateStr}" data-sugg="${suggRegQty!=null?suggRegQty:''}"
           data-orig-source="${src||''}"
-          oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this))" onchange="updateForecastQtyOrg(this)"
+          oninput="debounceFieldSave(this,()=>updateForecastQtyOrg(this,true))" onchange="updateForecastQtyOrg(this)"
           style="width:52px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:13.5px;font-weight:${isStore?'700':'400'};padding:5px 2px;background:${bBg};">
         ${srcLbl}
         ${dispLine}
@@ -11165,6 +11167,12 @@ async function renderOrgStoreForecast(){
   </div>`;
 
   target.innerHTML=html;
+  // Einfrieren: was die App zum Planungszeitpunkt geschätzt hat (ignore-duplicates = erste Schätzung zählt).
+  // Läuft im Hintergrund, blockiert die Anzeige nicht. Grundlage für den Rückwärts-Test und das Lernen.
+  if(orgEstLogRows.length){
+    api('forecast_suggestion_log?on_conflict=store_id,forecast_date,dish_name',{method:'POST',headers:{'Prefer':'resolution=ignore-duplicates'},body:JSON.stringify(orgEstLogRows)})
+      .catch(e=>console.error('Schätzungs-Protokoll fehlgeschlagen:', e));
+  }
   translateEl(target);
 }
 window.renderOrgStoreForecast=renderOrgStoreForecast;
@@ -11835,7 +11843,7 @@ async function renderOrgForecast(){
   }
 }
 
-async function updateForecastQtyOrg(inputEl){
+async function updateForecastQtyOrg(inputEl, silent){
   const storeId=inputEl.dataset.store;
   const dish=inputEl.dataset.dish;
   const dateStr=inputEl.dataset.date;
@@ -11862,7 +11870,10 @@ async function updateForecastQtyOrg(inputEl){
   // Bei deutlicher Abweichung vom Vorschlag (>25%) nach dem Grund fragen — optional, ein Klick.
   // Genau diese Gründe sind später die wertvollsten Daten für den Lernprozess.
   let reason=null;
-  if(status==='angepasst' && suggested!=null && suggested>0 && Math.abs(qty-suggested)/suggested>0.25){
+  // silent=true: Zwischenspeichern während des Tippens (Debounce) — dort NICHT nach dem Grund fragen,
+  // sonst poppt die Abfrage mitten im Eintippen auf (z.B. bei "0" auf dem Weg zu "0,75"). Gefragt wird
+  // erst beim Verlassen des Feldes (change-Ereignis).
+  if(!silent && status==='angepasst' && suggested!=null && suggested>0 && Math.abs(qty-suggested)/suggested>0.25){
     reason=await askForecastChangeReason(dish, suggested, qty);
   }
   try{
@@ -11891,7 +11902,8 @@ window.updateForecastQtyOrg=updateForecastQtyOrg;
 const FORECAST_CHANGE_REASONS=[
   'Erwarte mehr Nachfrage','Erwarte weniger Nachfrage','Veranstaltung in der Nähe',
   'Besondere Situation im Store','Vorbestellung','Erfahrungswert des Teams',
-  'Wetter','Ferien / Feiertag','Sonstiger Grund'
+  'Wetter','Ferien / Feiertag','Letzte Woche zu viel übrig','Letzte Woche ausverkauft',
+  'Gericht beliebt / unbeliebt','Personal / Schicht','Sonstiger Grund'
 ];
 function askForecastChangeReason(dish, suggested, actual){
   return new Promise(resolve=>{
