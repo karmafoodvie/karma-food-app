@@ -1221,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.140';
+const APP_VERSION = '6.99.141';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5918,7 +5918,7 @@ async function getForecastSettings(storeId){
 function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings){
   let pct = 0;
   const reasons = [];
-  let calText='', calBasis=''; // nur Feiertag/Ferien — für die Tages-Info in der Operations-Ansicht
+  let calText='', calBasis='', closed=false; // nur Feiertag/Ferien — für die Tages-Info in der Operations-Ansicht
   // Prozentwert immer mit ausschreiben ("Sommerferien −29%") statt nur das Ereignis zu nennen —
   // sonst ist nicht nachvollziehbar, WARUM ein Vorschlag höher oder niedriger ausfällt.
   const fmtPct=(p)=>!p?'':` ${p>0?'+':'−'}${Math.abs(Math.round(p))}%`;
@@ -5938,9 +5938,12 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
 
   const feiertag = calendarEvents.find(e=>e.event_type==='feiertag' && e.event_date===dateStr && (!e.store_id||e.store_id===storeId));
   if(feiertag){
-    pct += settings.feiertag_pct;
-    reasons.push(`🎉 ${feiertag.label}${fmtPct(settings.feiertag_pct)}`);
-    calText=`🎉 ${feiertag.label}${fmtPct(settings.feiertag_pct)}`;
+    // 21.10.26 (Hinweis Tini + Kassendaten): An Feiertagen ist IMMER geschlossen — in der Finanz-App gab es
+    // an allen 12 Feiertagen seit 10/2025 an keinem Standort einen Auftrag. Deshalb kein %-Abschlag
+    // (vorher −25%), sondern "geschlossen": keine Schätzung, und der Tag zählt nicht als Lerntag.
+    closed=true;
+    reasons.push(`🎉 ${feiertag.label} — geschlossen`);
+    calText=`🎉 ${feiertag.label} — geschlossen`;
   }
 
   const ferien = calendarEvents.find(e=>e.event_type==='ferien' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
@@ -5960,7 +5963,7 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
     reasons.push(`📌 ${sondertag.label}`);
   }
 
-  return {pct, reason: reasons.join(' · '), calText, calBasis};
+  return {pct, reason: reasons.join(' · '), calText, calBasis, closed};
 }
 
 // Ordnet einen (ggf. beschreibenden) Gerichtnamen der generischen Verkaufs-Kategorie zu,
@@ -10094,7 +10097,8 @@ async function renderOrgStoreForecast(){
     // Ferien-/Feiertags-Abschlag dieses Tages für die gewählte Filiale (inkl. Datenbasis), damit sichtbar
     // ist, warum die grauen Schätzungen niedriger ausfallen. Ohne Wetter (kommt oben schon als Badge).
     const calMod=getDayModifiers(dateStr, orgPlanStore, {}, orgCalEvents||[], orgFcSettings);
-    const calBadge=calMod.calText?`<div title="${escAttr(calMod.calBasis||'')}" style="font-size:9.5px;color:#B45309;font-weight:600;line-height:1.25;margin-top:3px;">${calMod.calText}${calMod.calBasis?`<div style="font-size:8.5px;color:var(--muted);font-weight:400;">Basis ${escAttr(calMod.calBasis.split(': ').pop())} %</div>`:''}</div>`:'';
+    const dayClosed=!!calMod.closed;
+    const calBadge=calMod.calText?`<div title="${escAttr(calMod.calBasis||'')}" style="font-size:9.5px;color:${dayClosed?'#B91C1C':'#B45309'};font-weight:600;line-height:1.25;margin-top:3px;">${calMod.calText}${calMod.calBasis?`<div style="font-size:8.5px;color:var(--muted);font-weight:400;">Basis ${escAttr(calMod.calBasis.split(': ').pop())} %</div>`:''}</div>`:'';
     html+=`<tr style="${isToday?'background:#EFF6FF;':''}">
       <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}${dwBadge}${calBadge}</td>`;
     cols.forEach((dish,ci)=>{
@@ -10183,7 +10187,7 @@ async function renderOrgStoreForecast(){
         const lasTeilSugg={};
         LASAGNE_SIZES.forEach(sz=>{
           const occs=hist.filter(h=>h.sizes?.some(s=>s.l===LBL[sz.k] && s.qty!=null)).slice(0,3);
-          if(!occs.length) return;
+          if(!occs.length || dayClosed) return;
           const vals=occs.map(o=>o.sizes.find(s=>s.l===LBL[sz.k]).qty);
           const avgVal=vals.reduce((a,b)=>a+b,0)/vals.length;
           const soldOutN=occs.filter(o=>o.soldOutTime).length;
@@ -10221,7 +10225,7 @@ async function renderOrgStoreForecast(){
         const teilSugg={};
         MEATBALLS_TEILE.forEach(t=>{
           const occs=hist.filter(h=>h.sizes?.some(s=>s.l===MLBL[t.k] && s.qty!=null)).slice(0,3);
-          if(!occs.length) return;
+          if(!occs.length || dayClosed) return;
           const vals=occs.map(o=>o.sizes.find(s=>s.l===MLBL[t.k]).qty);
           const avgVal=vals.reduce((a,b)=>a+b,0)/vals.length;
           const soldOutN=occs.filter(o=>o.soldOutTime).length;
@@ -10262,7 +10266,7 @@ async function renderOrgStoreForecast(){
       let catFallback=false;
       if(!last3Reg.length){ last3Reg=histWeekday.filter(h=>h.qty!=null).slice(0,3); catFallback=last3Reg.length>0; }
       let suggRegQty=null, suggRegReason='';
-      if(last3Reg.length){
+      if(last3Reg.length && !dayClosed){
         const calT=getDayModifiers(dateStr, orgPlanStore, {}, orgCalEvents||[], orgFcSettings);
         const avgQty=last3Reg.reduce((a,h)=>{
           const cp=getDayModifiers(h.date, orgPlanStore, {}, orgCalEvents||[], orgFcSettings).pct;
@@ -10608,6 +10612,7 @@ async function renderOrgForecast(){
     const yieldPerContainer = isLasagneSize ? LASAGNE_SIZE_YIELD[groesse] : null;
 
     const cat=mapDishNameToCategory(dish);
+    if(getDayModifiers(dateStr, storeId, {}, calendarEvents, settingsFor(storeId)).closed) return null; // Feiertag = geschlossen
     // Menü rotiert im 4-Wochen-Rhythmus, ABER seit dem neuen Menü (07.09.) sind die Gerichtnamen
     // jede Woche unterschiedlich — "4 Wochen zurück = exakt dasselbe Gericht" stimmt nicht mehr
     // zuverlässig. Chronologisch (letzte Woche zuerst) statt 4-Wochen-Sprung zuerst (Bug vom 03.09.,
