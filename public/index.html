@@ -1221,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.136';
+const APP_VERSION = '6.99.137';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1586,9 +1586,8 @@ function getMenuForDate(dateStr){
   const wd=d.getDay(); // 0=So...6=Sa
   const wdStr=WEEKDAY_MENU_KEY[wd];
   if(!wdStr) return []; // Wochenende — kein Menü
-  const woche=getMenuWocheForDate(dateStr);
-  const era=getMenuEraForDate(dateStr);
-  const entries=(era.data && era.data[`w${woche}_${wdStr}`])||[];
+  const ms=menuSlot(dateStr, wdStr);
+  const entries=(ms.era.data && ms.era.data[ms.key])||[];
   return entries.filter(e=>e.name && !e.name.startsWith('ÖL') && !e.name.startsWith('ZUTATEN'));
 }
 
@@ -1937,6 +1936,7 @@ async function loadAll(){
   stockData={};
   (stk||[]).forEach(s=>stockData[s.article_id]=s.quantity);
   await applyMenuOverrides();
+  await loadMenuTausch();
 }
 
 // ---- NAV ----
@@ -2093,13 +2093,40 @@ const REIS_DISH_NAME = 'Kurkuma Reis'; // War bisher immer ident (reiner Kurkuma
 
 const WEEKDAY_MENU_KEY = {1:'mo',2:'di',3:'mi',4:'do',5:'fr'};
 
+// ── EINMALIGE MENÜ-TAGESAUSNAHME (19.10.26, Wunsch Tini: Mo 26.10. Feiertag → Lasagne am Di nicht
+// vorbereitbar → Dienstag läuft das Montagsmenü). Gespeichert in calendar_events mit event_type
+// 'menutausch': event_date = betroffener Tag, end_date = Tag, dessen Menü stattdessen läuft.
+// Das Sheet und die 4-Wochen-Rotation bleiben unberührt; nach dem Tag gilt wieder der normale Plan.
+let MENU_TAUSCH = {};
+async function loadMenuTausch(){
+  try{
+    const rows=await api('calendar_events?event_type=eq.menutausch&select=id,event_date,end_date,label&order=event_date.asc');
+    const m={}; (rows||[]).forEach(r=>{ if(r.event_date && r.end_date) m[r.event_date]=r.end_date; });
+    MENU_TAUSCH=m; window._menuTauschRows=rows||[];
+  }catch(e){ console.error('Menü-Tausch laden fehlgeschlagen:', e); }
+}
+// Liefert Epoche, Woche, Wochentag und Daten-Schlüssel ("w4_mo"), aus dem das Menü eines Tages gelesen
+// wird. Ohne Ausnahme identisch zum bisherigen Verhalten. dateStr leer = heute (nur wenn wdStr zu heute passt).
+function menuSlot(dateStr, wdStr){
+  const todayStr=new Date().toISOString().split('T')[0];
+  const todayWd=WEEKDAY_MENU_KEY[new Date().getDay()];
+  const useDate = dateStr || ((!wdStr || wdStr===todayWd) ? todayStr : null);
+  const q = useDate ? MENU_TAUSCH[useDate] : null;
+  if(q){
+    const qwd=WEEKDAY_MENU_KEY[new Date(q+'T00:00:00').getDay()];
+    if(qwd){ const w=getMenuWocheForDate(q); return {era:getMenuEraForDate(q), woche:w, tag:qwd, key:`w${w}_${qwd}`, getauscht:true}; }
+  }
+  const tag=wdStr||todayWd;
+  const woche=getMenuWocheForDate(dateStr||undefined);
+  return {era:getMenuEraForDate(dateStr||undefined), woche, tag, key:`w${woche}_${tag}`, getauscht:false};
+}
+
 function getTodayMenu(){
   const wd = new Date().getDay(); // 0=So, 1=Mo...
   const dayKey = WEEKDAY_MENU_KEY[wd];
   if(!dayKey) return null; // Wochenende
-  const key = `w${CURRENT_MENU_WOCHE}_${dayKey}`;
-  const data = getMenuDataForDate();
-  return data[key] || null;
+  const ms = menuSlot(undefined, dayKey);
+  return (ms.era.data||{})[ms.key] || null;
 }
 
 function getTodayDishNames(){
@@ -2118,6 +2145,7 @@ const GETREIDE_KEYWORDS = ['BASMATI','REIS','COUSCOUS','EBLY','QUINOA'];
 
 // Stabiler Schlüssel für Zutaten-Overrides: Woche+Wochentag+Slot bleibt über die ganze
 // 4-Wochen-Rotation gleich, unabhängig vom (sich änderenden) Gerichtnamen.
+function zutatenKeyHeute(slot){ const ms=menuSlot(undefined, WEEKDAY_MENU_KEY[new Date().getDay()]); return zutatenKey(ms.woche, ms.tag, slot); }
 function zutatenKey(woche, tag, slot){
   return (woche!=null && tag && slot) ? `${woche}_${tag}_${slot}` : null;
 }
@@ -3693,7 +3721,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
   let panelsHtml='';
   todayMenu.forEach((d,i)=>{
     const cat=mapDishNameToCategory(d.name, d.slot);
-    const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
+    const zKeyHome=zutatenKeyHeute(d.slot);
     const mainCodes=(zKeyHome && allergenOverrideMap[zKeyHome])||allergenOverrideMap[d.name]||allergenOverrideMap[normGerichtName(d.name)]||d.allergene?.main||[];
     const dressingCodes=d.allergene?.dressing||[];
     const namesMain=mainCodes.map(c=>ALLERGEN_NAMES[c]||c);
@@ -3735,7 +3763,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
   const reisEntry={name:REIS_DISH_NAME, slot:'reis', allergene:{main:[],dressing:[]}, zutaten:''};
   const samosaEntry={name:'Samosa', slot:'samosa', allergene:{main:['A'],dressing:[]}, zutaten:'WEIZENMEHL, Kartoffeln, Erbsen, Kreuzkümmel, Koriandersamen, Kasoori Methi (Bockshornklee), Salz, Chiliflocken, Ajwain, Öl\n\nMANGO CHUTNEY:\nZucker, geschälte Mangoscheiben, Rohrzucker, Salz, Chilipulver, Ingwerpulver, Knoblauchpulver'};
   [reisEntry, samosaEntry].forEach(d=>{
-    const zKeyHome=zutatenKey(CURRENT_MENU_WOCHE, WEEKDAY_MENU_KEY[new Date().getDay()], d.slot);
+    const zKeyHome=zutatenKeyHeute(d.slot);
     const zutatenMerged=(zKeyHome && zutatenOverrideMap[zKeyHome])||zutatenOverrideMap[d.name]||zutatenOverrideMap[normGerichtName(d.name)]||d.zutaten;
     panelsHtml+=`<div id="dish-allergen-${idPrefix}${d.slot}" style="display:none;background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
       <div style="font-size:10px;font-weight:600;color:var(--muted);margin-bottom:6px;">🧂 ZUTATEN — <span data-no-translate>${d.name}</span></div>
@@ -5977,9 +6005,8 @@ function getMenuWocheForDate(dateStr){
 }
 
 function getMenuDishNamesForDay(wdStr, dateStr){
-  const era = getMenuEraForDate(dateStr);
-  const woche = getMenuWocheForDate(dateStr);
-  const entries = era.data[`w${woche}_${wdStr}`] || [];
+  const ms = menuSlot(dateStr, wdStr);
+  const entries = ms.era.data[ms.key] || [];
   return [...new Set(entries.filter(e=>e.slot!=='salat').map(e=>e.name).filter(Boolean))];
 }
 
@@ -8014,6 +8041,46 @@ async function loadMenuKontrolleBadge(){
 }
 window.loadMenuKontrolleBadge=loadMenuKontrolleBadge;
 
+// ── Menü-Tausch verwalten (Organisation) ──
+function mtCardHtml(todayStr){
+  const rows=(window._menuTauschRows||[]).filter(r=>r.event_date>=todayStr);
+  const wd=ds=>['So','Mo','Di','Mi','Do','Fr','Sa'][new Date(ds+'T00:00:00').getDay()];
+  const fd=ds=>{ const [y,m,d]=ds.split('-'); return `${wd(ds)} ${d}.${m}.`; };
+  return `<div class="section-lbl">🔁 Menü-Tausch — einmalige Ausnahme</div>
+    <div class="card" style="padding:12px;margin-bottom:14px;">
+      <div style="font-size:11.5px;color:var(--sub);margin-bottom:8px;">Wenn an einem Tag das Menü eines anderen Tages läuft (z.B. Feiertag). Das Sheet und die Rotation bleiben unverändert — nur dieser eine Tag ist betroffen.</div>
+      ${rows.length?rows.map(r=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--border);">
+        <div style="font-size:12.5px;"><b>${fd(r.event_date)}</b> läuft das Menü von <b>${fd(r.end_date)}</b></div>
+        <button onclick="mtDelete(${r.id})" style="border:1px solid #FCA5A5;background:#fff;color:#B91C1C;border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer;">Entfernen</button>
+      </div>`).join(''):'<div style="font-size:12px;color:var(--muted);padding:2px 0 6px;">Keine Ausnahme geplant.</div>'}
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+        <span style="font-size:11.5px;">Am</span><input type="date" id="mt-tag" style="padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;">
+        <span style="font-size:11.5px;">läuft das Menü von</span><input type="date" id="mt-quelle" style="padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;">
+        <button onclick="mtAdd()" style="border:none;background:var(--green);color:#fff;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;">Eintragen</button>
+      </div>
+    </div>`;
+}
+async function mtAdd(){
+  const tag=document.getElementById('mt-tag')?.value, q=document.getElementById('mt-quelle')?.value;
+  if(!tag||!q){ showToast('Bitte beide Tage wählen'); return; }
+  if(tag===q){ showToast('Die beiden Tage müssen verschieden sein'); return; }
+  const isWd=ds=>{ const d=new Date(ds+'T00:00:00').getDay(); return d>=1&&d<=5; };
+  if(!isWd(tag)||!isWd(q)){ showToast('Nur Wochentage (Mo–Fr) möglich'); return; }
+  try{
+    const fc=await api(`forecast_qty?forecast_date=eq.${tag}&select=id&limit=1`).catch(()=>[]);
+    await api('calendar_events?event_date=eq.'+tag+'&event_type=eq.menutausch',{method:'DELETE'}).catch(()=>{});
+    await api('calendar_events',{method:'POST',body:JSON.stringify([{event_date:tag,end_date:q,event_type:'menutausch',label:'Menü-Tausch (Organisation)'}])});
+    await loadMenuTausch();
+    showToast((fc&&fc.length)?'✔ Eingetragen — für diesen Tag gibt es schon Forecast-Zeilen mit den alten Gerichten, bitte prüfen':'✔ Eingetragen');
+    renderMenuKontrolle();
+  }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
+}
+async function mtDelete(id){
+  try{ await api(`calendar_events?id=eq.${id}`,{method:'DELETE'}); await loadMenuTausch(); showToast('Ausnahme entfernt'); renderMenuKontrolle(); }
+  catch(e){ showToast('Fehler beim Entfernen',true); }
+}
+Object.assign(window,{mtAdd,mtDelete});
+
 async function renderMenuKontrolle(){
   const el=document.getElementById('v-menuKontrolle');
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
@@ -8036,6 +8103,10 @@ async function renderMenuKontrolle(){
   html+=`<div style="font-size:11.5px;border-radius:10px;padding:9px 12px;margin-bottom:12px;${stale?'background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;':'background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;'}">
     ${last?`${stale?'⚠️':'✅'} Zuletzt geprüft: <strong>${fmt(last.geprueft_am)}</strong> · Sheet zuletzt geändert: <strong>${fmt(last.sheet_geaendert_am)}</strong>${stale?'<br>Die automatische Prüfung hat sich länger nicht gemeldet.':''}`:'⚠️ Noch keine automatische Prüfung gelaufen.'}
   </div>`;
+
+  // ── 0) Einmalige Menü-Tausch-Ausnahmen (z.B. Feiertag: Dienstag läuft das Montagsmenü)
+  await loadMenuTausch();
+  html+=mtCardHtml(todayStr);
 
   // ── 1) Offene Abweichungen
   const open=(diffs||[]).filter(d=>d.status==='offen').map(d=>({d, ab:mkOccurrenceDates(d.woche,d.tag,todayStr,60)[0]||'9999'}))
@@ -8070,8 +8141,8 @@ async function renderMenuKontrolle(){
   for(let i=0;i<14;i++){
     const dt=new Date(Date.UTC(y0,m0-1,d0+i));
     const wdn=dt.getUTCDay(); if(wdn<1||wdn>5) continue;
-    const ds=dt.toISOString().split('T')[0], tag=WEEKDAY_STR[wdn], woche=getMenuWocheForDate(ds);
-    const entries=(getMenuDataForDate(ds)[`w${woche}_${tag}`]||[]).filter(e=>e.slot!=='salat'&&e.name);
+    const ds=dt.toISOString().split('T')[0], _ms=menuSlot(ds, WEEKDAY_STR[wdn]), tag=_ms.tag, woche=_ms.woche;
+    const entries=((_ms.era.data||{})[_ms.key]||[]).filter(e=>e.slot!=='salat'&&e.name);
     entries.forEach(e=>{
       const zk=byZkey[zutatenKey(woche,tag,e.slot)], nm=byName[normGerichtName(e.name)];
       const rec=zk||nm;
@@ -17067,8 +17138,9 @@ async function renderKitchenDaily(){
   const todayDate=new Date().toISOString().split('T')[0];
   const wd=new Date().getDay();
   const wdStr=WEEKDAY_STR[wd]||'mo';
-  const woche=getMenuWocheForDate(todayDate);
-  const menuEntries=getMenuDataForDate(todayDate)[`w${woche}_${wdStr}`]||[];
+  const _msK=menuSlot(todayDate, wdStr);
+  const woche=getMenuWocheForDate(todayDate); // Anzeige (Wochenfarbe) bleibt die echte Rotationswoche
+  const menuEntries=(_msK.era.data||{})[_msK.key]||[];
   const dishNames=getMenuDishNamesForDay(wdStr, todayDate);
   const salatName=getSalatNameForDate(todayDate);
 
@@ -18050,9 +18122,10 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
 
   // Get tomorrow's menu dishes from MENU_DATA — epochen-bewusst, da "morgen" genau auf einen
   // Menü-Wechsel-Stichtag fallen kann (z.B. heute 06.09., morgen bereits 07.09. = neue Epoche).
-  const _cookWoche=getMenuWocheForDate(tomorrowStr);
-  const _cookEra=getMenuEraForDate(tomorrowStr);
-  const menuDishesRaw = (_cookEra.data && _cookEra.data[`w${_cookWoche}_${tomorrowWd}`])||[];
+  const _msCook=menuSlot(tomorrowStr, tomorrowWd);
+  const _cookWoche=_msCook.woche, _cookTag=_msCook.tag;
+  const _cookEra=_msCook.era;
+  const menuDishesRaw = (_cookEra.data && _cookEra.data[_msCook.key])||[];
   const dishNames = menuDishesRaw.map(d=>d.name).filter(n=>n&&!n.startsWith('ÖL'));
   // Reis wird nicht im Menüplan geführt, aber jeden Tag mitproduziert — daher hier synthetisch
   // ergänzt, DAMIT die Reis-Menge in der "Gerichte & Mengen"-Tabelle auftaucht (wie in Forecast/Daily).
@@ -18284,7 +18357,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   // genau dort, wo der Koch heute tatsächlich arbeitet.
   validDishObjs.forEach((dishObj,dIdx)=>{
     const dish=dishObj.name;
-    const zKey=zutatenKey(_cookWoche, tomorrowWd, dishObj.slot);
+    const zKey=zutatenKey(_cookWoche, _cookTag, dishObj.slot);
     const override = (zKey && overrideMap[zKey]) || overrideMap[dish] || overrideMap[normGerichtName(dish)];
     const zutatenRaw = (override?.zutaten||dishObj.zutaten||'').trim();
     const detailId = `morgen_zut_${dIdx}`;
