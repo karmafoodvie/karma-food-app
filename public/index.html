@@ -172,7 +172,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
      Personendaten (kein Name/E-Mail/Login) — nur Bewertung + optionale Tags + optionaler Kommentar. -->
 <div id="public-feedback" style="display:none;min-height:100vh;background:#1a1a18;"></div>
 <!-- ÖFFENTLICHE STADTGEMEINDE-ANMELDUNG (19.10.26) — ?bestellen=1&k=TOKEN, ohne Login. Schreibt nur über die Edge Function. -->
-<div id="public-bestellen" style="display:none;min-height:100vh;background:#1a1a18;"></div>
+<div id="public-bestellen" style="display:none;min-height:100vh;background:#FAF7F0;"></div>
 
 <div id="app" style="display:none;flex-direction:column;min-height:100vh;">
   <div id="topbar">
@@ -1223,7 +1223,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.147';
+const APP_VERSION = '6.99.148';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18993,8 +18993,8 @@ async function renderPublicBestellen(){
   _sbCarts={}; _sbDays={}; _sbOpen='';
   window._sbShell=inner=>{ el.innerHTML=`<div style="max-width:480px;margin:0 auto;padding:28px 18px 40px;min-height:100vh;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:22px;">
-      <div style="color:#D4FF3F;font-family:'Boldonse',sans-serif;font-weight:400;font-size:22px;letter-spacing:1px;">KARMA FOOD</div>
-      <div style="color:#fff;font-size:14px;margin-top:6px;opacity:0.85;">Lieferung${_sbInfo&&_sbInfo.stelle?' · '+escAttr(_sbInfo.stelle):''} 🛵</div>
+      <div style="display:inline-block;background:#1a1a18;color:#D4FF3F;font-family:'Boldonse',sans-serif;font-weight:400;font-size:20px;letter-spacing:1px;padding:10px 18px;border-radius:14px;">KARMA FOOD</div>
+      <div style="color:#444;font-size:15px;font-weight:600;margin-top:10px;">Lieferung${_sbInfo&&_sbInfo.stelle?' · '+escAttr(_sbInfo.stelle):''} 🛵</div>
     </div>${inner}</div>`; };
   const shell=window._sbShell;
   shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;color:#666;font-size:13px;">Wird geladen…</div>`);
@@ -19019,6 +19019,8 @@ async function renderPublicBestellen(){
   _sbOpen=(_sbInfo.tage.find(t=>t.offen)||{}).datum||'';
   sbDraw();
 }
+const SB_COL={1:['#FFF0B8','#E8B800'],2:['#FFD9C7','#E94E1B'],3:['#D3EFD9','#2E9E5B'],4:['#D4E6FF','#3B82F6'],5:['#EBDCFA','#8B5CF6'],6:['#eee','#999'],0:['#eee','#999']};
+const sbCol=d=>SB_COL[new Date(d+'T12:00:00Z').getUTCDay()];
 function sbDaySum(d){ const c=_sbCarts[d]||{}; return (_sbDays[d]?_sbDays[d].menu:[]).reduce((s,e)=>s+(c[e.slot]||0)*(e._preis||0),0); }
 function sbOpenDay(d){ _sbOpen=d; sbDraw(); setTimeout(()=>document.getElementById('sbday-'+d)?.scrollIntoView({behavior:'smooth',block:'start'}),30); }
 function sbChg(d,slot,n){ const c=_sbCarts[d]; c[slot]=Math.max(0,Math.min(20,(c[slot]||0)+n)); sbDraw(); }
@@ -19029,56 +19031,57 @@ function sbDraw(){
   const rl=t=>`${sbRel(t.datum)}${sbRel(t.datum)===SB_WD[new Date(t.datum+'T12:00:00Z').getUTCDay()]?'':' · '+SB_WD[new Date(t.datum+'T12:00:00Z').getUTCDay()].slice(0,2)} ${sbShort(t.datum)}`;
   let banner='';
   if(heuteT&&heuteT.offen){
-    banner=`<div style="background:#f4f4f1;border-radius:12px;padding:12px;margin-bottom:12px;font-size:13px;color:#333;">Heute noch bis <b>${escAttr(I.cutoff)} Uhr</b> anmelden.${naechster?` Du kannst dich auch <b>schon im Voraus</b> für die nächsten Tage eintragen:
-      <button onclick="sbOpenDay('${naechster.datum}')" style="display:block;width:100%;margin-top:8px;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:14px;font-weight:700;cursor:pointer;">📅 Schon für ${naechster.datum===sbPlus(I.heute,1)?'morgen':'den nächsten Liefertag ('+sbShort(naechster.datum)+')'} eintragen</button>`:''}</div>`;
+    banner=`<div style="background:#fff;border:1px solid #e8e3d8;border-radius:16px;padding:14px;margin-bottom:14px;font-size:14px;color:#333;line-height:1.45;">Heute noch bis <b>${escAttr(I.cutoff)} Uhr</b> anmelden.${naechster?` Du kannst dich auch <b>schon im Voraus</b> für die nächsten Tage eintragen:
+      <button onclick="sbOpenDay('${naechster.datum}')" style="display:block;width:100%;margin-top:10px;padding:14px;border:none;border-radius:12px;background:#1a1a18;color:#D4FF3F;font-size:15px;font-weight:700;cursor:pointer;">📅 Schon für ${naechster.datum===sbPlus(I.heute,1)?'morgen':'den nächsten Liefertag ('+sbShort(naechster.datum)+')'} eintragen</button>`:''}</div>`;
   } else if(naechster){
-    banner=`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:12px;margin-bottom:12px;font-size:13px;color:#333;">${I.heute_grund?escAttr(I.heute_grund):`Für heute ist die Anmeldung geschlossen (Schluss ${escAttr(I.cutoff)} Uhr).`}<br>Du kannst dich aber <b>jetzt schon für die nächsten Tage</b> anmelden:
-      <button onclick="sbOpenDay('${naechster.datum}')" style="display:block;width:100%;margin-top:8px;padding:12px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:14px;font-weight:700;cursor:pointer;">📅 Jetzt für ${naechster.datum===sbPlus(I.heute,1)?'morgen':'den nächsten Liefertag ('+sbShort(naechster.datum)+')'} eintragen</button></div>`;
+    banner=`<div style="background:#FFF1E0;border:1px solid #FED7AA;border-radius:16px;padding:14px;margin-bottom:14px;font-size:14px;color:#333;line-height:1.45;">${I.heute_grund?escAttr(I.heute_grund):`Für heute ist die Anmeldung geschlossen (Schluss ${escAttr(I.cutoff)} Uhr).`}<br>Du kannst dich aber <b>jetzt schon für die nächsten Tage</b> anmelden:
+      <button onclick="sbOpenDay('${naechster.datum}')" style="display:block;width:100%;margin-top:10px;padding:14px;border:none;border-radius:12px;background:#1a1a18;color:#D4FF3F;font-size:15px;font-weight:700;cursor:pointer;">📅 Jetzt für ${naechster.datum===sbPlus(I.heute,1)?'morgen':'den nächsten Liefertag ('+sbShort(naechster.datum)+')'} eintragen</button></div>`;
   }
   const cards=tage.map(t=>{
     const D=_sbDays[t.datum], mein=sbDaySum(t.datum), gesamt=t.summe+mein, ok=gesamt>=t.min, pct=Math.min(100,Math.round(gesamt/t.min*100));
     const open=_sbOpen===t.datum&&t.offen;
+    const [cBg,cAc]=sbCol(t.datum);
     const preview=D.roh.map(e=>escAttr(e.name)).join(' · ');
     let body='';
     if(t.nach_schluss){
       const n=t.anzahl;
-      body=`<div style="padding:10px 14px 14px;font-size:13px;color:#444;"><b>${n===0?'Anmeldung für heute geschlossen.':t.lieferbar?'Die Lieferung für heute steht ✓':'Lieferung konnte nicht ausgeführt werden'}</b><br>${n===0?'':t.lieferbar?`${n} Anmeldung(en) · ${sgFmt(t.summe)}`:`Der Mindestbestellwert von ${sgFmt(t.min)} wurde bis ${escAttr(I.cutoff)} Uhr nicht erreicht (${sgFmt(t.summe)} angemeldet).`}</div>`;
+      body=`<div style="padding:2px 14px 14px;font-size:13px;color:#444;"><b>${n===0?'Anmeldung für heute geschlossen.':t.lieferbar?'Die Lieferung für heute steht ✓':'Lieferung konnte nicht ausgeführt werden'}</b><br>${n===0?'':t.lieferbar?`${n} Anmeldung(en) · ${sgFmt(t.summe)}`:`Der Mindestbestellwert von ${sgFmt(t.min)} wurde bis ${escAttr(I.cutoff)} Uhr nicht erreicht (${sgFmt(t.summe)} angemeldet).`}</div>`;
     } else if(open){
       body=`<div style="padding:0 14px 14px;">
-        <div style="background:#f4f4f1;border-radius:10px;padding:9px 11px;margin:6px 0 4px;">
+        <div style="background:#fff;border-radius:12px;padding:10px 12px;margin:4px 0 6px;">
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;"><span>Angemeldet für diesen Tag (inkl. deiner Auswahl)</span><b>${sgFmt(gesamt)}</b></div>
-          <div style="height:7px;background:#e3e3df;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${ok?'#1D9E75':'#E94E1B'};"></div></div>
+          <div style="height:8px;background:#ece8de;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${ok?'#1D9E75':'#E94E1B'};"></div></div>
           <div style="font-size:11.5px;margin-top:5px;color:${ok?'#1D9E75':'#B4380F'};font-weight:600;">${ok?'Lieferung möglich ✓':`Noch ${sgFmt(t.min-gesamt)} bis zum Mindestbestellwert von ${sgFmt(t.min)} — frag gern Kolleg:innen!`}</div></div>
-        ${D.menu.length?D.menu.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee;">
+        ${D.menu.length?D.menu.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:6px;background:#fff;border-radius:12px;">
           <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#222;">${escAttr(e.name)}${e._kat==='Special'?' <span style="font-size:10px;background:#D4FF3F;border-radius:6px;padding:1px 6px;">Special</span>':''}</div>
             <div style="font-size:11.5px;color:#888;">${sgFmt(e._preis)}${e._hint?' · '+escAttr(e._hint):''}</div></div>
-          <button onclick="sbChg('${t.datum}','${e.slot}',-1)" style="width:34px;height:34px;border-radius:50%;border:1px solid #ddd;background:#fff;font-size:18px;cursor:pointer;">−</button>
-          <div style="width:22px;text-align:center;font-size:15px;font-weight:700;">${_sbCarts[t.datum][e.slot]||0}</div>
-          <button onclick="sbChg('${t.datum}','${e.slot}',1)" style="width:34px;height:34px;border-radius:50%;border:none;background:#D4FF3F;font-size:18px;font-weight:700;cursor:pointer;">+</button></div>`).join(''):'<div style="font-size:13px;color:#666;padding:10px 0;">Für diesen Tag ist noch kein Menü hinterlegt.</div>'}</div>`;
+          <button onclick="sbChg('${t.datum}','${e.slot}',-1)" style="width:40px;height:40px;border-radius:50%;border:1.5px solid ${cAc};background:#fff;color:#222;font-size:20px;cursor:pointer;">−</button>
+          <div style="width:24px;text-align:center;font-size:17px;font-weight:700;">${_sbCarts[t.datum][e.slot]||0}</div>
+          <button onclick="sbChg('${t.datum}','${e.slot}',1)" style="width:40px;height:40px;border-radius:50%;border:none;background:${cAc};color:#fff;font-size:20px;font-weight:700;cursor:pointer;">+</button></div>`).join(''):'<div style="font-size:13px;color:#666;padding:10px 0;">Für diesen Tag ist noch kein Menü hinterlegt.</div>'}</div>`;
     }
     const clickable=t.offen&&!open;
-    return `<div id="sbday-${t.datum}" style="background:#fff;border-radius:14px;margin-bottom:10px;border:${open?'2px solid #D4FF3F':'1px solid #eee'};overflow:hidden;">
+    return `<div id="sbday-${t.datum}" style="background:${cBg};border-radius:18px;margin-bottom:12px;border-left:7px solid ${cAc};box-shadow:${open?'0 4px 14px rgba(0,0,0,.12)':'0 1px 3px rgba(0,0,0,.06)'};overflow:hidden;${t.offen?'':'opacity:.6;filter:saturate(.6);'}">
       <div ${clickable?`onclick="sbOpenDay('${t.datum}')"`:''} style="padding:12px 14px;${clickable?'cursor:pointer;':''}">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div style="font-size:14px;font-weight:700;">${rl(t)}</div>
-          <div style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap;background:${t.nach_schluss?(t.anzahl===0?'#F3F4F6':t.lieferbar?'#DCFCE7':'#FEE2E2'):ok?'#DCFCE7':'#FEF3C7'};color:${t.nach_schluss?(t.anzahl===0?'#6B7280':t.lieferbar?'#166534':'#991B1B'):ok?'#166534':'#92400E'};">${t.nach_schluss?(t.anzahl===0?'geschlossen':t.lieferbar?'Lieferung steht':'nicht ausgeführt'):`${sgFmt(gesamt)} / ${sgFmt(t.min)}`}</div></div>
-        ${open?'':`<div style="font-size:11.5px;color:#777;margin-top:4px;line-height:1.4;">${preview||'Noch kein Menü'}</div>${clickable?`<div style="font-size:12px;font-weight:700;color:#1a1a18;margin-top:6px;">+ Eintragen</div>`:''}`}</div>${body}</div>`;
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div style="font-size:16px;font-weight:800;color:#1a1a18;">${rl(t)}</div>
+          <div style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap;background:${t.nach_schluss?(t.anzahl===0?'#F3F4F6':t.lieferbar?'#DCFCE7':'#FEE2E2'):ok?'#DCFCE7':'#fff'};color:${t.nach_schluss?(t.anzahl===0?'#6B7280':t.lieferbar?'#166534':'#991B1B'):ok?'#166534':'#92400E'};">${t.nach_schluss?(t.anzahl===0?'geschlossen':t.lieferbar?'Lieferung steht':'nicht ausgeführt'):`${sgFmt(gesamt)} / ${sgFmt(t.min)}`}</div></div>
+        ${open?'':`<div style="font-size:12.5px;color:#444;margin-top:5px;line-height:1.4;">${preview||'Noch kein Menü'}</div>${clickable?`<div style="display:inline-block;font-size:13px;font-weight:700;color:#fff;background:${cAc};border-radius:99px;padding:6px 14px;margin-top:9px;">+ Eintragen</div>`:''}`}</div>${body}</div>`;
   }).join('');
   // Zusammenfassung / Absenden
   const tageMitWahl=tage.filter(t=>sbDaySum(t.datum)>0&&t.offen);
   const total=tageMitWahl.reduce((s,t)=>s+sbDaySum(t.datum),0);
   const keepName=document.getElementById('sb-name')?.value||'', keepNote=document.getElementById('sb-notiz')?.value||'', keepSo=document.getElementById('sb-z-sodexo')?.checked, keepBar=document.getElementById('sb-z-bar')?.checked;
-  const summary=`<div style="background:#fff;border-radius:14px;padding:16px 14px;margin-top:4px;">
+  const summary=`<div style="background:#fff;border:1px solid #e8e3d8;border-radius:18px;padding:16px 14px;margin-top:4px;">
     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Deine Anmeldung</div>
     ${tageMitWahl.length?tageMitWahl.map(t=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span>${rl(t)}</span><b>${sgFmt(sbDaySum(t.datum))}</b></div>`).join('')+`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #eee;margin-top:6px;padding-top:6px;"><span>Gesamt</span><span>${sgFmt(total)}</span></div>`:'<div style="font-size:12.5px;color:#888;">Wähle oben Gerichte für einen oder mehrere Tage.</div>'}
-    <input id="sb-name" value="${escAttr(keepName)}" placeholder="Name / Nummer (optional)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin:12px 0 8px;">
-    <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional, z.B. Inhalt vom Lunch Combo)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:10px;">
+    <input id="sb-name" value="${escAttr(keepName)}" placeholder="Name / Nummer (optional)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin:12px 0 8px;background:#FAF7F0;">
+    <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional, z.B. Inhalt vom Lunch Combo)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin-bottom:10px;background:#FAF7F0;">
     <div style="font-size:11px;color:#888;margin-bottom:4px;">Bezahlung (optional, auch beides möglich)</div>
     <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;color:#444;">
       <label><input type="checkbox" id="sb-z-sodexo" ${keepSo?'checked':''}> Sodexo/Pluxee</label>
       <label><input type="checkbox" id="sb-z-bar" ${keepBar?'checked':''}> Bar</label></div>
-    <button id="sb-send" onclick="sbSubmit()" ${total>0?'':'disabled'} style="width:100%;padding:13px;border:none;border-radius:10px;background:${total>0?'#1a1a18':'#bbb'};color:#D4FF3F;font-size:14px;font-weight:700;cursor:pointer;">Verbindlich anmelden${tageMitWahl.length>1?` (${tageMitWahl.length} Tage)`:''}</button>
+    <button id="sb-send" onclick="sbSubmit()" ${total>0?'':'disabled'} style="width:100%;padding:15px;border:none;border-radius:12px;background:${total>0?'#1a1a18':'#bbb'};color:#D4FF3F;font-size:15px;font-weight:700;cursor:pointer;">Verbindlich anmelden${tageMitWahl.length>1?` (${tageMitWahl.length} Tage)`:''}</button>
     <div id="sb-err" style="color:#B4380F;font-size:12px;text-align:center;margin-top:8px;"></div></div>`;
-  window._sbShell(`${banner}<div style="font-size:12px;color:#ccc;margin:0 2px 8px;">Wochenmenü — Tag antippen, um dich einzutragen. Wir liefern ab einem Gesamt-Bestellwert von ${sgFmt(tage[0]?tage[0].min:30)} je Tag (alle Anmeldungen von ${escAttr(I.stelle)} zusammen).</div>${cards}${summary}`);
+  window._sbShell(`${banner}<div style="font-size:13px;color:#555;margin:0 2px 10px;line-height:1.4;"><b>Wochenmenü</b> — Tag antippen, um dich einzutragen. Wir liefern ab einem Gesamt-Bestellwert von ${sgFmt(tage[0]?tage[0].min:30)} je Tag (alle Anmeldungen von ${escAttr(I.stelle)} zusammen).</div>${cards}${summary}`);
 }
 async function sbSubmit(){
   const name=document.getElementById('sb-name').value.trim();
