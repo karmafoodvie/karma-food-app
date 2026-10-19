@@ -1221,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.137';
+const APP_VERSION = '6.99.138';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2105,6 +2105,28 @@ async function loadMenuTausch(){
     MENU_TAUSCH=m; window._menuTauschRows=rows||[];
   }catch(e){ console.error('Menü-Tausch laden fehlgeschlagen:', e); }
 }
+// Wochen-Ansichten (Wochenbestellung, Kochplan, Menü der Woche) arbeiten mit Woche+Wochentag statt mit einem
+// Datum. Gibt es für genau diesen Tag der laufenden/kommenden Rotation eine Tausch-Ausnahme, liefert das hier
+// die Quelle (Epoche, Woche, Tag, Schlüssel) — sonst null. Nur Ausnahmen ab letzter Woche zählen, damit die
+// Ausnahme nicht in vier Wochen beim nächsten Durchlauf wieder auftaucht.
+function menuTauschFuerWocheTag(woche, tag){
+  const grenze=new Date(); grenze.setDate(grenze.getDate()-7);
+  const g=grenze.toISOString().split('T')[0];
+  for(const ds of Object.keys(MENU_TAUSCH)){
+    if(ds<g) continue;
+    if(getMenuWocheForDate(ds)!==woche || WEEKDAY_MENU_KEY[new Date(ds+'T00:00:00').getDay()]!==tag) continue;
+    const q=MENU_TAUSCH[ds], qtag=WEEKDAY_MENU_KEY[new Date(q+'T00:00:00').getDay()]; if(!qtag) continue;
+    const qw=getMenuWocheForDate(q);
+    return {datum:ds, quelle:q, era:getMenuEraForDate(q), woche:qw, tag:qtag, key:`w${qw}_${qtag}`};
+  }
+  return null;
+}
+function menuEintraegeWocheTag(woche, tag, refDate){
+  const t=menuTauschFuerWocheTag(woche, tag);
+  if(t) return (t.era.data||{})[t.key]||[];
+  return (getMenuDataForDate(refDate)||{})[`w${woche}_${tag}`]||[];
+}
+const MENU_TAUSCH_HINWEIS='<span style="font-size:9.5px;font-weight:700;color:#B45309;background:#FEF3C7;padding:1px 6px;border-radius:10px;margin-left:6px;">einmalig: Menü von einem anderen Tag</span>';
 // Liefert Epoche, Woche, Wochentag und Daten-Schlüssel ("w4_mo"), aus dem das Menü eines Tages gelesen
 // wird. Ohne Ausnahme identisch zum bisherigen Verhalten. dateStr leer = heute (nur wenn wdStr zu heute passt).
 function menuSlot(dateStr, wdStr){
@@ -9221,9 +9243,10 @@ async function renderTgBestellungHtml(){
   html+=`<div class="card" style="padding:10px 14px;margin-bottom:14px;">
     <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Shop-Menü Woche ${shopWoche}</div>`;
   DAYS_ORDER.forEach(tag=>{
-    const dishes=(menuData[`w${shopWoche}_${tag}`]||[]);
+    const dishes=menuEintraegeWocheTag(shopWoche, tag, _od.shopDate);
     if(!dishes.length) return;
-    html+=`<div style="font-size:11px;margin-bottom:5px;"><b>${DAY_LABEL[tag]}:</b> <span data-no-translate>${dishes.map(d=>d.name).join(' / ')}</span></div>`;
+    const _tauschShop=menuTauschFuerWocheTag(shopWoche, tag);
+    html+=`<div style="font-size:11px;margin-bottom:5px;"><b>${DAY_LABEL[tag]}:</b> <span data-no-translate>${dishes.map(d=>d.name).join(' / ')}</span>${_tauschShop?MENU_TAUSCH_HINWEIS:''}</div>`;
   });
   html+='</div>';
 
@@ -17588,8 +17611,10 @@ async function renderKitchen(){
     html+=`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Auf ein Gericht tippen → Zutaten ausklappen</div>`;
 
     DAYS_ORDER.forEach(day=>{
+      const _kpT=menuTauschFuerWocheTag(selectedWoche, day);
+      const _kpW=_kpT?_kpT.woche:selectedWoche, _kpD=_kpT?_kpT.tag:day; // Quelle für Zutaten-Schlüssel/Editor
       const key=`w${selectedWoche}_${day}`;
-      const dishes=getMenuDataForDate()[key]||[];
+      const dishes=menuEintraegeWocheTag(selectedWoche, day);
       const isToday=day===todayWd && selectedWoche===CURRENT_MENU_WOCHE;
       html+=`<div style="border:${isToday?'2px solid var(--green)':'0.5px solid var(--border)'};border-radius:12px;margin-bottom:10px;overflow:hidden;">
         <div style="background:${isToday?'var(--green)':'#F5F5F3'};padding:8px 14px;font-size:13px;font-weight:700;color:${isToday?'#fff':'var(--sub)'};">${DAYS_FULL[day]}${isToday?' 👈 Heute':''}</div>`;
@@ -17599,7 +17624,7 @@ async function renderKitchen(){
         html+=`<div style="padding:10px 14px;font-size:12px;color:var(--muted);">–</div>`;
       } else {
         validDishes.forEach((dish,i)=>{
-          const zKey=zutatenKey(selectedWoche, day, dish.slot);
+          const zKey=zutatenKey(_kpW, _kpD, dish.slot);
           const override = (zKey && overrideMap[zKey]) || overrideMap[dish.name] || overrideMap[normGerichtName(dish.name)];
           const zutatenRaw = (override?.zutaten||dish.zutaten||'').trim();
           const zutaten = zutatenRaw.replace(/\n/g,' ').trim();
@@ -17627,7 +17652,7 @@ async function renderKitchen(){
             </div>
             <div id="${detailId}" style="display:none;background:#FAFAFA;border-top:0.5px solid var(--border);">
               ${renderZutatenReadOnly(zutatenRaw)}
-              <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${selectedWoche}, '${day}', '${dish.slot||''}')" data-dish="${dish.name}" data-zutaten="${zutatenRaw.replace(/"/g,'&quot;')}" style="margin-top:8px;width:100%;padding:7px;border:1px dashed rgba(29,94,58,0.3);border-radius:8px;font-size:11px;color:var(--green);background:var(--green-light);cursor:pointer;">✏️ Zutaten bearbeiten</button>
+              <button onclick="openZutatenEditor(this.dataset.dish, this.dataset.zutaten, ${_kpW}, '${_kpD}', '${dish.slot||''}')" data-dish="${dish.name}" data-zutaten="${zutatenRaw.replace(/"/g,'&quot;')}" style="margin-top:8px;width:100%;padding:7px;border:1px dashed rgba(29,94,58,0.3);border-radius:8px;font-size:11px;color:var(--green);background:var(--green-light);cursor:pointer;">✏️ Zutaten bearbeiten</button>
             </div>
           </div>`;
         });
@@ -18487,8 +18512,7 @@ async function renderMenuWoche(el, tabHtml){
   html += `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Menü <strong>${getMenuEraLabelForDate()}</strong> · Woche ${woche} von 4 · aktuelles Menü mit Zutaten & Allergenen</div>`;
 
   DAYS_ORDER.forEach(day=>{
-    const key = `w${woche}_${day}`;
-    const dishes = getMenuDataForDate()[key]||[];
+    const dishes = menuEintraegeWocheTag(woche, day);
     if(!dishes.length) return;
     const isToday = day===todayWd;
     html += `<div style="font-size:12px;font-weight:700;color:${isToday?'var(--green)':'var(--sub)'};letter-spacing:.04em;margin:12px 0 6px;padding-bottom:4px;border-bottom:2px solid ${isToday?'var(--green)':'var(--border)'};">${DAYS_DE[day]}${isToday?' 👈 HEUTE':''}</div>`;
