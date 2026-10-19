@@ -1223,7 +1223,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.145';
+const APP_VERSION = '6.99.146';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -19008,6 +19008,14 @@ async function renderPublicBestellen(){
   rawMenu.forEach(e=>{ const m=zu.get(e); e._kat=(m&&m.kat==='Special')?'Special':'Gericht'; e._preis=Number(e._kat==='Special'?P.special:P.gericht)||0; });
   _sbMenu=rawMenu.filter(e=>e._preis>0);
   if(Number(P.combo)>0) _sbMenu.push({slot:'combo',name:'Lunch Combo',_kat:'Combo',_preis:Number(P.combo),_hint:'Bitte unten bei „Anmerkung“ dazuschreiben, was drinnen sein soll.'});
+  if(_sbInfo.nach_schluss){
+    const n=_sbInfo.anzahl, ok=_sbInfo.lieferbar;
+    shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;">
+      <div style="font-size:34px;margin-bottom:8px;">${n===0?'⏰':ok?'✅':'⚠️'}</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px;">${n===0?'Anmeldung für heute geschlossen':ok?'Die Lieferung für heute steht ✓':'Lieferung konnte nicht ausgeführt werden'}</div>
+      <div style="font-size:13px;color:#666;">${n===0?`Anmeldeschluss war um ${escAttr(_sbInfo.cutoff)} Uhr.`:ok?`${n} Anmeldung(en) · ${sgFmt(_sbInfo.summe_heute)} — wir liefern heute.`:`Der Mindestbestellwert von ${sgFmt(_sbInfo.min)} wurde bis ${escAttr(_sbInfo.cutoff)} Uhr nicht erreicht (${sgFmt(_sbInfo.summe_heute)} angemeldet).`}<br><br>Am nächsten Liefertag kannst du dich wieder bis ${escAttr(_sbInfo.cutoff)} Uhr anmelden.</div></div>`);
+    return;
+  }
   if(!_sbInfo.offen){
     shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;">
       <div style="font-size:34px;margin-bottom:8px;">⏰</div>
@@ -19031,7 +19039,7 @@ function sbDraw(){
     <button onclick="sbChg('${e.slot}',-1)" style="width:34px;height:34px;border-radius:50%;border:1px solid #ddd;background:#fff;font-size:18px;cursor:pointer;">−</button>
     <div style="width:22px;text-align:center;font-size:15px;font-weight:700;">${_sbCart[e.slot]||0}</div>
     <button onclick="sbChg('${e.slot}',1)" style="width:34px;height:34px;border-radius:50%;border:none;background:#D4FF3F;font-size:18px;font-weight:700;cursor:pointer;">+</button></div>`).join('');
-  const keepName=document.getElementById('sb-name')?.value||'', keepNote=document.getElementById('sb-notiz')?.value||'', keepZ=document.querySelector('input[name=sb-z]:checked')?.value||'';
+  const keepName=document.getElementById('sb-name')?.value||'', keepNote=document.getElementById('sb-notiz')?.value||'', keepSo=document.getElementById('sb-z-sodexo')?.checked, keepBar=document.getElementById('sb-z-bar')?.checked;
   window._sbShell(`<div style="background:#fff;border-radius:18px;padding:20px 18px;">
     <div style="font-size:12px;color:#666;margin-bottom:8px;">Anmeldung bis <b>${escAttr(_sbInfo.cutoff)} Uhr</b>. Wir liefern ab einem Gesamt-Bestellwert von <b>${sgFmt(min)}</b> (alle Anmeldungen von ${escAttr(_sbInfo.stelle)} heute zusammen).</div>
     <div style="background:#f4f4f1;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
@@ -19040,11 +19048,12 @@ function sbDraw(){
       <div style="font-size:12px;margin-top:6px;color:${ok?'#1D9E75':'#B4380F'};font-weight:600;">${ok?'Lieferung möglich ✓':`Noch ${sgFmt(min-gesamt)} bis zur Lieferung — frag gern Kolleg:innen!`}</div></div>
     ${rows}
     <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin:12px 0;"><span>Deine Bestellung</span><span>${sgFmt(mein)}</span></div>
-    <input id="sb-name" value="${escAttr(keepName)}" placeholder="Dein Name (z.B. Vorname + Abteilung)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+    <input id="sb-name" value="${escAttr(keepName)}" placeholder="Name / Nummer (optional)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
     <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional, z.B. Inhalt vom Lunch Combo)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:10px;">
+    <div style="font-size:11px;color:#888;margin-bottom:4px;">Bezahlung (optional, auch beides möglich)</div>
     <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;color:#444;">
-      <label><input type="radio" name="sb-z" value="sodexo" ${keepZ==='sodexo'?'checked':''}> Sodexo/Pluxee</label>
-      <label><input type="radio" name="sb-z" value="bar" ${keepZ==='bar'?'checked':''}> Bar</label></div>
+      <label><input type="checkbox" id="sb-z-sodexo" ${keepSo?'checked':''}> Sodexo/Pluxee</label>
+      <label><input type="checkbox" id="sb-z-bar" ${keepBar?'checked':''}> Bar</label></div>
     <button id="sb-send" onclick="sbSubmit()" ${mein>0?'':'disabled'} style="width:100%;padding:13px;border:none;border-radius:10px;background:${mein>0?'#1a1a18':'#bbb'};color:#D4FF3F;font-size:14px;font-weight:700;cursor:pointer;">Verbindlich anmelden</button>
     <div id="sb-err" style="color:#B4380F;font-size:12px;text-align:center;margin-top:8px;"></div>
   </div>`);
@@ -19053,17 +19062,17 @@ function sbChg(slot,d){ _sbCart[slot]=Math.max(0,Math.min(20,(_sbCart[slot]||0)+
 async function sbSubmit(){
   const name=document.getElementById('sb-name').value.trim();
   const err=document.getElementById('sb-err');
-  if(name.length<2){ err.textContent='Bitte einen Namen angeben.'; return; }
   const items=_sbMenu.filter(e=>_sbCart[e.slot]>0).map(e=>({slot:e.slot,kategorie:e._kat,name:e.name,anzahl:_sbCart[e.slot]}));
   if(!items.length) return;
-  const z=document.querySelector('input[name=sb-z]:checked')?.value||null;
+  const so=document.getElementById('sb-z-sodexo').checked, ba=document.getElementById('sb-z-bar').checked;
+  const z=so&&ba?'sodexo+bar':so?'sodexo':ba?'bar':null;
   const notiz=document.getElementById('sb-notiz').value.trim();
   const btn=document.getElementById('sb-send'); btn.disabled=true; btn.textContent='Wird gesendet…';
   try{
     const r=await sgCall('',{k:_sbToken,name,items,zahlung:z,notiz});
     window._sbShell(`<div style="background:#fff;border-radius:18px;padding:24px 18px;text-align:center;">
       <div style="font-size:36px;margin-bottom:6px;">✅</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Danke, ${escAttr(name)}!</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Danke${name?', '+escAttr(name):''}!</div>
       <div style="font-size:13px;color:#444;margin-bottom:10px;">${items.map(i=>`${i.anzahl}× ${escAttr(i.name)}`).join('<br>')}<br><b>${sgFmt(r.summe)}</b></div>
       <div style="font-size:13px;font-weight:600;color:${r.lieferbar?'#1D9E75':'#B4380F'};">${r.lieferbar?'Die Lieferung für heute steht ✓':`Aktuell ${sgFmt(r.summe_heute)} von ${sgFmt(r.min)} — es fehlen noch ${sgFmt(r.min-r.summe_heute)}.`}</div>
       <button onclick="renderPublicBestellen()" style="margin-top:16px;padding:10px 16px;border:1px solid #ddd;border-radius:9px;background:#fff;font-size:13px;cursor:pointer;">Noch eine Anmeldung</button></div>`);
@@ -19082,14 +19091,16 @@ async function sgBestellHtml(){
   let d;
   try{ d=await sgCall('?action=list'); }catch(e){ return `<div class="card" style="padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);">Anmeldungen konnten nicht geladen werden (${escAttr(e.message)}).</div>`; }
   _sgListe=d;
-  const min=d.min_heute, P=d.config.preise||{}, zl={sodexo:'Sodexo',bar:'Bar'};
+  const min=d.min_heute, P=d.config.preise||{}, zl={sodexo:'Sodexo',bar:'Bar','sodexo+bar':'Sodexo + Bar'};
+  const final=!!d.nach_schluss && d.datum===d.heute;
+  const status=(sum,anz)=>{ const ok=sum>=min; if(ok) return {t:'Lieferung möglich',bg:'#DCFCE7',c:'#166534'}; if(final&&anz===0) return {t:'keine Anmeldung',bg:'#F3F4F6',c:'#6B7280'}; if(final) return {t:'Lieferung konnte nicht ausgeführt werden',bg:'#FEE2E2',c:'#991B1B'}; return {t:'Noch zu wenig',bg:'#FEF3C7',c:'#92400E'}; };
   const stellen=(d.stellen||[]);
   const von=sid=>(d.bestellungen||[]).filter(r=>r.stelle_id===sid);
   let h=`<div class="card" style="padding:14px;margin-bottom:14px;">
     <div style="font-size:12px;font-weight:700;margin-bottom:8px;">📥 Anmeldungen heute — Übersicht</div>
     <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Bestellstelle</th><th>Summe</th><th>Lieferstatus</th></tr></thead><tbody>
-    ${stellen.map(s=>{ const sum=sgSumme(von(s.id)), ok=sum>=min; return `<tr style="${s.aktiv?'':'opacity:.45;'}"><td style="font-size:12.5px;font-weight:600;">${escAttr(s.name)}</td><td style="text-align:center;font-size:12.5px;">${sgFmt(sum)}</td>
-      <td style="text-align:center;font-size:11px;font-weight:700;"><span style="padding:3px 9px;border-radius:99px;background:${ok?'#DCFCE7':'#FEE2E2'};color:${ok?'#166534':'#991B1B'};">${ok?'Lieferung möglich':'Noch zu wenig'}</span></td></tr>`; }).join('')}
+    ${stellen.map(s=>{ const sum=sgSumme(von(s.id)), stt=status(sum,sgAktiv(von(s.id)).length); return `<tr style="${s.aktiv?'':'opacity:.45;'}"><td style="font-size:12.5px;font-weight:600;">${escAttr(s.name)}</td><td style="text-align:center;font-size:12.5px;">${sgFmt(sum)}</td>
+      <td style="text-align:center;font-size:11px;font-weight:700;"><span style="padding:3px 9px;border-radius:99px;background:${stt.bg};color:${stt.c};">${stt.t}</span></td></tr>`; }).join('')}
     </tbody></table></div>
     <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Mindestbestellwert heute: ${sgFmt(min)} je Bestellstelle · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div></div>`;
   stellen.forEach(s=>{
@@ -19097,6 +19108,7 @@ async function sgBestellHtml(){
     const agg={}; akt.forEach(r=>(r.items||[]).forEach(i=>{ agg[i.name]=(agg[i.name]||0)+i.anzahl; }));
     h+=`<div class="card" style="padding:14px;margin-bottom:14px;${s.aktiv?'':'opacity:.6;'}">
       <div style="font-size:12.5px;font-weight:700;margin-bottom:2px;">${escAttr(s.name)}${s.aktiv?'':' (pausiert)'}</div>
+      <div style="font-size:11.5px;margin-bottom:4px;">${s.adresse?`📍 ${escAttr(s.adresse)}`:`<span style="color:#B45309;">⚠️ Adresse fehlt</span>`} <a onclick="sgAdresse(${s.id},'${escForInlineHandler(s.adresse||'')}')" style="color:var(--muted);cursor:pointer;">✏️</a></div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${akt.length} Anmeldung(en) · ${sgFmt(sum)} · ${port} Portionen</div>`;
     if(Object.keys(agg).length) h+=`<div style="font-size:12.5px;background:var(--surface-1);border-radius:8px;padding:8px 10px;margin-bottom:8px;">${Object.entries(agg).map(([n,a])=>`<b>${a}×</b> ${escAttr(n)}`).join('<br>')}</div>`;
     if(rows.length){
@@ -19118,7 +19130,7 @@ async function sgBestellHtml(){
   const st=(d.config.stufen||[]).slice().sort((a,b)=>a.ab<b.ab?-1:1);
   h+=`<details class="card" style="padding:14px;margin-bottom:14px;"><summary style="font-size:12px;font-weight:700;cursor:pointer;">⚙️ Einstellungen (Bestellstellen, Mindestbetrag, Preise, Schluss)</summary>
     <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Neue Bestellstelle (bekommt einen eigenen Link)</div>
-    <div style="display:flex;gap:6px;"><input id="sgc-neu" placeholder="z.B. Baubehörde" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"><button onclick="sgStelleNeu()" style="padding:7px 10px;border:none;border-radius:7px;background:#059669;color:#fff;font-size:12px;cursor:pointer;">Anlegen</button></div>
+    <div style="display:flex;gap:6px;"><input id="sgc-neu" placeholder="Name der Bestellstelle" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"><button onclick="sgStelleNeu()" style="padding:7px 10px;border:none;border-radius:7px;background:#059669;color:#fff;font-size:12px;cursor:pointer;">Anlegen</button></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
       <div style="flex:1;min-width:110px;"><label style="font-size:10px;color:var(--muted);display:block;">Mindestbetrag € (Standard)</label><input id="sgc-min" type="number" step="0.5" value="${d.config.min_betrag}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div>
       <div style="flex:1;min-width:110px;"><label style="font-size:10px;color:var(--muted);display:block;">Anmeldeschluss (hh:mm)</label><input id="sgc-cut" value="${escAttr(d.config.cutoff)}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div></div>
@@ -19129,6 +19141,11 @@ async function sgBestellHtml(){
     <button onclick="sgSaveConfig()" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">Einstellungen speichern ✓</button></details>`;
   return h;
 }
+async function sgAdresse(id,alt){
+  const a=prompt('Adresse für die Lieferung:',alt||''); if(a===null) return;
+  try{ await sgCall('',{action:'stelle_adresse',id,adresse:a}); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); }
+}
+window.sgAdresse=sgAdresse;
 function sgRefreshAfter(){ if(typeof sgRefresh==='function') sgRefresh(); }
 async function sgStorno(id,storno){
   if(storno && !confirm('Diese Anmeldung stornieren?')) return;
@@ -19210,8 +19227,7 @@ async function stadtgemeindeBodyHtml(){
     const monatLabel=new Date(m+'-01').toLocaleDateString('de-AT',{month:'long',year:'numeric'});
     const monatSumme=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
     const monatPort=einträge.reduce((s,r)=>s+(r.portionen||0),0);
-    html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;">${monatLabel} — Σ €${monatSumme.toFixed(2)}${monatPort?` · ${monatPort} Portionen`:''}</div>`;
-    html+=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
+    html+=`<details class="card" style="margin-top:10px;"><summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;font-size:13px;font-weight:700;"><span>${monatLabel}</span><span style="color:#059669;">Σ €${monatSumme.toFixed(2)}${monatPort?` · ${monatPort} Port.`:''}</span></summary><div style="overflow-x:auto;padding:0 6px 8px;"><table class="pack-table" style="width:100%;"><thead><tr>
       <th style="text-align:left;">Datum</th><th>Portionen</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
     </tr></thead><tbody>`;
     einträge.forEach(r=>{
@@ -19226,7 +19242,7 @@ async function stadtgemeindeBodyHtml(){
         <td style="text-align:center;"><button onclick="deleteStadtgemeindeZahlung(${r.id})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:13px;">🗑</button></td>
       </tr>`;
     });
-    html+='</tbody></table></div></div>';
+    html+='</tbody></table></div></details>';
   });
   return html;
 }
