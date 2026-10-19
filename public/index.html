@@ -1221,7 +1221,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.138';
+const APP_VERSION = '6.99.139';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5883,15 +5883,29 @@ async function getCalendarEvents(){
   return _calendarEventsCache;
 }
 
+// Ferien-Faktoren je Filiale UND Ferienart (Tabelle forecast_ferien_faktoren, Schlüssel = calendar_events.label,
+// z.B. "Herbstferien"). Ohne Eintrag gilt weiter der pauschale forecast_settings.ferien_pct.
+let _ferienFaktorenCache=null; // storeId -> {ferienart -> {pct, basis}}
+async function getFerienFaktoren(){
+  if(_ferienFaktorenCache) return _ferienFaktorenCache;
+  try{
+    const rows=await api('forecast_ferien_faktoren?select=store_id,ferienart,pct,basis');
+    const m={};
+    (rows||[]).forEach(r=>{ (m[r.store_id]=m[r.store_id]||{})[r.ferienart]={pct:Number(r.pct),basis:r.basis||''}; });
+    _ferienFaktorenCache=m;
+    return m;
+  }catch(e){ return {}; } // bei Fehler nicht zwischenspeichern, damit der nächste Aufruf es erneut versucht
+}
 async function getForecastSettings(storeId){
   if(_forecastSettingsCache[storeId]) return _forecastSettingsCache[storeId];
-  const cacheKey=`fc_settings_v2_${storeId}`; // v2: nach Korrektur der Ferien-Faktoren je Filiale
+  const cacheKey=`fc_settings_v3_${storeId}`; // v3: + Ferien-Faktoren je Ferienart (v2: Korrektur der Ferien-Faktoren je Filiale
   // (11.08.26) — neuer Schlüssel, damit alte zwischengespeicherte −10%-Werte nicht weiterwirken.
   const stored=cacheGet(cacheKey);
   if(stored){ _forecastSettingsCache[storeId]=stored; return stored; }
   const rows = await api(`forecast_settings?store_id=eq.${storeId}&select=*`).catch(()=>[]);
   const defaults = {weather_sunny_pct:10, weather_rain_pct:-8, feiertag_pct:-25, ferien_pct:-10};
   const settings = rows?.[0] ? {...defaults, ...rows[0]} : defaults;
+  settings.ferien_by_art = (await getFerienFaktoren())[storeId] || {};
   _forecastSettingsCache[storeId] = settings;
   cacheSet(cacheKey, settings);
   return settings;
@@ -5929,8 +5943,12 @@ function getDayModifiers(dateStr, storeId, weatherMap, calendarEvents, settings)
 
   const ferien = calendarEvents.find(e=>e.event_type==='ferien' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
   if(ferien && !feiertag){
-    pct += settings.ferien_pct;
-    reasons.push(`🏖️ ${ferien.label}${fmtPct(settings.ferien_pct)}`);
+    // Faktor je Ferienart (z.B. Herbstferien), sonst pauschaler Wert; die Datenbasis erscheint in Klammern
+    // und damit grau in der Begründung unter dem Vorschlag.
+    const fa=settings.ferien_by_art?.[ferien.label];
+    const fp=fa?fa.pct:settings.ferien_pct;
+    pct += fp;
+    reasons.push(`🏖️ ${ferien.label}${fmtPct(fp)}${fa?.basis?` (${fa.basis})`:''}`);
   }
 
   const sondertag = calendarEvents.find(e=>e.event_type==='sondertag' && dateStr>=e.event_date && dateStr<=(e.end_date||e.event_date) && (!e.store_id||e.store_id===storeId));
@@ -10405,6 +10423,7 @@ async function renderOrgForecast(){
     api(`disposal?disposal_date=gte.${prevFromDate}&disposal_date=lte.${dispToDate}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time,slot&limit=20000`).catch(()=>[]),
     api('forecast_settings?select=*').catch(()=>[])
   ]);
+  const ferienFaktoren=await getFerienFaktoren();
 
   // Settings für Wetter/Ferien-Zuschläge
   // Einstellungen PRO FILIALE — vorher wurde pauschal die erste Zeile für alle Filialen verwendet,
@@ -10412,7 +10431,7 @@ async function renderOrgForecast(){
   // blieben. Der Ferien-Effekt unterscheidet sich real um den Faktor 3 zwischen den Filialen.
   const SETTINGS_FALLBACK={weather_sunny_pct:10,weather_rain_pct:-8,feiertag_pct:-25,ferien_pct:-18};
   const settingsByStore={};
-  (fcSettings||[]).forEach(s=>{ settingsByStore[s.store_id]=s; });
+  (fcSettings||[]).forEach(s=>{ settingsByStore[s.store_id]={...s, ferien_by_art:ferienFaktoren[s.store_id]||{}}; });
   const settingsFor=(sid)=>settingsByStore[sid]||SETTINGS_FALLBACK;
 
   // fMap[date][store][dish][groesse] = rec
