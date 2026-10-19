@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.152';
+const APP_VERSION = '6.99.154';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18983,7 +18983,7 @@ const sgSumme=rows=>sgAktiv(rows).reduce((s,r)=>s+Number(r.summe),0);
 function sgPortionen(rows){ return sgAktiv(rows).reduce((s,r)=>s+(r.items||[]).reduce((a,i)=>a+(i.anzahl||0),0),0); }
 // Adresse der getrennten Bestellseite (Ordner bestellseite/, eigenes Vercel-Projekt). Leer = Übergangslösung über diese App.
 const SG_BASE='https://karma-bestellen.vercel.app';
-const sgLink=tok=>`${SG_BASE}/?k=${tok}`;
+const sgLink=tok=>{ if(!tok) return SG_BASE; const s=((_sgListe&&_sgListe.stellen)||[]).find(x=>x.token===tok); return SG_BASE+'/'+(s&&s.slug?s.slug:'?k='+tok); };
 async function sgBestellHtml(){
   sgSyncMenue();
   let d;
@@ -19000,6 +19000,8 @@ async function sgBestellHtml(){
   let h=`<div class="card" style="padding:14px;margin-bottom:14px;">
     <div style="font-size:12px;font-weight:700;margin-bottom:8px;">📥 Anmeldungen — ${dl(d.datum)}</div>
     <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;">${chips}</div>
+    <div style="background:var(--bg,#f4f4f1);border-radius:10px;padding:9px 10px;margin-bottom:10px;"><div style="font-size:11px;color:var(--muted);margin-bottom:5px;">Gemeinsamer Link für alle (man wählt dort die Stelle):</div>
+      <div style="display:flex;gap:6px;"><input readonly value="${escAttr(SG_BASE)}" onclick="this.select()" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;"><button onclick="sgCopyLink('')" style="padding:7px 10px;border:none;border-radius:7px;background:#059669;color:#fff;font-size:12px;cursor:pointer;">Kopieren</button></div></div>
     <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Bestellstelle</th><th>Summe</th><th>Lieferstatus</th></tr></thead><tbody>
     ${stellen.map(s=>{ const sum=sgSumme(von(s.id)), stt=status(sum,sgAktiv(von(s.id)).length); return `<tr style="${s.aktiv?'':'opacity:.45;'}"><td style="font-size:12.5px;font-weight:600;">${escAttr(s.name)}</td><td style="text-align:center;font-size:12.5px;">${sgFmt(sum)}</td>
       <td style="text-align:center;font-size:11px;font-weight:700;"><span style="padding:3px 9px;border-radius:99px;background:${stt.bg};color:${stt.c};">${stt.t}</span></td></tr>`; }).join('')}

@@ -3,13 +3,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <title>Karma Food · Lieferung</title>
-<link href="https://fonts.googleapis.com/css2?family=Boldonse&display=swap" rel="stylesheet">
 <style>*{box-sizing:border-box}html,body{margin:0;background:#FAF7F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a18;-webkit-text-size-adjust:100%}button,input{font-family:inherit}</style>
 </head><body>
 <!-- Eigenständige Bestellseite (Lieferung an Bestellstellen). Enthält KEINEN App-Code und KEINEN Datenbank-Schlüssel:
      Sie spricht ausschließlich mit der Edge Function stadtgemeinde-bestellung (Token im Link). Eigene Adresse
      (zusätzliche Domain am App-Projekt; vercel.json liefert dort NUR diese Seite aus, die App ist darüber nicht erreichbar). -->
 <div id="public-bestellen"></div>
+<div style="max-width:480px;margin:0 auto;padding:0 18px 36px;font-size:11.5px;line-height:1.5;color:#777;">
+  <b>Datenschutz:</b> Wir verarbeiten deine Angaben (Bestellung, Bestellstelle, optional Name/Nummer, Anmerkung und Zahlungsart) nur zur Abwicklung der Lieferung (Art. 6 Abs. 1 lit. b DSGVO). Name/Nummer und Anmerkung werden nach 90 Tagen unkenntlich gemacht, Beträge und Datum bleiben aus buchhalterischen Gründen erhalten. Dein Browser merkt sich nur, welche Stelle du gewählt hast – keine Tracking-Cookies. Verantwortlich: Raihmann GmbH (Karma Food), <a href="mailto:hallo@karmafood.at" style="color:#777;">hallo@karmafood.at</a>. Mehr in der <a href="https://karmafood.at/policies/privacy-policy" style="color:#777;" target="_blank" rel="noopener">Datenschutzerklärung</a>.
+</div>
 <script>
 const SG_FN='https://fkliyqjxnttzyuzogrng.supabase.co/functions/v1/stadtgemeinde-bestellung';
 const sgFmt=n=>(Math.round(Number(n)*100)/100).toFixed(2).replace('.',',')+' €';
@@ -43,14 +45,35 @@ const SB_WD=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Sa
 const sbPlus=(d,n)=>{ const x=new Date(d+'T12:00:00Z'); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); };
 const sbShort=d=>{ const [y,m,t]=d.split('-'); return `${t}.${m}.`; };
 function sbRel(d){ return d===_sbInfo.heute?'Heute':d===sbPlus(_sbInfo.heute,1)?'Morgen':SB_WD[new Date(d+'T12:00:00Z').getUTCDay()]; }
+async function sbPicker(){
+  const el=document.getElementById('public-bestellen');
+  const frame=inner=>{ el.innerHTML=`<div style="max-width:480px;margin:0 auto;padding:28px 18px 40px;min-height:100vh;">
+    <div style="text-align:center;margin-bottom:22px;"><div style="display:inline-block;background:#1a1a18;color:#D4FF3F;font-family:'Arial Black',Impact,system-ui,sans-serif;font-weight:900;font-size:19px;letter-spacing:1.5px;padding:10px 18px;border-radius:14px;">KARMA FOOD</div>
+    <div style="color:#444;font-size:15px;font-weight:600;margin-top:10px;">Lieferung 🛵</div></div>${inner}</div>`; };
+  frame(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;color:#666;font-size:13px;">Wird geladen…</div>`);
+  let list=[];
+  try{ list=(await sgCall('')).stellen||[]; }catch(e){}
+  const cols=[['#FFF0B8','#E8B800'],['#FFD9C7','#E94E1B'],['#D3EFD9','#2E9E5B'],['#D4E6FF','#3B82F6'],['#EBDCFA','#8B5CF6']];
+  frame(list.length?`<div style="font-size:16px;font-weight:800;margin:0 2px 12px;text-align:center;">Wer bestellt?</div>`+list.map((x,i)=>`<button onclick="sbPick('${escAttr(x.slug)}')" style="display:block;width:100%;text-align:left;margin-bottom:10px;padding:18px 16px;border:none;border-left:7px solid ${cols[i%5][1]};border-radius:16px;background:${cols[i%5][0]};font-size:17px;font-weight:700;color:#1a1a18;cursor:pointer;">${escAttr(x.name)}</button>`).join('')+`<div style="font-size:12px;color:#777;text-align:center;margin-top:8px;">Deine Auswahl wird auf diesem Handy gemerkt.</div>`
+    :`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;font-size:14px;">Gerade nicht erreichbar. Bitte später nochmal versuchen.</div>`);
+}
+function sbPick(slug){ try{ localStorage.setItem('kf_stelle',slug); }catch(e){} history.replaceState(null,'','/'); renderPublicBestellen(); }
+function sbReset(){ try{ localStorage.removeItem('kf_stelle'); }catch(e){} history.replaceState(null,'','/'); renderPublicBestellen(); }
+window.sbPick=sbPick; window.sbReset=sbReset;
 async function renderPublicBestellen(){
   const el=document.getElementById('public-bestellen');
-  _sbToken=new URLSearchParams(location.search).get('k')||'';
+  _sbToken=new URLSearchParams(location.search).get('k')||decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g,'').split('/')[0]||'').replace(/\.html$/,'').replace(/^(index|bestellen)$/,'');
   _sbCarts={}; _sbDays={}; _sbOpen='';
+  window._sbVia=false;
+  if(!_sbToken){
+    let saved=''; try{ saved=localStorage.getItem('kf_stelle')||''; }catch(e){}
+    if(saved){ _sbToken=saved; window._sbVia=true; } else { await sbPicker(); return; }
+  }
   window._sbShell=inner=>{ el.innerHTML=`<div style="max-width:480px;margin:0 auto;padding:28px 18px 40px;min-height:100vh;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:22px;">
-      <div style="display:inline-block;background:#1a1a18;color:#D4FF3F;font-family:'Boldonse',sans-serif;font-weight:400;font-size:20px;letter-spacing:1px;padding:10px 18px;border-radius:14px;">KARMA FOOD</div>
+      <div style="display:inline-block;background:#1a1a18;color:#D4FF3F;font-family:'Arial Black',Impact,system-ui,sans-serif;font-weight:900;font-size:19px;letter-spacing:1.5px;padding:10px 18px;border-radius:14px;">KARMA FOOD</div>
       <div style="color:#444;font-size:15px;font-weight:600;margin-top:10px;">Lieferung${_sbInfo&&_sbInfo.stelle?' · '+escAttr(_sbInfo.stelle):''} 🛵</div>
+      ${window._sbVia&&_sbInfo&&_sbInfo.stelle?`<a href="#" onclick="sbReset();return false" style="display:inline-block;margin-top:4px;font-size:12px;color:#777;">Andere Stelle wählen</a>`:''}
     </div>${inner}</div>`; };
   const shell=window._sbShell;
   shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;color:#666;font-size:13px;">Wird geladen…</div>`);
@@ -58,6 +81,7 @@ async function renderPublicBestellen(){
     _sbInfo=await sgCall(`?k=${encodeURIComponent(_sbToken)}`);
   }catch(e){
     _sbInfo=null;
+    if(window._sbVia){ try{ localStorage.removeItem('kf_stelle'); }catch(e){} window._sbVia=false; _sbToken=''; await sbPicker(); return; }
     shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;font-size:14px;">Dieser Link ist nicht gültig. Bitte den aktuellen Link von uns verwenden.</div>`);
     return;
   }
@@ -129,7 +153,7 @@ function sbDraw(){
     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Deine Anmeldung</div>
     ${tageMitWahl.length?tageMitWahl.map(t=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span>${rl(t)}</span><b>${sgFmt(sbDaySum(t.datum))}</b></div>`).join('')+`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #eee;margin-top:6px;padding-top:6px;"><span>Gesamt</span><span>${sgFmt(total)}</span></div>`:'<div style="font-size:12.5px;color:#888;">Wähle oben Gerichte für einen oder mehrere Tage.</div>'}
     <input id="sb-name" value="${escAttr(keepName)}" placeholder="Name / Nummer (optional)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin:12px 0 8px;background:#FAF7F0;">
-    <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional, z.B. Inhalt vom Lunch Combo)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin-bottom:10px;background:#FAF7F0;">
+    <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional, z.B. Inhalt Lunch Combo – bitte keine Gesundheitsdaten)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin-bottom:10px;background:#FAF7F0;">
     <div style="font-size:11px;color:#888;margin-bottom:4px;">Bezahlung (optional, auch beides möglich)</div>
     <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;color:#444;">
       <label><input type="checkbox" id="sb-z-sodexo" ${keepSo?'checked':''}> Sodexo/Pluxee</label>
