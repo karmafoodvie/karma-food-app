@@ -1223,7 +1223,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.149';
+const APP_VERSION = '6.99.150';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -19135,7 +19135,9 @@ const SG_PREIS_FELDER={gericht:'Gericht',special:'Special',combo:'Lunch Combo'};
 const sgAktiv=rows=>(rows||[]).filter(r=>!r.storniert);
 const sgSumme=rows=>sgAktiv(rows).reduce((s,r)=>s+Number(r.summe),0);
 function sgPortionen(rows){ return sgAktiv(rows).reduce((s,r)=>s+(r.items||[]).reduce((a,i)=>a+(i.anzahl||0),0),0); }
-const sgLink=tok=>`${location.origin}/?bestellen=1&k=${tok}`;
+// Adresse der getrennten Bestellseite (Ordner bestellseite/, eigenes Vercel-Projekt). Leer = Übergangslösung über diese App.
+const SG_BASE='';
+const sgLink=tok=>SG_BASE?`${SG_BASE.replace(/\/$/,'')}/?k=${tok}`:`${location.origin}/?bestellen=1&k=${tok}`;
 async function sgBestellHtml(){
   sgSyncMenue();
   let d;
