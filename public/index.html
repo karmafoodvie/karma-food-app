@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.156';
+const APP_VERSION = '6.99.157';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18940,7 +18940,7 @@ window.toggleArtikelFreigabe=toggleArtikelFreigabe;
 // ==== STADTGEMEINDE-ANMELDUNG (19.10.26) ====
 // Öffentliche Seite ?bestellen=1&k=TOKEN: Mitarbeitende einer Bestellstelle (Stadtgemeinde, ...) melden sich
 // bis zum Anmeldeschluss (Standard 11:40) für die Lieferung an. Jede Bestellstelle hat einen eigenen Link;
-// der Mindestbestellwert gilt je Bestellstelle für alle Anmeldungen des Tages zusammen. Schreiben/Lesen läuft
+// der Mindestbestellwert gilt je Liefertag für alle Anmeldungen ALLER Bestellstellen zusammen. Schreiben/Lesen läuft
 // NUR über die Edge Function 'stadtgemeinde-bestellung' (Tabellen per RLS gesperrt; Schluss, Mindestbetrag,
 // Preise gelten serverseitig). Preise: Gericht 10,50 / Special 11,50 / Lunch Combo 13,50 (Einstellung).
 // Die App (Everton) sieht Übersicht + Listen im Reiter Stadtgemeinde. Mindestbetrag = Einstellung (inkl. Stufen).
@@ -19002,11 +19002,11 @@ async function sgBestellHtml(){
     <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;">${chips}</div>
     <div style="background:var(--bg,#f4f4f1);border-radius:10px;padding:9px 10px;margin-bottom:10px;"><div style="font-size:11px;color:var(--muted);margin-bottom:5px;">Gemeinsamer Link für alle (man wählt dort die Stelle):</div>
       <div style="display:flex;gap:6px;"><input readonly value="${escAttr(SG_BASE)}" onclick="this.select()" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:8px;font-size:12px;"><button onclick="sgCopyLink('')" style="padding:7px 10px;border:none;border-radius:7px;background:#059669;color:#fff;font-size:12px;cursor:pointer;">Kopieren</button></div></div>
-    <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Bestellstelle</th><th>Summe</th><th>Lieferstatus</th></tr></thead><tbody>
-    ${stellen.map(s=>{ const sum=sgSumme(von(s.id)), stt=status(sum,sgAktiv(von(s.id)).length); return `<tr style="${s.aktiv?'':'opacity:.45;'}"><td style="font-size:12.5px;font-weight:600;">${escAttr(s.name)}</td><td style="text-align:center;font-size:12.5px;">${sgFmt(sum)}</td>
-      <td style="text-align:center;font-size:11px;font-weight:700;"><span style="padding:3px 9px;border-radius:99px;background:${stt.bg};color:${stt.c};">${stt.t}</span></td></tr>`; }).join('')}
+    ${(()=>{ const alleR=(d.bestellungen||[]).filter(r=>r.stelle_id), gs=sgSumme(alleR), ga=sgAktiv(alleR).length, g=status(gs,ga); return `<div style="border-radius:10px;padding:10px 12px;margin-bottom:10px;background:${g.bg};color:${g.c};"><div style="font-size:11px;opacity:.85;">Gesamt aller Stellen · ${ga} Anmeldung(en)</div><div style="font-size:15px;font-weight:800;">${sgFmt(gs)} <span style="font-weight:600;font-size:12px;">von ${sgFmt(min)}</span></div><div style="font-size:12.5px;font-weight:700;">${g.t}${gs<min&&!(final&&ga===0)?` · noch ${sgFmt(min-gs)}`:''}</div></div>`; })()}
+    <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Bestellstelle</th><th>Anmeldungen</th><th>Summe</th></tr></thead><tbody>
+    ${stellen.map(s=>{ const sum=sgSumme(von(s.id)), n=sgAktiv(von(s.id)).length; return `<tr style="${s.aktiv?'':'opacity:.45;'}"><td style="font-size:12.5px;font-weight:600;">${escAttr(s.name)}</td><td style="text-align:center;font-size:12.5px;">${n}</td><td style="text-align:center;font-size:12.5px;">${sgFmt(sum)}</td></tr>`; }).join('')}
     </tbody></table></div>
-    <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Mindestbestellwert: ${sgFmt(min)} je Bestellstelle und Tag · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div></div>`;
+    <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Mindestbestellwert: ${sgFmt(min)} je Liefertag über alle Stellen zusammen · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div></div>`;
   {
     const nm={}; stellen.forEach(s=>nm[s.id]=s.name);
     const alle=(d.bestellungen||[]).filter(r=>r.stelle_id).slice().sort((x,y)=>(nm[x.stelle_id]||'').localeCompare(nm[y.stelle_id]||'','de')||String(x.created_at).localeCompare(String(y.created_at)));
@@ -19024,7 +19024,7 @@ async function sgBestellHtml(){
             <td style="text-align:center;font-size:12.5px;font-weight:700;">${i.anzahl}×</td>
             <td style="font-size:12.5px;font-weight:700;text-align:left;">${first?escAttr(r.name):''}${first&&r.zahlung?`<div style="font-size:10px;font-weight:400;color:var(--muted);">${zl[r.zahlung]}</div>`:''}</td>
             <td style="text-align:center;font-size:12px;">${first?sgFmt(r.summe):''}</td>
-            <td style="text-align:center;">${first?`<button onclick="sgStorno(${r.id},${r.storniert?'false':'true'})" style="background:none;border:none;cursor:pointer;font-size:13px;" title="${r.storniert?'Wiederherstellen':'Stornieren'}">${r.storniert?'↩️':'🗑'}</button>`:''}</td></tr>`;
+            <td style="text-align:center;white-space:nowrap;">${first?`<button onclick="sgStorno(${r.id},${r.storniert?'false':'true'})" style="background:none;border:none;cursor:pointer;font-size:13px;" title="${r.storniert?'Wiederherstellen':'Stornieren'}">${r.storniert?'↩️':'🚫'}</button><button onclick="sgLoeschen(${r.id})" style="background:none;border:none;cursor:pointer;font-size:13px;" title="Endgültig löschen">🗑</button>`:''}</td></tr>`;
         });
       });
       h+=`</tbody></table></div>`;
@@ -19067,6 +19067,11 @@ async function sgAdresse(id,alt){
 }
 window.sgAdresse=sgAdresse;
 function sgRefreshAfter(){ if(typeof sgRefresh==='function') sgRefresh(); }
+async function sgLoeschen(id){
+  if(!confirm('Diese Anmeldung ENDGÜLTIG löschen? (Nicht rückgängig zu machen)')) return;
+  try{ await sgCall('',{action:'loeschen',id}); showToast('✓ Gelöscht'); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); }
+}
+window.sgLoeschen=sgLoeschen;
 async function sgStorno(id,storno){
   if(storno && !confirm('Diese Anmeldung stornieren?')) return;
   try{ await sgCall('',{action:storno?'storno':'wiederherstellen',id}); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); }
