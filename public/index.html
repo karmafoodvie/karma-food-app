@@ -1223,7 +1223,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.143';
+const APP_VERSION = '6.99.144';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18959,6 +18959,25 @@ async function sgCall(qs, body){
   return d;
 }
 
+// Preise je Tag/Kategorie (Kopie der Finanz-App) den Gerichten der App zuordnen. Die Namen weichen teils
+// leicht ab (Lasagna/Lasagne, Khadi/Kadhi, andere Lasagne-Namen) — deshalb: 1) gleicher Name, 2) ähnlicher
+// Name, 3) Rest 1:1 (jeder Tag hat je Kategorie genau ein Gericht), sonst Standardpreis des Slots.
+const sbNorm=t=>String(t||'').toLowerCase().replace(/lasagna/g,'lasagne').replace(/kadhi/g,'khadi').replace(/[^a-zäöüß0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const sbTok=t=>new Set(sbNorm(t).split(' ').filter(w=>w.length>2&&!['mit','und','veggie'].includes(w)));
+function sbMatchPreise(entries,rows){
+  const res=new Map(), freeE=entries.slice(), freeR=(rows||[]).slice();
+  const take=(e,r)=>{ res.set(e,{kat:r.kategorie,preis:Number(r.preis)}); freeE.splice(freeE.indexOf(e),1); freeR.splice(freeR.indexOf(r),1); };
+  entries.forEach(e=>{ const r=freeR.find(x=>sbNorm(x.dish_name)===sbNorm(e.name)); if(r&&freeE.includes(e)) take(e,r); });
+  let guard=0;
+  while(freeE.length&&freeR.length&&guard++<10){
+    let best=null;
+    freeE.forEach(e=>freeR.forEach(r=>{ const a=sbTok(e.name),b=sbTok(r.dish_name); const i=[...a].filter(w=>b.has(w)).length, u=new Set([...a,...b]).size||1; const j=i/u; if(j>=0.5&&(!best||j>best.j)) best={e,r,j}; }));
+    if(!best) break; take(best.e,best.r);
+  }
+  ['lasagn','biryani','bowl'].forEach(k=>{ const e=freeE.filter(x=>sbNorm(x.name).includes(k)), r=freeR.filter(x=>x.kategorie.toLowerCase().startsWith(k.slice(0,5))); if(e.length===1&&r.length===1) take(e[0],r[0]); });
+  if(freeE.length===1&&freeR.length===1) take(freeE[0],freeR[0]);
+  return res;
+}
 // ---- Öffentliche Anmeldeseite ----
 let _sbInfo=null, _sbMenu=[], _sbCart={}, _sbToken='';
 async function renderPublicBestellen(){
@@ -18979,7 +18998,10 @@ async function renderPublicBestellen(){
   }
   try{ await loadMenuTausch(); await applyMenuOverrides(); }catch(e){ console.error(e); }
   const preise=_sbInfo.preise||{};
-  _sbMenu=getMenuForDate(_sbInfo.datum).filter(e=>preise[e.slot]>0 && SG_SLOT_LABEL[e.slot]);
+  const rawMenu=getMenuForDate(_sbInfo.datum).filter(e=>SG_SLOT_LABEL[e.slot]);
+  const zu=sbMatchPreise(rawMenu,_sbInfo.preise_tag);
+  rawMenu.forEach(e=>{ const m=zu.get(e); if(m){ e._kat=m.kat; e._preis=m.preis; } else { e._kat=''; e._preis=Number(preise[e.slot])||0; } });
+  _sbMenu=rawMenu.filter(e=>e._preis>0);
   if(!_sbInfo.offen){
     shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;">
       <div style="font-size:34px;margin-bottom:8px;">⏰</div>
@@ -18993,14 +19015,14 @@ async function renderPublicBestellen(){
   }
   sbDraw(shell);
 }
-function sbCartSum(){ return _sbMenu.reduce((s,e)=>s+(_sbCart[e.slot]||0)*(_sbInfo.preise[e.slot]||0),0); }
+function sbCartSum(){ return _sbMenu.reduce((s,e)=>s+(_sbCart[e.slot]||0)*(e._preis||0),0); }
 function sbDraw(shell){
   shell=shell||(inner=>{ const w=document.querySelector('#public-bestellen > div'); if(w){ const h=w.firstElementChild.outerHTML; w.innerHTML=h+inner; } });
   const min=_sbInfo.min, bisher=_sbInfo.summe_heute, mein=sbCartSum();
   const gesamt=bisher+mein, pct=Math.min(100,Math.round(gesamt/min*100)), ok=gesamt>=min;
   const rows=_sbMenu.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #eee;">
     <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#222;">${escAttr(e.name)}</div>
-      <div style="font-size:11.5px;color:#888;">${SG_SLOT_LABEL[e.slot]} · ${sgFmt(_sbInfo.preise[e.slot])}</div></div>
+      <div style="font-size:11.5px;color:#888;">${sgFmt(e._preis)}</div></div>
     <button onclick="sbChg('${e.slot}',-1)" style="width:34px;height:34px;border-radius:50%;border:1px solid #ddd;background:#fff;font-size:18px;cursor:pointer;">−</button>
     <div style="width:22px;text-align:center;font-size:15px;font-weight:700;">${_sbCart[e.slot]||0}</div>
     <button onclick="sbChg('${e.slot}',1)" style="width:34px;height:34px;border-radius:50%;border:none;background:#D4FF3F;font-size:18px;font-weight:700;cursor:pointer;">+</button></div>`).join('');
@@ -19026,7 +19048,7 @@ async function sbSubmit(){
   const name=document.getElementById('sb-name').value.trim();
   const err=document.getElementById('sb-err');
   if(name.length<2){ err.textContent='Bitte einen Namen angeben.'; return; }
-  const items=_sbMenu.filter(e=>_sbCart[e.slot]>0).map(e=>({slot:e.slot,name:e.name,anzahl:_sbCart[e.slot]}));
+  const items=_sbMenu.filter(e=>_sbCart[e.slot]>0).map(e=>({slot:e.slot,kategorie:e._kat,name:e.name,anzahl:_sbCart[e.slot]}));
   if(!items.length) return;
   const z=document.querySelector('input[name=sb-z]:checked')?.value||null;
   const btn=document.getElementById('sb-send'); btn.disabled=true; btn.textContent='Wird gesendet…';
@@ -19055,11 +19077,13 @@ async function sgBestellHtml(){
   const port=sgPortionen(rows);
   const agg={}; aktiv.forEach(r=>(r.items||[]).forEach(i=>{ agg[i.name]=(agg[i.name]||0)+i.anzahl; }));
   const link=`${location.origin}/?bestellen=1&k=${d.config.token}`;
+  const preisHinweis=(d.preise_tag||[]).length||Object.keys(d.config.preise||{}).length?'':`<div style="font-size:11.5px;background:#FEF3C7;color:#92400E;border-radius:8px;padding:7px 10px;margin-bottom:8px;">⚠️ Für heute sind keine Preise hinterlegt — die Seite zeigt keine Gerichte. Standardpreise unter ⚙️ Einstellungen eintragen.</div>`;
   const zl={sodexo:'Sodexo',bar:'Bar'};
   let h=`<div class="card" style="padding:14px;margin-bottom:14px;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
       <div style="font-size:12px;font-weight:700;">📥 Anmeldungen heute</div>
       <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:${ok?'#DCFCE7':'#FEE2E2'};color:${ok?'#166534':'#991B1B'};">${ok?'Lieferung steht ✓':`noch ${sgFmt(min-summe)} bis ${sgFmt(min)}`}</span></div>
+    ${preisHinweis}
     <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">${aktiv.length} Anmeldung(en) · ${sgFmt(summe)} · ${port} Portionen · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div>`;
   if(Object.keys(agg).length) h+=`<div style="font-size:12.5px;background:var(--surface-1);border-radius:8px;padding:8px 10px;margin-bottom:8px;">${Object.entries(agg).map(([n,a])=>`<b>${a}×</b> ${escAttr(n)}`).join('<br>')}</div>`;
   if(rows.length){
@@ -19084,7 +19108,7 @@ async function sgBestellHtml(){
       <div style="flex:1;min-width:110px;"><label style="font-size:10px;color:var(--muted);display:block;">Anmeldeschluss (hh:mm)</label><input id="sgc-cut" value="${escAttr(d.config.cutoff)}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div></div>
     <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Stufen — ab diesem Datum gilt dieser Mindestbetrag (z.B. ab 01.12. → 35 €). Eine Zeile pro Stufe: <code>2026-12-01=35</code></div>
     <textarea id="sgc-stufen" rows="3" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;font-size:12px;">${st.map(s=>`${s.ab}=${s.betrag}`).join('\n')}</textarea>
-    <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Preise pro Gericht (€) — nur Gerichte mit Preis erscheinen auf der Seite:</div>
+    <div style="font-size:10px;color:var(--muted);margin:10px 0 4px;">Standardpreise pro Gericht (€) — gelten nur, wenn für den Tag kein Preis aus der Finanz-App vorliegt (die liegt bis 29.01.2027 vor):</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">${Object.keys(SG_SLOT_LABEL).map(k=>`<div style="flex:1;min-width:80px;"><label style="font-size:10px;color:var(--muted);display:block;">${SG_SLOT_LABEL[k]}</label><input id="sgc-p-${k}" type="number" step="0.1" value="${P[k]??''}" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:7px;box-sizing:border-box;"></div>`).join('')}</div>
     <button onclick="sgSaveConfig()" style="width:100%;margin-top:10px;padding:9px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">Einstellungen speichern ✓</button></details></div>`;
   return h;
