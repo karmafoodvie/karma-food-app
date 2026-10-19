@@ -1223,7 +1223,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.146';
+const APP_VERSION = '6.99.147';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18981,12 +18981,16 @@ function sbMatchPreise(entries,rows){
   return res;
 }
 
-// ---- Öffentliche Anmeldeseite ----
-let _sbInfo=null, _sbMenu=[], _sbCart={}, _sbToken='';
+// ---- Öffentliche Anmeldeseite (heute + Vorbestellung für die nächsten Liefertage / die ganze Woche) ----
+let _sbInfo=null, _sbDays={}, _sbCarts={}, _sbToken='', _sbOpen='';
+const SB_WD=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const sbPlus=(d,n)=>{ const x=new Date(d+'T12:00:00Z'); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); };
+const sbShort=d=>{ const [y,m,t]=d.split('-'); return `${t}.${m}.`; };
+function sbRel(d){ return d===_sbInfo.heute?'Heute':d===sbPlus(_sbInfo.heute,1)?'Morgen':SB_WD[new Date(d+'T12:00:00Z').getUTCDay()]; }
 async function renderPublicBestellen(){
   const el=document.getElementById('public-bestellen');
   _sbToken=new URLSearchParams(location.search).get('k')||'';
-  _sbCart={};
+  _sbCarts={}; _sbDays={}; _sbOpen='';
   window._sbShell=inner=>{ el.innerHTML=`<div style="max-width:480px;margin:0 auto;padding:28px 18px 40px;min-height:100vh;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:22px;">
       <div style="color:#D4FF3F;font-family:'Boldonse',sans-serif;font-weight:400;font-size:22px;letter-spacing:1px;">KARMA FOOD</div>
@@ -19003,85 +19007,110 @@ async function renderPublicBestellen(){
   }
   try{ await loadMenuTausch(); await applyMenuOverrides(); }catch(e){ console.error(e); }
   const P=_sbInfo.preise||{};
-  const rawMenu=getMenuForDate(_sbInfo.datum).filter(e=>SG_SLOTS.includes(e.slot));
-  const zu=sbMatchPreise(rawMenu,_sbInfo.kategorien_tag);
-  rawMenu.forEach(e=>{ const m=zu.get(e); e._kat=(m&&m.kat==='Special')?'Special':'Gericht'; e._preis=Number(e._kat==='Special'?P.special:P.gericht)||0; });
-  _sbMenu=rawMenu.filter(e=>e._preis>0);
-  if(Number(P.combo)>0) _sbMenu.push({slot:'combo',name:'Lunch Combo',_kat:'Combo',_preis:Number(P.combo),_hint:'Bitte unten bei „Anmerkung“ dazuschreiben, was drinnen sein soll.'});
-  if(_sbInfo.nach_schluss){
-    const n=_sbInfo.anzahl, ok=_sbInfo.lieferbar;
-    shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;">
-      <div style="font-size:34px;margin-bottom:8px;">${n===0?'⏰':ok?'✅':'⚠️'}</div>
-      <div style="font-size:15px;font-weight:700;margin-bottom:6px;">${n===0?'Anmeldung für heute geschlossen':ok?'Die Lieferung für heute steht ✓':'Lieferung konnte nicht ausgeführt werden'}</div>
-      <div style="font-size:13px;color:#666;">${n===0?`Anmeldeschluss war um ${escAttr(_sbInfo.cutoff)} Uhr.`:ok?`${n} Anmeldung(en) · ${sgFmt(_sbInfo.summe_heute)} — wir liefern heute.`:`Der Mindestbestellwert von ${sgFmt(_sbInfo.min)} wurde bis ${escAttr(_sbInfo.cutoff)} Uhr nicht erreicht (${sgFmt(_sbInfo.summe_heute)} angemeldet).`}<br><br>Am nächsten Liefertag kannst du dich wieder bis ${escAttr(_sbInfo.cutoff)} Uhr anmelden.</div></div>`);
-    return;
-  }
-  if(!_sbInfo.offen){
-    shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;">
-      <div style="font-size:34px;margin-bottom:8px;">⏰</div>
-      <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Anmeldung für heute geschlossen</div>
-      <div style="font-size:13px;color:#666;">${escAttr(_sbInfo.grund||'')}<br>Am nächsten Liefertag geht's wieder bis ${escAttr(_sbInfo.cutoff)} Uhr.</div></div>`);
-    return;
-  }
-  if(!_sbMenu.length){
-    shell(`<div style="background:#fff;border-radius:18px;padding:22px 18px;text-align:center;font-size:14px;">Heute gibt es keine Gerichte zur Anmeldung.</div>`);
-    return;
-  }
+  _sbInfo.tage.forEach(t=>{
+    const raw=getMenuForDate(t.datum).filter(e=>SG_SLOTS.includes(e.slot));
+    const zu=sbMatchPreise(raw,t.kategorien);
+    raw.forEach(e=>{ const m=zu.get(e); e._kat=(m&&m.kat==='Special')?'Special':'Gericht'; e._preis=Number(e._kat==='Special'?P.special:P.gericht)||0; });
+    const menu=raw.filter(e=>e._preis>0);
+    if(Number(P.combo)>0) menu.push({slot:'combo',name:'Lunch Combo',_kat:'Combo',_preis:Number(P.combo),_hint:'Inhalt bitte unten bei „Anmerkung“ dazuschreiben.'});
+    _sbDays[t.datum]={t,menu,roh:raw};
+    _sbCarts[t.datum]={};
+  });
+  _sbOpen=(_sbInfo.tage.find(t=>t.offen)||{}).datum||'';
   sbDraw();
 }
-function sbCartSum(){ return _sbMenu.reduce((s,e)=>s+(_sbCart[e.slot]||0)*(e._preis||0),0); }
+function sbDaySum(d){ const c=_sbCarts[d]||{}; return (_sbDays[d]?_sbDays[d].menu:[]).reduce((s,e)=>s+(c[e.slot]||0)*(e._preis||0),0); }
+function sbOpenDay(d){ _sbOpen=d; sbDraw(); setTimeout(()=>document.getElementById('sbday-'+d)?.scrollIntoView({behavior:'smooth',block:'start'}),30); }
+function sbChg(d,slot,n){ const c=_sbCarts[d]; c[slot]=Math.max(0,Math.min(20,(c[slot]||0)+n)); sbDraw(); }
 function sbDraw(){
-  const min=_sbInfo.min, bisher=_sbInfo.summe_heute, mein=sbCartSum();
-  const gesamt=bisher+mein, pct=Math.min(100,Math.round(gesamt/min*100)), ok=gesamt>=min;
-  const rows=_sbMenu.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #eee;">
-    <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#222;">${escAttr(e.name)}${e._kat==='Special'?' <span style="font-size:10px;background:#D4FF3F;border-radius:6px;padding:1px 6px;">Special</span>':''}</div>
-      <div style="font-size:11.5px;color:#888;">${sgFmt(e._preis)}${e._hint?' · '+escAttr(e._hint):''}</div></div>
-    <button onclick="sbChg('${e.slot}',-1)" style="width:34px;height:34px;border-radius:50%;border:1px solid #ddd;background:#fff;font-size:18px;cursor:pointer;">−</button>
-    <div style="width:22px;text-align:center;font-size:15px;font-weight:700;">${_sbCart[e.slot]||0}</div>
-    <button onclick="sbChg('${e.slot}',1)" style="width:34px;height:34px;border-radius:50%;border:none;background:#D4FF3F;font-size:18px;font-weight:700;cursor:pointer;">+</button></div>`).join('');
+  const I=_sbInfo, tage=I.tage;
+  const heuteT=tage.find(t=>t.datum===I.heute);
+  const naechster=tage.find(t=>t.offen&&t.datum!==I.heute);
+  const rl=t=>`${sbRel(t.datum)}${sbRel(t.datum)===SB_WD[new Date(t.datum+'T12:00:00Z').getUTCDay()]?'':' · '+SB_WD[new Date(t.datum+'T12:00:00Z').getUTCDay()].slice(0,2)} ${sbShort(t.datum)}`;
+  let banner='';
+  if(heuteT&&heuteT.offen){
+    banner=`<div style="background:#f4f4f1;border-radius:12px;padding:12px;margin-bottom:12px;font-size:13px;color:#333;">Heute noch bis <b>${escAttr(I.cutoff)} Uhr</b> anmelden.${naechster?` Du kannst dich auch <b>schon im Voraus</b> für die nächsten Tage eintragen:
+      <button onclick="sbOpenDay('${naechster.datum}')" style="display:block;width:100%;margin-top:8px;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:14px;font-weight:700;cursor:pointer;">📅 Schon für ${naechster.datum===sbPlus(I.heute,1)?'morgen':'den nächsten Liefertag ('+sbShort(naechster.datum)+')'} eintragen</button>`:''}</div>`;
+  } else if(naechster){
+    banner=`<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:12px;margin-bottom:12px;font-size:13px;color:#333;">${I.heute_grund?escAttr(I.heute_grund):`Für heute ist die Anmeldung geschlossen (Schluss ${escAttr(I.cutoff)} Uhr).`}<br>Du kannst dich aber <b>jetzt schon für die nächsten Tage</b> anmelden:
+      <button onclick="sbOpenDay('${naechster.datum}')" style="display:block;width:100%;margin-top:8px;padding:12px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:14px;font-weight:700;cursor:pointer;">📅 Jetzt für ${naechster.datum===sbPlus(I.heute,1)?'morgen':'den nächsten Liefertag ('+sbShort(naechster.datum)+')'} eintragen</button></div>`;
+  }
+  const cards=tage.map(t=>{
+    const D=_sbDays[t.datum], mein=sbDaySum(t.datum), gesamt=t.summe+mein, ok=gesamt>=t.min, pct=Math.min(100,Math.round(gesamt/t.min*100));
+    const open=_sbOpen===t.datum&&t.offen;
+    const preview=D.roh.map(e=>escAttr(e.name)).join(' · ');
+    let body='';
+    if(t.nach_schluss){
+      const n=t.anzahl;
+      body=`<div style="padding:10px 14px 14px;font-size:13px;color:#444;"><b>${n===0?'Anmeldung für heute geschlossen.':t.lieferbar?'Die Lieferung für heute steht ✓':'Lieferung konnte nicht ausgeführt werden'}</b><br>${n===0?'':t.lieferbar?`${n} Anmeldung(en) · ${sgFmt(t.summe)}`:`Der Mindestbestellwert von ${sgFmt(t.min)} wurde bis ${escAttr(I.cutoff)} Uhr nicht erreicht (${sgFmt(t.summe)} angemeldet).`}</div>`;
+    } else if(open){
+      body=`<div style="padding:0 14px 14px;">
+        <div style="background:#f4f4f1;border-radius:10px;padding:9px 11px;margin:6px 0 4px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;"><span>Angemeldet für diesen Tag (inkl. deiner Auswahl)</span><b>${sgFmt(gesamt)}</b></div>
+          <div style="height:7px;background:#e3e3df;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${ok?'#1D9E75':'#E94E1B'};"></div></div>
+          <div style="font-size:11.5px;margin-top:5px;color:${ok?'#1D9E75':'#B4380F'};font-weight:600;">${ok?'Lieferung möglich ✓':`Noch ${sgFmt(t.min-gesamt)} bis zum Mindestbestellwert von ${sgFmt(t.min)} — frag gern Kolleg:innen!`}</div></div>
+        ${D.menu.length?D.menu.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #eee;">
+          <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;color:#222;">${escAttr(e.name)}${e._kat==='Special'?' <span style="font-size:10px;background:#D4FF3F;border-radius:6px;padding:1px 6px;">Special</span>':''}</div>
+            <div style="font-size:11.5px;color:#888;">${sgFmt(e._preis)}${e._hint?' · '+escAttr(e._hint):''}</div></div>
+          <button onclick="sbChg('${t.datum}','${e.slot}',-1)" style="width:34px;height:34px;border-radius:50%;border:1px solid #ddd;background:#fff;font-size:18px;cursor:pointer;">−</button>
+          <div style="width:22px;text-align:center;font-size:15px;font-weight:700;">${_sbCarts[t.datum][e.slot]||0}</div>
+          <button onclick="sbChg('${t.datum}','${e.slot}',1)" style="width:34px;height:34px;border-radius:50%;border:none;background:#D4FF3F;font-size:18px;font-weight:700;cursor:pointer;">+</button></div>`).join(''):'<div style="font-size:13px;color:#666;padding:10px 0;">Für diesen Tag ist noch kein Menü hinterlegt.</div>'}</div>`;
+    }
+    const clickable=t.offen&&!open;
+    return `<div id="sbday-${t.datum}" style="background:#fff;border-radius:14px;margin-bottom:10px;border:${open?'2px solid #D4FF3F':'1px solid #eee'};overflow:hidden;">
+      <div ${clickable?`onclick="sbOpenDay('${t.datum}')"`:''} style="padding:12px 14px;${clickable?'cursor:pointer;':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div style="font-size:14px;font-weight:700;">${rl(t)}</div>
+          <div style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap;background:${t.nach_schluss?(t.anzahl===0?'#F3F4F6':t.lieferbar?'#DCFCE7':'#FEE2E2'):ok?'#DCFCE7':'#FEF3C7'};color:${t.nach_schluss?(t.anzahl===0?'#6B7280':t.lieferbar?'#166534':'#991B1B'):ok?'#166534':'#92400E'};">${t.nach_schluss?(t.anzahl===0?'geschlossen':t.lieferbar?'Lieferung steht':'nicht ausgeführt'):`${sgFmt(gesamt)} / ${sgFmt(t.min)}`}</div></div>
+        ${open?'':`<div style="font-size:11.5px;color:#777;margin-top:4px;line-height:1.4;">${preview||'Noch kein Menü'}</div>${clickable?`<div style="font-size:12px;font-weight:700;color:#1a1a18;margin-top:6px;">+ Eintragen</div>`:''}`}</div>${body}</div>`;
+  }).join('');
+  // Zusammenfassung / Absenden
+  const tageMitWahl=tage.filter(t=>sbDaySum(t.datum)>0&&t.offen);
+  const total=tageMitWahl.reduce((s,t)=>s+sbDaySum(t.datum),0);
   const keepName=document.getElementById('sb-name')?.value||'', keepNote=document.getElementById('sb-notiz')?.value||'', keepSo=document.getElementById('sb-z-sodexo')?.checked, keepBar=document.getElementById('sb-z-bar')?.checked;
-  window._sbShell(`<div style="background:#fff;border-radius:18px;padding:20px 18px;">
-    <div style="font-size:12px;color:#666;margin-bottom:8px;">Anmeldung bis <b>${escAttr(_sbInfo.cutoff)} Uhr</b>. Wir liefern ab einem Gesamt-Bestellwert von <b>${sgFmt(min)}</b> (alle Anmeldungen von ${escAttr(_sbInfo.stelle)} heute zusammen).</div>
-    <div style="background:#f4f4f1;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px;"><span>Heute bisher (inkl. deiner Auswahl)</span><b>${sgFmt(gesamt)}</b></div>
-      <div style="height:8px;background:#e3e3df;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${ok?'#1D9E75':'#E94E1B'};"></div></div>
-      <div style="font-size:12px;margin-top:6px;color:${ok?'#1D9E75':'#B4380F'};font-weight:600;">${ok?'Lieferung möglich ✓':`Noch ${sgFmt(min-gesamt)} bis zur Lieferung — frag gern Kolleg:innen!`}</div></div>
-    ${rows}
-    <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin:12px 0;"><span>Deine Bestellung</span><span>${sgFmt(mein)}</span></div>
-    <input id="sb-name" value="${escAttr(keepName)}" placeholder="Name / Nummer (optional)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:8px;">
+  const summary=`<div style="background:#fff;border-radius:14px;padding:16px 14px;margin-top:4px;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Deine Anmeldung</div>
+    ${tageMitWahl.length?tageMitWahl.map(t=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span>${rl(t)}</span><b>${sgFmt(sbDaySum(t.datum))}</b></div>`).join('')+`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #eee;margin-top:6px;padding-top:6px;"><span>Gesamt</span><span>${sgFmt(total)}</span></div>`:'<div style="font-size:12.5px;color:#888;">Wähle oben Gerichte für einen oder mehrere Tage.</div>'}
+    <input id="sb-name" value="${escAttr(keepName)}" placeholder="Name / Nummer (optional)" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin:12px 0 8px;">
     <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional, z.B. Inhalt vom Lunch Combo)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:14px;box-sizing:border-box;margin-bottom:10px;">
     <div style="font-size:11px;color:#888;margin-bottom:4px;">Bezahlung (optional, auch beides möglich)</div>
     <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;color:#444;">
       <label><input type="checkbox" id="sb-z-sodexo" ${keepSo?'checked':''}> Sodexo/Pluxee</label>
       <label><input type="checkbox" id="sb-z-bar" ${keepBar?'checked':''}> Bar</label></div>
-    <button id="sb-send" onclick="sbSubmit()" ${mein>0?'':'disabled'} style="width:100%;padding:13px;border:none;border-radius:10px;background:${mein>0?'#1a1a18':'#bbb'};color:#D4FF3F;font-size:14px;font-weight:700;cursor:pointer;">Verbindlich anmelden</button>
-    <div id="sb-err" style="color:#B4380F;font-size:12px;text-align:center;margin-top:8px;"></div>
-  </div>`);
+    <button id="sb-send" onclick="sbSubmit()" ${total>0?'':'disabled'} style="width:100%;padding:13px;border:none;border-radius:10px;background:${total>0?'#1a1a18':'#bbb'};color:#D4FF3F;font-size:14px;font-weight:700;cursor:pointer;">Verbindlich anmelden${tageMitWahl.length>1?` (${tageMitWahl.length} Tage)`:''}</button>
+    <div id="sb-err" style="color:#B4380F;font-size:12px;text-align:center;margin-top:8px;"></div></div>`;
+  window._sbShell(`${banner}<div style="font-size:12px;color:#ccc;margin:0 2px 8px;">Wochenmenü — Tag antippen, um dich einzutragen. Wir liefern ab einem Gesamt-Bestellwert von ${sgFmt(tage[0]?tage[0].min:30)} je Tag (alle Anmeldungen von ${escAttr(I.stelle)} zusammen).</div>${cards}${summary}`);
 }
-function sbChg(slot,d){ _sbCart[slot]=Math.max(0,Math.min(20,(_sbCart[slot]||0)+d)); sbDraw(); }
 async function sbSubmit(){
   const name=document.getElementById('sb-name').value.trim();
   const err=document.getElementById('sb-err');
-  const items=_sbMenu.filter(e=>_sbCart[e.slot]>0).map(e=>({slot:e.slot,kategorie:e._kat,name:e.name,anzahl:_sbCart[e.slot]}));
-  if(!items.length) return;
+  const notiz=document.getElementById('sb-notiz').value.trim();
   const so=document.getElementById('sb-z-sodexo').checked, ba=document.getElementById('sb-z-bar').checked;
   const z=so&&ba?'sodexo+bar':so?'sodexo':ba?'bar':null;
-  const notiz=document.getElementById('sb-notiz').value.trim();
+  const jobs=_sbInfo.tage.filter(t=>t.offen&&sbDaySum(t.datum)>0);
+  if(!jobs.length) return;
   const btn=document.getElementById('sb-send'); btn.disabled=true; btn.textContent='Wird gesendet…';
-  try{
-    const r=await sgCall('',{k:_sbToken,name,items,zahlung:z,notiz});
-    window._sbShell(`<div style="background:#fff;border-radius:18px;padding:24px 18px;text-align:center;">
-      <div style="font-size:36px;margin-bottom:6px;">✅</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Danke${name?', '+escAttr(name):''}!</div>
-      <div style="font-size:13px;color:#444;margin-bottom:10px;">${items.map(i=>`${i.anzahl}× ${escAttr(i.name)}`).join('<br>')}<br><b>${sgFmt(r.summe)}</b></div>
-      <div style="font-size:13px;font-weight:600;color:${r.lieferbar?'#1D9E75':'#B4380F'};">${r.lieferbar?'Die Lieferung für heute steht ✓':`Aktuell ${sgFmt(r.summe_heute)} von ${sgFmt(r.min)} — es fehlen noch ${sgFmt(r.min-r.summe_heute)}.`}</div>
-      <button onclick="renderPublicBestellen()" style="margin-top:16px;padding:10px 16px;border:1px solid #ddd;border-radius:9px;background:#fff;font-size:13px;cursor:pointer;">Noch eine Anmeldung</button></div>`);
-  }catch(e){ err.textContent=e.message; btn.disabled=false; btn.textContent='Verbindlich anmelden'; }
+  const ok=[], fail=[];
+  for(const t of jobs){
+    const D=_sbDays[t.datum];
+    const items=D.menu.filter(e=>_sbCarts[t.datum][e.slot]>0).map(e=>({slot:e.slot,kategorie:e._kat,name:e.name,anzahl:_sbCarts[t.datum][e.slot]}));
+    try{ const r=await sgCall('',{k:_sbToken,datum:t.datum,name,items,zahlung:z,notiz}); ok.push({t,items,r}); }
+    catch(e){ fail.push({t,msg:e.message}); }
+  }
+  if(!ok.length){ err.textContent=fail.map(f=>`${sbShort(f.t.datum)}: ${f.msg}`).join(' · '); btn.disabled=false; btn.textContent='Verbindlich anmelden'; return; }
+  const lbl=t=>`${sbRel(t.datum)} ${sbShort(t.datum)}`;
+  window._sbShell(`<div style="background:#fff;border-radius:18px;padding:24px 18px;text-align:center;">
+    <div style="font-size:36px;margin-bottom:6px;">✅</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:10px;">Danke${name?', '+escAttr(name):''}!</div>
+    ${ok.map(o=>`<div style="text-align:left;background:#f4f4f1;border-radius:10px;padding:9px 11px;margin-bottom:8px;font-size:13px;"><b>${lbl(o.t)}</b> · ${sgFmt(o.r.summe)}<br>${o.items.map(i=>`${i.anzahl}× ${escAttr(i.name)}`).join('<br>')}<div style="font-size:12px;font-weight:600;margin-top:4px;color:${o.r.lieferbar?'#1D9E75':'#B4380F'};">${o.r.lieferbar?'Lieferung für diesen Tag steht ✓':`Aktuell ${sgFmt(o.r.summe_heute)} von ${sgFmt(o.r.min)} — es fehlen noch ${sgFmt(o.r.min-o.r.summe_heute)}.`}</div></div>`).join('')}
+    ${fail.length?`<div style="font-size:12px;color:#B4380F;margin-bottom:8px;">Nicht gespeichert: ${fail.map(f=>`${sbShort(f.t.datum)} (${escAttr(f.msg)})`).join(', ')}</div>`:''}
+    <button onclick="renderPublicBestellen()" style="margin-top:8px;padding:10px 16px;border:1px solid #ddd;border-radius:9px;background:#fff;font-size:13px;cursor:pointer;">Weitere Anmeldung</button></div>`);
 }
-window.renderPublicBestellen=renderPublicBestellen; window.sbChg=sbChg; window.sbSubmit=sbSubmit;
+window.renderPublicBestellen=renderPublicBestellen; window.sbChg=sbChg; window.sbSubmit=sbSubmit; window.sbOpenDay=sbOpenDay;
 
 // ---- App-Seite (Everton): Übersicht je Bestellstelle + Listen + Einstellungen ----
-let _sgListe=null;
+let _sgListe=null, _sgDatum='';
+function sgSetDatum(d){ _sgDatum=d; sgRefreshAfter(); }
+window.sgSetDatum=sgSetDatum;
 const SG_PREIS_FELDER={gericht:'Gericht',special:'Special',combo:'Lunch Combo'};
 const sgAktiv=rows=>(rows||[]).filter(r=>!r.storniert);
 const sgSumme=rows=>sgAktiv(rows).reduce((s,r)=>s+Number(r.summe),0);
@@ -19089,20 +19118,24 @@ function sgPortionen(rows){ return sgAktiv(rows).reduce((s,r)=>s+(r.items||[]).r
 const sgLink=tok=>`${location.origin}/?bestellen=1&k=${tok}`;
 async function sgBestellHtml(){
   let d;
-  try{ d=await sgCall('?action=list'); }catch(e){ return `<div class="card" style="padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);">Anmeldungen konnten nicht geladen werden (${escAttr(e.message)}).</div>`; }
+  try{ d=await sgCall('?action=list'+(_sgDatum?`&datum=${_sgDatum}`:'')); _sgDatum=d.datum; }catch(e){ return `<div class="card" style="padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);">Anmeldungen konnten nicht geladen werden (${escAttr(e.message)}).</div>`; }
   _sgListe=d;
   const min=d.min_heute, P=d.config.preise||{}, zl={sodexo:'Sodexo',bar:'Bar','sodexo+bar':'Sodexo + Bar'};
-  const final=!!d.nach_schluss && d.datum===d.heute;
+  const final=!!d.final;
+  const wdN=['So','Mo','Di','Mi','Do','Fr','Sa'];
+  const dl=ds=>{ const x=new Date(ds+'T12:00:00Z'); const t=new Date(d.heute+'T12:00:00Z'); const diff=Math.round((x-t)/86400000); return (diff===0?'Heute':diff===1?'Morgen':wdN[x.getUTCDay()])+' '+ds.slice(8)+'.'+ds.slice(5,7)+'.'; };
+  const chips=(d.tage||[]).map(t=>`<button onclick="sgSetDatum('${t.datum}')" style="padding:6px 10px;border-radius:99px;border:1.5px solid #059669;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;${t.datum===d.datum?'background:#059669;color:#fff;':'background:#fff;color:#059669;'}">${dl(t.datum)}${t.anzahl?` · ${t.anzahl}`:''}</button>`).join('');
   const status=(sum,anz)=>{ const ok=sum>=min; if(ok) return {t:'Lieferung möglich',bg:'#DCFCE7',c:'#166534'}; if(final&&anz===0) return {t:'keine Anmeldung',bg:'#F3F4F6',c:'#6B7280'}; if(final) return {t:'Lieferung konnte nicht ausgeführt werden',bg:'#FEE2E2',c:'#991B1B'}; return {t:'Noch zu wenig',bg:'#FEF3C7',c:'#92400E'}; };
   const stellen=(d.stellen||[]);
   const von=sid=>(d.bestellungen||[]).filter(r=>r.stelle_id===sid);
   let h=`<div class="card" style="padding:14px;margin-bottom:14px;">
-    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">📥 Anmeldungen heute — Übersicht</div>
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px;">📥 Anmeldungen — ${dl(d.datum)}</div>
+    <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;">${chips}</div>
     <div style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr><th style="text-align:left;">Bestellstelle</th><th>Summe</th><th>Lieferstatus</th></tr></thead><tbody>
     ${stellen.map(s=>{ const sum=sgSumme(von(s.id)), stt=status(sum,sgAktiv(von(s.id)).length); return `<tr style="${s.aktiv?'':'opacity:.45;'}"><td style="font-size:12.5px;font-weight:600;">${escAttr(s.name)}</td><td style="text-align:center;font-size:12.5px;">${sgFmt(sum)}</td>
       <td style="text-align:center;font-size:11px;font-weight:700;"><span style="padding:3px 9px;border-radius:99px;background:${stt.bg};color:${stt.c};">${stt.t}</span></td></tr>`; }).join('')}
     </tbody></table></div>
-    <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Mindestbestellwert heute: ${sgFmt(min)} je Bestellstelle · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div></div>`;
+    <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Mindestbestellwert: ${sgFmt(min)} je Bestellstelle und Tag · Anmeldeschluss ${escAttr(d.config.cutoff)} Uhr</div></div>`;
   stellen.forEach(s=>{
     const rows=von(s.id), akt=sgAktiv(rows), sum=sgSumme(rows), port=sgPortionen(rows);
     const agg={}; akt.forEach(r=>(r.items||[]).forEach(i=>{ agg[i.name]=(agg[i.name]||0)+i.anzahl; }));
@@ -19120,8 +19153,8 @@ async function sgBestellHtml(){
           <td style="text-align:center;"><button onclick="sgStorno(${r.id},${r.storniert?'false':'true'})" style="background:none;border:none;cursor:pointer;font-size:13px;" title="${r.storniert?'Wiederherstellen':'Stornieren'}">${r.storniert?'↩️':'🗑'}</button></td></tr>`;
       });
       h+=`</tbody></table></div>`;
-      if(/^stadtgemeinde$/i.test(s.name)) h+=`<button onclick="sgUebernehmen(${s.id})" style="width:100%;margin-top:10px;padding:9px;border:1px solid #059669;border-radius:8px;background:#fff;color:#059669;font-size:12.5px;font-weight:600;cursor:pointer;">${port} Portionen + Datum ins Formular übernehmen ↓</button>`;
-    } else h+=`<div style="font-size:12px;color:var(--muted);">Noch keine Anmeldungen heute.</div>`;
+      if(/^stadtgemeinde$/i.test(s.name) && d.datum<=d.heute) h+=`<button onclick="sgUebernehmen(${s.id})" style="width:100%;margin-top:10px;padding:9px;border:1px solid #059669;border-radius:8px;background:#fff;color:#059669;font-size:12.5px;font-weight:600;cursor:pointer;">${port} Portionen + Datum ins Formular übernehmen ↓</button>`;
+    } else h+=`<div style="font-size:12px;color:var(--muted);">Noch keine Anmeldungen für diesen Tag.</div>`;
     h+=`<div style="display:flex;gap:6px;margin-top:10px;"><input readonly value="${escAttr(sgLink(s.token))}" onclick="this.select()" style="flex:1;min-width:0;padding:7px;border:1px solid var(--border);border-radius:7px;font-size:11px;box-sizing:border-box;">
       <button onclick="sgCopyLink('${s.token}')" style="padding:7px 10px;border:none;border-radius:7px;background:#059669;color:#fff;font-size:12px;cursor:pointer;">Link kopieren</button></div>
       <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;"><a onclick="sgStelleAktiv(${s.id},${!s.aktiv})" style="color:var(--muted);cursor:pointer;">${s.aktiv?'⏸ pausieren':'▶ wieder aktivieren'}</a><a onclick="sgTokenNeu(${s.id})" style="color:var(--muted);cursor:pointer;">🔄 neuen Link erzeugen</a></div></div>`;
