@@ -40,7 +40,7 @@ function sbMatchPreise(entries,rows){
 }
 
 // ---- Öffentliche Anmeldeseite (heute + Vorbestellung für die nächsten Liefertage / die ganze Woche) ----
-let _sbInfo=null, _sbDays={}, _sbCarts={}, _sbToken='', _sbOpen='';
+let _sbInfo=null, _sbDays={}, _sbCarts={}, _sbToken='', _sbOpen='', _sbCombo={};
 const SB_WD=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 const sbPlus=(d,n)=>{ const x=new Date(d+'T12:00:00Z'); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); };
 const sbShort=d=>{ const [y,m,t]=d.split('-'); return `${t}.${m}.`; };
@@ -63,7 +63,7 @@ window.sbPick=sbPick; window.sbReset=sbReset;
 async function renderPublicBestellen(){
   const el=document.getElementById('public-bestellen');
   _sbToken=new URLSearchParams(location.search).get('k')||decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g,'').split('/')[0]||'').replace(/\.html$/,'').replace(/^(index|bestellen)$/,'');
-  _sbCarts={}; _sbDays={}; _sbOpen='';
+  _sbCarts={}; _sbDays={}; _sbOpen=''; _sbCombo={};
   window._sbVia=false;
   if(!_sbToken){
     let saved=''; try{ saved=localStorage.getItem('kf_stelle')||''; }catch(e){}
@@ -91,7 +91,7 @@ async function renderPublicBestellen(){
     const zu=sbMatchPreise(raw,t.kategorien);
     raw.forEach(e=>{ const m=zu.get(e); e._kat=(m&&m.kat==='Special')?'Special':'Gericht'; e._preis=Number(e._kat==='Special'?P.special:P.gericht)||0; });
     const menu=raw.filter(e=>e._preis>0);
-    if(Number(P.combo)>0) menu.push({slot:'combo',name:'Lunch Combo',_kat:'Combo',_preis:Number(P.combo),_hint:'Inhalt bitte unten bei „Anmerkung“ dazuschreiben.'});
+    if(Number(P.combo)>0) menu.push({slot:'combo',name:'Lunch Combo',_kat:'Combo',_preis:Number(P.combo)});
     _sbDays[t.datum]={t,menu,roh:raw};
     _sbCarts[t.datum]={};
   });
@@ -101,6 +101,19 @@ async function renderPublicBestellen(){
 const SB_COL={1:['#FFF0B8','#E8B800'],2:['#FFD9C7','#E94E1B'],3:['#D3EFD9','#2E9E5B'],4:['#D4E6FF','#3B82F6'],5:['#EBDCFA','#8B5CF6'],6:['#eee','#999'],0:['#eee','#999']};
 const sbCol=d=>SB_COL[new Date(d+'T12:00:00Z').getUTCDay()];
 const sbDw=()=>!!(_sbInfo&&/stadtgemeinde/i.test(_sbInfo.stelle||''));
+function sbComboBox(d,e,ac){
+  if(e.slot!=='combo'||!(_sbCarts[d]&&_sbCarts[d].combo>0)) return '';
+  const c=_sbCombo[d]||{txt:'',mixed:false};
+  return `<div style="margin:-2px 0 8px;padding:10px 12px;background:#fff;border-radius:12px;border:1.5px dashed ${ac};">
+    <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">Was kommt ins Lunch Combo?</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input value="${escAttr(c.txt)}" ${c.mixed?'disabled':''} oninput="sbComboTxt('${d}',this.value)" placeholder="z.B. Curry + Dal" maxlength="50" style="flex:1;min-width:0;padding:10px;border:1px solid #ddd;border-radius:9px;font-size:15px;background:${c.mixed?'#eee':'#FAF7F0'};">
+      <button onclick="sbComboMixed('${d}')" style="padding:10px 12px;border-radius:9px;border:1.5px solid ${ac};background:${c.mixed?ac:'#fff'};color:${c.mixed?'#fff':'#222'};font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">${c.mixed?'✓ ':''}Mixed</button></div></div>`;
+}
+function sbComboTxt(d,v){ (_sbCombo[d]=_sbCombo[d]||{txt:'',mixed:false}).txt=v; }
+function sbComboMixed(d){ const c=(_sbCombo[d]=_sbCombo[d]||{txt:'',mixed:false}); c.mixed=!c.mixed; sbDraw(); }
+window.sbComboTxt=sbComboTxt; window.sbComboMixed=sbComboMixed;
+function sbComboName(d){ const c=_sbCombo[d]||{}; const x=c.mixed?'mixed':String(c.txt||'').trim(); return x?`Lunch Combo – ${x}`:''; }
 function sbDaySum(d){ const c=_sbCarts[d]||{}; return (_sbDays[d]?_sbDays[d].menu:[]).reduce((s,e)=>s+(c[e.slot]||0)*(e._preis||0),0); }
 function sbOpenDay(d){ _sbOpen=d; sbDraw(); setTimeout(()=>document.getElementById('sbday-'+d)?.scrollIntoView({behavior:'smooth',block:'start'}),30); }
 function sbChg(d,slot,n){ const c=_sbCarts[d]; c[slot]=Math.max(0,Math.min(20,(c[slot]||0)+n)); sbDraw(); }
@@ -137,7 +150,7 @@ function sbDraw(){
             <div style="font-size:11.5px;color:#888;">${sgFmt(e._preis)}${e._hint?' · '+escAttr(e._hint):''}</div></div>
           <button onclick="sbChg('${t.datum}','${e.slot}',-1)" style="width:40px;height:40px;border-radius:50%;border:1.5px solid ${cAc};background:#fff;color:#222;font-size:20px;cursor:pointer;">−</button>
           <div style="width:24px;text-align:center;font-size:17px;font-weight:700;">${_sbCarts[t.datum][e.slot]||0}</div>
-          <button onclick="sbChg('${t.datum}','${e.slot}',1)" style="width:40px;height:40px;border-radius:50%;border:none;background:${cAc};color:#fff;font-size:20px;font-weight:700;cursor:pointer;">+</button></div>`).join(''):'<div style="font-size:13px;color:#666;padding:10px 0;">Für diesen Tag ist noch kein Menü hinterlegt.</div>'}</div>`;
+          <button onclick="sbChg('${t.datum}','${e.slot}',1)" style="width:40px;height:40px;border-radius:50%;border:none;background:${cAc};color:#fff;font-size:20px;font-weight:700;cursor:pointer;">+</button></div>${sbComboBox(t.datum,e,cAc)}`).join(''):'<div style="font-size:13px;color:#666;padding:10px 0;">Für diesen Tag ist noch kein Menü hinterlegt.</div>'}</div>`;
     }
     const clickable=t.offen&&!open;
     return `<div id="sbday-${t.datum}" style="background:${cBg};border-radius:18px;margin-bottom:12px;border-left:7px solid ${cAc};box-shadow:${open?'0 4px 14px rgba(0,0,0,.12)':'0 1px 3px rgba(0,0,0,.06)'};overflow:hidden;${t.offen?'':'opacity:.6;filter:saturate(.6);'}">
@@ -154,7 +167,7 @@ function sbDraw(){
     <div style="font-size:13px;font-weight:700;margin-bottom:6px;">Deine Anmeldung</div>
     ${tageMitWahl.length?tageMitWahl.map(t=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span>${rl(t)}</span><b>${sgFmt(sbDaySum(t.datum))}</b></div>`).join('')+`<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #eee;margin-top:6px;padding-top:6px;"><span>Gesamt</span><span>${sgFmt(total)}</span></div>`:'<div style="font-size:12.5px;color:#888;">Wähle oben Gerichte für einen oder mehrere Tage.</div>'}
     <input id="sb-name" value="${escAttr(keepName)}" placeholder="${sbDw()?'Durchwahl (für Rückfragen, bitte angeben)':'Name / Durchwahl (optional)'}" maxlength="60" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin:12px 0 8px;background:#FAF7F0;">
-    <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional, z.B. Inhalt Lunch Combo – bitte keine Gesundheitsdaten)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin-bottom:10px;background:#FAF7F0;">
+    <input id="sb-notiz" value="${escAttr(keepNote)}" placeholder="Anmerkung (optional – bitte keine Gesundheitsdaten)" maxlength="200" style="width:100%;padding:11px;border:1px solid #ddd;border-radius:9px;font-size:15px;box-sizing:border-box;margin-bottom:10px;background:#FAF7F0;">
     <div style="font-size:11px;color:#888;margin-bottom:4px;">Bezahlung (optional, auch beides möglich)</div>
     <div style="display:flex;gap:14px;font-size:13px;margin-bottom:14px;color:#444;">
       <label><input type="checkbox" id="sb-z-sodexo" ${keepSo?'checked':''}> Sodexo/Pluxee</label>
@@ -171,12 +184,14 @@ async function sbSubmit(){
   const z=so&&ba?'sodexo+bar':so?'sodexo':ba?'bar':null;
   const jobs=_sbInfo.tage.filter(t=>t.offen&&sbDaySum(t.datum)>0);
   if(!jobs.length) return;
+  const comboFehlt=jobs.find(t=>_sbCarts[t.datum].combo>0&&!sbComboName(t.datum));
+  if(comboFehlt){ sbOpenDay(comboFehlt.datum); const e2=document.getElementById('sb-err'); if(e2) e2.textContent='Bitte beim Lunch Combo den Inhalt eintragen oder „Mixed“ wählen.'; return; }
   if(sbDw()&&!name){ err.textContent='Bitte deine Durchwahl angeben – wir rufen bei Rückfragen durch.'; document.getElementById('sb-name').focus(); return; }
   const btn=document.getElementById('sb-send'); btn.disabled=true; btn.textContent='Wird gesendet…';
   const ok=[], fail=[];
   for(const t of jobs){
     const D=_sbDays[t.datum];
-    const items=D.menu.filter(e=>_sbCarts[t.datum][e.slot]>0).map(e=>({slot:e.slot,kategorie:e._kat,name:e.name,anzahl:_sbCarts[t.datum][e.slot]}));
+    const items=D.menu.filter(e=>_sbCarts[t.datum][e.slot]>0).map(e=>({slot:e.slot,kategorie:e._kat,name:e.slot==='combo'?sbComboName(t.datum):e.name,anzahl:_sbCarts[t.datum][e.slot]}));
     try{ const r=await sgCall('',{k:_sbToken,datum:t.datum,name,items,zahlung:z,notiz}); ok.push({t,items,r}); }
     catch(e){ fail.push({t,msg:e.message}); }
   }
