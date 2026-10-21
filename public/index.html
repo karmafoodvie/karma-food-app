@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.195';
+const APP_VERSION = '6.99.196';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4344,10 +4344,11 @@ async function checkEssenNotruf(){
 const NOTRUF_TEL={lb:'0676 9138012',boerse:'0676 9198012','1020':'0676 9148012','3400':'0676 9118012',zentrale:'',kitchen:''};
 function notrufTelLink(id,label,style){ const t=(NOTRUF_TEL[id]||'').replace(/[^\d+]/g,''); if(!t) return ''; return `<a href="tel:${t}" onclick="event.stopPropagation()" style="${style||''}">📞 ${label||NOTRUF_NAMEN[id]||id}</a>`; }
 function notrufCallRowHtml(){
-  const me=currentStore?.id; const ids=NOTRUF_WIEN.filter(id=>id!==me);
-  const links=ids.map(id=>notrufTelLink(id,NOTRUF_NAMEN[id],'flex:1;min-width:110px;text-align:center;padding:9px 10px;border-radius:10px;background:#fff;border:1.5px solid #DC2626;color:#991B1B;font-size:12.5px;font-weight:700;text-decoration:none;')).join('');
-  if(!links) return '';
-  return `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #FCA5A5;"><div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">📞 Oder lieber gleich anrufen:</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${links}</div></div>`;
+  const me=currentStore?.id; const ids=['lb','boerse','1020','3400','zentrale'].filter(id=>id!==me&&(NOTRUF_TEL[id]||'').trim());
+  if(!ids.length) return '';
+  const rows=ids.map(id=>{ const t=NOTRUF_TEL[id].replace(/[^\d+]/g,''); const nm=id==='zentrale'?'Zentrale':NOTRUF_NAMEN[id];
+    return `<a href="tel:${t}" onclick="event.stopPropagation()" style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;border-bottom:1px solid #F3D5D5;font-size:12px;text-decoration:none;color:#991B1B;"><span>${nm}</span><span style="font-weight:700;letter-spacing:.02em;">${NOTRUF_TEL[id]}</span></a>`; }).join('');
+  return `<div style="margin-top:14px;padding-top:10px;border-top:1px dashed #FCA5A5;"><div style="font-size:10.5px;color:var(--muted);font-weight:600;margin-bottom:2px;">📞 Anrufen</div>${rows}</div>`;
 }
 // Ton: AudioContext beim ersten Tippen entsperren (Browser erlauben sonst keinen Ton ohne Interaktion)
 let _notrufCtx=null;
