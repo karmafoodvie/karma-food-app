@@ -1161,7 +1161,7 @@ function kvProdSearch(v){ kvProdState.q=v; kvProdRefresh(); }
 function kvProdKat(v){ kvProdState.kat=v; kvProdRefresh(); }
 function kvProdDiet(v){ kvProdState.diet=(kvProdState.diet===v?'':v); kvProdRefresh(); }
 function kvKkPick(i){
-  const c=KV_KOCHKURSE[i]; const ds=kvKkTermine(c);
+  KV_KK_SEL=i; const c=KV_KOCHKURSE[i]; const ds=kvKkTermine(c);
   KV_KOCHKURSE.forEach((_,j)=>{ const t=document.getElementById('kv-kk-t'+j); if(t){ t.style.background=j===i?'#D4FF3F':'#fff'; t.style.boxShadow=j===i?`3px 3px 0 ${KV_INK}`:'none'; } });
   const d=document.getElementById('kv-kk-detail'); if(!d) return;
   d.innerHTML=`<div style="background:${c.bg}66;border:2px solid ${KV_INK};border-radius:14px;padding:12px 13px;">
@@ -1176,10 +1176,10 @@ function kvKkPick(i){
 function kvKkSheetBody(){
   const h=t=>`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin:18px 0 6px;">${t}</div>`;
   const box=(t)=>`<div style="font-size:13px;line-height:1.55;">${t}</div>`;
-  const short=c=>{ const d=kvKkTermine(c)[0]; return d?('📅 '+d.replace(/^[^,]+, /,'').replace(/\.\d{4}.*/,'.')):'—'; };
+  const short=c=>kvKkShort(c);
   const mc=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">`+KV_KOCHKURSE.map((c,i)=>`<div id="kv-kk-t${i}" onclick="kvKkPick(${i})" style="cursor:pointer;border:2px solid ${KV_INK};border-radius:14px;overflow:hidden;background:#fff;">
       <div style="aspect-ratio:1/1;background:${c.bg};"><img src="${c.img}&width=300" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
-      <div style="padding:6px 6px 8px;text-align:center;"><div style="font-size:11.5px;font-weight:900;line-height:1.15;">${c.n.replace('Best of ','')}</div><div style="font-size:10px;opacity:.7;margin-top:2px;">${c.tag}</div><div style="font-size:10px;font-weight:800;margin-top:3px;">${short(c)}</div></div></div>`).join('')+`</div><div id="kv-kk-detail" style="margin-top:10px;"></div>`;
+      <div style="padding:6px 6px 8px;text-align:center;"><div style="font-size:11.5px;font-weight:900;line-height:1.15;">${c.n.replace('Best of ','')}</div><div style="font-size:10px;opacity:.7;margin-top:2px;">${c.tag}</div><div id="kv-kk-s${i}" style="font-size:10px;font-weight:800;margin-top:3px;">${short(c)}</div></div></div>`).join('')+`</div><div id="kv-kk-detail" style="margin-top:10px;"></div>`;
   const faq=(q,a)=>`<details style="border-top:1.5px solid #e5e0d3;padding:8px 0;"><summary style="font-size:13px;font-weight:800;cursor:pointer;">${q}</summary><div style="font-size:13px;line-height:1.5;margin-top:5px;">${a}</div></details>`;
   return h('KOCHKURS: ECHT INDISCHE KÜCHE MIT DEM PROFI')
    +box('In einer kleinen Gruppe kocht ihr in Teamarbeit bunte Gerichte aus der indischen Küche. Adi steht mit Rat, Tat und Entertainment zur Seite und zeigt euch, wie’s richtig geht. Macht zu zweit besonders Spaß, ist aber auch das perfekte Solo-Date.')
@@ -1211,7 +1211,7 @@ function kvProdOpen(name){
       ${x.a?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">⚠️ Enthält: ${x.a}</div>`:''}${x.h?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">ℹ️ ${x.h}</div>`:''}</div>
     <div style="font-size:11px;color:#888;margin-top:12px;">Bei Allergie-Fragen immer die Packung prüfen.</div>`}</div>`;
   document.body.appendChild(d);
-  if(x.kkAll) kvKkPick(0);
+  if(x.kkAll){ kvKkPick(KV_KK_SEL||0); kvKkLoadAvail(); }
 }
 function kvProdClose(){ document.getElementById('kv-prod-sheet')?.remove(); }
 function renderProdukte(){
@@ -1226,7 +1226,7 @@ function renderProdukte(){
     <div style="font-size:11px;color:var(--muted);margin:18px 2px 24px;line-height:1.4;">Antippen für Beschreibung & Zutaten. Quelle: karmafood.at (Stand 21.10.2026). Sets, Kochbücher & Gutscheine gibt es im Shop.</div>`;
   kvProdRefresh();
 }
-Object.assign(window,{kvKkPick,kvProdSearch,kvProdKat,kvProdDiet,kvProdOpen,kvProdClose});
+Object.assign(window,{kvKkPick,kvKkLoadAvail,kvProdSearch,kvProdKat,kvProdDiet,kvProdOpen,kvProdClose});
 window.renderProdukte=renderProdukte;
 // ===== Karmaverse: Kochkurse (Quelle: karmafood.at Shop, Stand 21.10.2026) =====
 const KV_KOCHKURSE=[
@@ -1243,7 +1243,24 @@ const KV_KOCHKURSE=[
   f:'Für alle, die die Restaurant-Lieblinge selbst können wollen. Auch mit Fleisch (Butter Chicken, Keema), vegetarisch gibt es auch.',
   d:['2026-11-25','2027-01-29','2027-02-24']}
 ];
-function kvKkTermine(c){ const now=new Date(); now.setHours(0,0,0,0); return c.d.filter(x=>new Date(x.slice(0,10))>=now).map(x=>new Date(x.slice(0,10)).toLocaleDateString('de-AT',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})+(x.includes('English')?' · 🇬🇧 English':'')); }
+// Ausverkauft-Status: Snapshot (Shopify, 21.10.2026) + Live-Abgleich über die öffentliche Shop-Seite
+let KV_KK_SOLD={'2026-12-02':true};
+let KV_KK_LIVE=false;
+async function kvKkLoadAvail(){
+  try{
+    const r=await fetch('https://karmafood.at/products/karma-food-kochkurse.js',{cache:'no-store'}); if(!r.ok) return;
+    const j=await r.json(); const m={};
+    (j.variants||[]).forEach(v=>{ const d=(v.title||'').match(/^(\d{2})\.(\d{2})\.(\d{4})/); if(d) m[`${d[3]}-${d[2]}-${d[1]}`]=!v.available; });
+    if(Object.keys(m).length){ KV_KK_SOLD=m; KV_KK_LIVE=true; }
+    if(document.getElementById('kv-kk-detail')){ const sel=KV_KK_SEL||0; kvKkTilesRefresh(); kvKkPick(sel); }
+  }catch(e){}
+}
+let KV_KK_SEL=0;
+const KV_SOLD_BADGE=`<span style="display:inline-block;background:${KV_ORANGE};color:#fff;border-radius:99px;padding:1px 8px;font-size:10px;font-weight:900;letter-spacing:.04em;margin-left:4px;">AUSVERKAUFT</span>`;
+function kvKkDates(c){ const now=new Date(); now.setHours(0,0,0,0); return c.d.filter(x=>new Date(x.slice(0,10))>=now).map(x=>{ const iso=x.slice(0,10); const dt=new Date(iso); return {iso,sold:!!KV_KK_SOLD[iso],label:dt.toLocaleDateString('de-AT',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})+(x.includes('English')?' · 🇬🇧 English':''),short:dt.getDate()+'.'+(dt.getMonth()+1)+'.'}; }); }
+function kvKkTermine(c){ return kvKkDates(c).map(d=>d.sold?`<span style="text-decoration:line-through;opacity:.55;">${d.label}</span>${KV_SOLD_BADGE}`:d.label); }
+function kvKkShort(c){ const ds=kvKkDates(c); const f=ds.find(d=>!d.sold); return f?('📅 '+f.short):(ds.length?`<span style="color:${KV_ORANGE};">ausverkauft</span>`:'—'); }
+function kvKkTilesRefresh(){ KV_KOCHKURSE.forEach((c,i)=>{ const e=document.getElementById('kv-kk-s'+i); if(e) e.innerHTML=kvKkShort(c); }); }
 function kvKochkursCard(c){
   const now=new Date(); now.setHours(0,0,0,0);
   const ds=c.d.filter(x=>new Date(x.slice(0,10))>=now).map(x=>{const dt=new Date(x.slice(0,10)); return dt.toLocaleDateString('de-AT',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})+(x.includes('English')?' · 🇬🇧 English':'');});
@@ -1559,7 +1576,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.186';
+const APP_VERSION = '6.99.187';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
