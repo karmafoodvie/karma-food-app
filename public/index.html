@@ -978,16 +978,19 @@ const KV_SLIDES=[
    de:'Nicht zu viel, nicht zu wenig. Und Reste verwerten wir klug.', en:'Waste nothing'},
   {id:'g6', bg:KV_PEACH, pill:'LEITLINIE 6 · GUTES KARMA, GUTES GESCHÄFT', ico:'🌍', head:'Gut für die Welt. Gut für Karma Food.',
    de:'Nachhaltig, wo es sich trägt: Jede Entscheidung muss für Umwelt und Karma Food passen.', en:'Good karma, good business'},
+  {id:'rush', bg:KV_NEON, pill:'WENN’S STRESSIG WIRD', ico:'🌬️', breath:true, head:'Egal wie lang die Schlange ist: erst mal durchatmen.',
+   de:'Ruhe und Herzlichkeit sind das, was unsere Locations ausmacht. Drei Schritte:', en:'Breathe. Reassure. Be kind.',
+   steps:[['🌬️','Durchatmen','Einmal tief ein, langsam aus. Du bist nicht allein – wir sind eine Crew.'],['📣','Kurz durch die Menge rufen','„Keine Sorge – wir haben noch alles da!“ Das nimmt Druck raus, bei den Gästen und bei dir.'],['😊','Nett mit den Leuten sprechen','Ein Lächeln, ein paar freundliche Worte. Genau das macht uns aus.']]},
   {id:'zweifel', bg:'#fff', pill:'IM ZWEIFEL · WAS ZÄHLT ZUERST', ico:'🚦', head:'Zwei Dinge gleichzeitig wichtig? Das zählt zuerst.',
    de:'Wenn du dich nicht entscheiden kannst, gilt diese Reihenfolge – von oben nach unten:', en:'When in doubt: Safety → Guest → Crew → Speed',
    steps:[['🛡️','Sicherheit zuerst','Essen, Allergene, Hygiene, Verletzungen. Unsicher? Nicht herausgeben, lieber nachfragen.'],['🙂','Dann der Gast','Der Gast bekommt, was er braucht – auch wenn es für uns mehr Aufwand ist.'],['🤝','Dann die Crew','Lieber kurz helfen, als jemanden allein zu lassen.'],['⚡','Zuletzt das Tempo','Schnell ist gut – aber nie auf Kosten der drei davor.']]}
 ];
-const KV_START={vision:0, mission:1, leitlinien:4, zweifel:10};
+const KV_START={vision:0, mission:1, leitlinien:4, rush:10, zweifel:11};
 let _kvIdx=0;
 function kvEnsureCss(){
   if(document.getElementById('kv-css')) return;
   const st=document.createElement('style'); st.id='kv-css';
-  st.textContent='@keyframes kvPop{0%{transform:scale(.3) rotate(-14deg);opacity:0}60%{transform:scale(1.12) rotate(5deg);opacity:1}100%{transform:scale(1) rotate(-3deg)}}@keyframes kvUp{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}.kv-sticker{animation:kvPop .55s cubic-bezier(.2,.9,.3,1.2) both}.kv-up{animation:kvUp .45s ease both}.kv-up2{animation:kvUp .45s .12s ease both}.kv-up3{animation:kvUp .45s .24s ease both}';
+  st.textContent='@keyframes kvPop{0%{transform:scale(.3) rotate(-14deg);opacity:0}60%{transform:scale(1.12) rotate(5deg);opacity:1}100%{transform:scale(1) rotate(-3deg)}}@keyframes kvBreath{0%,100%{transform:scale(.82)}50%{transform:scale(1.18)}}@keyframes kvIn{0%,45%{opacity:1}55%,100%{opacity:0}}@keyframes kvOut{0%,45%{opacity:0}55%,100%{opacity:1}}.kv-breath{animation:kvBreath 8s ease-in-out infinite}.kv-in{animation:kvIn 8s infinite}.kv-out{animation:kvOut 8s infinite}@keyframes kvUp{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}.kv-sticker{animation:kvPop .55s cubic-bezier(.2,.9,.3,1.2) both}.kv-up{animation:kvUp .45s ease both}.kv-up2{animation:kvUp .45s .12s ease both}.kv-up3{animation:kvUp .45s .24s ease both}';
   document.head.appendChild(st);
 }
 // Sticker: großes Symbol im Kreis mit dicker Kontur + Schattenversatz — fühlt sich an wie ein Aufkleber
@@ -995,10 +998,10 @@ function kvSticker(ico,size,bg){ return `<div class="kv-sticker" style="width:${
 function kvSlideHtml(sl){
   const chips=(sl.chips||[]).map(([i,t],k)=>`<div class="kv-up3" style="display:flex;align-items:center;gap:10px;background:${['#fff',KV_ORANGE,KV_CREAM][k%3]};border-radius:99px;padding:8px 16px 8px 10px;margin-bottom:8px;font-size:14px;font-weight:800;"><span style="font-size:22px;">${i}</span>${t}</div>`).join('');
   const promise=sl.promise?`<div class="kv-up3" style="background:#fff;border:2.5px solid ${KV_INK};border-radius:22px;padding:16px 18px;margin-top:16px;box-shadow:4px 4px 0 ${KV_INK};"><div style="font-size:10px;font-weight:800;letter-spacing:.12em;color:${KV_ORANGE};margin-bottom:6px;">${sl.promise.k}</div><div style="font-size:20px;font-weight:900;line-height:1.2;">${sl.promise.de}<br>${sl.promise.de2}</div><div style="font-size:11px;opacity:.55;margin-top:6px;">${sl.promise.en}</div></div>`:'';
-  const steps=sl.steps?`<div class="kv-up3" style="margin-top:18px;">${sl.steps.map(([i,t,d],k)=>`<div style="display:flex;align-items:center;gap:12px;background:${[KV_NEON,KV_PEACH,KV_CREAM,'#fff'][k]};border:2.5px solid ${KV_INK};border-radius:18px;padding:10px 12px;margin-bottom:${k<3?'18':'0'}px;position:relative;"><div style="flex-shrink:0;width:46px;height:46px;border-radius:50%;background:#fff;border:2px solid ${KV_INK};display:flex;align-items:center;justify-content:center;font-size:24px;">${i}</div><div><div style="font-size:14.5px;font-weight:900;">${k+1}. ${t}</div><div style="font-size:12.5px;line-height:1.35;margin-top:2px;opacity:.85;">${d}</div></div>${k<3?`<div style="position:absolute;left:30px;bottom:-17px;font-weight:900;color:${KV_ORANGE};font-size:16px;">↓</div>`:''}</div>`).join('')}</div>`:''
+  const steps=sl.steps?`<div class="kv-up3" style="margin-top:18px;">${sl.steps.map(([i,t,d],k)=>`<div style="display:flex;align-items:center;gap:12px;background:${[KV_NEON,KV_PEACH,KV_CREAM,'#fff'][k]};border:2.5px solid ${KV_INK};border-radius:18px;padding:10px 12px;margin-bottom:${k<sl.steps.length-1?'18':'0'}px;position:relative;"><div style="flex-shrink:0;width:46px;height:46px;border-radius:50%;background:#fff;border:2px solid ${KV_INK};display:flex;align-items:center;justify-content:center;font-size:24px;">${i}</div><div><div style="font-size:14.5px;font-weight:900;">${k+1}. ${t}</div><div style="font-size:12.5px;line-height:1.35;margin-top:2px;opacity:.85;">${d}</div></div>${k<sl.steps.length-1?`<div style="position:absolute;left:30px;bottom:-17px;font-weight:900;color:${KV_ORANGE};font-size:16px;">↓</div>`:''}</div>`).join('')}</div>`:''
   return `<div style="color:${KV_INK};">
     <div style="display:inline-block;background:${sl.bg==='#fff'?KV_NEON:'#fff'};border:2px solid ${KV_INK};border-radius:99px;padding:7px 14px;font-size:10.5px;font-weight:900;letter-spacing:.12em;">${sl.pill}</div>
-    <div style="margin:${sl.steps?'14px 0 14px':'26px 0 22px'};">${kvSticker(sl.ico,sl.steps?64:112,sl.bg==='#fff'?KV_PEACH:'#fff')}</div>
+    ${sl.breath?`<div style="margin:10px 0 10px;display:flex;align-items:center;gap:14px;"><div class="kv-breath" style="width:76px;height:76px;border-radius:50%;background:#fff;border:3px solid ${KV_INK};box-shadow:4px 4px 0 ${KV_INK};display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;">🌬️</div><div style="position:relative;height:24px;flex:1;font-size:15px;font-weight:900;"><span class="kv-in" style="position:absolute;left:0;top:0;">… einatmen …</span><span class="kv-out" style="position:absolute;left:0;top:0;">… und langsam ausatmen …</span></div></div>`:`<div style="margin:${sl.steps?'14px 0 14px':'26px 0 22px'};">${kvSticker(sl.ico,sl.steps?64:112,sl.bg==='#fff'?KV_PEACH:'#fff')}</div>`}
     <div class="kv-up" style="font-size:${sl.steps?'23':'29'}px;font-weight:900;line-height:1.12;letter-spacing:-.015em;">${sl.head}</div>
     <div class="kv-up2" style="font-size:16px;line-height:1.45;margin-top:14px;font-weight:500;">${sl.de}</div>
     ${sl.chips?`<div style="margin-top:16px;">${chips}</div>`:''}${promise}${steps}
@@ -1058,6 +1061,8 @@ function renderKarmaverse(){
       ${tile('#fff','🤝','So sind wir','Unsere 6 Leitlinien',`kvStoryOpen(${KV_START.leitlinien})`)}
       ${tile(KV_PEACH,'🚦','Was zählt zuerst?','Wenn zwei Dinge wichtig sind',`kvStoryOpen(${KV_START.zweifel})`)}
     </div>
+    <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">WENN’S STRESSIG WIRD</div>
+    <div onclick="kvStoryOpen(${KV_START.rush})" style="background:${KV_NEON};color:${KV_INK};border:2px solid ${KV_INK};box-shadow:3px 3px 0 ${KV_INK};border-radius:20px;padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:14px;"><div style="font-size:38px;line-height:1;">🌬️</div><div><div style="font-size:16px;font-weight:900;line-height:1.2;">Schlange wird lang? Durchatmen.</div><div style="font-size:12px;margin-top:3px;opacity:.8;">3 Schritte für Ruhe und Herzlichkeit</div></div></div>
     <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">WISSEN & HILFE</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       ${tile(KV_CREAM,'📖','Guide','Infos, Geräte & Abläufe',"goTo('guide')")}
@@ -1349,7 +1354,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.178';
+const APP_VERSION = '6.99.179';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
