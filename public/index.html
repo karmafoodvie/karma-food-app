@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.166';
+const APP_VERSION = '6.99.168';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6016,12 +6016,18 @@ function dateMinusDays(dateStr, days){
 // Deklaration hat hier Vorrang (Anfrage Tini 02.09.: "wenn es als special deklariert ist, ist es Special").
 const SPECIAL_DECLARED_DISHES = ['tofu tikka masala','paneer tikka masala curry','tofu tikka masala curry'];
 
+// Kategorien laut Menü-Sheet 'Alle Menüs' (Stand 21.10.26), Schlüssel = Gerichtsname klein, Leerzeichen normalisiert.
+const DISH_KAT_SHEET={"mediterrane couscous bowl mit limetten dip":"Salat","kokos satay veggie curry":"Curry","röstzwiebel linsen dal":"Dal","rajma masala curry mit kidneybohnen":"Curry","veggie bolognese lasagne":"Lasagne","kefir lime dal":"Dal","roasted brokkoli biryani mit curry raita":"Biryani","cremiges coconut dal":"Dal","green power pesto veggie lasagne":"Lasagne","karotten quinoa bowl mit zitronen hummus":"Salat","süßkartoffel linsen dal":"Dal","sweet & sour chana biryani mit fruchtigem raita":"Biryani","cremiges green palak curry":"Curry","immune power ingwer dal":"Dal","tajín süßkartoffel quinoa bowl mit würzigem tomaten dip":"Salat","kurkuma linsen dal":"Dal","cremiges erbsen minz curry":"Curry","indian ratatouille lasagne":"Lasagne","chana linsen dal":"Dal","kichererbsen masala veggie biryani mit pink raita":"Biryani","baingan bharta style curry":"Curry","schmorgemüse quinoa bowl mit hummus dip":"Salat","karotten linsen dal":"Dal","zitronen veggie biryani mit salzzitronen raita":"Biryani","cremiges korma veggie curry":"Curry","mama masala linsen dal":"Dal","orientalische couscous veggie bowl mit harissa dip":"Salat","coconut mango veggie curry":"Curry","dal mit punjabi gewürz tadka":"Dal","vegan butter veggie curry":"Curry","sweet & sour dal mit jaggery & zitrone":"Dal","kaffir lime kokos biryani":"Biryani","vindaloo veggie curry":"Curry","white bean pesto veggie lasagne":"Lasagne","kashmiri kokos süßkartoffel curry":"Curry","south indian dal mit kürbis":"Dal","bean power biryani mit röstzwiebel":"Biryani","green palak dal":"Dal","chana masala quinoa bowl mit lemon tahini dip":"Salat","dal tadka":"Dal","fruchtiges chana curry":"Curry","tandoori style veggie lasagne":"Lasagne","toor dal mit sambar kürbis":"Dal","kerala veggie biryani mit raita":"Biryani","süßkartoffel paprika masala curry":"Curry","sweet potato quinoa bowl mit limetten dip":"Salat","smoky melanzani biryani & mit kidneybohnen & raita":"Biryani","cremiges goa veggie curry":"Curry","dal makhani":"Dal"};
 function mapDishNameToCategory(dishName, slot){
   const n=(dishName||'').toLowerCase();
   // Slot hat immer Vorrang — das ist die verlässlichste Information.
   if(slot==='salat') return 'Salat';
   if(slot==='reis') return 'Reis';
   if(slot==='samosa') return 'Samosas';
+  // 21.10.26 (Wunsch Tini): Kategorie aus dem Menü-Sheet (Spalte vor dem Gerichtsnamen) hat Vorrang vor dem
+  // Raten aus dem Namen ("Vindaloo" enthielt "dal"). SPECIAL/unbekannte (umbenannte) Gerichte -> Namensregeln.
+  const _sk=DISH_KAT_SHEET[n.replace(/\s+/g,' ').trim().replace('lasagna','lasagne')];
+  if(_sk) return _sk;
   if(SPECIAL_DECLARED_DISHES.includes(n.trim())) return 'Special';
   // WICHTIG: Erst die konkreten Hauptgerichte prüfen, DANN erst Reis. Sonst wird z.B.
   // "Parmesan-Basilikum-Meatballs mit Gewürzreis" wegen des Wortteils "…reis" fälschlich als
@@ -8580,6 +8586,13 @@ async function renderManagement(){
       <div class="org-btn-text">
         <span class="org-btn-title" style="color:#2B3A67;">Operations — Mengen anpassen</span>
         <span class="org-btn-sub">Portionsmengen aller Filialen direkt überschreiben</span>
+      </div>
+    </button>
+    <button class="org-btn" onclick="window.open('https://drive.google.com/file/d/1F35amHifGP0aZxQA2MAsYcOvjrnT1ZFv/view','_blank','noopener')" style="border-color:#16A34A;">
+      <span class="org-btn-icon">📊</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#16A34A;">Menü-Sheet (Excel in Drive)</span>
+        <span class="org-btn-sub">Alle Menüs inkl. Kategorie – öffnet in Google Drive</span>
       </div>
     </button>
     <button class="org-btn" onclick="goTo('transporterTasks')" style="border-color:#F97316;">
