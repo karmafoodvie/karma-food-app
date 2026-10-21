@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.164';
+const APP_VERSION = '6.99.165';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3246,17 +3246,41 @@ function scharfBadgeHtml(dishName){
   if(!/KASHMIRI/i.test(dishName||'')) return '';
   return '<span style="font-size:10px;background:#FEE2E2;color:#B91C1C;padding:1px 6px;border-radius:20px;font-weight:700;">🌶️ Scharf</span>';
 }
+
+// 21.10.26 (Regel Tini): "Glutenfrei" und "Vegan" kommen IMMER live aus der aktuellen Zutatenliste —
+// ändert sich die Liste, ändert sich das Badge. Steckt der Auslöser nur im Dip/Sauce/Toppings-Teil,
+// wird er ausdrücklich genannt ("Glutenfrei ohne Röstzwiebel"), weil man das Topping weglassen kann.
+const TIER_PFLANZLICH_RE=/(kokos|hafer|soja|mandel|reis|nuss|cashew|pflanzen|erbsen)\s*-?\s*(milch|joghurt|jogurt|sahne|obers|rahm|butter|drink|käse)|vegan\w*\s+\w+/gi;
+const TIER_KW_RE=/(?<!nuss|erdnuss|mandel|kakao|shea|cashew|kokos)butter|\bghee\b|paneer|parmesan|käse|joghurt|jogurt|sahne|obers|\brahm\b|topfen|quark|feta\b|mozzarella|halloumi|ricotta|\beier?\b|\bei\b|honig|fisch|garnele|shrimp|gelatine|\bmilch\b|milchpulver/i;
+function dishDietFlags(zutatenText){
+  if(!zutatenText||!String(zutatenText).trim()) return null;
+  const {main, extra}=splitZutatenMainExtra(String(zutatenText).trim());
+  const items=t=>(t||'').split(/[,\n]/).map(x=>x.replace(/^(DIP\/SAUCE\/TOPPINGS|RAITA)\s*:?/i,'').trim()).filter(Boolean);
+  const res={gMain:[],gExtra:[],tMain:[],tExtra:[]};
+  const check=(item,gArr,tArr)=>{
+    const lo=item.toLowerCase();
+    const hit=(typeof findZutatMasterMatch==='function')?findZutatMasterMatch(item):null;
+    const codes=(hit&&hit.allergene)||[];
+    const pflanzlich=TIER_PFLANZLICH_RE.test(item); TIER_PFLANZLICH_RE.lastIndex=0;
+    const gluten=GLUTEN_ZUTATEN_KEYWORDS.some(kw=>lo.includes(kw))||GLUTEN_NIE_RE.test(item)||codes.includes('A');
+    const tier=!pflanzlich&&(TIER_KW_RE.test(item)||codes.some(c=>['G','C','D','B','R'].includes(c)));
+    if(gluten) gArr.push(item);
+    if(tier) tArr.push(item);
+  };
+  items(main).forEach(i=>check(i,res.gMain,res.tMain));
+  items(extra).forEach(i=>check(i,res.gExtra,res.tExtra));
+  return res;
+}
+const _uniqTxt=a=>[...new Set(a)].join(', ');
 function veganBadgeHtml(dishName, allergenMain, zutatenText){
-  // Echte Zutaten-Erkennung hat Vorrang (21.09.26) — Milch(G)/Eier(C)/Fisch(D)/Krebstiere(B)/
-  // Weichtiere(R) aus der berechneten Zutatenliste prüfen, statt dem (meist leeren) Array zu vertrauen.
-  const computed=computeDishAllergeneFromZutaten(zutatenText);
-  if(computed){
-    const hatTierisch=computed.codes.some(c=>['G','C','D','B','R'].includes(c));
-    if(!hatTierisch){
-      return '<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;">🌱 Vegan</span>';
-    }
+  // Immer live aus der Zutatenliste (21.10.26). Tierisches nur im Topping -> "Vegan ohne <Topping>".
+  const fl=dishDietFlags(zutatenText);
+  if(fl){
+    const sty='font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;';
+    if(!fl.tMain.length&&!fl.tExtra.length) return `<span style="${sty}">🌱 Vegan</span>`;
+    if(!fl.tMain.length) return `<span style="${sty}" title="Topping weglassen = vegan">🌱 Vegan ohne ${_uniqTxt(fl.tExtra)}</span>`;
     const exc=getVeganToppingAusnahme(dishName);
-    if(exc) return `<span style="font-size:10px;background:#DCFCE7;color:#166534;padding:1px 6px;border-radius:20px;font-weight:600;" title="Ohne ${exc.topping} ist das Gericht vegan">🌱 Vegan ohne ${exc.topping}</span>`;
+    if(exc) return `<span style="${sty}" title="Ohne ${exc.topping} ist das Gericht vegan">🌱 Vegan ohne ${exc.topping}</span>`;
     return '';
   }
   if(isVegan(allergenMain)){
@@ -3312,15 +3336,13 @@ function getGlutenToppingAusnahme(dishName){
   return GLUTEN_TOPPING_AUSNAHMEN.find(e => e.match.test(n)) || null;
 }
 function glutenfreiBadgeHtml(dishName, allergenMain, zutatenText){
-  // Regel 21.10.26: Röstzwiebel / geröstete Zwiebel (Name oder Zutaten) -> nie ein Glutenfrei-Badge.
-  if(GLUTEN_NIE_RE.test((dishName||'')+' '+(zutatenText||''))) return '';
-  // Echte Zutaten-Erkennung hat Vorrang (21.09.26) — nur wenn gar keine Zutaten hinterlegt sind,
-  // auf das (meist leere) allergenMain-Array zurückfallen, NIE automatisch "glutenfrei" annehmen,
-  // wenn Gluten-Zutaten im Text stehen.
-  const glutenAusZutaten=zutatenEnthaeltGluten(zutatenText);
-  if(glutenAusZutaten===true) return ''; // enthält Gluten -> kein Glutenfrei-Badge
-  if(glutenAusZutaten===false){
-    return '<span style="font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;">🟣 Glutenfrei</span>';
+  // Immer live aus der Zutatenliste (21.10.26). Gluten nur im Topping -> "Glutenfrei ohne <Topping>".
+  const fl=dishDietFlags(zutatenText);
+  if(fl){
+    const sty='font-size:10px;background:#EDE9FE;color:#5B21B6;padding:1px 6px;border-radius:20px;font-weight:600;';
+    if(fl.gMain.length) return '';
+    if(fl.gExtra.length) return `<span style="${sty}" title="Topping weglassen = glutenfrei">🟣 Glutenfrei ohne ${_uniqTxt(fl.gExtra)}</span>`;
+    return `<span style="${sty}">🟣 Glutenfrei</span>`;
   }
   // Keine Zutaten hinterlegt -> alter Weg als letzter Rückfall
   if(isGlutenfrei(allergenMain)){
@@ -13824,6 +13846,9 @@ async function renderWaehrend(){
   const _hideFeedbackThisTime=!!window._waehrendHideFeedback;
   window._waehrendHideFeedback=false;
   const todayMenu=getTodayMenu()||[]; // volle Einträge inkl. Allergene, nicht nur Namen
+  const _zRaw=await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
+  const _zMapW={}; (_zRaw||[]).forEach(r=>{ if(r.zutaten){ _zMapW[r.gericht]=r.zutaten; _zMapW[normGerichtName(r.gericht)]=r.zutaten; if(r.zkey) _zMapW[r.zkey]=r.zutaten; } });
+  const _zutatW=d=>{ const k=zutatenKeyHeute(d.slot); return (k&&_zMapW[k])||_zMapW[d.name]||_zMapW[normGerichtName(d.name)]||d.zutaten||''; };
   const _todayStrWaehrend=new Date().toISOString().split('T')[0];
   const _laufendeWoche=getMenuWocheForDate(_todayStrWaehrend);
   const _WOCHE_COLORS={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
@@ -13847,8 +13872,8 @@ async function renderWaehrend(){
       const mainCodes=d.allergene?.main||[];
       const dressingCodes=d.allergene?.dressing||[];
       const badges=[
-        veganBadgeHtml(d.name, mainCodes),
-        glutenfreiBadgeHtml(d.name, mainCodes),
+        veganBadgeHtml(d.name, mainCodes, _zutatW(d)),
+        glutenfreiBadgeHtml(d.name, mainCodes, _zutatW(d)),
         scharfBadgeHtml(d.name),
         ...mainCodes.map(c=>`<span class="badge" style="background:var(--green-light);color:var(--green);">${c}</span>`),
         ...dressingCodes.map(c=>`<span class="badge" style="background:#FEF3C7;color:#92400E;">${c} (Dressing)</span>`)
@@ -17687,7 +17712,7 @@ async function renderKitchen(){
           const allergenDressing = dish.allergene?.dressing||[];
           const hasZutaten = zutaten.length>0;
           const vegan = isVegan(allergenMain);
-          const gf = isGlutenfrei(allergenMain) && !GLUTEN_NIE_RE.test(dish.name+' '+zutaten);
+          const gf = isGlutenfrei(allergenMain);
           const {gemuese, rest, getreide} = splitZutaten(zutaten);
           const detailId = `kp_${selectedWoche}_${day}_${i}`;
           const gemueseId = `gem_${selectedWoche}_${day}_${i}`;
