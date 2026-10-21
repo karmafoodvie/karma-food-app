@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.194';
+const APP_VERSION = '6.99.195';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4294,6 +4294,7 @@ function showEssenNotrufConfirm(){
       <button onclick="_essenNotrufSelectedDishes=[];_essenNotrufMengen={};document.getElementById('essen-notruf-confirm').innerHTML='';" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;cursor:pointer;">Abbrechen</button>
       <button onclick="sendEssenNotruf()" style="flex:2;padding:10px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🆘 Ja, jetzt senden</button>
     </div>
+    ${notrufCallRowHtml()}
   </div>`;
 }
 window.showEssenNotrufConfirm=showEssenNotrufConfirm;
@@ -4346,7 +4347,7 @@ function notrufCallRowHtml(){
   const me=currentStore?.id; const ids=NOTRUF_WIEN.filter(id=>id!==me);
   const links=ids.map(id=>notrufTelLink(id,NOTRUF_NAMEN[id],'flex:1;min-width:110px;text-align:center;padding:9px 10px;border-radius:10px;background:#fff;border:1.5px solid #DC2626;color:#991B1B;font-size:12.5px;font-weight:700;text-decoration:none;')).join('');
   if(!links) return '';
-  return `<div style="margin:-6px 0 14px;"><div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">Oder gleich direkt anrufen:</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${links}</div></div>`;
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #FCA5A5;"><div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">📞 Oder lieber gleich anrufen:</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${links}</div></div>`;
 }
 // Ton: AudioContext beim ersten Tippen entsperren (Browser erlauben sonst keinen Ton ohne Interaktion)
 let _notrufCtx=null;
@@ -4875,7 +4876,6 @@ async function renderHome(){
     </button>
     <div id="essen-notruf-confirm"></div>
     <div id="essen-notruf-status"></div>
-    ${notrufCallRowHtml()}
     `:''}
     ${currentStore?.id==='kitchen' && new Date().getDay()===1?`
     <div onclick="goTo('wochenFeedback')" style="background:linear-gradient(135deg,#FBCFE8,#F9A8D4);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
