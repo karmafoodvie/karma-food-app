@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.168';
+const APP_VERSION = '6.99.169';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -17713,6 +17713,18 @@ async function renderKitchen(){
         <div style="background:${isToday?'var(--green)':'#F5F5F3'};padding:8px 14px;font-size:13px;font-weight:700;color:${isToday?'#fff':'var(--sub)'};">${DAYS_FULL[day]}${isToday?' 👈 Heute':''}</div>`;
 
       const validDishes = dishes.filter(d=>d.name&&!d.name.startsWith('ÖL'));
+      // 21.10.26 (Frage Simone, Einkauf): Datum des Tages ermitteln — ist es Quelle einer Menü-Tausch-Ausnahme
+      // (z.B. Feiertag), steht das klar im Kasten statt der Gerichte; der Tauschtag bekommt den Hinweis.
+      const _kpDi=DAYS_ORDER.indexOf(day);
+      const _kpDd=new Date(thisMonday); _kpDd.setDate(_kpDd.getDate()+((((selectedWoche-CURRENT_MENU_WOCHE)+4)%4)*7)+_kpDi);
+      const _kpDs=_kpDd.getFullYear()+'-'+String(_kpDd.getMonth()+1).padStart(2,'0')+'-'+String(_kpDd.getDate()).padStart(2,'0');
+      const _kpTauschZiel=Object.keys(MENU_TAUSCH).find(k=>MENU_TAUSCH[k]===_kpDs);
+      if(_kpTauschZiel){
+        const _zl=new Date(_kpTauschZiel+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
+        html+=`<div style="padding:12px 14px;font-size:12.5px;color:#B45309;background:#FFFBEB;font-weight:600;">🚫 ${_kpDd.toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}: kein Betrieb — dieses Menü läuft stattdessen am ${_zl}.</div></div>`;
+        return;
+      }
+      if(MENU_TAUSCH[_kpDs]){ html=html.replace(/(<div style="background:[^"]*;padding:8px 14px;font-size:13px;font-weight:700;[^"]*">[^<]*(?:👈 Heute)?)<\/div>$/,'$1'+MENU_TAUSCH_HINWEIS+'</div>'); }
       if(!validDishes.length){
         html+=`<div style="padding:10px 14px;font-size:12px;color:var(--muted);">–</div>`;
       } else {
