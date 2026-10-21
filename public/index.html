@@ -1065,16 +1065,12 @@ function renderKarmaverse(){
     </div>
     <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">WENN’S STRESSIG WIRD</div>
     <div onclick="kvStoryOpen(${KV_START.rush})" style="background:${KV_NEON};color:${KV_INK};border:2px solid ${KV_INK};box-shadow:3px 3px 0 ${KV_INK};border-radius:20px;padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:14px;"><div style="font-size:38px;line-height:1;">🌬️</div><div><div style="font-size:16px;font-weight:900;line-height:1.2;">Schlange wird lang? Durchatmen.</div><div style="font-size:12px;margin-top:3px;opacity:.8;">3 Schritte für Ruhe und Herzlichkeit</div></div></div>
-    <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">UNSER ANGEBOT</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      ${tile('#FFE3D6','🛍️','Kund:innen & Produkte','Was wir verkaufen – mit Zutaten',"goTo('produkte')")}
-      ${tile('#F4FFC2','👨‍🍳','Kochkurse','3 Masterclasses mit Adi',"goTo('kochkurse')")}
-    </div>
     <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">WISSEN & HILFE</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       ${tile(KV_CREAM,'📖','Guide','Infos, Geräte & Abläufe',"goTo('guide')")}
       ${tile('#FFFBEB','🙋','Hilfe','Wen fragen? Ansprechpartner',"goTo('hilfe')")}
       ${tile('#fff','✅','Checklisten','Öffnen, Schließen, Reinigung',"goTo('check')")}
+      ${tile('#FFE3D6','🛍️','Produkte & Kochkurse','Was wir verkaufen & anbieten',"goTo('produkte')")}
     </div>`;
 }
 window.renderKarmaverse=renderKarmaverse;
@@ -1129,10 +1125,11 @@ const KV_PROD_IMG={
  'Curry Party Starter Kit':'Karma-Food-Curry-Party-Starter-Set-online-kaufen_efe1381d-ed17-493d-91c3-78ba97c2b58a.jpg?v=1755597499',
  'Chai Sirup':'chai-sirup-kaufen-ayurvedischer-tee-sirup-fuer-chai-latte-von-karma-food.jpg?v=1755597499'
 };
-const KV_PROD_KAT=[['all','Alle'],['Curry Pasten','🍛 Pasten'],['Masalas (Gewürzmischungen)','🌶️ Masalas'],['Saucen, Toppings & Getränk','🔥 Saucen & Co'],['Sets','🎁 Sets']];
+const KV_PROD_KAT=[['all','Alle'],['Curry Pasten','🍛 Pasten'],['Masalas (Gewürzmischungen)','🌶️ Masalas'],['Saucen, Toppings & Getränk','🔥 Saucen & Co'],['Sets','🎁 Sets'],['Kochkurse','🎓 Kochkurse']];
 let kvProdState={q:'',kat:'all',diet:''};
 function kvProdAll(){
   const r=[]; KV_PRODUKTE.forEach(g=>g.items.forEach(x=>r.push(Object.assign({kat:g.k,bg:g.bg},x))));
+  KV_KOCHKURSE.forEach(c=>r.push({kat:'Kochkurse',bg:c.bg,n:c.n,kk:c,t:[],p:'130 €',b:c.f,z:c.g.join(', '),img:'https://cdn.shopify.com/s/files/1/0616/3647/7178/products/Karma-Food-Indischer-Kochkurs-Rundreise-Nord-Ost.png?v=1736537353'}));
   const by=n=>r.find(y=>y.n===n);
   const flat=n=>{ const y=by(n); return y&&y.set?y.set.flatMap(flat):[n]; };
   r.filter(x=>x.set).forEach(x=>{ // Sets: Zutaten/Allergene aus den Einzelprodukten
@@ -1143,10 +1140,10 @@ function kvProdAll(){
   });
   return r;
 }
-function kvProdImg(x,w){ const f=KV_PROD_IMG[x.n]; return f?`${KV_IMG_BASE}${f}&width=${w}`:''; }
+function kvProdImg(x,w){ if(x.img) return x.img+'&width='+w; const f=KV_PROD_IMG[x.n]; return f?`${KV_IMG_BASE}${f}&width=${w}`:''; }
 function kvProdFiltered(){
   const q=kvProdState.q.trim().toLowerCase();
-  return kvProdAll().filter(x=>(kvProdState.kat==='all'||x.kat===kvProdState.kat)&&(!kvProdState.diet||x.t.includes(kvProdState.diet))&&(!q||(x.n+' '+x.b+' '+x.z).toLowerCase().includes(q)));
+  return kvProdAll().filter(x=>(kvProdState.kat==='all'||x.kat===kvProdState.kat)&&(!q||(x.n+' '+x.b+' '+x.z).toLowerCase().includes(q)));
 }
 function kvProdGridHtml(){
   const l=kvProdFiltered();
@@ -1163,6 +1160,17 @@ function kvProdRefresh(){
 function kvProdSearch(v){ kvProdState.q=v; kvProdRefresh(); }
 function kvProdKat(v){ kvProdState.kat=v; kvProdRefresh(); }
 function kvProdDiet(v){ kvProdState.diet=(kvProdState.diet===v?'':v); kvProdRefresh(); }
+function kvKkSheetBody(c){
+  const ds=kvKkTermine(c);
+  const h=t=>`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin:14px 0 5px;">${t}</div>`;
+  return `<span style="display:inline-block;background:#D4FF3F;border:1.5px solid ${KV_INK};border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800;">${c.tag}</span>`
+   +h('DAS KOCHEN WIR')+`<div style="font-size:13px;line-height:1.55;">${c.g.map(x=>'• '+x).join('<br>')}</div>`
+   +h('NÄCHSTE TERMINE')+`<div style="font-size:13px;line-height:1.55;">${ds.length?ds.map(x=>'📅 '+x).join('<br>'):'Aktuell keine Termine, neue kommen laufend online.'}</div>`
+   +h('IM TICKET')+`<div style="font-size:13px;line-height:1.5;">18:00 bis ca. 22:00 Uhr · Gastgeschenk, Online-Rezeptheft, Kitchen Hacks, Doggy Bag, Getränke</div>`
+   +h('WO')+`<div style="font-size:13px;line-height:1.5;">Kitchen Collective, Inkustraße 1–7, Klosterneuburg (an der Wiener Stadtgrenze). Gratis parken, barrierefrei, S40 / Bus 400.</div>`
+   +h('GUT ZU WISSEN')+`<div style="font-size:13px;line-height:1.5;">Keine Kocherfahrung nötig. Zu zweit besonders schön. Ticket wird nicht erstattet und nicht verschoben, aber kann weitergegeben werden. Auch als Gutschein erhältlich.</div>
+   <div style="background:${KV_CREAM};border-radius:14px;padding:10px 12px;margin-top:14px;font-size:12.5px;line-height:1.45;"><b>💬 Am Counter:</b> „Adi kocht bei uns mit einer kleinen Gruppe indische Gerichte, alle Level sind willkommen. Tickets gibt es auf karmafood.at.“</div>`;
+}
 function kvProdOpen(name){
   const x=kvProdAll().find(y=>y.n===name); if(!x) return;
   document.getElementById('kv-prod-sheet')?.remove();
@@ -1174,10 +1182,11 @@ function kvProdOpen(name){
     <div style="display:flex;gap:14px;align-items:center;"><div style="width:110px;height:110px;flex-shrink:0;background:${x.bg};border:2px solid ${KV_INK};border-radius:18px;overflow:hidden;"><img src="${kvProdImg(x,400)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;"></div>
       <div><div style="font-size:21px;font-weight:900;line-height:1.1;">${x.n}</div><div style="font-size:13px;font-weight:800;opacity:.6;margin-top:4px;">${x.p}</div>${x.pn?`<div style="font-size:11px;opacity:.6;">${x.pn}</div>`:''}<div style="margin-top:6px;">${x.t.map(kvProdTag).join('')}</div></div></div>
     <div style="font-size:14px;line-height:1.45;margin:14px 0;">${x.b}</div>
+    ${x.kk?kvKkSheetBody(x.kk):''}
     ${x.set?`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:6px;">DAS IST DRIN</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${x.set.map(n=>`<span onclick="kvProdOpen('${n.replace(/'/g,"\\'")}')" style="cursor:pointer;background:#D4FF3F;border:2px solid ${KV_INK};border-radius:99px;padding:5px 11px;font-size:12px;font-weight:800;">${n} →</span>`).join('')}</div>`:''}
-    <div style="background:${KV_CREAM};border-radius:14px;padding:11px 13px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:4px;">ZUTATEN</div><div style="font-size:13px;line-height:1.45;">${x.z}</div>
+    ${x.kk?'':`<div style="background:${KV_CREAM};border-radius:14px;padding:11px 13px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:4px;">ZUTATEN</div><div style="font-size:13px;line-height:1.45;">${x.z}</div>
       ${x.a?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">⚠️ Enthält: ${x.a}</div>`:''}${x.h?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">ℹ️ ${x.h}</div>`:''}</div>
-    <div style="font-size:11px;color:#888;margin-top:12px;">Bei Allergie-Fragen immer die Packung prüfen.</div></div>`;
+    <div style="font-size:11px;color:#888;margin-top:12px;">Bei Allergie-Fragen immer die Packung prüfen.</div>`}</div>`;
   document.body.appendChild(d);
 }
 function kvProdClose(){ document.getElementById('kv-prod-sheet')?.remove(); }
@@ -1185,10 +1194,10 @@ function renderProdukte(){
   const el=document.getElementById('v-produkte'); if(!el) return;
   const chip=(t,v,l)=>`<button data-kvchip="${t}|${v}" onclick="${t==='kat'?'kvProdKat':'kvProdDiet'}('${v}')" style="flex-shrink:0;border:2px solid ${KV_INK};background:#fff;color:${KV_INK};border-radius:99px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">${l}</button>`;
   el.innerHTML=`<div onclick="goTo('karmaverse')" style="cursor:pointer;font-size:13px;font-weight:800;margin:0 2px 10px;">← Karmaverse</div>
-    <div style="font-size:24px;font-weight:900;margin:0 2px 10px;color:${KV_INK};">Unsere Produkte 🛍️</div>
+    <div style="font-size:24px;font-weight:900;margin:0 2px 10px;color:${KV_INK};">Produkte &amp; Kochkurse 🛍️</div>
     <input id="kv-prod-q" type="search" placeholder="🔎 Suchen: Name oder Zutat (z.B. Cashew)" value="${kvProdState.q.replace(/"/g,'&quot;')}" oninput="kvProdSearch(this.value)" style="width:100%;box-sizing:border-box;padding:12px 14px;border:2px solid ${KV_INK};border-radius:14px;font-size:14px;background:#fff;margin-bottom:10px;">
     <div style="display:flex;gap:7px;overflow-x:auto;padding:2px 2px 8px;">${KV_PROD_KAT.map(k=>chip('kat',k[0],k[1])).join('')}</div>
-    <div style="display:flex;gap:7px;margin-bottom:10px;">${chip('diet','vegan','🌱 vegan')}${chip('diet','glutenfrei','🌾 glutenfrei')}<span id="kv-prod-n" style="margin-left:auto;align-self:center;font-size:11px;color:var(--muted);"></span></div>
+    <div style="text-align:right;margin:0 2px 8px;"><span id="kv-prod-n" style="font-size:11px;color:var(--muted);"></span></div>
     <div id="kv-prod-grid"></div>
     <div style="font-size:11px;color:var(--muted);margin:18px 2px 24px;line-height:1.4;">Antippen für Beschreibung & Zutaten. Quelle: karmafood.at (Stand 21.10.2026). Sets, Kochbücher & Gutscheine gibt es im Shop.</div>`;
   kvProdRefresh();
@@ -1210,6 +1219,7 @@ const KV_KOCHKURSE=[
   f:'Für alle, die die Restaurant-Lieblinge selbst können wollen. Auch mit Fleisch (Butter Chicken, Keema), vegetarisch gibt es auch.',
   d:['2026-11-25','2027-01-29','2027-02-24']}
 ];
+function kvKkTermine(c){ const now=new Date(); now.setHours(0,0,0,0); return c.d.filter(x=>new Date(x.slice(0,10))>=now).map(x=>new Date(x.slice(0,10)).toLocaleDateString('de-AT',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})+(x.includes('English')?' · 🇬🇧 English':'')); }
 function kvKochkursCard(c){
   const now=new Date(); now.setHours(0,0,0,0);
   const ds=c.d.filter(x=>new Date(x.slice(0,10))>=now).map(x=>{const dt=new Date(x.slice(0,10)); return dt.toLocaleDateString('de-AT',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})+(x.includes('English')?' · 🇬🇧 English':'');});
@@ -1525,7 +1535,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.183';
+const APP_VERSION = '6.99.184';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
