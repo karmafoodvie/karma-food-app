@@ -259,6 +259,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="v-hilfe" class="view"></div>
     <div id="v-karmaverse" class="view"></div>
     <div id="v-produkte" class="view"></div>
+    <div id="v-kochkurse" class="view"></div>
     <div id="v-rabattcodes" class="view"></div>
     <div id="v-onboarding" class="view"></div>
   </div>
@@ -1064,12 +1065,16 @@ function renderKarmaverse(){
     </div>
     <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">WENN’S STRESSIG WIRD</div>
     <div onclick="kvStoryOpen(${KV_START.rush})" style="background:${KV_NEON};color:${KV_INK};border:2px solid ${KV_INK};box-shadow:3px 3px 0 ${KV_INK};border-radius:20px;padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:14px;"><div style="font-size:38px;line-height:1;">🌬️</div><div><div style="font-size:16px;font-weight:900;line-height:1.2;">Schlange wird lang? Durchatmen.</div><div style="font-size:12px;margin-top:3px;opacity:.8;">3 Schritte für Ruhe und Herzlichkeit</div></div></div>
+    <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">UNSER ANGEBOT</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      ${tile('#FFE3D6','🛍️','Kund:innen & Produkte','Was wir verkaufen – mit Zutaten',"goTo('produkte')")}
+      ${tile('#F4FFC2','👨‍🍳','Kochkurse','3 Masterclasses mit Adi',"goTo('kochkurse')")}
+    </div>
     <div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;color:var(--muted);margin:20px 2px 9px;">WISSEN & HILFE</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       ${tile(KV_CREAM,'📖','Guide','Infos, Geräte & Abläufe',"goTo('guide')")}
       ${tile('#FFFBEB','🙋','Hilfe','Wen fragen? Ansprechpartner',"goTo('hilfe')")}
       ${tile('#fff','✅','Checklisten','Öffnen, Schließen, Reinigung',"goTo('check')")}
-      ${tile('#FFE3D6','🛍️','Kund:innen & Produkte','Was wir verkaufen – mit Zutaten',"goTo('produkte')")}
     </div>`;
 }
 window.renderKarmaverse=renderKarmaverse;
@@ -1113,6 +1118,53 @@ function renderProdukte(){
     +`<div style="font-size:11px;color:var(--muted);margin:14px 2px 24px;line-height:1.4;">Quelle: karmafood.at (Stand 21.10.2026). Sets, Kochbücher, Kochkurse & Gutscheine findest du im Shop. Bei Allergie-Fragen immer die Packung prüfen.</div>`;
 }
 window.renderProdukte=renderProdukte;
+// ===== Karmaverse: Kochkurse (Quelle: karmafood.at Shop, Stand 21.10.2026) =====
+const KV_KOCHKURSE=[
+ {n:'Best of Indian Classics',ico:'🍛',bg:'#F4FFC2',tag:'Vegan & Veggie',sub:'Reise nach Delhi & Kolkata',
+  g:['Chai','Okra Curry','Aloo Gobi','Shahi Paneer','Dal Tadka'],
+  f:'Für alle, die die indischen Klassiker richtig können wollen. Komplett vegetarisch, vegan machbar.',
+  d:['2026-12-02','2027-01-20 (English)','2027-02-17']},
+ {n:'Best of Kerala',ico:'🥥',bg:'#FFF1B8',tag:'Vegan, Veggie & Fisch',sub:'Südindien: frisch, fruchtig, kokosig',
+  g:['Chai','Papaya-Salat','Gedämpfte Kochbananen mit Tamarinden-Chutney','Medu Vada (knusprige Linsen-Donuts) mit Kokos-Chutney','Malabar-Masala-Garnelen','Kerala Fish Curry','Basmati-Reis'],
+  f:'Für Neugierige, die mal was anderes als Butter Chicken kochen wollen. Mit Fisch & Garnelen (pescetarisch).',
+  d:['2027-01-13','2027-02-11']},
+ {n:'Best of Indian Restaurant Kitchen',ico:'🍗',bg:'#FFE3D6',tag:'Veggie & mit Fleisch',sub:'Kochen wie im indischen Restaurant',
+  g:['Chai','Paneer Tikka Masala (Grill-Spieße)','Butter Chicken','Keema','Dal Makhani','Veggie Biryani','Naan','Raita'],
+  f:'Für alle, die die Restaurant-Lieblinge selbst können wollen. Auch mit Fleisch (Butter Chicken, Keema), vegetarisch gibt es auch.',
+  d:['2026-11-25','2027-01-29','2027-02-24']}
+];
+function kvKochkursCard(c){
+  const now=new Date(); now.setHours(0,0,0,0);
+  const ds=c.d.filter(x=>new Date(x.slice(0,10))>=now).map(x=>{const dt=new Date(x.slice(0,10)); return dt.toLocaleDateString('de-AT',{weekday:'short',day:'numeric',month:'numeric',year:'numeric'})+(x.includes('English')?' · 🇬🇧 English':'');});
+  return `<div style="background:#fff;color:${KV_INK};border:2px solid ${KV_INK};box-shadow:3px 3px 0 ${KV_INK};border-radius:20px;overflow:hidden;margin-bottom:14px;">
+    <div style="background:${c.bg};padding:14px;border-bottom:2px solid ${KV_INK};display:flex;gap:12px;align-items:center;"><div style="font-size:38px;">${c.ico}</div><div><div style="font-size:17px;font-weight:900;line-height:1.15;">${c.n}</div><div style="font-size:12px;font-weight:700;opacity:.8;margin-top:2px;">${c.sub}</div></div></div>
+    <div style="padding:14px;">
+      <span style="display:inline-block;background:#D4FF3F;border:1.5px solid ${KV_INK};border-radius:99px;padding:2px 9px;font-size:10.5px;font-weight:800;">${c.tag}</span>
+      <div style="font-size:13px;line-height:1.4;margin:9px 0;">${c.f}</div>
+      <div style="font-size:9.5px;font-weight:900;letter-spacing:.12em;opacity:.6;margin-bottom:4px;">DAS KOCHEN WIR</div>
+      <div style="font-size:12.5px;line-height:1.5;">${c.g.map(x=>'• '+x).join('<br>')}</div>
+      <div style="font-size:9.5px;font-weight:900;letter-spacing:.12em;opacity:.6;margin:12px 0 4px;">NÄCHSTE TERMINE</div>
+      <div style="font-size:12.5px;line-height:1.5;">${ds.length?ds.map(x=>'📅 '+x).join('<br>'):'Aktuell keine Termine – neue kommen laufend online.'}</div>
+    </div></div>`;
+}
+function renderKochkurse(){
+  const el=document.getElementById('v-kochkurse'); if(!el) return;
+  const box=(t,l)=>`<div style="background:${KV_CREAM};border:2px solid ${KV_INK};border-radius:16px;padding:12px 14px;margin-bottom:12px;"><div style="font-size:10.5px;font-weight:900;letter-spacing:.12em;margin-bottom:6px;">${t}</div><div style="font-size:13px;line-height:1.5;">${l}</div></div>`;
+  el.innerHTML=`<div onclick="goTo('karmaverse')" style="cursor:pointer;font-size:13px;font-weight:800;margin:0 2px 12px;">← Karmaverse</div>
+    <div style="background:${KV_NEON};border:2px solid ${KV_INK};box-shadow:4px 4px 0 ${KV_INK};border-radius:24px;padding:18px;color:${KV_INK};margin-bottom:16px;">
+      <div style="font-size:26px;font-weight:900;line-height:1.1;">Kochen mit Adi 👨‍🍳</div>
+      <div style="font-size:14px;font-weight:700;margin-top:6px;opacity:.85;">3 Masterclasses, ein Abend, viel Spaß. Damit du jede Kundenfrage dazu beantworten kannst.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;">${['130 € pro Person','18:00–ca. 22:00 Uhr','kleine Gruppe'].map(x=>`<span style="background:#fff;border:2px solid ${KV_INK};border-radius:99px;padding:4px 10px;font-size:11.5px;font-weight:800;">${x}</span>`).join('')}</div></div>`
+    +KV_KOCHKURSE.map(kvKochkursCard).join('')
+    +box('🎟️ DAS IST IM TICKET','• Gastgeschenk (homemade, mit Herz)<br>• Online-Rezeptheft<br>• Unlimited Kitchen Hacks<br>• Doggy Bag, falls etwas übrig bleibt<br>• Getränke')
+    +box('📍 WO &amp; WIE','Karma Food Kitchen Collective, Inkustraße 1–7, Klosterneuburg (gleich an der Wiener Stadtgrenze).<br>Kostenlos parken · barrierefrei · mit S40 oder Bus 400 erreichbar.')
+    +box('🙋 HÄUFIGE FRAGEN','<b>Brauche ich Kocherfahrung?</b> Nein, alle Level sind willkommen.<br><b>Zu zweit?</b> Gern! Macht zu zweit besonders Spaß, auch als Solo-Date super.<br><b>Gibt es vegane Optionen?</b> Ja, je nach Masterclass (siehe oben).<br><b>Verschenken?</b> Gutschein „Kochkurs-Voucher: Book now, cook later“ (130 €) oder Ticket direkt im Shop.')
+    +box('⚠️ STORNO','Das Ticket wird bei Absagen nicht erstattet und kann nicht auf einen anderen Termin verschoben werden. Es kann aber an andere Personen weitergegeben werden.')
+    +box('💬 SO SAGST DU ES AM COUNTER','„Adi kocht bei uns mit einer kleinen Gruppe indische Gerichte, alle Level sind willkommen. Tickets und Termine gibt es auf karmafood.at.“')
+    +`<div style="font-size:11px;color:var(--muted);margin:14px 2px 24px;line-height:1.4;">Quelle: karmafood.at (Stand 21.10.2026). Termine ändern sich laufend, aktuelle Termine immer im Shop prüfen.</div>`;
+}
+window.renderKochkurse=renderKochkurse;
+
 
 Object.assign(window,{kvStoryOpen,kvStoryStep,kvStoryClose});
 
@@ -1396,7 +1448,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.180';
+const APP_VERSION = '6.99.181';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2131,7 +2183,7 @@ function goTo(v, noPush=false){
   document.getElementById('v-'+v).classList.add('show');
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   let navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
-  if(v==='check'||v==='guide'||v==='hilfe'||v==='produkte') navId='nav-karmaverse'; // Unterpunkte des Karmaverse (nur Store-Nav; Org hat eigene Zuordnung unten)
+  if(v==='check'||v==='guide'||v==='hilfe'||v==='produkte'||v==='kochkurse') navId='nav-karmaverse'; // Unterpunkte des Karmaverse (nur Store-Nav; Org hat eigene Zuordnung unten)
   if(currentStore?.id==='zentrale'){
     // Neue 5-Tab Org-Nav
     if(v==='home') navId='nav-org-ueberblick';
@@ -2148,7 +2200,7 @@ function goTo(v, noPush=false){
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos'};
+  const subs={kochkurse:'Kochkurse',produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -2157,7 +2209,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={produkte:renderProdukte,karmaverse:renderKarmaverse,home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,todos:renderTodos,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={kochkurse:renderKochkurse,produkte:renderProdukte,karmaverse:renderKarmaverse,home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,todos:renderTodos,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
