@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.169';
+const APP_VERSION = '6.99.170';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9195,11 +9195,12 @@ function tgHas(a){ return !!a.genug || !!a.bestellen || (a.bestand_text!=null &&
 function tgArtikelRowHtml(a, extraLabel){
   const has=tgHas(a);
   const txt=a.bestand_text!=null?a.bestand_text:(a.bestand!=null?a.bestand:'');
-  return `<div class="tg-row" data-id="${a.id}" data-has="${has?1:0}" data-genug="${a.genug?1:0}" data-bestellen="${a.bestellen?1:0}" style="display:flex;align-items:center;gap:5px;padding:7px 8px;border-bottom:1px solid var(--border);${a.bestellen?'background:#FFF7ED;':(a.genug?'background:#F0FDF4;':'')}">
-    <div data-name="${escAttr(a.name)}" style="flex:1;min-width:0;font-size:12.5px;">${a.name}${extraLabel||''}</div>
+  return `<div class="tg-row" data-id="${a.id}" data-has="${has?1:0}" data-genug="${a.genug?1:0}" data-bestellen="${a.bestellen?1:0}" data-bestellt="${a.bestellt?1:0}" style="display:flex;align-items:center;gap:5px;padding:7px 8px;border-bottom:1px solid var(--border);${a.bestellt?'background:#EFF6FF;':(a.bestellen?'background:#FFF7ED;':(a.genug?'background:#F0FDF4;':''))}">
+    <div data-name="${escAttr(a.name)}" style="flex:1;min-width:0;font-size:12.5px;${a.bestellt?'text-decoration:line-through;color:var(--muted);':''}">${a.name}${extraLabel||''}</div>
     <input type="text" inputmode="text" value="${escAttr(String(txt))}" placeholder="–" oninput="debounceFieldSave(this,()=>updateTgBestand(${a.id},this.value))" onchange="updateTgBestand(${a.id},this.value)" style="width:70px;text-align:center;border:1.5px solid ${has?'#86EFAC':'var(--border)'};background:${has?'#F0FDF4':'#fff'};border-radius:8px;font-size:13px;padding:6px 2px;">
     <button class="tg-genug" onclick="toggleTgGenug(${a.id})" title="Wir haben genug" style="flex-shrink:0;border:1.5px solid ${a.genug?'#16A34A':'var(--border)'};background:${a.genug?'#16A34A':'#fff'};color:${a.genug?'#fff':'var(--sub)'};border-radius:8px;padding:6px 6px;font-size:11px;font-weight:700;cursor:pointer;">✓ genug</button>
     <button class="tg-bestellen" onclick="toggleTgBestellen(${a.id})" title="Muss bestellt werden" style="flex-shrink:0;border:1.5px solid ${a.bestellen?'#EA580C':'var(--border)'};background:${a.bestellen?'#EA580C':'#fff'};color:${a.bestellen?'#fff':'var(--sub)'};border-radius:8px;padding:6px 6px;font-size:11px;font-weight:700;cursor:pointer;">🛒 bestellen</button>
+    <button class="tg-bestellt" onclick="toggleTgBestellt(${a.id})" title="Ist bestellt (Simone)" style="flex-shrink:0;border:1.5px solid ${a.bestellt?'#2563EB':'var(--border)'};background:${a.bestellt?'#2563EB':'#fff'};color:${a.bestellt?'#fff':'var(--sub)'};border-radius:8px;padding:6px 6px;font-size:11px;font-weight:700;cursor:pointer;">✔ bestellt</button>
     ${a.manuell_hinzugefuegt?`<button onclick="deleteTgArtikel(${a.id})" title="Entfernen" style="background:none;border:none;color:#DC2626;font-size:13px;cursor:pointer;padding:2px 2px;">🗑</button>`:''}
   </div>`;
 }
@@ -9208,7 +9209,7 @@ function tgUpdateProgress(){
   const rows=[...document.querySelectorAll('.tg-row')]; if(!rows.length) return;
   const done=rows.filter(r=>r.dataset.has==='1').length;
   const el=document.getElementById('tg-progress'); if(el){ el.textContent=`${done} / ${rows.length} gezählt`; if(lang!=='de') tx('gezählt').then(t=>{ el.textContent=`${done} / ${rows.length} ${t}`; }); }
-  const nb=rows.filter(r=>r.dataset.bestellen==='1').length; const be=document.getElementById('tg-best-count'); if(be){ be.textContent=nb?`🛒 ${nb} zu bestellen`:'🛒 Liste'; if(lang!=='de'&&nb) tx('zu bestellen').then(t=>{ be.textContent=`🛒 ${nb} ${t}`; }); }
+  const nb=rows.filter(r=>r.dataset.bestellen==='1'&&r.dataset.bestellt!=='1').length; const be=document.getElementById('tg-best-count'); if(be){ be.textContent=nb?`🛒 ${nb} zu bestellen`:'🛒 Liste'; if(lang!=='de'&&nb) tx('zu bestellen').then(t=>{ be.textContent=`🛒 ${nb} ${t}`; }); }
   const bar=document.getElementById('tg-bar'); if(bar) bar.style.width=Math.round(done/rows.length*100)+'%';
   document.querySelectorAll('.tg-kat').forEach(k=>{
     const rs=[...k.querySelectorAll('.tg-row')]; const d=rs.filter(r=>r.dataset.has==='1').length;
@@ -9246,7 +9247,7 @@ async function renderTgBestellungHtml(){
   // (Bestellung läuft immer neu — Wunsch Tini 13.10.26). Artikel selbst bleiben bestehen.
   try{
     const _m=new Date(); _m.setHours(0,0,0,0); _m.setDate(_m.getDate()+(_m.getDay()===0?-6:1-_m.getDay()));
-    await api(`tg_artikel?aktualisiert_am=lt.${encodeURIComponent(_m.toISOString())}&or=(genug.eq.true,bestellen.eq.true,bestand_text.not.is.null,bestand.not.is.null)`,{method:'PATCH',body:JSON.stringify({bestand:null,bestand_text:null,genug:false,bestellen:false})});
+    await api(`tg_artikel?aktualisiert_am=lt.${encodeURIComponent(_m.toISOString())}&or=(genug.eq.true,bestellen.eq.true,bestellt.eq.true,bestand_text.not.is.null,bestand.not.is.null)`,{method:'PATCH',body:JSON.stringify({bestand:null,bestand_text:null,genug:false,bestellen:false,bestellt:false})});
   }catch(e){ console.error('Wochen-Reset Wochenbestellung',e); }
   const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
   const doneN=items.filter(a=>tgHas(a)).length;
@@ -9261,7 +9262,7 @@ async function renderTgBestellungHtml(){
     <div style="height:5px;background:var(--surface-1);border-radius:3px;margin:8px 0 6px;overflow:hidden;"><div id="tg-bar" style="height:100%;width:${items.length?Math.round(doneN/items.length*100):0}%;background:#F97316;"></div></div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
       <label style="font-size:11.5px;color:var(--sub);display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" onchange="tgToggleOpenOnly(this.checked)" ${window._tgOpenOnly?'checked':''} style="width:16px;height:16px;"> nur noch offene</label>
-      <button onclick="tgCopyBestellliste()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;"><span id="tg-best-count">${items.filter(a=>a.bestellen).length?'🛒 '+items.filter(a=>a.bestellen).length+' zu bestellen':'🛒 Liste'}</span> · kopieren</button>
+      <button onclick="tgCopyBestellliste()" style="border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;"><span id="tg-best-count">${items.filter(a=>a.bestellen&&!a.bestellt).length?'🛒 '+items.filter(a=>a.bestellen&&!a.bestellt).length+' zu bestellen':'🛒 Liste'}</span> · kopieren</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
       <label style="font-size:11px;color:var(--sub);display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="tg-asana-test" ${tgAsanaTestMode()?'checked':''} onchange="try{localStorage.setItem('tg_asana_test2',this.checked?'1':'0')}catch(e){};tgAsanaBtnRefresh()" style="width:16px;height:16px;"> Test (nur an mich)</label>
@@ -9344,10 +9345,12 @@ window.renderTgBestellungHtml=renderTgBestellungHtml;
 function tgRowRefresh(articleId){
   const row=document.querySelector(`.tg-row[data-id="${articleId}"]`); if(!row) return;
   const inp=row.querySelector('input'); const genug=row.dataset.genug==='1'; const hasTxt=!!(inp&&inp.value.trim());
-  const best=row.dataset.bestellen==='1';
+  const best=row.dataset.bestellen==='1'; const bt=row.dataset.bestellt==='1';
   const has=genug||best||hasTxt; row.dataset.has=has?'1':'0';
   if(inp){ inp.style.borderColor=has?'#86EFAC':'var(--border)'; inp.style.background=has?'#F0FDF4':'#fff'; }
-  row.style.background=best?'#FFF7ED':(genug?'#F0FDF4':'');
+  row.style.background=bt?'#EFF6FF':(best?'#FFF7ED':(genug?'#F0FDF4':''));
+  const nm=row.children[0]; if(nm){ nm.style.textDecoration=bt?'line-through':''; nm.style.color=bt?'var(--muted)':''; }
+  const bt2=row.querySelector('.tg-bestellt'); if(bt2){ bt2.style.borderColor=bt?'#2563EB':'var(--border)'; bt2.style.background=bt?'#2563EB':'#fff'; bt2.style.color=bt?'#fff':'var(--sub)'; }
   const b=row.querySelector('.tg-genug'); if(b){ b.style.borderColor=genug?'#16A34A':'var(--border)'; b.style.background=genug?'#16A34A':'#fff'; b.style.color=genug?'#fff':'var(--sub)'; }
   const bb=row.querySelector('.tg-bestellen'); if(bb){ bb.style.borderColor=best?'#EA580C':'var(--border)'; bb.style.background=best?'#EA580C':'#fff'; bb.style.color=best?'#fff':'var(--sub)'; }
   tgUpdateProgress();
@@ -9365,9 +9368,9 @@ window.updateTgBestand=updateTgBestand;
 async function toggleTgGenug(articleId){
   const row=document.querySelector(`.tg-row[data-id="${articleId}"]`); if(!row) return;
   const neu=row.dataset.genug!=='1';
-  row.dataset.genug=neu?'1':'0'; if(neu) row.dataset.bestellen='0'; tgRowRefresh(articleId);
+  row.dataset.genug=neu?'1':'0'; if(neu){ row.dataset.bestellen='0'; row.dataset.bestellt='0'; } tgRowRefresh(articleId);
   try{
-    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({genug:neu, ...(neu?{bestellen:false}:{}), aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
+    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({genug:neu, ...(neu?{bestellen:false,bestellt:false}:{}), aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
     showToast(neu?'✓ „Wir haben genug“ vermerkt':'✓ Zurückgesetzt');
   }catch(e){ console.error(e); row.dataset.genug=neu?'0':'1'; tgRowRefresh(articleId); showToast('Fehler beim Speichern',true); }
 }
@@ -9375,13 +9378,25 @@ window.toggleTgGenug=toggleTgGenug;
 async function toggleTgBestellen(articleId){
   const row=document.querySelector(`.tg-row[data-id="${articleId}"]`); if(!row) return;
   const neu=row.dataset.bestellen!=='1';
-  row.dataset.bestellen=neu?'1':'0'; if(neu) row.dataset.genug='0'; tgRowRefresh(articleId);
+  row.dataset.bestellen=neu?'1':'0'; if(neu) row.dataset.genug='0'; else row.dataset.bestellt='0'; tgRowRefresh(articleId);
   try{
-    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestellen:neu, ...(neu?{genug:false}:{}), aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
+    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestellen:neu, ...(neu?{genug:false}:{bestellt:false}), aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
     showToast(neu?'🛒 Zum Bestellen vermerkt':'✓ Zurückgesetzt');
   }catch(e){ console.error(e); row.dataset.bestellen=neu?'0':'1'; tgRowRefresh(articleId); showToast('Fehler beim Speichern',true); }
 }
 window.toggleTgBestellen=toggleTgBestellen;
+// 21.10.26 (Wunsch Simone): "✔ bestellt" — Simone hakt ab, was sie schon bestellt hat. Markiert den Artikel zugleich als
+// "zu bestellen" (damit er in der Liste bleibt), zählt aber nicht mehr bei "zu bestellen · kopieren".
+async function toggleTgBestellt(articleId){
+  const row=document.querySelector(`.tg-row[data-id="${articleId}"]`); if(!row) return;
+  const neu=row.dataset.bestellt!=='1';
+  row.dataset.bestellt=neu?'1':'0'; if(neu){ row.dataset.bestellen='1'; row.dataset.genug='0'; } tgRowRefresh(articleId);
+  try{
+    await api(`tg_artikel?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({bestellt:neu, ...(neu?{bestellen:true,genug:false}:{}), aktualisiert_am:new Date().toISOString(), eingetragen_von:currentStore?.name||'Küche'})});
+    showToast(neu?'✔ Als bestellt vermerkt':'✓ Zurückgesetzt');
+  }catch(e){ console.error(e); row.dataset.bestellt=neu?'0':'1'; tgRowRefresh(articleId); showToast('Fehler beim Speichern',true); }
+}
+window.toggleTgBestellt=toggleTgBestellt;
 // Bestellliste (alle mit 🛒) als Text kopieren — Weitergabe an Simone läuft noch manuell
 // Wochenbestellung automatisch als Asana-Task (Edge Function asana-wochenbestellung). 07.10.26 (Wunsch
 // Tini): erster Versuch ist ein Test — Testmodus ist standardmäßig AN und schickt nur an Tini.
@@ -9401,7 +9416,8 @@ async function tgSendAsana(){
     kategorie:(r.closest('.tg-kat')?.dataset.kat||r.closest('.tg-kat')?.querySelector('summary span')?.textContent||'Sonstiges').trim(),
     bestand:(r.querySelector('input')?.value||'').trim(),
     genug:r.dataset.genug==='1',
-    bestellen:r.dataset.bestellen==='1'
+    bestellen:r.dataset.bestellen==='1',
+    bestellt:r.dataset.bestellt==='1'
   }));
   const btn=document.getElementById('tg-asana-btn'); if(btn){ btn.disabled=true; btn.textContent='Sendet …'; }
   try{
@@ -9414,8 +9430,8 @@ async function tgSendAsana(){
 }
 Object.assign(window,{tgSendAsana,tgAsanaBtnRefresh,tgAsanaTestMode});
 function tgCopyBestellliste(){
-  const rows=[...document.querySelectorAll('.tg-row[data-bestellen="1"]')];
-  if(!rows.length){ showToast('Noch nichts zum Bestellen markiert',true); return; }
+  const rows=[...document.querySelectorAll('.tg-row[data-bestellen="1"]:not([data-bestellt="1"])')];
+  if(!rows.length){ showToast('Nichts mehr offen zum Bestellen',true); return; }
   const txt='Wochenbestellung Transgourmet:\n'+rows.map(r=>{ const n=(r.children[0].dataset.name||r.children[0].textContent).trim(); const v=r.querySelector('input')?.value.trim(); return '• '+n+(v?' (Bestand: '+v+')':''); }).join('\n');
   (navigator.clipboard?.writeText(txt)||Promise.reject()).then(()=>showToast('✓ Bestellliste kopiert ('+rows.length+')')).catch(()=>{ prompt('Bestellliste kopieren:',txt); });
 }
