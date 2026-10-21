@@ -1222,7 +1222,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.163';
+const APP_VERSION = '6.99.164';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3278,8 +3278,12 @@ const GLUTEN_ZUTATEN_KEYWORDS = [
   'lasagneteigblätter','lasagneblätter','lasagne blätter','teig blatte',
   'weizen','weizenmehl','dinkel','roggen','gerste','grieß','couscous','bulgur',
   'paniermehl','semmelbrösel','panko','nudeln','pasta','teigwaren',
-  'sojasauce','soja sauce','malzextrakt','bierhefe'
+  'sojasauce','soja sauce','malzextrakt','bierhefe',
+  // 21.10.26 (Regel Tini): Röstzwiebel / geröstete Zwiebel in der Zutatenliste = NIE glutenfrei
+  // (Röstzwiebeln enthalten Weizenmehl). Gilt auch, wenn sie nur im Dip/Sauce/Toppings-Teil stehen.
+  'röstzwiebel','roestzwiebel','geröstete zwiebel','gerösteten zwiebel','geroestete zwiebel','crispy onion'
 ];
+const GLUTEN_NIE_RE=/röstzwiebel|roestzwiebel|geröstet\w*\s+zwiebel|geroestet\w*\s+zwiebel|crispy onion/i;
 function zutatenEnthaeltGluten(zutatenText){
   if(!zutatenText) return null; // keine Zutaten hinterlegt -> unbekannt, nicht automatisch glutenfrei
   const n=zutatenText.toLowerCase();
@@ -3308,6 +3312,8 @@ function getGlutenToppingAusnahme(dishName){
   return GLUTEN_TOPPING_AUSNAHMEN.find(e => e.match.test(n)) || null;
 }
 function glutenfreiBadgeHtml(dishName, allergenMain, zutatenText){
+  // Regel 21.10.26: Röstzwiebel / geröstete Zwiebel (Name oder Zutaten) -> nie ein Glutenfrei-Badge.
+  if(GLUTEN_NIE_RE.test((dishName||'')+' '+(zutatenText||''))) return '';
   // Echte Zutaten-Erkennung hat Vorrang (21.09.26) — nur wenn gar keine Zutaten hinterlegt sind,
   // auf das (meist leere) allergenMain-Array zurückfallen, NIE automatisch "glutenfrei" annehmen,
   // wenn Gluten-Zutaten im Text stehen.
@@ -17681,7 +17687,7 @@ async function renderKitchen(){
           const allergenDressing = dish.allergene?.dressing||[];
           const hasZutaten = zutaten.length>0;
           const vegan = isVegan(allergenMain);
-          const gf = isGlutenfrei(allergenMain);
+          const gf = isGlutenfrei(allergenMain) && !GLUTEN_NIE_RE.test(dish.name+' '+zutaten);
           const {gemuese, rest, getreide} = splitZutaten(zutaten);
           const detailId = `kp_${selectedWoche}_${day}_${i}`;
           const gemueseId = `gem_${selectedWoche}_${day}_${i}`;
