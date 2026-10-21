@@ -1129,7 +1129,7 @@ const KV_PROD_KAT=[['all','Alle'],['Curry Pasten','🍛 Pasten'],['Masalas (Gew�
 let kvProdState={q:'',kat:'all',diet:''};
 function kvProdAll(){
   const r=[]; KV_PRODUKTE.forEach(g=>g.items.forEach(x=>r.push(Object.assign({kat:g.k,bg:g.bg},x))));
-  KV_KOCHKURSE.forEach(c=>r.push({kat:'Kochkurse',bg:c.bg,n:c.n,kk:c,t:[],p:'130 €',b:c.f,z:c.g.join(', '),img:'https://cdn.shopify.com/s/files/1/0616/3647/7178/products/Karma-Food-Indischer-Kochkurs-Rundreise-Nord-Ost.png?v=1736537353'}));
+  r.push({kat:'Kochkurse',bg:'#F4FFC2',n:'Karma Food Kochkurse',kkAll:true,t:[],p:'ab 130 €',b:'Echt indische Küche mit dem Profi kochen: Adi zeigt dir, wie\'s richtig geht. 3 Masterclasses, kleine Gruppe, Teamarbeit.',z:KV_KOCHKURSE.map(c=>c.n+' '+c.g.join(' ')).join(' '),img:KV_KOCHKURSE[0].img});
   const by=n=>r.find(y=>y.n===n);
   const flat=n=>{ const y=by(n); return y&&y.set?y.set.flatMap(flat):[n]; };
   r.filter(x=>x.set).forEach(x=>{ // Sets: Zutaten/Allergene aus den Einzelprodukten
@@ -1160,16 +1160,32 @@ function kvProdRefresh(){
 function kvProdSearch(v){ kvProdState.q=v; kvProdRefresh(); }
 function kvProdKat(v){ kvProdState.kat=v; kvProdRefresh(); }
 function kvProdDiet(v){ kvProdState.diet=(kvProdState.diet===v?'':v); kvProdRefresh(); }
-function kvKkSheetBody(c){
-  const ds=kvKkTermine(c);
-  const h=t=>`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin:14px 0 5px;">${t}</div>`;
-  return `<span style="display:inline-block;background:#D4FF3F;border:1.5px solid ${KV_INK};border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800;">${c.tag}</span>`
-   +h('DAS KOCHEN WIR')+`<div style="font-size:13px;line-height:1.55;">${c.g.map(x=>'• '+x).join('<br>')}</div>`
-   +h('NÄCHSTE TERMINE')+`<div style="font-size:13px;line-height:1.55;">${ds.length?ds.map(x=>'📅 '+x).join('<br>'):'Aktuell keine Termine, neue kommen laufend online.'}</div>`
-   +h('IM TICKET')+`<div style="font-size:13px;line-height:1.5;">18:00 bis ca. 22:00 Uhr · Gastgeschenk, Online-Rezeptheft, Kitchen Hacks, Doggy Bag, Getränke</div>`
-   +h('WO')+`<div style="font-size:13px;line-height:1.5;">Kitchen Collective, Inkustraße 1–7, Klosterneuburg (an der Wiener Stadtgrenze). Gratis parken, barrierefrei, S40 / Bus 400.</div>`
-   +h('GUT ZU WISSEN')+`<div style="font-size:13px;line-height:1.5;">Keine Kocherfahrung nötig. Zu zweit besonders schön. Ticket wird nicht erstattet und nicht verschoben, aber kann weitergegeben werden. Auch als Gutschein erhältlich.</div>
-   <div style="background:${KV_CREAM};border-radius:14px;padding:10px 12px;margin-top:14px;font-size:12.5px;line-height:1.45;"><b>💬 Am Counter:</b> „Adi kocht bei uns mit einer kleinen Gruppe indische Gerichte, alle Level sind willkommen. Tickets gibt es auf karmafood.at.“</div>`;
+function kvKkSheetBody(){
+  const h=t=>`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin:18px 0 6px;">${t}</div>`;
+  const box=(t)=>`<div style="font-size:13px;line-height:1.55;">${t}</div>`;
+  const mc=KV_KOCHKURSE.map(c=>{ const ds=kvKkTermine(c);
+    return `<div style="border:2px solid ${KV_INK};border-radius:16px;overflow:hidden;margin-bottom:12px;">
+      <div style="height:130px;background:${c.bg};"><img src="${c.img}&width=600" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+      <div style="padding:11px 13px;background:${c.bg}55;">
+        <div style="font-size:15px;font-weight:900;line-height:1.2;">${c.ico} ${c.n}</div>
+        <div style="font-size:12px;font-weight:700;opacity:.75;margin:2px 0 6px;">${c.sub}</div>
+        <span style="display:inline-block;background:#D4FF3F;border:1.5px solid ${KV_INK};border-radius:99px;padding:2px 9px;font-size:10.5px;font-weight:800;">${c.tag}</span>
+        <div style="font-size:12.5px;line-height:1.5;margin-top:8px;">${c.g.map(x=>'• '+x).join('<br>')}</div>
+        <div style="font-size:12.5px;line-height:1.5;margin-top:8px;font-weight:700;">${ds.length?ds.map(x=>'📅 '+x).join('<br>'):'Aktuell keine Termine'}</div>
+      </div></div>`; }).join('');
+  const faq=(q,a)=>`<details style="border-top:1.5px solid #e5e0d3;padding:8px 0;"><summary style="font-size:13px;font-weight:800;cursor:pointer;">${q}</summary><div style="font-size:13px;line-height:1.5;margin-top:5px;">${a}</div></details>`;
+  return h('KOCHKURS: ECHT INDISCHE KÜCHE MIT DEM PROFI')
+   +box('In einer kleinen Gruppe kocht ihr in Teamarbeit bunte Gerichte aus der indischen Küche. Adi steht mit Rat, Tat und Entertainment zur Seite und zeigt euch, wie’s richtig geht. Macht zu zweit besonders Spaß, ist aber auch das perfekte Solo-Date.')
+   +h('3 MASTERCLASSES & TERMINE')+mc
+   +h('EIN TICKET BEINHALTET')+box('• Gastgeschenk (homemade, mit Herz)<br>• Online-Rezeptheft<br>• Unlimited Kitchen Hacks<br>• Doggy Bag, falls etwas übrig bleibt<br>• Getränke')
+   +h('DETAILS')+box('• Ticket per Mail<br>• 18:00 bis ca. 22:00 Uhr<br>• Karma Food Kitchen Collective, Inkustraße 1–7, Klosterneuburg (gleich an der Wiener Stadtgrenze)<br>• Gratis parken · barrierefrei · S40 / Bus 400<br>• 130 € pro Person')
+   +h('HÄUFIGE FRAGEN')
+   +faq('Brauche ich Kocherfahrung?','Nein, alle Level sind willkommen.')
+   +faq('Gibt es vegane oder vegetarische Optionen?','Ja, je nach Masterclass (siehe oben). Kerala enthält Fisch und Garnelen, Restaurant Kitchen auch Fleischgerichte.')
+   +faq('Rückgabe & Erstattung','Bei Absagen kann der Kaufpreis nicht erstattet werden. Verschieben auf einen anderen Termin ist nicht möglich. Das Ticket kann aber an andere Personen übertragen werden.')
+   +faq('Kochkurs verschenken?','Gutschein „Kochkurs-Voucher: Book now, cook later“ (130 €) oder Ticket direkt im Shop.')
+   +`<div style="background:${KV_CREAM};border-radius:14px;padding:10px 12px;margin-top:14px;font-size:12.5px;line-height:1.45;"><b>💬 Am Counter:</b> „Adi kocht bei uns mit einer kleinen Gruppe indische Gerichte, alle Level sind willkommen. Tickets und Termine gibt es auf karmafood.at.“</div>
+   <div style="font-size:11px;color:#888;margin-top:12px;">Termine ändern sich laufend, bitte im Shop prüfen.</div>`;
 }
 function kvProdOpen(name){
   const x=kvProdAll().find(y=>y.n===name); if(!x) return;
@@ -1182,9 +1198,9 @@ function kvProdOpen(name){
     <div style="display:flex;gap:14px;align-items:center;"><div style="width:110px;height:110px;flex-shrink:0;background:${x.bg};border:2px solid ${KV_INK};border-radius:18px;overflow:hidden;"><img src="${kvProdImg(x,400)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;"></div>
       <div><div style="font-size:21px;font-weight:900;line-height:1.1;">${x.n}</div><div style="font-size:13px;font-weight:800;opacity:.6;margin-top:4px;">${x.p}</div>${x.pn?`<div style="font-size:11px;opacity:.6;">${x.pn}</div>`:''}<div style="margin-top:6px;">${x.t.map(kvProdTag).join('')}</div></div></div>
     <div style="font-size:14px;line-height:1.45;margin:14px 0;">${x.b}</div>
-    ${x.kk?kvKkSheetBody(x.kk):''}
+    ${x.kkAll?kvKkSheetBody():''}
     ${x.set?`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:6px;">DAS IST DRIN</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${x.set.map(n=>`<span onclick="kvProdOpen('${n.replace(/'/g,"\\'")}')" style="cursor:pointer;background:#D4FF3F;border:2px solid ${KV_INK};border-radius:99px;padding:5px 11px;font-size:12px;font-weight:800;">${n} →</span>`).join('')}</div>`:''}
-    ${x.kk?'':`<div style="background:${KV_CREAM};border-radius:14px;padding:11px 13px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:4px;">ZUTATEN</div><div style="font-size:13px;line-height:1.45;">${x.z}</div>
+    ${x.kkAll?'':`<div style="background:${KV_CREAM};border-radius:14px;padding:11px 13px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:4px;">ZUTATEN</div><div style="font-size:13px;line-height:1.45;">${x.z}</div>
       ${x.a?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">⚠️ Enthält: ${x.a}</div>`:''}${x.h?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">ℹ️ ${x.h}</div>`:''}</div>
     <div style="font-size:11px;color:#888;margin-top:12px;">Bei Allergie-Fragen immer die Packung prüfen.</div>`}</div>`;
   document.body.appendChild(d);
@@ -1206,15 +1222,15 @@ Object.assign(window,{kvProdSearch,kvProdKat,kvProdDiet,kvProdOpen,kvProdClose})
 window.renderProdukte=renderProdukte;
 // ===== Karmaverse: Kochkurse (Quelle: karmafood.at Shop, Stand 21.10.2026) =====
 const KV_KOCHKURSE=[
- {n:'Best of Indian Classics',ico:'🍛',bg:'#F4FFC2',tag:'Vegan & Veggie',sub:'Reise nach Delhi & Kolkata',
+ {n:'Best of Indian Classics',img:'https://cdn.shopify.com/s/files/1/0616/3647/7178/products/Karma-Food-Indischer-Kochkurs-Rundreise-Nord-Ost.png?v=1736537353',ico:'🍛',bg:'#F4FFC2',tag:'Vegan & Veggie',sub:'Reise nach Delhi & Kolkata',
   g:['Chai','Okra Curry','Aloo Gobi','Shahi Paneer','Dal Tadka'],
   f:'Für alle, die die indischen Klassiker richtig können wollen. Komplett vegetarisch, vegan machbar.',
   d:['2026-12-02','2027-01-20 (English)','2027-02-17']},
- {n:'Best of Kerala',ico:'🥥',bg:'#FFF1B8',tag:'Vegan, Veggie & Fisch',sub:'Südindien: frisch, fruchtig, kokosig',
+ {n:'Best of Kerala',img:'https://cdn.shopify.com/s/files/1/0616/3647/7178/products/Karma-Food-Indischer-Kochkurs-Rundreise-Sued-West.png?v=1736537353',ico:'🥥',bg:'#FFF1B8',tag:'Vegan, Veggie & Fisch',sub:'Südindien: frisch, fruchtig, kokosig',
   g:['Chai','Papaya-Salat','Gedämpfte Kochbananen mit Tamarinden-Chutney','Medu Vada (knusprige Linsen-Donuts) mit Kokos-Chutney','Malabar-Masala-Garnelen','Kerala Fish Curry','Basmati-Reis'],
   f:'Für Neugierige, die mal was anderes als Butter Chicken kochen wollen. Mit Fisch & Garnelen (pescetarisch).',
   d:['2027-01-13','2027-02-11']},
- {n:'Best of Indian Restaurant Kitchen',ico:'🍗',bg:'#FFE3D6',tag:'Veggie & mit Fleisch',sub:'Kochen wie im indischen Restaurant',
+ {n:'Best of Indian Restaurant Kitchen',img:'https://cdn.shopify.com/s/files/1/0616/3647/7178/files/Karma-Food-Kochkurs-Best-of-Indian_Restaurant.jpg?v=1775655693',ico:'🍗',bg:'#FFE3D6',tag:'Veggie & mit Fleisch',sub:'Kochen wie im indischen Restaurant',
   g:['Chai','Paneer Tikka Masala (Grill-Spieße)','Butter Chicken','Keema','Dal Makhani','Veggie Biryani','Naan','Raita'],
   f:'Für alle, die die Restaurant-Lieblinge selbst können wollen. Auch mit Fleisch (Butter Chicken, Keema), vegetarisch gibt es auch.',
   d:['2026-11-25','2027-01-29','2027-02-24']}
@@ -1535,7 +1551,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.184';
+const APP_VERSION = '6.99.185';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
