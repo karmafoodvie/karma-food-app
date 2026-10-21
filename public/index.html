@@ -1160,23 +1160,30 @@ function kvProdRefresh(){
 function kvProdSearch(v){ kvProdState.q=v; kvProdRefresh(); }
 function kvProdKat(v){ kvProdState.kat=v; kvProdRefresh(); }
 function kvProdDiet(v){ kvProdState.diet=(kvProdState.diet===v?'':v); kvProdRefresh(); }
+function kvKkPick(i){
+  const c=KV_KOCHKURSE[i]; const ds=kvKkTermine(c);
+  KV_KOCHKURSE.forEach((_,j)=>{ const t=document.getElementById('kv-kk-t'+j); if(t){ t.style.background=j===i?'#D4FF3F':'#fff'; t.style.boxShadow=j===i?`3px 3px 0 ${KV_INK}`:'none'; } });
+  const d=document.getElementById('kv-kk-detail'); if(!d) return;
+  d.innerHTML=`<div style="background:${c.bg}66;border:2px solid ${KV_INK};border-radius:14px;padding:12px 13px;">
+    <div style="font-size:15px;font-weight:900;line-height:1.2;">${c.ico} ${c.n}</div>
+    <div style="font-size:12px;font-weight:700;opacity:.75;margin:2px 0 6px;">${c.sub} · ${c.tag}</div>
+    <div style="font-size:12.5px;line-height:1.4;margin-bottom:8px;">${c.f}</div>
+    <div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:3px;">DAS KOCHEN WIR</div>
+    <div style="font-size:12.5px;line-height:1.5;">${c.g.map(x=>'• '+x).join('<br>')}</div>
+    <div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin:10px 0 3px;">TERMINE</div>
+    <div style="font-size:12.5px;line-height:1.5;font-weight:700;">${ds.length?ds.map(x=>'📅 '+x).join('<br>'):'Aktuell keine Termine'}</div></div>`;
+}
 function kvKkSheetBody(){
   const h=t=>`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin:18px 0 6px;">${t}</div>`;
   const box=(t)=>`<div style="font-size:13px;line-height:1.55;">${t}</div>`;
-  const mc=KV_KOCHKURSE.map(c=>{ const ds=kvKkTermine(c);
-    return `<div style="border:2px solid ${KV_INK};border-radius:16px;overflow:hidden;margin-bottom:12px;">
-      <div style="height:130px;background:${c.bg};"><img src="${c.img}&width=600" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
-      <div style="padding:11px 13px;background:${c.bg}55;">
-        <div style="font-size:15px;font-weight:900;line-height:1.2;">${c.ico} ${c.n}</div>
-        <div style="font-size:12px;font-weight:700;opacity:.75;margin:2px 0 6px;">${c.sub}</div>
-        <span style="display:inline-block;background:#D4FF3F;border:1.5px solid ${KV_INK};border-radius:99px;padding:2px 9px;font-size:10.5px;font-weight:800;">${c.tag}</span>
-        <div style="font-size:12.5px;line-height:1.5;margin-top:8px;">${c.g.map(x=>'• '+x).join('<br>')}</div>
-        <div style="font-size:12.5px;line-height:1.5;margin-top:8px;font-weight:700;">${ds.length?ds.map(x=>'📅 '+x).join('<br>'):'Aktuell keine Termine'}</div>
-      </div></div>`; }).join('');
+  const short=c=>{ const d=kvKkTermine(c)[0]; return d?('📅 '+d.replace(/^[^,]+, /,'').replace(/\.\d{4}.*/,'.')):'—'; };
+  const mc=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">`+KV_KOCHKURSE.map((c,i)=>`<div id="kv-kk-t${i}" onclick="kvKkPick(${i})" style="cursor:pointer;border:2px solid ${KV_INK};border-radius:14px;overflow:hidden;background:#fff;">
+      <div style="aspect-ratio:1/1;background:${c.bg};"><img src="${c.img}&width=300" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+      <div style="padding:6px 6px 8px;text-align:center;"><div style="font-size:11.5px;font-weight:900;line-height:1.15;">${c.n.replace('Best of ','')}</div><div style="font-size:10px;opacity:.7;margin-top:2px;">${c.tag}</div><div style="font-size:10px;font-weight:800;margin-top:3px;">${short(c)}</div></div></div>`).join('')+`</div><div id="kv-kk-detail" style="margin-top:10px;"></div>`;
   const faq=(q,a)=>`<details style="border-top:1.5px solid #e5e0d3;padding:8px 0;"><summary style="font-size:13px;font-weight:800;cursor:pointer;">${q}</summary><div style="font-size:13px;line-height:1.5;margin-top:5px;">${a}</div></details>`;
   return h('KOCHKURS: ECHT INDISCHE KÜCHE MIT DEM PROFI')
    +box('In einer kleinen Gruppe kocht ihr in Teamarbeit bunte Gerichte aus der indischen Küche. Adi steht mit Rat, Tat und Entertainment zur Seite und zeigt euch, wie’s richtig geht. Macht zu zweit besonders Spaß, ist aber auch das perfekte Solo-Date.')
-   +h('3 MASTERCLASSES & TERMINE')+mc
+   +h('3 MASTERCLASSES · ANTIPPEN FÜR GERICHTE & TERMINE')+mc
    +h('EIN TICKET BEINHALTET')+box('• Gastgeschenk (homemade, mit Herz)<br>• Online-Rezeptheft<br>• Unlimited Kitchen Hacks<br>• Doggy Bag, falls etwas übrig bleibt<br>• Getränke')
    +h('DETAILS')+box('• Ticket per Mail<br>• 18:00 bis ca. 22:00 Uhr<br>• Karma Food Kitchen Collective, Inkustraße 1–7, Klosterneuburg (gleich an der Wiener Stadtgrenze)<br>• Gratis parken · barrierefrei · S40 / Bus 400<br>• 130 € pro Person')
    +h('HÄUFIGE FRAGEN')
@@ -1197,13 +1204,14 @@ function kvProdOpen(name){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="width:40px;height:5px;border-radius:9px;background:#ddd;"></div><button onclick="kvProdClose()" style="border:2px solid ${KV_INK};background:#fff;border-radius:99px;width:34px;height:34px;font-size:16px;font-weight:900;cursor:pointer;">✕</button></div>
     <div style="display:flex;gap:14px;align-items:center;"><div style="width:110px;height:110px;flex-shrink:0;background:${x.bg};border:2px solid ${KV_INK};border-radius:18px;overflow:hidden;"><img src="${kvProdImg(x,400)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;"></div>
       <div><div style="font-size:21px;font-weight:900;line-height:1.1;">${x.n}</div><div style="font-size:13px;font-weight:800;opacity:.6;margin-top:4px;">${x.p}</div>${x.pn?`<div style="font-size:11px;opacity:.6;">${x.pn}</div>`:''}<div style="margin-top:6px;">${x.t.map(kvProdTag).join('')}</div></div></div>
-    <div style="font-size:14px;line-height:1.45;margin:14px 0;">${x.b}</div>
+    <div style="font-size:14px;line-height:1.45;margin:14px 0;${x.kkAll?'display:none;':''}">${x.b}</div>
     ${x.kkAll?kvKkSheetBody():''}
     ${x.set?`<div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:6px;">DAS IST DRIN</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${x.set.map(n=>`<span onclick="kvProdOpen('${n.replace(/'/g,"\\'")}')" style="cursor:pointer;background:#D4FF3F;border:2px solid ${KV_INK};border-radius:99px;padding:5px 11px;font-size:12px;font-weight:800;">${n} →</span>`).join('')}</div>`:''}
     ${x.kkAll?'':`<div style="background:${KV_CREAM};border-radius:14px;padding:11px 13px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:4px;">ZUTATEN</div><div style="font-size:13px;line-height:1.45;">${x.z}</div>
       ${x.a?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">⚠️ Enthält: ${x.a}</div>`:''}${x.h?`<div style="font-size:12.5px;font-weight:800;margin-top:8px;">ℹ️ ${x.h}</div>`:''}</div>
     <div style="font-size:11px;color:#888;margin-top:12px;">Bei Allergie-Fragen immer die Packung prüfen.</div>`}</div>`;
   document.body.appendChild(d);
+  if(x.kkAll) kvKkPick(0);
 }
 function kvProdClose(){ document.getElementById('kv-prod-sheet')?.remove(); }
 function renderProdukte(){
@@ -1218,7 +1226,7 @@ function renderProdukte(){
     <div style="font-size:11px;color:var(--muted);margin:18px 2px 24px;line-height:1.4;">Antippen für Beschreibung & Zutaten. Quelle: karmafood.at (Stand 21.10.2026). Sets, Kochbücher & Gutscheine gibt es im Shop.</div>`;
   kvProdRefresh();
 }
-Object.assign(window,{kvProdSearch,kvProdKat,kvProdDiet,kvProdOpen,kvProdClose});
+Object.assign(window,{kvKkPick,kvProdSearch,kvProdKat,kvProdDiet,kvProdOpen,kvProdClose});
 window.renderProdukte=renderProdukte;
 // ===== Karmaverse: Kochkurse (Quelle: karmafood.at Shop, Stand 21.10.2026) =====
 const KV_KOCHKURSE=[
@@ -1551,7 +1559,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.185';
+const APP_VERSION = '6.99.186';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
