@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.192';
+const APP_VERSION = '6.99.193';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4338,6 +4338,39 @@ async function checkEssenNotruf(){
   }catch(e){console.error('Notruf-Check fehlgeschlagen:',e);}
 }
 
+// Telefonnummern der Locations (für "Anrufen"-Buttons im Notruf). Leer = Button wird nicht angezeigt.
+// Format: '+43 1 234 5678' (Leerzeichen sind ok).
+const NOTRUF_TEL={lb:'',boerse:'','1020':'','3400':'',zentrale:'',kitchen:''};
+function notrufTelLink(id,label,style){ const t=(NOTRUF_TEL[id]||'').replace(/[^\d+]/g,''); if(!t) return ''; return `<a href="tel:${t}" onclick="event.stopPropagation()" style="${style||''}">📞 ${label||NOTRUF_NAMEN[id]||id}</a>`; }
+function notrufCallRowHtml(){
+  const me=currentStore?.id; const ids=NOTRUF_WIEN.filter(id=>id!==me);
+  const links=ids.map(id=>notrufTelLink(id,NOTRUF_NAMEN[id],'flex:1;min-width:110px;text-align:center;padding:9px 10px;border-radius:10px;background:#fff;border:1.5px solid #DC2626;color:#991B1B;font-size:12.5px;font-weight:700;text-decoration:none;')).join('');
+  if(!links) return '';
+  return `<div style="margin:-6px 0 14px;"><div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">Oder gleich direkt anrufen:</div><div style="display:flex;gap:8px;flex-wrap:wrap;">${links}</div></div>`;
+}
+// Ton: AudioContext beim ersten Tippen entsperren (Browser erlauben sonst keinen Ton ohne Interaktion)
+let _notrufCtx=null;
+function notrufUnlockAudio(){ try{ const A=window.AudioContext||window.webkitAudioContext; if(!A) return; if(!_notrufCtx) _notrufCtx=new A(); if(_notrufCtx.state==='suspended') _notrufCtx.resume(); }catch(e){} }
+['pointerdown','touchstart','keydown'].forEach(ev=>document.addEventListener(ev,notrufUnlockAudio,{passive:true}));
+function notrufBeep(){
+  try{
+    notrufUnlockAudio(); const ctx=_notrufCtx; if(!ctx) return;
+    [0,0.35,0.7].forEach(delay=>{
+      const osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.type='square'; osc.frequency.value=880;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime+delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+delay+0.25);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime+delay); osc.stop(ctx.currentTime+delay+0.3);
+    });
+    navigator.vibrate?.([300,150,300,150,300]);
+  }catch(e){}
+}
+let _notrufLoop=null;
+function notrufStartLoop(){
+  if(_notrufLoop) return;
+  _notrufLoop=setInterval(()=>{ if(!document.getElementById('essen-notruf-alarm')){ clearInterval(_notrufLoop); _notrufLoop=null; return; } notrufBeep(); },5000);
+}
 function showEssenNotrufAlarm(relevant,silent){
   let el=document.getElementById('essen-notruf-alarm');
   if(!el){
@@ -4356,24 +4389,14 @@ function showEssenNotrufAlarm(relevant,silent){
       ${gerichteHtml}
       <div style="font-size:12px;opacity:0.9;margin-bottom:8px;">Ich schicke rüber:</div>
       <div style="display:flex;gap:8px;justify-content:center;margin-bottom:10px;">${NOTRUF_MENGEN.map(x=>`<button onclick="essenNotrufZusage(${r.id},'${x}')" style="flex:1;background:#fff;color:#DC2626;border:none;border-radius:10px;padding:12px 6px;font-size:15px;font-weight:800;cursor:pointer;">✋ ${x} Gebinde</button>`).join('')}</div>
+      ${notrufTelLink(r.von_store,NOTRUF_NAMEN[r.von_store]+' anrufen','display:block;margin:0 auto 10px;max-width:260px;padding:10px;border-radius:10px;background:rgba(255,255,255,0.18);border:1.5px solid rgba(255,255,255,0.7);color:#fff;font-size:13px;font-weight:700;text-decoration:none;')}
       <button onclick="essenNotrufAbsage(${r.id})" style="background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,0.7);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;">Hab nichts übrig</button>
     </div>`;
   }).join('');
   el.innerHTML=`<div style="font-size:48px;margin-bottom:8px;">🆘</div>
     <div style="font-size:22px;font-weight:800;margin-bottom:14px;">Hey, habt ihr noch Essen?</div>${blocks}`;
   if(silent) return;
-  try{
-    const AudioCtx=window.AudioContext||window.webkitAudioContext;
-    const ctx=new AudioCtx();
-    [0,0.35,0.7].forEach(delay=>{
-      const osc=ctx.createOscillator(), gain=ctx.createGain();
-      osc.type='square'; osc.frequency.value=880;
-      gain.gain.setValueAtTime(0.25, ctx.currentTime+delay);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+delay+0.25);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(ctx.currentTime+delay); osc.stop(ctx.currentTime+delay+0.3);
-    });
-  }catch(e){}
+  notrufBeep(); notrufStartLoop();
   if(!document.title.startsWith('🆘 ')) document.title='🆘 '+document.title;
   try{ navigator.setAppBadge?.(relevant.length); }catch(e){}
 }
@@ -4425,7 +4448,7 @@ function renderNotrufStatus(rows){
     const keinerHat=r.status==='offen' && alle.length && alle.every(s=>(r.absagen||[]).includes(s));
     let head,body='',btn='';
     if(mine){
-      if(r.status==='offen'){ head=keinerHat?'😕 Niemand hat etwas übrig':'⏳ Notruf gesendet — warte auf Antwort'; body=keinerHat?'Bitte die Zentrale anrufen.':txt; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">Abbrechen</button>`; }
+      if(r.status==='offen'){ head=keinerHat?'😕 Niemand hat etwas übrig':'⏳ Notruf gesendet — warte auf Antwort'; body=keinerHat?('Bitte die Zentrale anrufen. '+notrufTelLink('zentrale','Zentrale anrufen','display:inline-block;margin-top:6px;padding:7px 12px;border-radius:8px;background:#991B1B;color:#fff;font-weight:700;text-decoration:none;')):txt; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">Abbrechen</button>`; }
       else if(r.status==='zugesagt'){ head=`✅ ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von} schickt ${r.zusage_menge||''} Gebinde`; body=`${txt}<br><span style="opacity:.8;">Die Zentrale bestellt den Uber…</span>`; }
       else { head=`🚗 Uber unterwegs${r.ankunft?' — ca. '+r.ankunft+' Uhr':''}`; body=`${txt} von ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}`; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:9px 14px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Angekommen</button>`; }
     } else {
@@ -4628,7 +4651,7 @@ async function notstandErledigt(id){
 window.notstandArtikelChanged=notstandArtikelChanged; window.showNotstandModal=showNotstandModal; window.closeNotstandModal=closeNotstandModal; window.sendNotstand=sendNotstand; window.notstandErledigt=notstandErledigt; window.renderNotstandZentrale=renderNotstandZentrale;
 
 // Alle 20 Sekunden prüfen — bewusst häufig, weil's im Ernstfall wirklich schnell gehen muss.
-setInterval(checkEssenNotruf, 20000);
+setInterval(checkEssenNotruf, 10000);
 
 async function renderHome(){
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
@@ -4852,6 +4875,7 @@ async function renderHome(){
     </button>
     <div id="essen-notruf-confirm"></div>
     <div id="essen-notruf-status"></div>
+    ${notrufCallRowHtml()}
     `:''}
     ${currentStore?.id==='kitchen' && new Date().getDay()===1?`
     <div onclick="goTo('wochenFeedback')" style="background:linear-gradient(135deg,#FBCFE8,#F9A8D4);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
