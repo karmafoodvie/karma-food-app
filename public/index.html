@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.205';
+const APP_VERSION = '6.99.206';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -20490,6 +20490,15 @@ async function renderTeamFeedbackApp(el,html){
   const nm={}; (stores||[]).forEach(s=>nm[s.id]=s.name);
   const fmt=(d)=>d?new Date(d).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'';
   html+=`<button onclick="showAppFeedbackModal()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#2563EB;color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">📱 Neues App-Feedback eintragen</button>`;
+  const card=(r,tbl,txt,sid,dt)=>{
+    const t=tbl||'app_feedback', text=(txt!==undefined?txt:r.text)||'', st=(sid!==undefined?sid:r.store_id), d=(dt!==undefined?dt:r.created_at), done=!!r.bearbeitet;
+    return `<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#EFF6FF;border-color:#BFDBFE;${done?'opacity:.65;':''}">
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+        <input type="checkbox" ${done?'checked':''} onchange="toggleAppFeedbackDone('${t}',${r.id},this.checked,this)" style="width:20px;height:20px;margin-top:1px;flex-shrink:0;accent-color:#2563EB;">
+        <span style="flex:1;min-width:0;"><span class="afb-txt" style="display:block;font-size:12.5px;color:#1E3A8A;white-space:pre-wrap;${done?'text-decoration:line-through;':''}">${escAttr(text)}</span>
+        <span style="display:block;font-size:9.5px;color:var(--muted);margin-top:5px;">${st?(nm[st]||st):'ohne Filiale'} · ${fmt(d)}</span></span>
+      </label></div>`;
+  };
   const olds=(oldRows||[]).filter(r=>r.feedback_frei&&r.feedback_frei.trim()&&!isFoodFreeText(r.feedback_frei));
   const open=(appRows||[]).filter(r=>!r.bearbeitet), done=(appRows||[]).filter(r=>r.bearbeitet);
   const oldOpen=olds.filter(r=>!r.bearbeitet), oldDone=olds.filter(r=>r.bearbeitet);
