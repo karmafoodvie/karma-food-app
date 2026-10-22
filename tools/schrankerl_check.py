@@ -19,10 +19,11 @@ if len(sys.argv)<3: sys.exit(__doc__)
 SLOT={'curry':'curry','salad':'salat','salat':'salat','dessert':'dessert'}
 norm=lambda s: re.sub(r'\s+',' ',str(s or '').strip()).lower().replace('lasagna','lasagne')
 def clean_zutaten(z):
-    # Manche Sheet-Zellen beginnen mit "<Gerichtsname>   vegan/glutenfrei   " vor der eigentlichen Liste -> abschneiden
-    z=re.sub(r'\s+',' ',str(z or '').strip())
-    m=re.match(r'^.*?\b(?:vegan|vegetarisch)(?:/glutenfrei)?\s+(?=[A-ZÄÖÜ])',z)
-    return z[m.end():] if m and ',' in z[m.end():] else z
+    # Manche Sheet-Zellen beginnen mit "<Gerichtsname>   vegan/glutenfrei   " (mehrere Leerzeichen) vor der eigentlichen Liste -> abschneiden
+    raw=str(z or '')
+    m=re.match(r'^([^,]*?)\b(?:vegan|vegetarisch)(?:/glutenfrei)?[ \t]{2,}',raw)
+    if m: raw=raw[m.end():]
+    return re.sub(r'\s+',' ',raw.strip())
 normlist=lambda s: sorted(x for x in (norm(p) for p in re.split(r'[,;]',str(s or ''))) if x)
 def codes(v):
     s=str(v or '').strip()
