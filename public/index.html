@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.206';
+const APP_VERSION = '6.99.207';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5644,7 +5644,7 @@ async function renderKCOrderTab(el, tabHtml){
     html+=`<tr${(!isOrg && !verfuegbar)?' style="opacity:0.4;"':''}>
       <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
       <td>
-        <div class="ist-step"><input type="number" inputmode="numeric" min="0" value="${ist}" oninput="debounceFieldSave(this,()=>updateIstBestandStore(${a.id}, this.value))" onchange="updateIstBestandStore(${a.id}, this.value)" style="text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:8px;background:${updatedToday?'#F0FDF4':'#fff'};"></div>
+        <div class="ist-step"><input type="number" inputmode="numeric" min="0" value="${ist}" onfocus="this.select()" oninput="debounceFieldSave(this,()=>updateIstBestandStore(${a.id}, this.value, this),1200)" onchange="updateIstBestandStore(${a.id}, this.value, this)" style="text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:8px;background:${updatedToday?'#F0FDF4':'#fff'};"></div>
         ${updatedLabel?`<div style="font-size:9px;color:${updatedToday?'#22C55E':'var(--muted)'};margin-top:2px;">${updatedLabel}</div>`:''}
       </td>
       <td style="color:var(--muted);">${soll}</td>
@@ -5684,7 +5684,20 @@ async function submitKCNote(){
   }catch(e){console.error(e);showToast('Fehler — bitte nochmal versuchen');}
 }
 window.submitKCNote=submitKCNote;
-async function updateIstBestandStore(articleId, value){
+// IST-Feld: nach dem Speichern NICHT die ganze Seite neu zeichnen (das hat beim Tippen den Fokus/die Tastatur
+// weggenommen -> "10 mal klicken bis die Zahl passt"). Nur Bestellung-Zelle + Feldfarbe an Ort und Stelle aktualisieren.
+function istInPlace(el,v){
+  try{
+    if(!el) return false;
+    const tr=el.closest('tr'); if(!tr) return false;
+    const tds=tr.querySelectorAll('td'); const soll=parseFloat(tds[2]?.textContent)||0;
+    const b=tds[3]; if(b){ const best=(v===null||isNaN(v))?null:soll-v;
+      b.textContent=best===null?'·':(Math.round(best*100)/100); b.style.color=best===null?'var(--muted)':best<0?'#A32D2D':best>0?'#3B6D11':'var(--muted)'; }
+    el.style.borderColor='#22C55E'; el.style.background='#F0FDF4';
+    return true;
+  }catch(e){ return false; }
+}
+async function updateIstBestandStore(articleId, value, el){
   const today=new Date().toISOString().split('T')[0];
   const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
@@ -5693,7 +5706,7 @@ async function updateIstBestandStore(articleId, value){
       await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,article_id:articleId,ist_bestand:v,updated_date:today}])});
     }
     showToast('✓ Gespeichert');
-    renderOrder();
+    if(!istInPlace(el,v)) renderOrder();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.updateIstBestandStore=updateIstBestandStore;
@@ -20841,7 +20854,7 @@ async function renderKCLager(){
       const updatedToday=rec?.updated_date===today;
       html+=`<tr>
         <td style="font-size:12px;">${a.name}</td>
-        <td><div class="ist-step"><input type="number" inputmode="numeric" min="0" value="${ist}" data-article="${a.id}" oninput="debounceFieldSave(this,()=>updateIstBestand(${a.id}, this.value))" onchange="updateIstBestand(${a.id}, this.value)" style="text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:8px;background:${updatedToday?'#F0FDF4':'#fff'};"></div></td>
+        <td><div class="ist-step"><input type="number" inputmode="numeric" min="0" value="${ist}" data-article="${a.id}" onfocus="this.select()" oninput="debounceFieldSave(this,()=>updateIstBestand(${a.id}, this.value, this),1200)" onchange="updateIstBestand(${a.id}, this.value, this)" style="text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:8px;background:${updatedToday?'#F0FDF4':'#fff'};"></div></td>
         <td style="color:var(--muted);">${soll}</td>
         <td style="font-weight:600;color:${bestellung===null?'var(--muted)':bestellung<0?'#A32D2D':bestellung>0?'#3B6D11':'var(--muted)'};">${bestellung===null?'·':bestellung}</td>
       </tr>`;
@@ -20858,7 +20871,7 @@ async function renderKCLager(){
 }
 function switchKCTab(t){kcTab=t;renderKCLager();}
 function switchKCStore(id){kcLagerStoreId=id;renderKCLager();}
-async function updateIstBestand(articleId, value){
+async function updateIstBestand(articleId, value, el){
   const today=new Date().toISOString().split('T')[0];
   const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
@@ -20866,7 +20879,7 @@ async function updateIstBestand(articleId, value){
     if(v!==null){
       await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:kcLagerStoreId,article_id:articleId,ist_bestand:v,updated_date:today}])});
     }
-    renderKCLager();
+    if(!istInPlace(el,v)) renderKCLager();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.switchKCTab=switchKCTab;
