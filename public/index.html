@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.208';
+const APP_VERSION = '6.99.209';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -19847,6 +19847,100 @@ window.renderKundenfeedback=renderKundenfeedback;
 // War bisher NIRGENDS für Organisation einsehbar (essen_feedback landete nur pro Store/Tag in der
 // DB) — das ist der eigentliche Fehler, den Tini gefunden hat: das App-Feedback (freier Text) war
 // komplett unsichtbar für sie.
+// ── Feedback-Tendenzen (22.10.26, Wunsch Tini): Der Chefkoch liest das Einzelfeedback nicht täglich, weil es
+// widersprüchlich wirkt. Hier wird es über Zeit, Standorte und Gerichte verdichtet: Ø-Bewertung, Einigkeit,
+// wiederkehrende Aussagen (Tags) und Standort-Unterschiede (manche Standorte bewerten grundsätzlich strenger).
+window._tdDays=window._tdDays||28;
+function tdSetDays(n){ window._tdDays=n; tdLoad(); }
+window.tdSetDays=tdSetDays;
+const TD_MIN_N=3; // ab so vielen Bewertungen wird ein Gericht beurteilt
+function tdF1(x){ return (Math.round(x*10)/10).toFixed(1).replace('.',','); }
+async function tdLoad(){
+  const box=document.getElementById('td-card'); if(!box) return;
+  const days=window._tdDays;
+  const from=days>=9999?'2000-01-01':(()=>{ const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().split('T')[0]; })();
+  const [rows,stores]=await Promise.all([
+    api(`essen_feedback?datum=gte.${from}&select=store_id,datum,ratings&order=datum.desc&limit=2000`).catch(()=>[]),
+    api('stores?select=id,name').catch(()=>[])
+  ]);
+  const sn={}; (stores||[]).forEach(x=>sn[x.id]=x.name);
+  const seen=new Set(), E=[]; // Einträge: ein Gericht, eine Bewertung
+  (rows||[]).forEach(r=>{
+    const k=r.store_id+'|'+r.datum+'|'+JSON.stringify(r.ratings||{}); if(seen.has(k)) return; seen.add(k); // Doppelklicks nicht doppelt zählen
+    Object.entries(r.ratings||{}).forEach(([dish,rec])=>{
+      const v=(rec&&typeof rec==='object')?rec.v:rec; if(v==null||isNaN(v)) return;
+      E.push({dish,store:r.store_id,datum:r.datum,v:Number(v),tags:(rec&&rec.tags)||[],perfekt:!!(rec&&rec.perfekt)});
+    });
+  });
+  const per=(a,fn)=>{ const m={}; a.forEach(x=>{ const k=fn(x); (m[k]=m[k]||[]).push(x); }); return m; };
+  const avg=a=>a.reduce((t,x)=>t+x.v,0)/a.length;
+  const sd=a=>{ const m=avg(a); return Math.sqrt(a.reduce((t,x)=>t+(x.v-m)**2,0)/a.length); };
+  const btn=(n,l)=>`<button onclick="tdSetDays(${n})" style="flex:1;padding:7px 4px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;border:1.5px solid #DB2777;${days===n?'background:#DB2777;color:#fff;':'background:#fff;color:#DB2777;'}">${l}</button>`;
+  let h=`<div class="section-lbl">🔎 Tendenzen — was zieht sich durch?</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">${btn(14,'14 Tage')}${btn(28,'4 Wochen')}${btn(56,'8 Wochen')}${btn(9999,'Alles')}</div>`;
+  if(E.length<5){
+    box.innerHTML=h+`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Zu wenig Bewertungen in diesem Zeitraum (${E.length}) für Tendenzen.</div>`; return;
+  }
+  const overall=avg(E), nDays=new Set(E.map(x=>x.datum)).size;
+  // Standorte
+  const byStore=per(E,x=>x.store), stRows=Object.entries(byStore).map(([id,a])=>({id,n:a.length,avg:avg(a)})).sort((a,b)=>a.avg-b.avg);
+  const bias={}; stRows.forEach(x=>bias[x.id]=x.avg-overall);
+  // Gerichte (Rohwert + um die Strenge des Standorts bereinigt)
+  const byDish=per(E,x=>x.dish);
+  const D=Object.entries(byDish).map(([name,a])=>{
+    const ps=per(a,x=>x.store), psAvg=Object.entries(ps).map(([id,b])=>({id,n:b.length,avg:avg(b)}));
+    const tg={}; a.forEach(x=>x.tags.forEach(t=>tg[t]=(tg[t]||0)+1));
+    const adj=a.reduce((t,x)=>t+x.v-(bias[x.store]||0),0)/a.length;
+    const multi=psAvg.filter(x=>x.n>=2).sort((x,y)=>y.avg-x.avg);
+    const spread=multi.length>=2?multi[0].avg-multi[multi.length-1].avg:0;
+    return {name,n:a.length,avg:avg(a),adj,sd:sd(a),ps:psAvg.sort((x,y)=>y.avg-x.avg),tg,spread,hi:multi[0],lo:multi[multi.length-1],perfekt:a.filter(x=>x.perfekt).length,last:a.map(x=>x.datum).sort().pop()};
+  });
+  const rated=D.filter(d=>d.n>=TD_MIN_N);
+  const tagLbl=k=>(KF_TAGS.find(t=>t.k===k)||{label:k}).label;
+  const isNeg=k=>!!(KF_TAGS.find(t=>t.k===k)||{}).neg;
+  // Wiederkehrende Aussagen (Tags, über alle Gerichte)
+  const tagAll={}; E.forEach(x=>x.tags.forEach(t=>{ const o=tagAll[t]=tagAll[t]||{n:0,dishes:new Set(),stores:{}}; o.n++; o.dishes.add(x.dish); o.stores[x.store]=(o.stores[x.store]||0)+1; }));
+  const recurring=Object.entries(tagAll).filter(([k,o])=>o.n>=3).sort((a,b)=>b[1].n-a[1].n);
+  // ── Auf einen Blick
+  const best=rated.filter(d=>d.avg>=4.3).sort((a,b)=>b.avg-a.avg).slice(0,3), weak=rated.filter(d=>d.avg<3.6).sort((a,b)=>a.avg-b.avg).slice(0,3);
+  const bul=[];
+  bul.push(`${E.length} Bewertungen aus ${nDays} Tagen · Ø <strong>${tdF1(overall)}</strong> von 5`);
+  if(best.length) bul.push(`👍 Kommt durchgehend gut an: ${best.map(d=>`<strong data-no-translate>${escAttr(d.name)}</strong> (Ø ${tdF1(d.avg)})`).join(', ')}`);
+  if(weak.length) bul.push(`⚠️ Eher schwach bewertet: ${weak.map(d=>`<strong data-no-translate>${escAttr(d.name)}</strong> (Ø ${tdF1(d.avg)})`).join(', ')}`);
+  const negRec=recurring.filter(([k])=>isNeg(k));
+  if(negRec.length){ const [k,o]=negRec[0]; bul.push(`🔁 Häufigste Kritik: ${tagLbl(k)} — ${o.n}× bei ${o.dishes.size} Gericht${o.dishes.size>1?'en':''}`); }
+  if(stRows.length>=2){ const lo=stRows[0],hi=stRows[stRows.length-1]; if(hi.avg-lo.avg>=0.4) bul.push(`📍 <span data-no-translate>${escAttr(sn[lo.id]||lo.id)}</span> bewertet im Schnitt ${tdF1(hi.avg-lo.avg)} Punkte strenger als <span data-no-translate>${escAttr(sn[hi.id]||hi.id)}</span> — Einzelbewertungen deshalb nie 1:1 vergleichen.`); }
+  const mixed=rated.filter(d=>d.spread>=1.0).sort((a,b)=>b.spread-a.spread).slice(0,2);
+  if(mixed.length) bul.push(`↔️ Standorte uneinig: ${mixed.map(d=>`<strong data-no-translate>${escAttr(d.name)}</strong> (${escAttr(sn[d.hi.id]||d.hi.id)} Ø ${tdF1(d.hi.avg)} vs. ${escAttr(sn[d.lo.id]||d.lo.id)} Ø ${tdF1(d.lo.avg)})`).join(', ')}`);
+  h+=`<div class="card" style="padding:12px 14px;margin-bottom:10px;background:#FDF2F8;border-color:#FBCFE8;">${bul.map(b=>`<div style="font-size:12.5px;color:#831843;line-height:1.55;margin-bottom:5px;">• ${b}</div>`).join('')}</div>`;
+  // ── Standorte
+  h+=`<div class="section-lbl">📍 Standorte im Vergleich</div><div class="card" style="padding:6px 14px;margin-bottom:10px;">${stRows.slice().reverse().map(x=>{
+    const d=x.avg-overall; return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><span style="flex:1;" data-no-translate>${escAttr(sn[x.id]||x.id)}</span><span style="color:var(--muted);font-size:10.5px;">${x.n} Bew.</span><strong>Ø ${tdF1(x.avg)}</strong><span style="width:46px;text-align:right;font-size:10.5px;color:${d>=0.2?'#16A34A':d<=-0.2?'#DC2626':'var(--muted)'};">${d>=0?'+':'−'}${tdF1(Math.abs(d))}</span></div>`; }).join('')}
+    <div style="font-size:10.5px;color:var(--muted);padding:6px 0 4px;">Abweichung zum Gesamt-Ø. Wer grundsätzlich strenger bewertet, zieht jedes Gericht dort nach unten.</div></div>`;
+  // ── Wiederkehrende Aussagen
+  h+=`<div class="section-lbl">🔁 Wiederkehrende Aussagen (ab 3×)</div>`;
+  if(!recurring.length) h+=`<div class="card" style="padding:12px;font-size:12.5px;color:var(--muted);margin-bottom:10px;">Keine Aussage kommt in diesem Zeitraum mehrfach vor.</div>`;
+  else h+=`<div class="card" style="padding:6px 14px;margin-bottom:10px;">${recurring.map(([k,o])=>`<div style="padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><div style="display:flex;gap:8px;"><span style="flex:1;color:${isNeg(k)?'#9A3412':'#166534'};font-weight:600;">${escAttr(tagLbl(k))}</span><strong>${o.n}×</strong></div><div style="font-size:10.5px;color:var(--muted);">${o.dishes.size} Gericht${o.dishes.size>1?'e':''} · ${Object.entries(o.stores).sort((a,b)=>b[1]-a[1]).map(([id,n])=>`${escAttr(sn[id]||id)} ${n}×`).join(', ')}</div></div>`).join('')}</div>`;
+  // ── Gerichte
+  const sorted=D.slice().sort((a,b)=>(b.n>=TD_MIN_N)-(a.n>=TD_MIN_N)||a.avg-b.avg);
+  h+=`<div class="section-lbl">🍛 Gerichte (schwächste zuerst)</div>`;
+  h+=sorted.map(d=>{
+    const enough=d.n>=TD_MIN_N, col=!enough?'#9CA3AF':d.avg>=4.3?'#16A34A':d.avg<3.6?'#DC2626':'#D97706';
+    const topTags=Object.entries(d.tg).filter(([k,n])=>n>=2||(d.n<=3&&n>=1)).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    const verdict=!enough?'zu wenig Daten':d.spread>=1.0?'Standorte uneinig':d.sd>=1.2?'Meinungen gemischt':d.avg>=4.3?'einig: gut':d.avg<3.6?'einig: schwach':'einig: ok';
+    return `<details class="card" style="padding:10px 12px;margin-bottom:6px;"><summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;">
+      <span style="flex:1;font-size:12.5px;font-weight:600;" data-no-translate>${escAttr(d.name)}</span>
+      <span style="font-size:10px;color:var(--muted);">${d.n}×</span><strong style="color:${col};font-size:13px;">Ø ${tdF1(d.avg)}</strong></summary>
+      <div style="margin-top:8px;font-size:11.5px;color:var(--sub);line-height:1.6;">
+        <div><strong>${verdict}</strong>${enough&&Math.abs(d.adj-d.avg)>=0.2?` · um Standort-Strenge bereinigt Ø ${tdF1(d.adj)}`:''}${d.perfekt?` · ⭐ ${d.perfekt}× „perfekt"`:''}</div>
+        <div style="margin-top:3px;">${d.ps.map(x=>`<span style="display:inline-block;background:var(--bg,#F5F5F4);border-radius:6px;padding:2px 7px;margin:0 4px 3px 0;" data-no-translate>${escAttr(sn[x.id]||x.id)} Ø ${tdF1(x.avg)} (${x.n})</span>`).join('')}</div>
+        ${topTags.length?`<div style="margin-top:3px;">${topTags.map(([k,n])=>`<span style="color:${isNeg(k)?'#9A3412':'#166534'};margin-right:8px;">${escAttr(tagLbl(k))} ${n}×</span>`).join('')}</div>`:''}
+      </div></details>`;
+  }).join('');
+  box.innerHTML=h; translateEl(box);
+}
+window.tdLoad=tdLoad;
+
 // Wochen-Feedback (16.09.26, Wunsch Tini) — jeden Montag für die Küche: was ist aus der letzten
 // Woche offen zum Abarbeiten, und wo stehen die Gerichts-Kategorien gerade auf der Skala.
 async function renderWochenFeedback(){
@@ -19867,6 +19961,7 @@ async function renderWochenFeedback(){
   // Filial-Inkonsistenz oder Backzeit-Themen lassen sich nicht rein automatisch erkennen).
   const isOrg=currentStore?.id==='zentrale';
   const erkenntnis=erkenntnisRows?.[0];
+  html+=`<div id="td-card"><div style="padding:12px;text-align:center;color:var(--muted);font-size:12px;">Tendenzen werden berechnet…</div></div>`;
   html+=`<div class="section-lbl">📌 Erkenntnisse dieser Woche</div>`;
   if(erkenntnis){
     html+=`<div class="card" style="padding:14px;margin-bottom:8px;background:#FDF2F8;border-color:#FBCFE8;">
@@ -19961,7 +20056,7 @@ async function renderWochenFeedback(){
     });
   }
 
-  el.innerHTML=html;
+  el.innerHTML=html; tdLoad();
   translateEl(el);
 }
 window.renderWochenFeedback=renderWochenFeedback;
