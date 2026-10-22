@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.197';
+const APP_VERSION = '6.99.198';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5509,17 +5509,23 @@ function renderOrder(){
   if(activeOrderTab==='transporter'){
     html+=`<div class="section-lbl" style="margin-top:14px;">📬 An Transporter</div>
     <div class="card" style="padding:12px;">
-      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Braucht ihr Wechselgeld? Michi bringt's beim nächsten Mal mit.</div>
-      <div style="display:flex;gap:8px;">
-        <input type="number" id="geldwechsel-betrag" placeholder="Betrag in €" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;">
-        <select id="geldwechsel-format" style="padding:9px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;">
-          <option value="Münzen">Münzen</option>
-          <option value="Scheine">Scheine</option>
-          <option value="Gemischt">Gemischt</option>
-        </select>
+      <div style="background:#FFF7E0;border:1.5px solid #F5C542;border-radius:12px;padding:10px 12px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start;">
+        <div style="font-size:22px;line-height:1;">💶</div>
+        <div><div style="font-size:12.5px;font-weight:800;color:#7A5B00;">Nicht mehr als ca. 150 € in der Kassa</div>
+        <div style="font-size:11.5px;color:#7A5B00;margin-top:2px;line-height:1.35;">Bitte nur so viel Wechselgeld anfragen, dass die Kassa danach bei etwa 150 € bleibt.</div></div>
       </div>
-      <input type="text" id="geldwechsel-detail" placeholder="Genaue Stückelung, z.B. 2× 10€, 20× 0,50€" style="width:100%;margin-top:8px;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
-      <button onclick="requestGeldwechsel()" style="margin-top:8px;width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:500;cursor:pointer;">💶 Wechselgeld anfragen</button>
+      <div style="font-size:13px;font-weight:800;margin-bottom:2px;">Wechselgeld anfragen</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">Michi bringt es beim nächsten Mal mit.</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;">Wie viel?</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">${[20,50,100,150].map(v=>`<button type="button" onclick="gwSetBetrag(${v})" style="flex:1;padding:9px 0;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:14px;font-weight:700;cursor:pointer;">${v} €</button>`).join('')}</div>
+      <input type="number" inputmode="decimal" id="geldwechsel-betrag" oninput="gwCheckBetrag()" placeholder="oder anderen Betrag in € eingeben" style="width:100%;padding:11px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;box-sizing:border-box;">
+      <div id="gw-warn" style="display:none;margin-top:6px;font-size:11.5px;font-weight:700;color:#B45309;">⚠️ Über 150 €: so viel soll nicht in der Kassa liegen. Bitte nur anfragen, wenn wirklich nötig.</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin:12px 0 6px;">Wie soll es sein?</div>
+      <input type="hidden" id="geldwechsel-format" value="Gemischt">
+      <div id="gw-fmt" style="display:flex;gap:6px;">${[['Münzen','🪙 Münzen'],['Scheine','💶 Scheine'],['Gemischt','🔀 Gemischt']].map(([v,l])=>`<button type="button" data-fmt="${v}" onclick="gwSetFormat('${v}')" style="flex:1;padding:9px 4px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">${l}</button>`).join('')}</div>
+      <div onclick="document.getElementById('gw-detail-wrap').style.display='block';this.style.display='none';" style="margin-top:10px;font-size:12px;color:var(--green);font-weight:600;cursor:pointer;">➕ Genaue Stückelung angeben (optional)</div>
+      <div id="gw-detail-wrap" style="display:none;margin-top:8px;"><input type="text" id="geldwechsel-detail" placeholder="z.B. 2× 10 €, 20× 0,50 €" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;box-sizing:border-box;"></div>
+      <button onclick="requestGeldwechsel()" style="margin-top:12px;width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;">💶 Wechselgeld anfragen</button>
       <div id="geldwechsel-list" style="margin-top:10px;"></div>
       <div style="border-top:0.5px solid var(--border);margin-top:12px;padding-top:10px;">
         <button onclick="toggleTransporterNoteForm()" id="tn-toggle-btn" style="width:100%;background:none;border:1.5px dashed var(--border);color:var(--sub);border-radius:8px;padding:8px;font-size:13px;font-weight:500;cursor:pointer;">➕ Notiz an Transporter</button>
@@ -5567,7 +5573,7 @@ function renderOrder(){
   loadSpecialOrderAntwortBox();
   if(sweetsOrderLocked()){ loadSweetsNachtraegeStore(); sweetsErledigtRefresh(); }
   translateEl(el);
-  if(activeOrderTab==='transporter'){ loadGeldwechselList(); loadTransporterNoteList(); }
+  if(activeOrderTab==='transporter'){ gwSetFormat('Gemischt'); loadGeldwechselList(); loadTransporterNoteList(); }
   if(activeOrderTab==='transporter' || activeOrderTab==='sweets'){ loadYesterdayOrderBox(); }
 }
 
@@ -14622,6 +14628,13 @@ async function uploadMangelFoto(blob){
   return `${SUPABASE_URL}/storage/v1/object/public/mangel-fotos/${path}`;
 }
 
+// ---- GELDWECHSEL UI-Helfer ----
+function gwSetBetrag(v){ const i=document.getElementById('geldwechsel-betrag'); if(i){ i.value=v; gwCheckBetrag(); } }
+function gwCheckBetrag(){ const i=document.getElementById('geldwechsel-betrag'); const w=document.getElementById('gw-warn'); if(!i||!w) return; const v=parseFloat(String(i.value).replace(',','.')); w.style.display=(v>150)?'block':'none';
+  document.querySelectorAll('#geldwechsel-betrag')?.forEach(()=>{}); }
+function gwSetFormat(f){ const h=document.getElementById('geldwechsel-format'); if(h) h.value=f;
+  document.querySelectorAll('#gw-fmt button').forEach(b=>{ const on=b.dataset.fmt===f; b.style.background=on?'var(--green)':'#fff'; b.style.color=on?'#fff':'inherit'; b.style.borderColor=on?'var(--green)':'var(--border)'; }); }
+Object.assign(window,{gwSetBetrag,gwCheckBetrag,gwSetFormat});
 // ---- GELDWECHSEL (Wechselgeld-Anfrage an Michi/Transporter) ----
 async function requestGeldwechsel(){
   const betrag=parseFloat(String(document.getElementById('geldwechsel-betrag')?.value).replace(',','.'));
@@ -14631,7 +14644,8 @@ async function requestGeldwechsel(){
   try{
     await api('geldwechsel',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,betrag,format,detail,status:'offen'}])});
     document.getElementById('geldwechsel-betrag').value='';
-    document.getElementById('geldwechsel-detail').value='';
+    const _d=document.getElementById('geldwechsel-detail'); if(_d) _d.value='';
+    gwCheckBetrag();
     showToast('✓ Geldwechsel angefragt');
     loadGeldwechselList();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
