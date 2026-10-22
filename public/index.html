@@ -1588,7 +1588,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.207';
+const APP_VERSION = '6.99.208';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8600,6 +8600,7 @@ async function renderMenuKontrolle(){
     html+=`<div class="card" style="padding:14px;text-align:center;color:#16A34A;font-size:13px;">✅ Sheet und App stimmen überein.</div>`;
   }
   open.forEach(({d,ab})=>{
+    if(d.epoche==='schrankerl'){ html+=skDiffCardHtml(d); return; }
     const rename=d.app_name && d.sheet_name;
     html+=`<div class="card" style="padding:12px;margin-bottom:8px;border-left:3px solid #C2410C;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">${MK_TAGE[d.tag]||d.tag}${ab!=='9999'?' '+mkDateLabel(ab):''} · Menü-Woche ${d.woche}</div>
@@ -8613,7 +8614,7 @@ async function renderMenuKontrolle(){
       </div>
     </div>`;
   });
-  if(open.some(({d})=>d.app_name&&d.sheet_name)){
+  if(open.some(({d})=>d.epoche!=='schrankerl'&&d.app_name&&d.sheet_name)){
     html+=`<div style="font-size:10.5px;color:var(--muted);margin:2px 2px 12px;">Freigeben = die App übernimmt den Sheet-Namen (für alle Geräte ab dem nächsten Laden), Forecast/Entsorgung/Feedback der betroffenen Tage werden mit umgestellt. Die Zutatenliste an diesem Platz wird als „unbestätigt" markiert, bis die Küche sie geprüft hat.</div>`;
   }
 
@@ -8652,7 +8653,7 @@ async function renderMenuKontrolle(){
   if(done.length){
     html+=`<div class="section-lbl" style="margin-top:18px;">🕘 Zuletzt entschieden</div><div class="card" style="padding:4px 12px;">${done.map(d=>`<div style="padding:7px 0;border-bottom:0.5px solid var(--border);font-size:11.5px;">
       <span style="color:${d.status==='freigegeben'?'#16A34A':'var(--muted)'};font-weight:700;">${d.status==='freigegeben'?'✓ freigegeben':d.status==='abgelehnt'?'✕ abgelehnt':'erledigt'}</span>
-      · ${MK_TAGE[d.tag]||d.tag} W${d.woche} · <span data-no-translate>${escAttr(d.app_name||'–')} → ${escAttr(d.sheet_name||'–')}</span>
+      · ${d.epoche==='schrankerl'?`🥡 Menü ${d.woche} ${SK_SLOT_LBL[d.tag]||d.tag} (${SK_FELD_LBL[d.hinweis]||d.hinweis||''})`:`${MK_TAGE[d.tag]||d.tag} W${d.woche}`} · <span data-no-translate>${escAttr(d.app_name||'–')} → ${escAttr(d.sheet_name||'–')}</span>
       <span style="color:var(--muted);"> (${d.entschieden_von||''} ${d.entschieden_am?new Date(d.entschieden_am).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''})</span>
     </div>`).join('')}</div>`;
   }
@@ -8660,6 +8661,41 @@ async function renderMenuKontrolle(){
   translateEl(el);
 }
 window.renderMenuKontrolle=renderMenuKontrolle;
+
+// ── Schrankerl-Menüs (22.10.26): Tab "Schrankerl" im selben Sheet ist führend für schrankerl_menu.
+// Die Prüfung legt Abweichungen in menu_sheet_diffs ab (epoche='schrankerl', woche=Menü-Nr., tag=Slot
+// curry/salat/dessert, hinweis=Feld name|spezial|zutaten|allergene). Freigabe schreibt direkt in schrankerl_menu.
+const SK_SLOT_LBL={curry:'Curry',salat:'Salat',dessert:'Dessert'};
+const SK_FELD_LBL={name:'Gerichtsname',spezial:'Kennzeichnung',zutaten:'Zutatenliste',allergene:'Allergene'};
+function skDiffCardHtml(d){
+  const f=d.hinweis||'name';
+  const cut=(t)=>{ t=String(t||'–'); return t.length>220?t.slice(0,220)+'…':t; };
+  return `<div class="card" style="padding:12px;margin-bottom:8px;border-left:3px solid #7C3AED;">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🥡 Schrankerl · Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag} · <strong>${SK_FELD_LBL[f]||f}</strong></div>
+    <div style="font-size:12px;"><span style="color:var(--muted);">App:</span> <span data-no-translate style="text-decoration:line-through;color:#991B1B;">${escAttr(cut(d.app_name))}</span></div>
+    <div style="font-size:12.5px;margin-top:2px;"><span style="color:var(--muted);">Sheet:</span> <strong data-no-translate style="color:#166534;">${escAttr(cut(d.sheet_name))}</strong></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="skKontrolleFreigeben(${d.id})" style="flex:1;padding:9px;border:none;border-radius:9px;background:#16A34A;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Aus Sheet übernehmen</button>
+      <button onclick="menuKontrolleEntscheiden(${d.id},'abgelehnt')" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:9px;background:#fff;color:var(--sub);font-size:12.5px;font-weight:700;cursor:pointer;">✕ Ablehnen</button>
+    </div>
+  </div>`;
+}
+async function skKontrolleFreigeben(id){
+  const d=(window._mkDiffs||{})[id]; if(!d||d.epoche!=='schrankerl') return;
+  const f=d.hinweis||'name';
+  let val=d.sheet_name;
+  if(f==='allergene'){ const t=String(val||'').trim(); val=(t===''||t==='-')?[]:t.split(/[,;\/\s]+/).filter(Boolean).map(x=>x.toUpperCase()); }
+  const col=f==='allergene'?'allergene_codes':f;
+  if(!['name','spezial','zutaten','allergene_codes'].includes(col)){ showToast('Unbekanntes Feld',true); return; }
+  if(!confirm(`Schrankerl Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag}\n${SK_FELD_LBL[f]||f} aus dem Sheet übernehmen?`)) return;
+  try{
+    await api(`schrankerl_menu?woche=eq.${d.woche}&slot=eq.${encodeURIComponent(d.tag)}`,{method:'PATCH',body:JSON.stringify({[col]:val})});
+    await api(`menu_sheet_diffs?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'freigegeben',entschieden_am:new Date().toISOString(),entschieden_von:currentStore?.name||'Organisation'})});
+    showToast('✔ Schrankerl-Menü aktualisiert');
+    renderMenuKontrolle();
+  }catch(e){ console.error(e); showToast('Fehler bei der Freigabe: '+(e?.message||String(e)).slice(0,120),true); }
+}
+window.skKontrolleFreigeben=skKontrolleFreigeben;
 
 async function menuKontrolleEntscheiden(id, status){
   try{

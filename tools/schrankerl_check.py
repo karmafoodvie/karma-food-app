@@ -7,7 +7,7 @@ Aufruf:  python3 tools/schrankerl_check.py <sheet.xlsm> <schrankerl_menu.json>
   (Liste von Objekten; Supabase-Antwort {"j":[...]} wird ebenfalls akzeptiert)
 - Tab "Schrankerl": Blöcke "MENÜ n" mit Zeilen Curry / Salad / Dessert
   (Spalten: Slot | Gericht DE | Spezial | Zutatenliste gesamt | Allergene)
-- Sheet ist führend. Ausgabe JSON: {"diffs":[{woche,slot,feld,app,sheet}],"geprueft":N,"hinweise":[...]}
+- Sheet ist führend. Ausgabe JSON: {"rows":[fertige menu_sheet_diffs-Zeilen],"diffs":[{woche,slot,feld,app,sheet}],"geprueft":N,"hinweise":[...]}
 - Nur LESEN, am Sheet wird nichts geändert.
 Leere Sheet-Felder (noch nicht befüllt) zählen als Hinweis, nicht als Abweichung.
 Reine Schreibweisen-Unterschiede (Groß/Klein, Leerzeichen, Lasagna/Lasagne) zählen nicht.
@@ -49,4 +49,6 @@ for key in sorted(set(sheet)|set(app)):
     elif normlist(s['zutaten'])!=normlist(a.get('zutaten')): diffs.append({'woche':w,'slot':slot,'feld':'zutaten','app':a.get('zutaten'),'sheet':s['zutaten']})
     if s['allergene'] is None: hint.append(f"Menü {w} {slot}: Allergene im Sheet noch leer")
     elif codes(s['allergene'])!=sorted(a.get('allergene_codes') or []): diffs.append({'woche':w,'slot':slot,'feld':'allergene','app':a.get('allergene_codes'),'sheet':s['allergene']})
-print(json.dumps({'diffs':diffs,'geprueft':len(set(sheet)|set(app)),'hinweise':hint},ensure_ascii=False,indent=1))
+def tostr(v): return ', '.join(v) if isinstance(v,list) else (None if v is None else str(v))
+rows=[{'epoche':'schrankerl','woche':d['woche'],'tag':d['slot'],'app_name':tostr(d['app']),'sheet_name':tostr(d['sheet']),'hinweis':d['feld']} for d in diffs]
+print(json.dumps({'rows':rows,'diffs':diffs,'geprueft':len(set(sheet)|set(app)),'hinweise':hint},ensure_ascii=False,indent=1))
