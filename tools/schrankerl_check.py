@@ -18,6 +18,11 @@ import openpyxl
 if len(sys.argv)<3: sys.exit(__doc__)
 SLOT={'curry':'curry','salad':'salat','salat':'salat','dessert':'dessert'}
 norm=lambda s: re.sub(r'\s+',' ',str(s or '').strip()).lower().replace('lasagna','lasagne')
+def clean_zutaten(z):
+    # Manche Sheet-Zellen beginnen mit "<Gerichtsname>   vegan/glutenfrei   " vor der eigentlichen Liste -> abschneiden
+    z=re.sub(r'\s+',' ',str(z or '').strip())
+    m=re.match(r'^.*?\b(?:vegan|vegetarisch)(?:/glutenfrei)?\s+(?=[A-ZÄÖÜ])',z)
+    return z[m.end():] if m and ',' in z[m.end():] else z
 normlist=lambda s: sorted(x for x in (norm(p) for p in re.split(r'[,;]',str(s or ''))) if x)
 def codes(v):
     s=str(v or '').strip()
@@ -31,7 +36,7 @@ def sheet_rows(path):
         if isinstance(a,str) and a.strip().upper().startswith('MENÜ'):
             blk=int(re.findall(r'\d+',a)[0]); continue
         if blk and isinstance(a,str) and a.strip().lower() in SLOT:
-            out[(blk,SLOT[a.strip().lower()])]={'name':r[1],'spezial':r[2],'zutaten':r[3],'allergene':r[4]}
+            out[(blk,SLOT[a.strip().lower()])]={'name':r[1],'spezial':r[2],'zutaten':clean_zutaten(r[3]) or None,'allergene':r[4]}
     return out
 
 db=json.load(open(sys.argv[2]))
