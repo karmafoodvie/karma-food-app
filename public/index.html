@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.211';
+const APP_VERSION = '6.99.212';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9811,6 +9811,19 @@ function tgOrderDates(){
   const shop=new Date(sk); shop.setDate(shop.getDate()+7);
   return {shopDate:iso(shop), skDate:iso(sk)};
 }
+// Zeitraum (Mo–Fr) in dem Woche w als Nächstes läuft, ab dem Montag von refDate (läuft sie gerade, ist es diese Woche)
+function wocheRangeLbl(w,refDate,fn,n){
+  const d=new Date(refDate+'T00:00:00'); d.setDate(d.getDate()+(d.getDay()===0?-6:1-d.getDay()));
+  for(let k=0;k<n;k++){
+    const m=new Date(d); m.setDate(m.getDate()+7*k);
+    if(fn(m.toISOString().split('T')[0])===w){
+      const f=new Date(m); f.setDate(f.getDate()+4);
+      const z=x=>String(x).padStart(2,'0');
+      return `${z(m.getDate())}.${z(m.getMonth()+1)}.–${z(f.getDate())}.${z(f.getMonth()+1)}.`;
+    }
+  }
+  return '';
+}
 async function renderTgBestellungHtml(){
   const _od=tgOrderDates();
   const shopWoche = window.tgShopWoche || getMenuWocheForDate(_od.shopDate);
@@ -9874,14 +9887,14 @@ async function renderTgBestellungHtml(){
       <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🏬 SHOP-WOCHE</div>
       <div style="display:flex;gap:4px;">${[1,2,3,4].map(w=>{
         const active=shopWoche===w; const col=WOCHE_COLORS[w];
-        return `<button onclick="window.tgShopWoche=${w};renderKitchen()" style="flex:1;padding:6px 2px;border-radius:8px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${w}</button>`;
+        return `<button onclick="window.tgShopWoche=${w};renderKitchen()" style="flex:1;padding:6px 2px;border-radius:8px;border:${active?`2px solid ${col}`:'1.5px solid var(--border)'};background:${active?col+'20':'var(--card)'};color:${active?col:'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${w}<div style="font-size:8.5px;font-weight:500;opacity:.8;line-height:1.2;margin-top:2px;">${wocheRangeLbl(w,_od.shopDate,getMenuWocheForDate,4)}</div></button>`;
       }).join('')}</div>
     </div>
     <div style="flex:1;min-width:140px;">
       <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🥡 SCHRANKERL-WOCHE</div>
       <div style="display:flex;gap:4px;">${Array.from({length:window._skN||4},(_,k)=>k+1).map(w=>{
         const active=schrankerlWoche===w;
-        return `<button onclick="window.tgSchrankerlWoche=${w};renderKitchen()" style="flex:1;padding:6px 2px;border-radius:8px;border:${active?'2px solid #C1542C':'1.5px solid var(--border)'};background:${active?'#C1542C20':'var(--card)'};color:${active?'#C1542C':'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${w}</button>`;
+        return `<button onclick="window.tgSchrankerlWoche=${w};renderKitchen()" style="flex:1;padding:6px 2px;border-radius:8px;border:${active?'2px solid #C1542C':'1.5px solid var(--border)'};background:${active?'#C1542C20':'var(--card)'};color:${active?'#C1542C':'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${w}<div style="font-size:8.5px;font-weight:500;opacity:.8;line-height:1.2;margin-top:2px;">${wocheRangeLbl(w,_od.skDate,getSchrankerlWoche,window._skN||4)}</div></button>`;
       }).join('')}</div>
     </div>
   </div>`;
