@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.210';
+const APP_VERSION = '6.99.211';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2282,6 +2282,7 @@ window.loadNotifBadge=loadNotifBadge;
 // ---- DATA ----
 async function loadAll(){
   const today=new Date().toISOString().split('T')[0];
+  loadSkMenuCount();
   articles=await api('articles?select=*&order=sort_order');
   await autoReactivateExpiredArticles();
   const tmpl=await api('checklist_templates?select=*&order=sort_order');
@@ -8775,9 +8776,20 @@ window.renderMenuKontrolle=renderMenuKontrolle;
 // Die Prüfung legt Abweichungen in menu_sheet_diffs ab (epoche='schrankerl', woche=Menü-Nr., tag=Slot
 // curry/salat/dessert, hinweis=Feld name|spezial|zutaten|allergene). Freigabe schreibt direkt in schrankerl_menu.
 const SK_SLOT_LBL={curry:'Curry',salat:'Salat',dessert:'Dessert'};
-const SK_FELD_LBL={name:'Gerichtsname',spezial:'Kennzeichnung',zutaten:'Zutatenliste',allergene:'Allergene'};
+const SK_FELD_LBL={neu:'Neues Menü',name:'Gerichtsname',spezial:'Kennzeichnung',zutaten:'Zutatenliste',allergene:'Allergene'};
 function skDiffCardHtml(d){
   const f=d.hinweis||'name';
+  if(f==='neu'){
+    let p={}; try{ p=JSON.parse(d.sheet_name||'{}'); }catch(e){}
+    return `<div class="card" style="padding:12px;margin-bottom:8px;border-left:3px solid #7C3AED;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🥡 Schrankerl · <strong>Neues Menü ${d.woche}</strong> · ${SK_SLOT_LBL[d.tag]||d.tag}</div>
+      <div style="font-size:12.5px;"><strong data-no-translate style="color:#166534;">${escAttr(p.name||'–')}</strong> <span style="color:var(--muted);font-size:11px;">${escAttr(p.spezial||'')}</span></div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:3px;">Wird <strong>zusätzlich</strong> angelegt — bestehende Menüs bleiben unverändert.</div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="skKontrolleFreigeben(${d.id})" style="flex:1;padding:9px;border:none;border-radius:9px;background:#16A34A;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">＋ Menü hinzufügen</button>
+        <button onclick="menuKontrolleEntscheiden(${d.id},'abgelehnt')" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:9px;background:#fff;color:var(--sub);font-size:12.5px;font-weight:700;cursor:pointer;">✕ Ablehnen</button>
+      </div></div>`;
+  }
   const cut=(t)=>{ t=String(t||'–'); return t.length>220?t.slice(0,220)+'…':t; };
   return `<div class="card" style="padding:12px;margin-bottom:8px;border-left:3px solid #7C3AED;">
     <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🥡 Schrankerl · Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag} · <strong>${SK_FELD_LBL[f]||f}</strong></div>
@@ -8792,6 +8804,19 @@ function skDiffCardHtml(d){
 async function skKontrolleFreigeben(id){
   const d=(window._mkDiffs||{})[id]; if(!d||d.epoche!=='schrankerl') return;
   const f=d.hinweis||'name';
+  if(f==='neu'){
+    let p; try{ p=JSON.parse(d.sheet_name); }catch(e){ showToast('Daten nicht lesbar',true); return; }
+    if(!confirm(`Neues Schrankerl-Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag}\n„${p.name}"\nzusätzlich anlegen? Bestehende Menüs bleiben unverändert.`)) return;
+    try{
+      const ex=await api(`schrankerl_menu?woche=eq.${d.woche}&slot=eq.${encodeURIComponent(d.tag)}&select=id`);
+      if(ex&&ex.length){ showToast('Dieses Menü gibt es schon — nichts überschrieben',true); return; }
+      await api('schrankerl_menu',{method:'POST',body:JSON.stringify([{woche:d.woche,slot:d.tag,name:p.name,zutaten:p.zutaten||null,allergene_codes:p.allergene_codes||[],spezial:p.spezial||null}])});
+      await api(`menu_sheet_diffs?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'freigegeben',entschieden_am:new Date().toISOString(),entschieden_von:currentStore?.name||'Organisation'})});
+      await loadSkMenuCount();
+      showToast('✔ Menü hinzugefügt'); renderMenuKontrolle();
+    }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||String(e)).slice(0,100),true); }
+    return;
+  }
   let val=d.sheet_name;
   if(f==='allergene'){ const t=String(val||'').trim(); val=(t===''||t==='-')?[]:t.split(/[,;\/\s]+/).filter(Boolean).map(x=>x.toUpperCase()); }
   const col=f==='allergene'?'allergene_codes':f;
@@ -9522,6 +9547,9 @@ window.deleteZutatenMaster=deleteZutatenMaster;
 // gewesen, ist aber durch den Reset auf "Woche 1" um mehrere Wochen nach hinten gerutscht).
 // 29.09.26 (Wunsch Tini): Schrankerl hat ein komplett neues Menü — neue Periode, neuer Zyklus.
 // Referenz (korrigiert 06.10.26, Tini): Montag 05.10.26 = Schrankerl-Woche 1 (Massaman) — durchgehender 4-Wochen-Zyklus danach.
+// Anzahl laufender Schrankerl-Menüs: aus schrankerl_menu (höchste Menü-Nr.), bisher 4. Weitere Menüs kommen laufend dazu.
+window._skN=window._skN||4;
+async function loadSkMenuCount(){ try{ const r=await api('schrankerl_menu?select=woche'); const m=Math.max(0,...(r||[]).map(x=>x.woche||0)); if(m>=1) window._skN=m; }catch(e){} }
 function getSchrankerlWoche(dateStr){
   const ref=new Date('2026-10-05T00:00:00');
   const d=new Date((dateStr||new Date().toISOString().split('T')[0])+'T00:00:00');
@@ -9530,7 +9558,8 @@ function getSchrankerlWoche(dateStr){
   d.setDate(d.getDate()+mondayOffset);
   const diffDays=Math.round((d-ref)/86400000);
   const weeksSince=Math.floor(diffDays/7);
-  return ((weeksSince%4)+4)%4 + 1;
+  const N=window._skN||4;
+  return ((weeksSince%N)+N)%N + 1;
 }
 function getNextFriday(){
   const d=new Date();
@@ -9850,7 +9879,7 @@ async function renderTgBestellungHtml(){
     </div>
     <div style="flex:1;min-width:140px;">
       <div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;">🥡 SCHRANKERL-WOCHE</div>
-      <div style="display:flex;gap:4px;">${[1,2,3,4].map(w=>{
+      <div style="display:flex;gap:4px;">${Array.from({length:window._skN||4},(_,k)=>k+1).map(w=>{
         const active=schrankerlWoche===w;
         return `<button onclick="window.tgSchrankerlWoche=${w};renderKitchen()" style="flex:1;padding:6px 2px;border-radius:8px;border:${active?'2px solid #C1542C':'1.5px solid var(--border)'};background:${active?'#C1542C20':'var(--card)'};color:${active?'#C1542C':'var(--sub)'};font-size:11.5px;font-weight:600;cursor:pointer;">${w}</button>`;
       }).join('')}</div>

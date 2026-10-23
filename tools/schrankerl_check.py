@@ -8,7 +8,8 @@ Aufruf:  python3 tools/schrankerl_check.py <sheet.xlsm> <schrankerl_menu.json>
 - Tab "Schrankerl": Blöcke "MENÜ n" mit Zeilen Curry / Salad / Dessert
   (Spalten: Slot | Gericht DE | Spezial | Zutatenliste gesamt | Allergene)
 - Sheet ist führend. Ausgabe JSON: {"rows":[fertige menu_sheet_diffs-Zeilen],"diffs":[{woche,slot,feld,app,sheet}],"geprueft":N,"hinweise":[...]}
-- Nur LESEN, am Sheet wird nichts geändert.
+- Nur LESEN, am Sheet wird nichts geändert. Menüs nur in der App werden nie als Abweichung gemeldet; neue Menüs im Sheet
+  kommen als Vorschlag feld='neu' (HINZUFÜGEN, nichts wird überschrieben).
 Leere Sheet-Felder (noch nicht befüllt) zählen als Hinweis, nicht als Abweichung.
 Reine Schreibweisen-Unterschiede (Groß/Klein, Leerzeichen, Lasagna/Lasagne) zählen nicht.
 """
@@ -45,10 +46,17 @@ if isinstance(db,list) and db and isinstance(db[0],dict) and 'j' in db[0]: db=db
 app={(int(x['woche']),x['slot']):x for x in db}
 sheet=sheet_rows(sys.argv[1])
 diffs=[]; hint=[]
+info=[]
 for key in sorted(set(sheet)|set(app)):
     w,slot=key; s=sheet.get(key); a=app.get(key)
-    if s is None: diffs.append({'woche':w,'slot':slot,'feld':'gericht','app':a['name'],'sheet':None}); continue
-    if a is None: diffs.append({'woche':w,'slot':slot,'feld':'gericht','app':None,'sheet':s['name']}); continue
+    if s is None:
+        # Menü läuft in der App, steht (noch) nicht im Sheet -> NIE als Abweichung melden, nichts anfassen
+        info.append(f"Menü {w} {slot}: nur in der App, nicht im Sheet (bleibt unverändert)"); continue
+    if a is None:
+        # Neues Menü im Sheet -> als Vorschlag zum HINZUFÜGEN (überschreibt nichts)
+        if s['name'] and str(s['name']).strip():
+            diffs.append({'woche':w,'slot':slot,'feld':'neu','app':None,'sheet':json.dumps({'name':str(s['name']).strip(),'spezial':s['spezial'],'zutaten':clean_zutaten(s['zutaten']) or None,'allergene_codes':codes(s['allergene'])},ensure_ascii=False)})
+        continue
     if norm(s['name'])!=norm(a['name']): diffs.append({'woche':w,'slot':slot,'feld':'name','app':a['name'],'sheet':s['name']})
     if s['spezial'] and norm(s['spezial'])!=norm(a.get('spezial')): diffs.append({'woche':w,'slot':slot,'feld':'spezial','app':a.get('spezial'),'sheet':s['spezial']})
     if not s['zutaten']: hint.append(f"Menü {w} {slot}: Zutatenliste im Sheet noch leer")
@@ -57,4 +65,4 @@ for key in sorted(set(sheet)|set(app)):
     elif codes(s['allergene'])!=sorted(a.get('allergene_codes') or []): diffs.append({'woche':w,'slot':slot,'feld':'allergene','app':a.get('allergene_codes'),'sheet':s['allergene']})
 def tostr(v): return ', '.join(v) if isinstance(v,list) else (None if v is None else str(v))
 rows=[{'epoche':'schrankerl','woche':d['woche'],'tag':d['slot'],'app_name':tostr(d['app']),'sheet_name':tostr(d['sheet']),'hinweis':d['feld']} for d in diffs]
-print(json.dumps({'rows':rows,'diffs':diffs,'geprueft':len(set(sheet)|set(app)),'hinweise':hint},ensure_ascii=False,indent=1))
+print(json.dumps({'rows':rows,'diffs':diffs,'geprueft':len(set(sheet)&set(app)),'hinweise':hint,'info':info},ensure_ascii=False,indent=1))
