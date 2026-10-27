@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.217';
+const APP_VERSION = '6.99.218';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4859,6 +4859,7 @@ async function renderHome(){
   el.innerHTML=`
     ${enteredStoreViaOrg && currentStore?.id!=='zentrale'?`<div onclick="backToOrg()" style="display:flex;align-items:center;gap:8px;background:#2B3A67;color:#fff;border-radius:10px;padding:9px 14px;margin:0 0 8px;cursor:pointer;font-size:12.5px;font-weight:600;">← Zurück zu Organisation<span style="margin-left:auto;opacity:0.8;font-weight:400;">gerade in: ${currentStore?.name||''}</span></div>`:''}
     <div class="kf-greeting" style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
+    ${feiertagBannerHtml()}
     ${messeInfoHtml}
     ${messeBewertungHtml}
     <div id="broadcast-banner-widget"></div>
@@ -6293,7 +6294,7 @@ function getAustrianHolidays(year){
   const month=Math.floor((h+l-7*m+114)/31), day=((h+l-7*m+114)%31)+1;
   const easter=new Date(year, month-1, day);
   const plusDays=n=>{ const d2=new Date(easter); d2.setDate(d2.getDate()+n); return d2; };
-  const iso=d2=>d2.toISOString().split('T')[0];
+  const iso=d2=>`${d2.getFullYear()}-${String(d2.getMonth()+1).padStart(2,'0')}-${String(d2.getDate()).padStart(2,'0')}`; // lokal formatieren — toISOString() hätte in Wien alle Oster-Feiertage um 1 Tag nach vorn verschoben
   return [
     {event_date:`${year}-01-01`, label:'Neujahr'},
     {event_date:`${year}-01-06`, label:'Heilige Drei Könige'},
@@ -6311,16 +6312,109 @@ function getAustrianHolidays(year){
   ].map(h=>({...h, event_type:'feiertag', end_date:null, store_id:null}));
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// FEIERTAGS-ASSISTENT (27.10.26, Wunsch Gurl): Gesetzliche Feiertage AT sind immer geschlossen. Folgen:
+//  • Vor dem Feiertag: Grundlagen für die Woche (Limetten, Petersilie …) früher mitschicken, Produktion verschieben.
+//  • Tag danach: Alles, was am Vortag produziert werden muss (VORTAG_PRODUKTION, z.B. Lasagne), geht nicht →
+//    Menü anpassen (Menü-Tausch) + Beilagen. Beilagen folgen automatisch dem getauschten Menü.
+// Feiertage werden per Formel berechnet (getAustrianHolidays) — nichts händisch pflegen. Nur Hinweise,
+// geändert wird erst, wenn Organisation den Tausch bestätigt.
+const VORTAG_PRODUKTION=/LASAGNE/i; // Gerichte, die am Vortag hergestellt werden müssen — hier erweitern
+const FT_WD=['So','Mo','Di','Mi','Do','Fr','Sa'];
+function ftPad(n){ return String(n).padStart(2,'0'); }
+function ftDs(d){ return `${d.getFullYear()}-${ftPad(d.getMonth()+1)}-${ftPad(d.getDate())}`; }
+function ftToday(){ return ftDs(new Date()); }
+function ftAdd(ds,n){ const d=new Date(ds+'T00:00:00'); d.setDate(d.getDate()+n); return ftDs(d); }
+function ftIsWd(ds){ const g=new Date(ds+'T00:00:00').getDay(); return g>=1&&g<=5; }
+function ftFmt(ds){ const [y,m,d]=ds.split('-'); return `${FT_WD[new Date(ds+'T00:00:00').getDay()]} ${d}.${m}.`; }
+const _ftCache={};
+function ftHolidays(year){ return _ftCache[year]||(_ftCache[year]=Object.fromEntries(getAustrianHolidays(year).map(h=>[h.event_date,h.label]))); }
+function ftLabel(ds){ return ftHolidays(+ds.slice(0,4))[ds]||null; }
+function ftIsFreeWd(ds){ return ftIsWd(ds)&&!ftLabel(ds); } // Arbeitstag Mo–Fr, kein Feiertag
+function ftNextWorkday(ds){ let d=ftAdd(ds,1); for(let i=0;i<10&&!ftIsFreeWd(d);i++) d=ftAdd(d,1); return d; }
+function ftPrevWorkday(ds){ let d=ftAdd(ds,-1); for(let i=0;i<10&&!ftIsFreeWd(d);i++) d=ftAdd(d,-1); return d; }
+// Tag D ist ein "Tag nach Feiertag": Arbeitstag, dessen Vortag ein Feiertag unter der Woche war
+function ftDayAfter(ds){ const v=ftAdd(ds,-1); return ftIsFreeWd(ds)&&ftIsWd(v)&&!!ftLabel(v); }
+function ftMenuDishes(ds){
+  try{
+    const tag=WEEKDAY_MENU_KEY[new Date(ds+'T00:00:00').getDay()]; if(!tag) return [];
+    const ms=menuSlot(ds,tag);
+    return ((ms.era.data||{})[ms.key]||[]).map(d=>d.name).filter(Boolean);
+  }catch(e){ return []; }
+}
+function ftVortagDishes(ds){ return ftMenuDishes(ds).filter(n=>VORTAG_PRODUKTION.test(n)); }
+// Nächste Feiertage (nur unter der Woche) ab heute
+function ftUpcoming(fromDs,count){
+  const out=[]; let d=fromDs;
+  for(let i=0;i<400&&out.length<count;i++){ if(ftIsWd(d)&&ftLabel(d)) out.push(d); d=ftAdd(d,1); }
+  return out;
+}
+async function ftTauschSetzen(tag,quelle){
+  try{
+    await api('calendar_events?event_date=eq.'+tag+'&event_type=eq.menutausch',{method:'DELETE'}).catch(()=>{});
+    await api('calendar_events',{method:'POST',body:JSON.stringify([{event_date:tag,end_date:quelle,event_type:'menutausch',label:'Menü-Tausch (Feiertag)'}])});
+    await loadMenuTausch();
+    showToast(`✔ ${ftFmt(tag)} läuft jetzt das Menü von ${ftFmt(quelle)} — Beilagen ziehen automatisch nach`);
+    if(currentView==='home') renderHome(); else if(currentView==='menuKontrolle') renderMenuKontrolle();
+  }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
+}
+window.ftTauschSetzen=ftTauschSetzen;
+// Zeile "Tag nach Feiertag" für Tag D mit Quelle H (der Feiertag); Orga bekommt den Tausch-Button
+function ftNachFeiertagHtml(D,H,mitButton){
+  const vd=ftVortagDishes(D), tauschQ=MENU_TAUSCH[D];
+  const isOrg=currentStore?.id==='zentrale';
+  let h=`<div style="margin-top:6px;"><b>${ftFmt(D)}:</b> Vortag war Feiertag — nichts, was am Vortag produziert werden muss (z.B. Lasagne).`;
+  if(tauschQ) return h+` <span style="color:#166534;font-weight:700;">✅ Menü ist getauscht: es läuft das Menü von ${ftFmt(tauschQ)} (Beilagen passen automatisch).</span></div>`;
+  if(vd.length) h+=` <span style="color:#B91C1C;font-weight:700;">⚠️ Auf dem Menü: ${vd.map(escAttr).join(', ')} → Menü anpassen + Beilagen.</span>`;
+  else h+=` Das Menü hat aktuell kein Vortags-Gericht — Beilagen trotzdem kurz prüfen.`;
+  if(vd.length){
+    const srcDishes=ftVortagDishes(H);
+    if(isOrg&&mitButton){
+      h+=`<div style="margin-top:6px;"><button onclick="if(confirm('${ftFmt(D)} läuft das Menü von ${ftFmt(H)}?'))ftTauschSetzen('${D}','${H}')" style="border:none;background:#B45309;color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;">🔁 ${ftFmt(D)} → Menü von ${ftFmt(H)} laufen lassen</button>${srcDishes.length?`<div style="font-size:10.5px;margin-top:3px;color:#B91C1C;">Achtung: auch das Menü von ${ftFmt(H)} enthält ${srcDishes.map(escAttr).join(', ')} — anderen Tag wählen (Organisation → Menü-Kontrolle).</div>`:''}</div>`;
+    } else h+=`<div style="font-size:10.5px;margin-top:3px;">Organisation stellt das Menü um (Menü-Kontrolle → Menü-Tausch).</div>`;
+  }
+  return h+'</div>';
+}
+function feiertagBannerHtml(){
+  const T=ftToday(); const parts=[];
+  // a) heute Feiertag / Feiertag in den nächsten Tagen (ab letztem Arbeitstag davor)
+  let H=null;
+  for(let k=0;k<=4;k++){ const d=ftAdd(T,k); if(ftIsWd(d)&&ftLabel(d)){ if(k===0||T>=ftPrevWorkday(d)){ H=d; } break; } }
+  if(H){
+    const N=ftNextWorkday(H);
+    if(H===T) parts.push(`<div><b>🎉 Heute Feiertag: ${ftLabel(H)}</b> — alle Standorte geschlossen.</div>`);
+    else parts.push(`<div><b>📅 ${ftFmt(H)} ist Feiertag (${ftLabel(H)})</b> — geschlossen. Alles, was normalerweise an diesem Tag geschickt wird (Grundlagen für die Woche wie Limetten, Petersilie), schon vorher mitschicken · Produktion auf den Tag danach verlegen.</div>`);
+    if(ftDayAfter(N)) parts.push(`<div style="margin-top:6px;"><b>⚠️ Achtung für ${H===T?'morgen':'den Tag danach'} — Menü anpassen &amp; Beilagen</b></div>`+ftNachFeiertagHtml(N,H,true));
+  } else if(ftDayAfter(T)){
+    const Hd=ftAdd(T,-1);
+    parts.push(`<div><b>⚠️ Gestern war Feiertag (${ftLabel(Hd)})</b> — heute Menü &amp; Beilagen prüfen.</div>`+ftNachFeiertagHtml(T,Hd,true));
+  }
+  if(!parts.length) return '';
+  return `<div style="font-size:12px;line-height:1.5;color:#7C2D12;background:#FFF7ED;border:1.5px solid #FB923C;border-radius:12px;padding:10px 13px;margin:0 0 10px;">${parts.join('')}</div>`;
+}
+// Orga-Übersicht: nächste Feiertage inkl. Folgen (Menü-Kontrolle → Menü-Tausch)
+function ftListeHtml(){
+  const T=ftToday(); const isOrg=currentStore?.id==='zentrale';
+  const rows=ftUpcoming(T,6).map(H=>{
+    const N=ftNextWorkday(H); const dayAfter=ftDayAfter(N);
+    return `<div style="padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><b>${ftFmt(H)}</b> · ${ftLabel(H)}${dayAfter?`<div style="font-size:11.5px;color:var(--sub);margin-top:2px;">Danach ${ftFmt(N)}: Vortags-Produktion nicht möglich.${ftVortagDishes(N).length?` Menü enthält <b style="color:#B91C1C;">${ftVortagDishes(N).map(escAttr).join(', ')}</b>.`:' Menü ohne Vortags-Gericht.'}${MENU_TAUSCH[N]?` <span style="color:#166534;font-weight:700;">✅ getauscht (Menü von ${ftFmt(MENU_TAUSCH[N])})</span>`:(isOrg&&ftVortagDishes(N).length?` <button onclick="if(confirm('${ftFmt(N)} läuft das Menü von ${ftFmt(H)}?'))ftTauschSetzen('${N}','${H}')" style="border:1px solid #B45309;background:#fff;color:#B45309;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;">🔁 Menü von ${ftFmt(H)} nehmen</button>`:'')}</div>`:''}</div>`;
+  }).join('');
+  return `<div class="section-lbl">🎉 Gesetzliche Feiertage (Österreich)</div><div class="card" style="padding:10px 12px;margin-bottom:14px;">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Automatisch berechnet, immer geschlossen. Am Feiertag und am Tag davor erscheint ein Hinweis auf der Startseite.</div>${rows}</div>`;
+}
+Object.assign(window,{feiertagBannerHtml,ftListeHtml});
+
 async function getCalendarEvents(){
   if(_calendarEventsCache) return _calendarEventsCache;
-  const stored=cacheGet('cal_events');
+  const stored=cacheGet('cal_events_v2');
   if(stored){ _calendarEventsCache=stored; return stored; }
   const events = await api('calendar_events?select=event_date,end_date,event_type,label,store_id').catch(()=>[]);
   const thisYear=new Date().getFullYear();
   // Feiertage für letztes/aktuelles/nächste 2 Jahre berechnen — deckt Rückblick & Vorschau ab, ohne DB-Pflege
   const computedHolidays=[thisYear-1, thisYear, thisYear+1, thisYear+2].flatMap(getAustrianHolidays);
   _calendarEventsCache = [...(events||[]), ...computedHolidays];
-  cacheSet('cal_events', _calendarEventsCache);
+  cacheSet('cal_events_v2', _calendarEventsCache);
   return _calendarEventsCache;
 }
 
@@ -8700,6 +8794,7 @@ async function renderMenuKontrolle(){
 
   // ── 0) Einmalige Menü-Tausch-Ausnahmen (z.B. Feiertag: Dienstag läuft das Montagsmenü)
   await loadMenuTausch();
+  html+=ftListeHtml();
   html+=mtCardHtml(todayStr);
 
   // ── 1) Offene Abweichungen
