@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.218';
+const APP_VERSION = '6.99.219';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6380,12 +6380,16 @@ function feiertagBannerHtml(){
   const T=ftToday(); const parts=[];
   // a) heute Feiertag / Feiertag in den nächsten Tagen (ab letztem Arbeitstag davor)
   let H=null;
-  for(let k=0;k<=4;k++){ const d=ftAdd(T,k); if(ftIsWd(d)&&ftLabel(d)){ if(k===0||T>=ftPrevWorkday(d)){ H=d; } break; } }
+  // Vorlaufzeit: ab 9 Tagen vorher (= die Woche davor), damit Menü & Beilagen rechtzeitig geplant sind
+  for(let k=0;k<=9;k++){ const d=ftAdd(T,k); if(ftIsWd(d)&&ftLabel(d)){ H=d; break; } }
   if(H){
-    const N=ftNextWorkday(H);
+    const N=ftNextWorkday(H), lwd=ftPrevWorkday(H), tage=Math.round((new Date(H+'T00:00:00')-new Date(T+'T00:00:00'))/86400000);
     if(H===T) parts.push(`<div><b>🎉 Heute Feiertag: ${ftLabel(H)}</b> — alle Standorte geschlossen.</div>`);
-    else parts.push(`<div><b>📅 ${ftFmt(H)} ist Feiertag (${ftLabel(H)})</b> — geschlossen. Alles, was normalerweise an diesem Tag geschickt wird (Grundlagen für die Woche wie Limetten, Petersilie), schon vorher mitschicken · Produktion auf den Tag danach verlegen.</div>`);
-    if(ftDayAfter(N)) parts.push(`<div style="margin-top:6px;"><b>⚠️ Achtung für ${H===T?'morgen':'den Tag danach'} — Menü anpassen &amp; Beilagen</b></div>`+ftNachFeiertagHtml(N,H,true));
+    else parts.push(`<div><b>📅 In ${tage} Tag${tage===1?'':'en'}: ${ftFmt(H)} ist Feiertag (${ftLabel(H)})</b> — geschlossen. Alles, was normalerweise an diesem Tag geschickt wird (Grundlagen für die Woche wie Limetten, Petersilie), schon vorher mitschicken · Produktion auf den Tag danach verlegen.</div>`);
+    if(ftDayAfter(N)){
+      const frueh=T<lwd;
+      parts.push(`<div style="margin-top:6px;"><b>⚠️ ${H===T?'Achtung für morgen':'Jetzt vorbereiten'} (${ftFmt(N)}) — Menü anpassen &amp; Beilagen</b>${H!==T?` · spätestens bis <b>${ftFmt(lwd)}</b> fix, denn ${ftFmt(N)} muss schon alles laufen`:''}</div>`+ftNachFeiertagHtml(N,H,true));
+    }
   } else if(ftDayAfter(T)){
     const Hd=ftAdd(T,-1);
     parts.push(`<div><b>⚠️ Gestern war Feiertag (${ftLabel(Hd)})</b> — heute Menü &amp; Beilagen prüfen.</div>`+ftNachFeiertagHtml(T,Hd,true));
