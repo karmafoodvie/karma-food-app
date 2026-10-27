@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.221';
+const APP_VERSION = '6.99.222';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -20741,6 +20741,104 @@ async function cateringImportPdf(inp){
 }
 Object.assign(window,{showCateringDetail,toggleCateringPack,copyCateringText,showCateringForm,closeCateringForm,saveCatering,cancelCatering,cateringImportPdf});
 
+
+// ── Schrankerl-Monatsreport direkt in der App hochladen (27.10.26, Wunsch Gurl) ──
+// PDF wählen → wird im Browser ausgelesen (pdf.js) → Kontrollansicht (inkl. Plausibilitätscheck gegen die Summen) →
+// Speichern schreibt schrankerl_reports + schrankerl_dish_stats + schrankerl_kommentare. Gibt es den Monat schon, wird er ersetzt.
+// ── Schrankerl-Monatsreport (PDF von Schrankerl GmbH): Zeilen -> Report, Gericht-Statistik, Kommentare
+function parseSchrankerlReport(lines){
+  const MON={januar:1,jänner:1,februar:2,märz:3,april:4,mai:5,juni:6,juli:7,august:8,september:9,oktober:10,november:11,dezember:12};
+  const r={von:null,bis:null,zustimmung:null,gerichte:null,bewertungen:null,positiv:null,negativ:null,stats:[],kommentare:[],warnungen:[]};
+  const head=lines.join('\n').match(/Karma Food\s*\|\s*([A-Za-zäöüÄÖÜ]+)\s+(\d{4})/);
+  if(head && MON[head[1].toLowerCase()]){
+    const m=MON[head[1].toLowerCase()], y=+head[2], z=n=>String(n).padStart(2,'0');
+    r.von=`${y}-${z(m)}-01`; r.bis=`${y}-${z(m)}-${z(new Date(y,m,0).getDate())}`;
+  }
+  const top=lines.slice(0, Math.max(1,lines.findIndex(l=>/^Bewertungen je Gericht/i.test(l))));
+  const pz=top.map(l=>l.match(/(\d{1,3})\s*%(?:\s+(\d+))?/)).find(Boolean);
+  if(pz){ r.zustimmung=+pz[1]; if(pz[2]) r.gerichte=+pz[2]; }
+  const pn=lines.join('\n').match(/(\d+)\s*positiv\s*[·•|\-]\s*(\d+)\s*negativ/i);
+  if(pn){ r.positiv=+pn[1]; r.negativ=+pn[2]; r.bewertungen=r.positiv+r.negativ; }
+  const iDish=lines.findIndex(l=>/^Bewertungen je Gericht/i.test(l));
+  const iKom=lines.findIndex(l=>/^Kundenkommentare/i.test(l));
+  if(iDish>=0){
+    for(const l of lines.slice(iDish+1, iKom>iDish?iKom:undefined)){
+      const m=l.match(/^(.+?)\s+(\d{1,3})\s+(\d+)\s+(\d+)$/);
+      if(m && !/^Gericht\b/.test(m[1]) && !/Seite\s*\d+/.test(l)) r.stats.push({gericht:m[1].trim(),zustimmung_pct:+m[2],positiv:+m[3],negativ:+m[4]});
+    }
+  }
+  if(iKom>=0){
+    const META=/^(Positiv|Kritik)\s*(?:\(([^)]*)\))?\s*[·•|\-]?\s*(\d{2})\.(\d{2})\.(\d{4})$/;
+    const SKIP=/^(Monatsreport|SCHRANKERL GmbH.*|Karma Food\s*\|.*|.*\bSeite\s*\d+)$/;
+    let dish=null, buf=null;
+    for(const l of lines.slice(iKom+1)){
+      if(SKIP.test(l)) continue;
+      const mm=l.match(META);
+      if(mm && buf!==null){
+        let t=buf.join(' ').replace(/\s+/g,' ').trim().replace(/^[“"„]\s*/,'').replace(/\s*[”"“]$/,'').trim();
+        r.kommentare.push({gericht:dish,kommentar:t,sentiment:mm[1]==='Positiv'?'positiv':'kritik',grund:mm[1]==='Positiv'?null:(mm[2]||null),datum:`${mm[5]}-${mm[4]}-${mm[3]}`});
+        buf=null; continue;
+      }
+      if(buf!==null){ buf.push(l); continue; }
+      if(/^[“"„]/.test(l)){ buf=[l]; continue; }
+      dish=l.trim();
+    }
+  }
+  // Plausibilitätsprüfung — Zahlen im Kopf gegen Summe der Gerichte
+  if(r.von==null) r.warnungen.push('Zeitraum nicht erkannt');
+  if(r.zustimmung==null||r.bewertungen==null) r.warnungen.push('Kennzahlen (Zustimmung/Gerichte/Bewertungen) nicht erkannt');
+  if(!r.stats.length) r.warnungen.push('Keine Gerichte erkannt');
+  else{
+    const sp=r.stats.reduce((t,x)=>t+x.positiv,0), sn=r.stats.reduce((t,x)=>t+x.negativ,0);
+    if(r.positiv!=null && (sp!==r.positiv||sn!==r.negativ)) r.warnungen.push(`Summe der Gerichte (${sp} positiv / ${sn} negativ) passt nicht zum Kopf (${r.positiv} / ${r.negativ})`);
+    if(r.gerichte!=null && r.gerichte!==r.stats.length) r.warnungen.push(`${r.stats.length} Gerichte erkannt, im Kopf stehen ${r.gerichte}`);
+  }
+  if(r.negativ!=null){ const kn=r.kommentare.filter(k=>k.sentiment==='kritik').length; if(kn>r.negativ) r.warnungen.push(`${kn} Kritik-Kommentare, aber nur ${r.negativ} negative Bewertungen`); }
+  return r;
+}
+
+function skRepUploadCardHtml(){
+  if(currentStore?.id!=='zentrale') return '';
+  return `<div class="card" style="padding:12px 14px;margin-bottom:12px;border:1.5px dashed #C1542C;">
+    <div style="font-size:13px;font-weight:800;color:#C1542C;">📄 Monatsreport von Schrankerl hochladen</div>
+    <div style="font-size:11.5px;color:var(--sub);margin:3px 0 8px;">PDF „Report Karma Food …" wählen — die App liest Zahlen, Gerichte und Kommentare aus. Vor dem Speichern siehst du eine Kontrolle.</div>
+    <input type="file" id="sk-rep-file" accept="application/pdf" onchange="skRepRead(this)" style="font-size:12px;max-width:100%;">
+    <div id="sk-rep-prev" style="margin-top:10px;"></div></div>`;
+}
+async function skRepRead(inp){
+  const f=inp.files&&inp.files[0]; const box=document.getElementById('sk-rep-prev'); if(!f||!box) return;
+  box.innerHTML='<div style="font-size:12px;color:var(--muted);">Wird gelesen …</div>';
+  try{
+    const lines=await pdfToLines(await f.arrayBuffer());
+    const r=parseSchrankerlReport(lines); window._skRep=r;
+    const monat=r.von?new Date(r.von+'T00:00:00').toLocaleDateString('de-AT',{month:'long',year:'numeric'}):'?';
+    const warn=r.warnungen.length?`<div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;border-radius:8px;padding:8px 10px;font-size:11.5px;margin:8px 0;">⚠️ ${r.warnungen.map(escAttr).join('<br>⚠️ ')}</div>`:`<div style="background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;border-radius:8px;padding:6px 10px;font-size:11.5px;margin:8px 0;">✅ Zahlen im Kopf stimmen mit den Gerichten überein</div>`;
+    box.innerHTML=`<div style="font-size:12.5px;line-height:1.6;"><b>${monat}</b> · Zustimmung <b>${r.zustimmung??'?'}%</b> · ${r.bewertungen??'?'} Bewertungen (👍 ${r.positiv??'?'} · 👎 ${r.negativ??'?'})<br>${r.stats.length} Gerichte · ${r.kommentare.length} Kommentare (${r.kommentare.filter(k=>k.sentiment==='kritik').length} Kritik)</div>${warn}
+      <details style="font-size:11.5px;margin-bottom:8px;"><summary style="cursor:pointer;">Gerichte ansehen</summary>${r.stats.map(x=>`<div data-no-translate>${escAttr(x.gericht)} — ${x.zustimmung_pct}% (${x.positiv}/${x.negativ})</div>`).join('')}</details>
+      <div style="display:flex;gap:8px;"><button onclick="skRepSave()" ${(!r.von||!r.stats.length)?'disabled':''} style="flex:1;padding:10px;border:none;border-radius:10px;background:#C1542C;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Speichern</button><button onclick="document.getElementById('sk-rep-prev').innerHTML='';document.getElementById('sk-rep-file').value=''" style="padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font-size:13px;cursor:pointer;">Verwerfen</button></div>`;
+  }catch(e){ console.error(e); box.innerHTML=`<div style="color:#B91C1C;font-size:12px;">Konnte die PDF nicht lesen: ${escAttr((e?.message||'').slice(0,100))}</div>`; }
+}
+async function skRepSave(){
+  const r=window._skRep; if(!r||!r.von) return;
+  if(r.warnungen.length && !confirm('Es gibt Warnungen (siehe oben). Trotzdem speichern?')) return;
+  try{
+    const ex=await api(`schrankerl_reports?zeitraum_von=eq.${r.von}&select=id`);
+    if(ex&&ex.length){
+      if(!confirm('Für diesen Monat gibt es schon einen Report. Ersetzen?')) return;
+      for(const e of ex) await api(`schrankerl_dish_stats?report_id=eq.${e.id}`,{method:'DELETE'});
+      await api(`schrankerl_kommentare?datum=gte.${r.von}&datum=lte.${r.bis}`,{method:'DELETE'});
+      await api(`schrankerl_reports?zeitraum_von=eq.${r.von}`,{method:'DELETE'});
+    }
+    const rep=await api('schrankerl_reports',{method:'POST',body:JSON.stringify([{zeitraum_von:r.von,zeitraum_bis:r.bis,zustimmung_pct:r.zustimmung,gerichte_anzahl:r.gerichte??r.stats.length,bewertungen_anzahl:r.bewertungen,positiv:r.positiv,negativ:r.negativ}])});
+    const id=rep[0].id;
+    await api('schrankerl_dish_stats',{method:'POST',body:JSON.stringify(r.stats.map(x=>({report_id:id,...x})))});
+    if(r.kommentare.length) await api('schrankerl_kommentare',{method:'POST',body:JSON.stringify(r.kommentare)});
+    showToast(`✔ Report gespeichert (${r.stats.length} Gerichte, ${r.kommentare.length} Kommentare)`);
+    window._skRep=null; renderTeamFeedback();
+  }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,100),true); }
+}
+Object.assign(window,{skRepRead,skRepSave});
+
 async function renderTeamFeedback(){
   const el=document.getElementById('v-teamFeedback');
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
@@ -20750,9 +20848,11 @@ async function renderTeamFeedback(){
   html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">
     <button onclick="window._tfTab='essen';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #EC4899;${_tab==='essen'?'background:#EC4899;color:#fff;':'background:#fff;color:#BE185D;'}">🍽️ An den Koch<div style="font-size:9.5px;font-weight:500;">Essen</div></button>
     <button onclick="window._tfTab='trend';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #DB2777;${_tab==='trend'?'background:#DB2777;color:#fff;':'background:#fff;color:#DB2777;'}">📈 Trend<div style="font-size:9.5px;font-weight:500;">Entwicklung</div></button>
+    <button onclick="window._tfTab='schrankerl';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #C1542C;${_tab==='schrankerl'?'background:#C1542C;color:#fff;':'background:#fff;color:#C1542C;'}">🥡 Schrankerl<div style="font-size:9.5px;font-weight:500;">Bewertung</div></button>
     <button onclick="window._tfTab='app';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #2563EB;${_tab==='app'?'background:#2563EB;color:#fff;':'background:#fff;color:#1D4ED8;'}">📱 An Tini<div style="font-size:9.5px;font-weight:500;">App</div></button>
   </div>`;
   if(_tab==='app'){ await renderTeamFeedbackApp(el,html); return; }
+  if(_tab==='schrankerl'){ el.innerHTML=html+skRepUploadCardHtml()+(await renderSchrankerlFeedbackHtml([])||'<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px;">Noch kein Report hochgeladen.</div>'); translateEl(el); return; }
   if(_tab==='trend'){ el.innerHTML=html+'<div id="td-card"></div>'; await tdLoad(); return; }
   html+=`<button onclick="goTo('waehrend')" style="width:100%;display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:14px;">😋 Eigene Essens-Bewertung abgeben</button>`;
   html+=`<div style="font-size:11px;color:var(--muted);text-align:center;margin:-8px 0 14px;">Anonym — der Name muss nirgends stehen, mehrere Bewertungen pro Person sind kein Problem.</div>`;
