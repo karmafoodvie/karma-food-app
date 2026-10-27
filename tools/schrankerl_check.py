@@ -30,13 +30,14 @@ def codes(v):
     s=str(v or '').strip()
     return [] if s in ('','-') else sorted(c.strip().upper() for c in re.split(r'[,;/ ]+',s) if c.strip())
 
+BLOCKS=[]  # Kopfzeilen je Menü-Block (inkl. Datumsangaben wie "26.10-30.10.2026" / "Schrankerl Lieferung 01.11.2026")
 def sheet_rows(path):
     ws=openpyxl.load_workbook(path,data_only=True)['Schrankerl']
     out={}; blk=None
-    for r in ws.iter_rows(min_row=1,max_row=200,max_col=5,values_only=True):
+    for r in ws.iter_rows(min_row=1,max_row=300,max_col=8,values_only=True):
         a=r[0]
         if isinstance(a,str) and a.strip().upper().startswith('MENÜ'):
-            blk=int(re.findall(r'\d+',a)[0]); continue
+            blk=int(re.findall(r'\d+',a)[0]); BLOCKS.append({'menue':blk,'kopf':[str(c) for c in r if c is not None]}); continue
         if blk and isinstance(a,str) and a.strip().lower() in SLOT:
             out[(blk,SLOT[a.strip().lower()])]={'name':r[1],'spezial':r[2],'zutaten':clean_zutaten(r[3]) or None,'allergene':r[4]}
     return out
@@ -65,4 +66,5 @@ for key in sorted(set(sheet)|set(app)):
     elif codes(s['allergene'])!=sorted(a.get('allergene_codes') or []): diffs.append({'woche':w,'slot':slot,'feld':'allergene','app':a.get('allergene_codes'),'sheet':s['allergene']})
 def tostr(v): return ', '.join(v) if isinstance(v,list) else (None if v is None else str(v))
 rows=[{'epoche':'schrankerl','woche':d['woche'],'tag':d['slot'],'app_name':tostr(d['app']),'sheet_name':tostr(d['sheet']),'hinweis':d['feld']} for d in diffs]
-print(json.dumps({'rows':rows,'diffs':diffs,'geprueft':len(set(sheet)&set(app)),'hinweise':hint,'info':info},ensure_ascii=False,indent=1))
+blocks=[dict(b,gerichte={k[1]:str(v['name']) for k,v in sheet.items() if k[0]==b['menue']}) for b in BLOCKS]
+print(json.dumps({'blocks':blocks,'rows':rows,'diffs':diffs,'geprueft':len(set(sheet)&set(app)),'hinweise':hint,'info':info},ensure_ascii=False,indent=1))
