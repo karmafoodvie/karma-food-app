@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.213';
+const APP_VERSION = '6.99.214';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9762,7 +9762,9 @@ window.saveSchrankerlMenge=saveSchrankerlMenge;
 window.tgShopWoche = window.tgShopWoche || null;
 window.tgSchrankerlWoche = window.tgSchrankerlWoche || null;
 // 27.10.26 (Wunsch Gurl): Wochenbestellung hat zwei Listen — 📦 Trockenlager (Transgourmet) und 🥬 Gemüse/Obst (bisher als Excel verschickt)
-window.tgListe = window.tgListe || 'trocken';
+// 27.10.26: Gemüse/Obst-Reiter archiviert (Küchenchef bleibt bei der Excel). Zum Reaktivieren TG_GEMUESE_AKTIV=true — Artikel (liste='gemuese') liegen unverändert in tg_artikel.
+const TG_GEMUESE_AKTIV=false;
+window.tgListe = TG_GEMUESE_AKTIV ? (window.tgListe || 'trocken') : 'trocken';
 
 const TG_KATEGORIE_ORDER=['Gemüse/Obst','Milchprodukte/Käse','Tiefkühlprodukte','Hülsenfrüchte','Dosen','Nüsse/Trockenfrüchte','Öle/Essig/Salz','Lasagne','Getränke','Kuchen','Sonstiges'];
 
@@ -9841,7 +9843,7 @@ async function renderTgBestellungHtml(){
     await api(`tg_artikel?aktualisiert_am=lt.${encodeURIComponent(_m.toISOString())}&or=(genug.eq.true,bestellen.eq.true,bestellt.eq.true,bestand_text.not.is.null,bestand.not.is.null)`,{method:'PATCH',body:JSON.stringify({bestand:null,bestand_text:null,genug:false,bestellen:false,bestellt:false})});
   }catch(e){ console.error('Wochen-Reset Wochenbestellung',e); }
   const allItems=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
-  const _gem=window.tgListe==='gemuese';
+  const _gem=TG_GEMUESE_AKTIV && window.tgListe==='gemuese';
   const items=allItems.filter(a=>(a.liste||'trocken')===(_gem?'gemuese':'trocken'));
   const _cnt=l=>{ const x=allItems.filter(a=>(a.liste||'trocken')===l); return x.filter(a=>tgHas(a)).length+'/'+x.length; };
   const doneN=items.filter(a=>tgHas(a)).length;
@@ -9849,7 +9851,7 @@ async function renderTgBestellungHtml(){
   // 07.10.26 (Wunsch Tini: "viel Text, wenig Inhalt"): kompakter — ein Block statt 10 Karten mit
   // wiederholten Tabellenköpfen, Fortschritt oben, Kategorien einklappbar, Referenz-Menüs eingeklappt.
   const _tab=(k,lbl)=>`<button onclick="window.tgListe='${k}';renderKitchen()" style="flex:1;padding:9px 6px;border-radius:10px;border:2px solid ${window.tgListe===k||(!_gem&&k==='trocken')?'#F97316':'var(--border)'};background:${(_gem?'gemuese':'trocken')===k?'#FFF7ED':'#fff'};color:${(_gem?'gemuese':'trocken')===k?'#C2410C':'var(--sub)'};font-size:12.5px;font-weight:800;cursor:pointer;">${lbl}<div style="font-size:10px;font-weight:600;opacity:.8;margin-top:1px;">${_cnt(k)} gezählt</div></button>`;
-  let html=`<div style="display:flex;gap:8px;margin-bottom:10px;">${_tab('trocken','📦 Trockenlager')}${_tab('gemuese','🥬 Gemüse/Obst')}</div>
+  let html=`${TG_GEMUESE_AKTIV?`<div style="display:flex;gap:8px;margin-bottom:10px;">${_tab('trocken','📦 Trockenlager')}${_tab('gemuese','🥬 Gemüse/Obst')}</div>`:''}
   <div class="card" style="padding:12px 14px;margin-bottom:10px;">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
       <div style="font-size:13px;font-weight:800;color:#F97316;">${_gem?'🥬 Wochenbestellung · Gemüse/Obst':'🚛 Wochenbestellung · Transgourmet'}</div>
