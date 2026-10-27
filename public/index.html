@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.212';
+const APP_VERSION = '6.99.213';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9761,8 +9761,10 @@ window.saveSchrankerlMenge=saveSchrankerlMenge;
 // Weiterleitung an Simone ist weiterhin NICHT gebaut.
 window.tgShopWoche = window.tgShopWoche || null;
 window.tgSchrankerlWoche = window.tgSchrankerlWoche || null;
+// 27.10.26 (Wunsch Gurl): Wochenbestellung hat zwei Listen — 📦 Trockenlager (Transgourmet) und 🥬 Gemüse/Obst (bisher als Excel verschickt)
+window.tgListe = window.tgListe || 'trocken';
 
-const TG_KATEGORIE_ORDER=['Gemüse','Milchprodukte/Käse','Tiefkühlprodukte','Hülsenfrüchte','Dosen','Nüsse/Trockenfrüchte','Öle/Essig/Salz','Lasagne','Getränke','Kuchen','Sonstiges'];
+const TG_KATEGORIE_ORDER=['Gemüse/Obst','Milchprodukte/Käse','Tiefkühlprodukte','Hülsenfrüchte','Dosen','Nüsse/Trockenfrüchte','Öle/Essig/Salz','Lasagne','Getränke','Kuchen','Sonstiges'];
 
 // 07.10.26 (Wunsch Tini): Der Küchenchef antwortet oft "wir haben genug" oder "10 × 100g" — deshalb pro Artikel
 // ein Freitextfeld (Zahl ODER z.B. "10 × 100g") plus ein "✓ genug"-Chip. Beides zählt als gezählt.
@@ -9838,14 +9840,19 @@ async function renderTgBestellungHtml(){
     const _m=new Date(); _m.setHours(0,0,0,0); _m.setDate(_m.getDate()+(_m.getDay()===0?-6:1-_m.getDay()));
     await api(`tg_artikel?aktualisiert_am=lt.${encodeURIComponent(_m.toISOString())}&or=(genug.eq.true,bestellen.eq.true,bestellt.eq.true,bestand_text.not.is.null,bestand.not.is.null)`,{method:'PATCH',body:JSON.stringify({bestand:null,bestand_text:null,genug:false,bestellen:false,bestellt:false})});
   }catch(e){ console.error('Wochen-Reset Wochenbestellung',e); }
-  const items=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
+  const allItems=await api('tg_artikel?select=*&order=kategorie,sort_order').catch(()=>[]);
+  const _gem=window.tgListe==='gemuese';
+  const items=allItems.filter(a=>(a.liste||'trocken')===(_gem?'gemuese':'trocken'));
+  const _cnt=l=>{ const x=allItems.filter(a=>(a.liste||'trocken')===l); return x.filter(a=>tgHas(a)).length+'/'+x.length; };
   const doneN=items.filter(a=>tgHas(a)).length;
 
   // 07.10.26 (Wunsch Tini: "viel Text, wenig Inhalt"): kompakter — ein Block statt 10 Karten mit
   // wiederholten Tabellenköpfen, Fortschritt oben, Kategorien einklappbar, Referenz-Menüs eingeklappt.
-  let html=`<div class="card" style="padding:12px 14px;margin-bottom:10px;">
+  const _tab=(k,lbl)=>`<button onclick="window.tgListe='${k}';renderKitchen()" style="flex:1;padding:9px 6px;border-radius:10px;border:2px solid ${window.tgListe===k||(!_gem&&k==='trocken')?'#F97316':'var(--border)'};background:${(_gem?'gemuese':'trocken')===k?'#FFF7ED':'#fff'};color:${(_gem?'gemuese':'trocken')===k?'#C2410C':'var(--sub)'};font-size:12.5px;font-weight:800;cursor:pointer;">${lbl}<div style="font-size:10px;font-weight:600;opacity:.8;margin-top:1px;">${_cnt(k)} gezählt</div></button>`;
+  let html=`<div style="display:flex;gap:8px;margin-bottom:10px;">${_tab('trocken','📦 Trockenlager')}${_tab('gemuese','🥬 Gemüse/Obst')}</div>
+  <div class="card" style="padding:12px 14px;margin-bottom:10px;">
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;">
-      <div style="font-size:13px;font-weight:800;color:#F97316;">🚛 Wochenbestellung · Transgourmet</div>
+      <div style="font-size:13px;font-weight:800;color:#F97316;">${_gem?'🥬 Wochenbestellung · Gemüse/Obst':'🚛 Wochenbestellung · Transgourmet'}</div>
       <div id="tg-progress" style="font-size:11.5px;font-weight:700;color:var(--sub);">${doneN} / ${items.length} gezählt</div>
     </div>
     <div style="height:5px;background:var(--surface-1);border-radius:3px;margin:8px 0 6px;overflow:hidden;"><div id="tg-bar" style="height:100%;width:${items.length?Math.round(doneN/items.length*100):0}%;background:#F97316;"></div></div>
@@ -9873,8 +9880,8 @@ async function renderTgBestellungHtml(){
     </details>`;
   });
   html+=`<div style="display:flex;gap:8px;margin:6px 0 14px;">
-    <select id="tg-extra-kat" aria-label="Kategorie" style="flex-shrink:0;max-width:112px;padding:8px 4px;border:1px dashed var(--border);border-radius:8px;font-size:12px;background:#fff;">${[...new Set(['Gemüse',...katOrder])].map(k=>`<option value="${escAttr(k)}"${k==='Sonstiges'?' selected':''}>${k}</option>`).join('')}</select>
-    <input id="tg-extra-input" type="text" placeholder="+ Artikel, der auf keiner Liste steht" onkeydown="if(event.key==='Enter')addTgExtraArtikel()" style="flex:1;padding:9px;border:1px dashed var(--border);border-radius:8px;font-size:12.5px;">
+    <select id="tg-extra-kat" aria-label="Kategorie" style="flex-shrink:0;max-width:112px;padding:8px 4px;border:1px dashed var(--border);border-radius:8px;font-size:12px;background:#fff;">${(_gem?['Gemüse/Obst']:[...new Set(katOrder.filter(k=>k!=='Gemüse/Obst'))]).map(k=>`<option value="${escAttr(k)}"${k==='Sonstiges'?' selected':''}>${k}</option>`).join('')}</select>
+    <input id="tg-extra-input" type="text" placeholder="${_gem?'+ Gemüse/Obst, das nicht auf der Liste steht':'+ Artikel, der auf keiner Liste steht'}" onkeydown="if(event.key==='Enter')addTgExtraArtikel()" style="flex:1;padding:9px;border:1px dashed var(--border);border-radius:8px;font-size:12.5px;">
     <button onclick="addTgExtraArtikel()" style="padding:8px 14px;border:none;border-radius:8px;background:#F97316;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">＋</button>
   </div>`;
   if(window._tgOpenOnly) setTimeout(()=>tgToggleOpenOnly(true),0);
@@ -10024,7 +10031,7 @@ Object.assign(window,{tgSendAsana,tgAsanaBtnRefresh,tgAsanaTestMode});
 function tgCopyBestellliste(){
   const rows=[...document.querySelectorAll('.tg-row[data-bestellen="1"]:not([data-bestellt="1"])')];
   if(!rows.length){ showToast('Nichts mehr offen zum Bestellen',true); return; }
-  const txt='Wochenbestellung Transgourmet:\n'+rows.map(r=>{ const n=(r.children[0].dataset.name||r.children[0].textContent).trim(); const v=r.querySelector('input')?.value.trim(); return '• '+n+(v?' (Bestand: '+v+')':''); }).join('\n');
+  const txt=(window.tgListe==='gemuese'?'Wochenbestellung Gemüse/Obst:\n':'Wochenbestellung Transgourmet:\n')+rows.map(r=>{ const n=(r.children[0].dataset.name||r.children[0].textContent).trim(); const v=r.querySelector('input')?.value.trim(); return '• '+n+(v?' (Bestand: '+v+')':''); }).join('\n');
   (navigator.clipboard?.writeText(txt)||Promise.reject()).then(()=>showToast('✓ Bestellliste kopiert ('+rows.length+')')).catch(()=>{ prompt('Bestellliste kopieren:',txt); });
 }
 window.tgCopyBestellliste=tgCopyBestellliste;
@@ -10034,7 +10041,7 @@ async function addTgExtraArtikel(){
   const name=(inp?.value||'').trim();
   if(!name) return;
   try{
-    await api('tg_artikel',{method:'POST',body:JSON.stringify([{kategorie:(document.getElementById('tg-extra-kat')?.value||'Sonstiges'), name, sort_order:999, manuell_hinzugefuegt:true}])});
+    await api('tg_artikel',{method:'POST',body:JSON.stringify([{kategorie:(document.getElementById('tg-extra-kat')?.value||'Sonstiges'), name, sort_order:999, manuell_hinzugefuegt:true, liste:(window.tgListe==='gemuese'?'gemuese':'trocken')}])});
     showToast('✓ Hinzugefügt');
     renderKitchen();
   }catch(e){console.error(e);showToast('Fehler beim Speichern', true);}
@@ -10056,7 +10063,7 @@ function tgArtikelMenu(id){
   const row=document.querySelector(`.tg-row[data-id="${id}"]`); if(!row) return;
   const name=(row.children[0].dataset.name||'').trim();
   const cur=(row.closest('.tg-kat')?.dataset.kat||'').toLowerCase();
-  const kats=[...new Set(['Gemüse',...[...document.querySelectorAll('.tg-kat')].map(k=>k.dataset.kat).map(k=>k.charAt(0)+k.slice(1).toLowerCase()).filter(Boolean)])];
+  const kats=[...new Set(['Gemüse/Obst',...[...document.querySelectorAll('.tg-kat')].map(k=>k.dataset.kat).map(k=>k.charAt(0)+k.slice(1).toLowerCase()).filter(Boolean)])];
   const allKats=[...new Set([...TG_KATEGORIE_ORDER,...kats])];
   const ov=document.createElement('div'); ov.id='tg-menu-ov';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -10075,7 +10082,8 @@ function tgArtikelMenu(id){
 async function tgArtikelKatSpeichern(id){
   const k=document.getElementById('tg-menu-kat')?.value; if(!k) return;
   try{
-    await api(`tg_artikel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({kategorie:k})});
+    const toGem=/^gemüse/i.test(k);
+    await api(`tg_artikel?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(toGem?{kategorie:'Gemüse/Obst',liste:'gemuese'}:{kategorie:k,liste:'trocken'})});
     document.getElementById('tg-menu-ov')?.remove();
     showToast('✓ Verschoben nach '+k);
     renderKitchen();
