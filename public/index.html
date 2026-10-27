@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.215';
+const APP_VERSION = '6.99.216';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -20044,9 +20044,39 @@ async function tdLoad(){
   const per=(a,fn)=>{ const m={}; a.forEach(x=>{ const k=fn(x); (m[k]=m[k]||[]).push(x); }); return m; };
   const avg=a=>a.reduce((t,x)=>t+x.v,0)/a.length;
   const sd=a=>{ const m=avg(a); return Math.sqrt(a.reduce((t,x)=>t+(x.v-m)**2,0)/a.length); };
+  let trendH='';
   const btn=(n,l)=>`<button onclick="tdSetDays(${n})" style="flex:1;padding:7px 4px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;border:1.5px solid #DB2777;${days===n?'background:#DB2777;color:#fff;':'background:#fff;color:#DB2777;'}">${l}</button>`;
   let h=`<div class="section-lbl">🔎 Tendenzen — was zieht sich durch?</div>
     <div style="display:flex;gap:6px;margin-bottom:10px;">${btn(14,'14 Tage')}${btn(28,'4 Wo.')}${btn(90,'3 Mon.')}${btn(180,'6 Mon.')}${btn(9999,'Alles')}</div>`;
+  // ── 📊 Trend: letzte 30 Tage vs. die 30 Tage davor (rollierend, unabhängig vom Zeitraum-Button)
+  {
+    const dIso=n=>{ const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split('T')[0]; };
+    const t30=dIso(30), t60=dIso(60);
+    const A=EA.filter(x=>x.datum>=t30), B=EA.filter(x=>x.datum>=t60&&x.datum<t30);
+    if(A.length>=5&&B.length>=5){
+      const aV=avg(A), bV=avg(B), dlt=aV-bV;
+      const pill=(d,thr)=>d>=thr?`<strong style="color:#16A34A;">▲ +${tdF1(d)}</strong>`:d<=-thr?`<strong style="color:#DC2626;">▼ −${tdF1(Math.abs(d))}</strong>`:`<strong style="color:var(--muted);">▶ ${d>=0?'+':'−'}${tdF1(Math.abs(d))}</strong>`;
+      const tl=k=>(KF_TAGS.find(t=>t.k===k)||{label:k}).label, ng=k=>!!(KF_TAGS.find(t=>t.k===k)||{}).neg;
+      const row=(l,r)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><span style="flex:1;" data-no-translate>${l}</span><span style="text-align:right;">${r}</span></div>`;
+      const sA=per(A,x=>x.store), sB=per(B,x=>x.store);
+      const stT=Object.keys(sA).filter(id=>sA[id].length>=3&&sB[id]&&sB[id].length>=3).map(id=>({id,a:avg(sA[id]),b:avg(sB[id])})).map(x=>({...x,d:x.a-x.b})).sort((x,y)=>y.d-x.d);
+      const dA=per(A,x=>x.dish), dB=per(B,x=>x.dish);
+      const diT=Object.keys(dA).filter(n=>dA[n].length>=2&&dB[n]&&dB[n].length>=2).map(n=>({n,a:avg(dA[n]),b:avg(dB[n])})).map(x=>({...x,d:x.a-x.b})).filter(x=>Math.abs(x.d)>=0.5).sort((x,y)=>y.d-x.d);
+      const tc=(arr,k)=>arr.filter(x=>x.tags.includes(k)).length;
+      const allTags=[...new Set([...A,...B].flatMap(x=>x.tags))];
+      const tgT=allTags.map(k=>({k,ra:tc(A,k)/A.length*100,rb:tc(B,k)/B.length*100,na:tc(A,k),nb:tc(B,k)})).filter(x=>x.na+x.nb>=4&&Math.abs(x.ra-x.rb)>=3).map(x=>({...x,d:x.ra-x.rb}));
+      const ps=(d)=>{ const f=Math.round(Math.abs(d)); return (d>0?'+':'−')+f+' pp'; };
+      const fmt=iso=>{ const [y,m,dd]=iso.split('-'); return dd+'.'+m+'.'; };
+      trendH=`<div class="section-lbl">📊 Trend — letzte 30 Tage vs. 30 Tage davor</div><div class="card" style="padding:8px 14px;margin-bottom:10px;">
+        <div style="font-size:10.5px;color:var(--muted);padding:2px 0 6px;">${fmt(t30)} – heute (${A.length} Bewertungen) gegen ${fmt(t60)} – ${fmt(t30)} (${B.length})</div>
+        ${row('<strong>Gesamt Ø</strong>',`${tdF1(bV)} → <strong>${tdF1(aV)}</strong> &nbsp;${pill(dlt,0.15)}`)}
+        ${stT.length?`<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);padding:8px 0 2px;">STANDORTE</div>${stT.map(x=>row(escAttr(sn[x.id]||x.id),`${tdF1(x.b)} → <strong>${tdF1(x.a)}</strong> &nbsp;${pill(x.d,0.2)}`)).join('')}`:''}
+        ${diT.length?`<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);padding:8px 0 2px;">GERICHTE, DIE IN BEIDEN ZEITRÄUMEN LIEFEN (Änderung ab 0,5)</div>${diT.slice(0,6).map(x=>row(escAttr(x.n),`${tdF1(x.b)} → <strong>${tdF1(x.a)}</strong> &nbsp;${pill(x.d,0.5)}`)).join('')}`:''}
+        ${tgT.length?`<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--muted);padding:8px 0 2px;">AUSSAGEN — Anteil an allen Bewertungen</div>${tgT.sort((x,y)=>Math.abs(y.d)-Math.abs(x.d)).slice(0,6).map(x=>{ const gut=ng(x.k)?x.d<0:x.d>0; return row(escAttr(tl(x.k)),`${Math.round(x.rb)}% → <strong>${Math.round(x.ra)}%</strong> &nbsp;<strong style="color:${gut?'#16A34A':'#DC2626'};">${x.d>0?'▲':'▼'} ${ps(x.d)}</strong>`); }).join('')}`:''}
+        <div style="font-size:10.5px;color:var(--muted);padding:6px 0 2px;">Ø von 5. Grün = besser, rot = schlechter, grau = praktisch unverändert. Standorte ab 3 Bewertungen je Zeitraum, Gerichte ab 2.</div></div>`;
+    }
+  }
+  h+=trendH;
   if(E.length<5){
     box.innerHTML=h+`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Zu wenig Bewertungen in diesem Zeitraum (${E.length}) für Tendenzen.</div>`; return;
   }
