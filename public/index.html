@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.214';
+const APP_VERSION = '6.99.215';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -20025,25 +20025,28 @@ async function tdLoad(){
   const box=document.getElementById('td-card'); if(!box) return;
   const days=window._tdDays;
   const from=days>=9999?'2000-01-01':(()=>{ const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().split('T')[0]; })();
+  const m6=(()=>{ const d=new Date(); d.setDate(d.getDate()-200); return d.toISOString().split('T')[0]; })();
+  const loadFrom=from<m6?from:m6; // Monatsverlauf braucht immer die letzten ~6 Monate, unabhängig vom gewählten Zeitraum
   const [rows,stores]=await Promise.all([
-    api(`essen_feedback?datum=gte.${from}&select=store_id,datum,ratings&order=datum.desc&limit=2000`).catch(()=>[]),
+    api(`essen_feedback?datum=gte.${loadFrom}&select=store_id,datum,ratings&order=datum.desc&limit=2000`).catch(()=>[]),
     api('stores?select=id,name').catch(()=>[])
   ]);
   const sn={}; (stores||[]).forEach(x=>sn[x.id]=x.name);
-  const seen=new Set(), E=[]; // Einträge: ein Gericht, eine Bewertung
+  const seen=new Set(), EA=[]; // Einträge: ein Gericht, eine Bewertung
   (rows||[]).forEach(r=>{
     const k=r.store_id+'|'+r.datum+'|'+JSON.stringify(r.ratings||{}); if(seen.has(k)) return; seen.add(k); // Doppelklicks nicht doppelt zählen
     Object.entries(r.ratings||{}).forEach(([dish,rec])=>{
       const v=(rec&&typeof rec==='object')?rec.v:rec; if(v==null||isNaN(v)) return;
-      E.push({dish,store:r.store_id,datum:r.datum,v:Number(v),tags:(rec&&rec.tags)||[],perfekt:!!(rec&&rec.perfekt)});
+      EA.push({dish,store:r.store_id,datum:r.datum,v:Number(v),tags:(rec&&rec.tags)||[],perfekt:!!(rec&&rec.perfekt)});
     });
   });
+  const E=EA.filter(x=>x.datum>=from);
   const per=(a,fn)=>{ const m={}; a.forEach(x=>{ const k=fn(x); (m[k]=m[k]||[]).push(x); }); return m; };
   const avg=a=>a.reduce((t,x)=>t+x.v,0)/a.length;
   const sd=a=>{ const m=avg(a); return Math.sqrt(a.reduce((t,x)=>t+(x.v-m)**2,0)/a.length); };
   const btn=(n,l)=>`<button onclick="tdSetDays(${n})" style="flex:1;padding:7px 4px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;border:1.5px solid #DB2777;${days===n?'background:#DB2777;color:#fff;':'background:#fff;color:#DB2777;'}">${l}</button>`;
   let h=`<div class="section-lbl">🔎 Tendenzen — was zieht sich durch?</div>
-    <div style="display:flex;gap:6px;margin-bottom:10px;">${btn(14,'14 Tage')}${btn(28,'4 Wochen')}${btn(56,'8 Wochen')}${btn(9999,'Alles')}</div>`;
+    <div style="display:flex;gap:6px;margin-bottom:10px;">${btn(14,'14 Tage')}${btn(28,'4 Wo.')}${btn(90,'3 Mon.')}${btn(180,'6 Mon.')}${btn(9999,'Alles')}</div>`;
   if(E.length<5){
     box.innerHTML=h+`<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px;">Zu wenig Bewertungen in diesem Zeitraum (${E.length}) für Tendenzen.</div>`; return;
   }
@@ -20061,7 +20064,9 @@ async function tdLoad(){
     const spread=multi.length>=2?multi[0].avg-multi[multi.length-1].avg:0;
     return {name,n:a.length,avg:avg(a),adj,sd:sd(a),ps:psAvg.sort((x,y)=>y.avg-x.avg),tg,spread,hi:multi[0],lo:multi[multi.length-1],perfekt:a.filter(x=>x.perfekt).length,last:a.map(x=>x.datum).sort().pop()};
   });
-  const rated=D.filter(d=>d.n>=TD_MIN_N);
+  const _cut=(()=>{ const d=new Date(); d.setDate(d.getDate()-21); return d.toISOString().split('T')[0]; })();
+  D.forEach(d=>d.aktuell=d.last>=_cut); // zuletzt in den letzten 3 Wochen bewertet = läuft noch
+  const rated=D.filter(d=>d.n>=TD_MIN_N&&d.aktuell);
   const tagLbl=k=>(KF_TAGS.find(t=>t.k===k)||{label:k}).label;
   const isNeg=k=>!!(KF_TAGS.find(t=>t.k===k)||{}).neg;
   // Wiederkehrende Aussagen (Tags, über alle Gerichte)
@@ -20079,6 +20084,24 @@ async function tdLoad(){
   const mixed=rated.filter(d=>d.spread>=1.0).sort((a,b)=>b.spread-a.spread).slice(0,2);
   if(mixed.length) bul.push(`↔️ Standorte uneinig: ${mixed.map(d=>`<strong data-no-translate>${escAttr(d.name)}</strong> (${escAttr(sn[d.hi.id]||d.hi.id)} Ø ${tdF1(d.hi.avg)} vs. ${escAttr(sn[d.lo.id]||d.lo.id)} Ø ${tdF1(d.lo.avg)})`).join(', ')}`);
   h+=`<div class="card" style="padding:12px 14px;margin-bottom:10px;background:#FDF2F8;border-color:#FBCFE8;">${bul.map(b=>`<div style="font-size:12.5px;color:#831843;line-height:1.55;margin-bottom:5px;">• ${b}</div>`).join('')}</div>`;
+  // ── Verlauf von Monat zu Monat (immer die letzten Monate, unabhängig vom Zeitraum oben)
+  {
+    const byM=per(EA,x=>x.datum.slice(0,7)), ms=Object.keys(byM).sort().slice(-6);
+    if(ms.length>=2){
+      const MN=['Jän','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+      const stIds=[...new Set(EA.filter(x=>ms.includes(x.datum.slice(0,7))).map(x=>x.store))].sort((a,b)=>String(sn[a]||a).localeCompare(String(sn[b]||b),'de'));
+      const colr=v=>v>=4.3?'#16A34A':v<3.6?'#DC2626':'#D97706';
+      const arrow=(c,pv)=>pv==null?'':(c-pv>=0.2?'<span style="color:#16A34A;">▲</span>':c-pv<=-0.2?'<span style="color:#DC2626;">▼</span>':'<span style="color:var(--muted);">▶</span>');
+      let prev=null;
+      const rowsH=ms.map(m=>{
+        const a=byM[m], av=avg(a), [yy,mm]=m.split('-'), ps=per(a,x=>x.store);
+        const tr=`<tr style="border-bottom:0.5px solid var(--border);"><td style="padding:7px 4px 7px 0;font-weight:700;white-space:nowrap;">${MN[+mm-1]} ${yy.slice(2)}</td><td style="text-align:right;color:var(--muted);font-size:10.5px;">${a.length}</td><td style="text-align:right;padding-left:8px;"><strong style="color:${colr(av)};">${tdF1(av)}</strong> ${arrow(av,prev)}</td>${stIds.map(id=>ps[id]&&ps[id].length>=2?`<td style="text-align:right;padding-left:8px;color:${colr(avg(ps[id]))};">${tdF1(avg(ps[id]))}</td>`:'<td style="text-align:right;padding-left:8px;color:var(--muted);">–</td>').join('')}</tr>`;
+        prev=av; return tr;
+      }).reverse().join('');
+      h+=`<div class="section-lbl">📈 Verlauf von Monat zu Monat</div><div class="card" style="padding:8px 12px;margin-bottom:10px;overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:var(--muted);font-size:10px;text-align:right;"><th style="text-align:left;font-weight:600;">Monat</th><th style="font-weight:600;">Bew.</th><th style="font-weight:600;padding-left:8px;">Ø alle</th>${stIds.map(id=>`<th style="font-weight:600;padding-left:8px;" data-no-translate>${escAttr(String(sn[id]||id).split(' ')[0])}</th>`).join('')}</tr></thead><tbody>${rowsH}</tbody></table>
+      <div style="font-size:10.5px;color:var(--muted);padding-top:6px;">Ø von 5 · ▲▼ = Veränderung zum Vormonat (ab 0,2). Standort erst ab 2 Bewertungen im Monat. Der aktuelle Monat ist noch nicht komplett.</div></div>`;
+    }
+  }
   // ── Standorte
   h+=`<div class="section-lbl">📍 Standorte im Vergleich</div><div class="card" style="padding:6px 14px;margin-bottom:10px;">${stRows.slice().reverse().map(x=>{
     const d=x.avg-overall; return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><span style="flex:1;" data-no-translate>${escAttr(sn[x.id]||x.id)}</span><span style="color:var(--muted);font-size:10.5px;">${x.n} Bew.</span><strong>Ø ${tdF1(x.avg)}</strong><span style="width:46px;text-align:right;font-size:10.5px;color:${d>=0.2?'#16A34A':d<=-0.2?'#DC2626':'var(--muted)'};">${d>=0?'+':'−'}${tdF1(Math.abs(d))}</span></div>`; }).join('')}
@@ -20088,9 +20111,11 @@ async function tdLoad(){
   if(!recurring.length) h+=`<div class="card" style="padding:12px;font-size:12.5px;color:var(--muted);margin-bottom:10px;">Keine Aussage kommt in diesem Zeitraum mehrfach vor.</div>`;
   else h+=`<div class="card" style="padding:6px 14px;margin-bottom:10px;">${recurring.map(([k,o])=>`<div style="padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><div style="display:flex;gap:8px;"><span style="flex:1;color:${isNeg(k)?'#9A3412':'#166534'};font-weight:600;">${escAttr(tagLbl(k))}</span><strong>${o.n}×</strong></div><div style="font-size:10.5px;color:var(--muted);">${o.dishes.size} Gericht${o.dishes.size>1?'e':''} · ${Object.entries(o.stores).sort((a,b)=>b[1]-a[1]).map(([id,n])=>`${escAttr(sn[id]||id)} ${n}×`).join(', ')}</div></div>`).join('')}</div>`;
   // ── Gerichte
-  const sorted=D.slice().sort((a,b)=>(b.n>=TD_MIN_N)-(a.n>=TD_MIN_N)||a.avg-b.avg);
-  h+=`<div class="section-lbl">🍛 Gerichte (schwächste zuerst)</div>`;
-  h+=sorted.map(d=>{
+  const sorted=D.filter(d=>d.aktuell).sort((a,b)=>(b.n>=TD_MIN_N)-(a.n>=TD_MIN_N)||a.avg-b.avg);
+  const aelter=D.filter(d=>!d.aktuell).sort((a,b)=>b.last.localeCompare(a.last));
+  h+=`<div class="section-lbl">🍛 Aktuelle Gerichte (schwächste zuerst)</div>`;
+  if(!sorted.length) h+=`<div class="card" style="padding:12px;font-size:12.5px;color:var(--muted);margin-bottom:6px;">Zu aktuellen Gerichten gibt es in diesem Zeitraum keine Bewertungen.</div>`;
+  const dishH=d=>{
     const enough=d.n>=TD_MIN_N, col=!enough?'#9CA3AF':d.avg>=4.3?'#16A34A':d.avg<3.6?'#DC2626':'#D97706';
     const topTags=Object.entries(d.tg).filter(([k,n])=>n>=2||(d.n<=3&&n>=1)).sort((a,b)=>b[1]-a[1]).slice(0,3);
     const verdict=!enough?'zu wenig Daten':d.spread>=1.0?'Standorte uneinig':d.sd>=1.2?'Meinungen gemischt':d.avg>=4.3?'einig: gut':d.avg<3.6?'einig: schwach':'einig: ok';
@@ -20102,7 +20127,9 @@ async function tdLoad(){
         <div style="margin-top:3px;">${d.ps.map(x=>`<span style="display:inline-block;background:var(--bg,#F5F5F4);border-radius:6px;padding:2px 7px;margin:0 4px 3px 0;" data-no-translate>${escAttr(sn[x.id]||x.id)} Ø ${tdF1(x.avg)} (${x.n})</span>`).join('')}</div>
         ${topTags.length?`<div style="margin-top:3px;">${topTags.map(([k,n])=>`<span style="color:${isNeg(k)?'#9A3412':'#166534'};margin-right:8px;">${escAttr(tagLbl(k))} ${n}×</span>`).join('')}</div>`:''}
       </div></details>`;
-  }).join('');
+  };
+  h+=sorted.map(dishH).join('');
+  if(aelter.length) h+=`<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);padding:8px 2px;">🗂 Ältere Gerichte (${aelter.length}) — seit über 3 Wochen nicht mehr bewertet</summary>${aelter.map(dishH).join('')}</details>`;
   box.innerHTML=h; translateEl(box);
 }
 window.tdLoad=tdLoad;
