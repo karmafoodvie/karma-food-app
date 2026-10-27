@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.220';
+const APP_VERSION = '6.99.221';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9671,6 +9671,7 @@ async function renderSchrankerlTab(){
   await getZutatenMaster();
   // Menü-Nr. immer aus dem PRODUKTIONSTAG (Freitag) ableiten, nicht aus "heute" — sonst passte am Wochenende
   // das Menü der alten Woche zum Datum der nächsten Woche (27.10.26, Hinweis Gurl).
+  await loadSkMenuCount(); // Anzahl Menüs vor der Berechnung frisch laden (sonst falsche Rotation direkt nach dem Start)
   const lieferdatum=getNextFriday();
   const woche=getSchrankerlWoche(lieferdatum);
   const _sun=ftAdd(lieferdatum,2), _mon=ftAdd(lieferdatum,3);
@@ -9932,6 +9933,7 @@ function wocheRangeLbl(w,refDate,fn,n){
   return '';
 }
 async function renderTgBestellungHtml(){
+  await loadSkMenuCount();
   const _od=tgOrderDates();
   const shopWoche = window.tgShopWoche || getMenuWocheForDate(_od.shopDate);
   const schrankerlWoche = window.tgSchrankerlWoche || getSchrankerlWoche(_od.skDate);
