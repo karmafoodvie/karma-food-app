@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.228';
+const APP_VERSION='6.99.229';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9726,58 +9726,54 @@ async function renderSchrankerlTab(){
   const dateLabel=new Date(lieferdatum+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   const SLOT_LABEL={curry:'🍛 Curry',salat:'🥗 Salat',dessert:'🍮 Dessert'};
 
-  let html=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">
+  let html=`<div class="card" style="padding:10px 12px;margin-bottom:10px;">
     <div style="font-size:12px;font-weight:700;color:#C1542C;">🥡 Schrankerl-Produktion — Menü ${woche}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:1px;">Produktion: <b>${dateLabel}</b> · Lieferung ${ftFmt(_sun)} · im Verkauf ab ${ftFmt(_mon)} (Schrankerl-Bestellung KW ${_kw})</div>
   </div>`;
 
-  // Übersichtszeile ganz am Anfang — auf einen Blick, welche 3 Produkte diese Woche dran sind,
-  // PLUS gleich hier die Bestellmenge PRO GERICHT eintragbar (kommt meist Dienstag Nachmittag von
-  // Schrankerl rein und muss der Küche kommuniziert werden — deshalb direkt hier oben).
-  const overviewOrder=[['curry','Curry'],['salat','Salat'],['dessert','Dessert']];
-  html+=`<div class="card" style="padding:12px 14px;margin-bottom:14px;">`;
-  overviewOrder.forEach(([slot,label],i)=>{
-    const item=menu.find(m=>m.slot===slot);
-    html+=`<div style="font-size:12.5px;${i>0?'margin-top:4px;':''}"><strong>${label}:</strong> <span data-no-translate>${item?item.name:'–'}</span></div>`;
-  });
-  html+=`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-    <div style="font-size:12px;font-weight:600;margin-bottom:8px;">📦 Bestellmenge pro Gericht (von Schrankerl reingekommen)</div>`;
-  overviewOrder.forEach(([slot,label])=>{
-    const lastBy=(prod||[]).find(p=>p.slot===slot)?.eingetragen_von;
-    html+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-      <span style="font-size:12px;width:52px;flex-shrink:0;">${label}</span>
-      <input id="schrankerl-menge-${slot}" type="number" step="1" placeholder="z.B. 15" value="${mengeBySlot[slot]??''}" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;">
-      <button onclick="saveSchrankerlMenge('${lieferdatum}','${slot}')" style="padding:8px 12px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">Speichern</button>
-    </div>`;
-  });
-  html+=`</div></div>`;
-
+  // Kompakte Ansicht (28.10.26): pro Gericht EINE Karte — Foto (komplett, nicht beschnitten) + Name + Menge-Eingabe;
+  // Zutaten & Bearbeiten klappen nur bei Bedarf auf. Bestellmenge kommt meist Di nachmittag von Schrankerl.
   const _gfIsOrgSk=currentStore?.id==='zentrale';
   const _gfMapSk=await gfLoad(_gfIsOrgSk).catch(()=>({})); window._gfSk=[];
+  window._skItems={}; (menu||[]).forEach(m=>{ window._skItems[m.id]=m; });
+  const _inp='padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;width:64px;text-align:center;box-sizing:border-box;';
   ['curry','salat','dessert'].forEach(slot=>{
     const item=menu.find(m=>m.slot===slot);
     if(!item) return;
-    const _gf=_gfMapSk[item.name]; let _gfH='';
+    const _gf=_gfMapSk[item.name]; let thumb='';
     if(_gf){ window._gfSk.push(_gf); const _k=window._gfSk.length-1;
-      _gfH=`<div onclick="gfShowSk(${_k})" style="position:relative;margin-bottom:8px;cursor:pointer;"><img src="${escAttr(_gf.foto_url)}" alt="" onerror="this.parentNode.style.display='none'" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;display:block;"><span style="position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;">📸 So soll's aussehen · zum Vergrößern tippen</span>${_gf.status==='test'?'<span style="position:absolute;right:6px;top:6px;background:#7C3AED;color:#fff;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;">TEST</span>':''}</div>`; }
-    else if(_gfIsOrgSk){ _gfH=`<div style="font-size:10.5px;color:var(--muted);margin-bottom:6px;">📸 Noch kein Soll-Foto — unter Organisation → Soll-Fotos Gerichte hinzufügen.</div>`; }
-    html+=`<div class="card" style="padding:12px 14px;margin-bottom:10px;">
-      ${_gfH}
-      <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">${SLOT_LABEL[slot]}</div>
-      <div style="font-size:14px;font-weight:700;margin-bottom:2px;" data-no-translate>${item.name}</div>
-      <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">${item.grammatur||''}</div>
-      <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(item.zutaten)}</div>
-      <div style="margin-top:8px;"><button onclick="skEditOpen(${item.id})" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;font-size:11.5px;cursor:pointer;">✏️ Bearbeiten</button></div>
-      <div id="sk-edit-${item.id}" style="display:none;"></div>
+      thumb=`<div onclick="gfShowSk(${_k})" style="position:relative;flex-shrink:0;width:104px;height:130px;background:#F3F1EC;border-radius:10px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+        <img src="${escAttr(_gf.foto_url)}" alt="" onerror="this.parentNode.style.display='none'" style="max-width:100%;max-height:100%;object-fit:contain;display:block;">
+        <span style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:1px 6px;font-size:10px;">🔍</span>
+        ${_gf.status==='test'?'<span style="position:absolute;left:4px;top:4px;background:#7C3AED;color:#fff;border-radius:5px;padding:1px 5px;font-size:8.5px;font-weight:700;">TEST</span>':''}</div>`; }
+    else { thumb=`<div style="flex-shrink:0;width:104px;height:130px;background:#F3F1EC;border-radius:10px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;color:var(--muted);padding:6px;box-sizing:border-box;">${_gfIsOrgSk?'📸 Foto fehlt<br>(Orga → Soll-Fotos)':'kein Foto'}</div>`; }
+    html+=`<div class="card" style="padding:10px;margin-bottom:10px;">
+      <div style="display:flex;gap:10px;align-items:flex-start;">
+        ${thumb}
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);">${SLOT_LABEL[slot]}${item.grammatur?' · '+escAttr(item.grammatur):''}</div>
+          <div style="font-size:14px;font-weight:700;line-height:1.25;margin:2px 0 8px;" data-no-translate>${item.name}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:3px;">📦 Bestellmenge (von Schrankerl)</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <input id="schrankerl-menge-${slot}" type="number" step="1" placeholder="Stk." value="${mengeBySlot[slot]??''}" style="${_inp}">
+            <button onclick="saveSchrankerlMenge('${lieferdatum}','${slot}')" style="padding:8px 12px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Speichern</button>
+          </div>
+        </div>
+      </div>
+      <details style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">
+        <summary style="font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;padding:4px 0;">Zutaten & Allergene anzeigen</summary>
+        <div style="font-size:11px;line-height:1.6;margin-top:6px;">${renderZutatenReadOnly(item.zutaten)}</div>
+        <div style="margin-top:8px;"><button onclick="skEditOpen(${item.id})" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;font-size:11.5px;cursor:pointer;">✏️ Bearbeiten</button></div>
+        <div id="sk-edit-${item.id}" style="display:none;"></div>
+      </details>
     </div>`;
   });
-  window._skItems={}; (menu||[]).forEach(m=>{ window._skItems[m.id]=m; });
   html+=`<div style="margin:4px 0 14px;"><button onclick="skNeuesMenue()" style="padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:transparent;font-size:12px;cursor:pointer;">➕ Neues Menü ${(window._skN||4)+1} anlegen</button></div>`;
 
   // Kund:innen-Feedback von Schrankerl (25.08.26, Wunsch Tini) — monatlicher Verlaufs-Report, den
   // Tini per PDF bekommt, wird von Claude manuell nachgetragen. Zeigt auf einen Blick, wie die
   // aktuell laufenden Gerichte bei den Kund:innen ankommen — inkl. Original-Kommentaren.
-  html+=await renderSchrankerlFeedbackHtml(menu.map(m=>m.name).filter(Boolean));
+  html+=`<details class="card" style="padding:10px 12px;margin-bottom:10px;"><summary style="font-size:13px;font-weight:700;cursor:pointer;">⭐ Kund:innen-Feedback zu diesen Gerichten</summary><div style="margin-top:8px;">`+await renderSchrankerlFeedbackHtml(menu.map(m=>m.name).filter(Boolean))+`</div></details>`;
 
   return html;
 }
