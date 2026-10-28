@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.223';
+const APP_VERSION='6.99.224';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9667,6 +9667,41 @@ function getNextFriday(){
   d.setDate(d.getDate()+(diff===0?0:diff));
   return d.toISOString().split('T')[0];
 }
+// ── Schrankerl-Menü direkt in der App bearbeiten (28.10.26, Wunsch Tini) ──
+function skEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function skEditOpen(id){
+  const it=(window._skItems||{})[id]; if(!it) return;
+  const box=document.getElementById('sk-edit-'+id); if(!box) return;
+  if(box.style.display==='block'){ box.style.display='none'; return; }
+  const inp='width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px;font-family:inherit;';
+  box.innerHTML=`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+    <label style="font-size:11px;color:var(--muted);">Name</label><input id="sk-n-${id}" value="${skEsc(it.name)}" style="${inp}">
+    <label style="font-size:11px;color:var(--muted);">Spezial (z.B. vegan/glutenfrei)</label><input id="sk-s-${id}" value="${skEsc(it.spezial)}" style="${inp}">
+    <label style="font-size:11px;color:var(--muted);">Grammatur</label><input id="sk-g-${id}" value="${skEsc(it.grammatur)}" style="${inp}">
+    <label style="font-size:11px;color:var(--muted);">Allergene (Codes, Komma-getrennt, z.B. G, M)</label><input id="sk-a-${id}" value="${skEsc((it.allergene_codes||[]).join(', '))}" style="${inp}">
+    <label style="font-size:11px;color:var(--muted);">Zutaten (Komma-getrennt)</label><textarea id="sk-z-${id}" rows="5" style="${inp}">${skEsc(it.zutaten)}</textarea>
+    <button onclick="skEditSave(${id})" style="padding:8px 14px;border:none;border-radius:8px;background:#C1542C;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">Speichern</button>
+  </div>`;
+  box.style.display='block';
+}
+async function skEditSave(id){
+  const v=k=>(document.getElementById('sk-'+k+'-'+id)||{}).value||'';
+  const name=v('n').trim(); if(!name){ alert('Name fehlt'); return; }
+  const body={name, spezial:v('s').trim()||null, grammatur:v('g').trim()||null,
+    allergene_codes:v('a').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean),
+    zutaten:v('z').trim()||null};
+  try{ await api(`schrankerl_menu?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(body)}); }
+  catch(e){ alert('Speichern fehlgeschlagen'); return; }
+  if(typeof showToast==='function') showToast('Gespeichert ✓');
+  renderKitchen();
+}
+async function skNeuesMenue(){
+  const n=(window._skN||4)+1;
+  if(!confirm('Menü '+n+' mit 3 leeren Gerichten anlegen? Danach läuft die Rotation über '+n+' Menüs.')) return;
+  const rows=['curry','salat','dessert'].map(slot=>({woche:n,slot,name:'Neues '+slot.charAt(0).toUpperCase()+slot.slice(1),allergene_codes:[]}));
+  try{ await api('schrankerl_menu',{method:'POST',body:JSON.stringify(rows)}); }catch(e){ alert('Anlegen fehlgeschlagen'); return; }
+  window._skN=n; location.reload();
+}
 async function renderSchrankerlTab(){
   await getZutatenMaster();
   // Menü-Nr. immer aus dem PRODUKTIONSTAG (Freitag) ableiten, nicht aus "heute" — sonst passte am Wochenende
@@ -9718,8 +9753,12 @@ async function renderSchrankerlTab(){
       <div style="font-size:14px;font-weight:700;margin-bottom:2px;" data-no-translate>${item.name}</div>
       <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">${item.grammatur||''}</div>
       <div style="font-size:10.5px;line-height:1.6;">${renderZutatenReadOnly(item.zutaten)}</div>
+      <div style="margin-top:8px;"><button onclick="skEditOpen(${item.id})" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:transparent;font-size:11.5px;cursor:pointer;">✏️ Bearbeiten</button></div>
+      <div id="sk-edit-${item.id}" style="display:none;"></div>
     </div>`;
   });
+  window._skItems={}; (menu||[]).forEach(m=>{ window._skItems[m.id]=m; });
+  html+=`<div style="margin:4px 0 14px;"><button onclick="skNeuesMenue()" style="padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:transparent;font-size:12px;cursor:pointer;">➕ Neues Menü ${(window._skN||4)+1} anlegen</button></div>`;
 
   // Kund:innen-Feedback von Schrankerl (25.08.26, Wunsch Tini) — monatlicher Verlaufs-Report, den
   // Tini per PDF bekommt, wird von Claude manuell nachgetragen. Zeigt auf einen Blick, wie die
