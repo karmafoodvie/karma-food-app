@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.232';
+const APP_VERSION='6.99.233';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18878,11 +18878,23 @@ let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 // 07.09.26, Wunsch Tini: beides klar getrennt zeigen statt nur das jeweils neueste Datum).
 // Zwei Quellen: essen_feedback (Team, ratings ist JSON {gericht:wert}) + kunden_feedback
 // (Besucher:innen, dish_name direkt). Gibt für beide Zeiträume Ø, Anzahl, Notizen, Top-Tags zurück.
+// Gäste-Feedback (alt kunden_feedback + Homepage) für die Gericht-Karten: kunden_feedback ist für anon gesperrt, daher
+// über die Edge-Function (führt beides zusammen). Ein Abruf pro Minute für alle Karten, Homepage-Abgleich max. alle 10 Min.
+let _kaP=null,_kaT=0;
+function gfbKundenAll(){
+  if(_kaP && Date.now()-_kaT<60000) return _kaP;
+  _kaT=Date.now();
+  _kaP=(async()=>{
+    try{ if(Date.now()-(window._gfbSyncedAt||0)>10*60*1000){ window._gfbSyncedAt=Date.now(); const r=await gfbSync(); if(!(r&&r.ok)) window._gfbSyncedAt=0; } }catch(e){}
+    try{ const r=await fetch(`${SUPABASE_URL}/functions/v1/kunden-feedback-read?limit=1000`,{headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}}); const j=await r.json(); return Array.isArray(j)?j:[]; }catch(e){ return []; }
+  })();
+  return _kaP;
+}
 async function getDishFeedbackSummary(dishName, refDateStr){
   const heute=refDateStr || new Date().toISOString().split('T')[0];
   const [teamRows, kundenRows] = await Promise.all([
     api(`essen_feedback?datum=lte.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
-    api(`kunden_feedback?dish_name=eq.${encodeURIComponent(dishName)}&submitted_at=lte.${heute}T23:59:59&select=rating,quick_tags,kommentar,submitted_at&order=submitted_at.desc&limit=400`).catch(()=>[])
+    gfbKundenAll().then(a=>(a||[]).filter(r=>r.dish_name===dishName && String(r.submitted_at||'')<=heute+'T23:59:59'))
   ]);
 
   function summarizeTeam(dateFilterFn){
