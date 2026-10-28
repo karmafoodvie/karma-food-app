@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.235';
+const APP_VERSION='6.99.236';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -15503,7 +15503,7 @@ function renderFeedbackExistingList(existing, todayMenu){
           <span>${isPerfekt?'<b style="color:#16A34A;">💯 Perfekt — so lassen!</b>':(scale?`${scale.emoji} ${scale.label}`:'<span style="color:var(--muted);">– nicht probiert</span>')}</span>
         </div>
         ${tagsHtml?`<div style="margin-top:2px;">${tagsHtml}</div>`:''}
-        ${note?`<div style="font-size:11px;color:var(--sub);margin-top:2px;font-style:italic;">„${note}"</div>`:''}
+        ${note?`<div style="font-size:11px;color:var(--sub);margin-top:2px;font-style:italic;">„${escAttr(note)}"</div>`:''}
       </div>`;
     }).join('');
     return `<div class="card" style="padding:12px 14px;margin-bottom:8px;">
@@ -15512,7 +15512,7 @@ function renderFeedbackExistingList(existing, todayMenu){
         <span style="font-size:10px;color:var(--muted);">${new Date(e.submitted_at).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div style="margin-top:4px;">${rows}</div>
-      ${e.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${e.kommentar}"</div>`:''}
+      ${e.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${escAttr(e.kommentar)}"</div>`:''}
       ${e.feedback_frei?`<div style="font-size:12px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;">💬 ${e.feedback_frei}</div>`:''}
     </div>`;
   }).join('');
@@ -19007,11 +19007,11 @@ function feedbackSummaryHtml(sum){
       html+=`<div id="${boxId}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">`;
       if(hasTeamNotes){
         html+=`<div style="font-size:9px;font-weight:700;color:#9D2463;margin-bottom:3px;">👥 TEAM SAGT:</div>`;
-        s.teamNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+        s.teamNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${escAttr(n)}"</div>`);
       }
       if(hasKundenNotes){
         html+=`<div style="font-size:9px;font-weight:700;color:#B8460F;margin-bottom:3px;${hasTeamNotes?'margin-top:6px;':''}">🗣️ GÄSTE SAGEN:</div>`;
-        s.kundenNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${n}"</div>`);
+        s.kundenNotes.forEach(n=>html+=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">„${escAttr(n)}"</div>`);
       }
       html+=`</div>`;
     }
@@ -20196,7 +20196,7 @@ async function renderKundenfeedback(){
       </div>
       <div style="font-size:11.5px;color:var(--sub);margin-top:3px;">${r.store_id?(storeNameMap[r.store_id]||r.store_id):'Filiale nicht angegeben'}${r.dish_name?' · '+r.dish_name:''}</div>
       ${tagsHtml?`<div style="margin-top:6px;">${tagsHtml}</div>`:''}
-      ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${r.kommentar}"</div>`:''}
+      ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${escAttr(r.kommentar)}"</div>`:''}
     </div>`;
   });
   html+='</div>';
@@ -20471,7 +20471,7 @@ async function renderWochenFeedback(){
     html+=`<div class="section-lbl" style="margin-top:16px;">💬 Weitere Gäste-Kommentare (zur Info)</div>`;
     linkRowsRecent.filter(r=>r.kommentar).forEach(r=>{
       html+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;background:#FAF5FF;border-color:#DDD6FE;">
-        <div style="font-size:11.5px;color:#4C1D95;">„${r.kommentar}"${r.dish_name?` — <span data-no-translate>${r.dish_name}</span>`:''}</div>
+        <div style="font-size:11.5px;color:#4C1D95;">„${escAttr(r.kommentar)}"${r.dish_name?` — <span data-no-translate>${escAttr(r.dish_name)}</span>`:''}</div>
       </div>`;
     });
   }
@@ -21173,7 +21173,7 @@ async function renderTeamFeedback(){
     html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
       <div style="font-size:10px;color:var(--muted);text-align:right;">${storeNameMap[r.store_id]||r.store_id||'ohne Filiale'} · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
       <div style="margin-top:4px;">${ratingRows}</div>
-      ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${r.kommentar}"</div>`:''}
+      ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${escAttr(r.kommentar)}"</div>`:''}
       ${(r.feedback_frei && isFoodFreeText(r.feedback_frei))?`<div style="font-size:11.5px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;">💬 ${r.feedback_frei}</div>`:''}
     </div>`;
   });
@@ -21188,7 +21188,7 @@ async function renderTeamFeedback(){
       </div>
       <div style="font-size:11.5px;color:var(--sub);margin-top:3px;">${r.store_id?(storeNameMap[r.store_id]||r.store_id):'Filiale nicht angegeben'}${r.dish_name?' · '+r.dish_name:''}</div>
       ${tagsHtml?`<div style="margin-top:6px;">${tagsHtml}</div>`:''}
-      ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${r.kommentar}"</div>`:''}
+      ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${escAttr(r.kommentar)}"</div>`:''}
     </div>`;
   });
   html+='</div>';
