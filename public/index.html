@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.226';
+const APP_VERSION='6.99.227';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8659,6 +8659,8 @@ async function renderGerichtFotos(){
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   const map=await gfLoad(true);
   const list=gfDishesNext14(); window._gfList=list; window._gfMap=map;
+  // Schrankerl-Gerichte (alle Menüs) ebenfalls mit Soll-Foto versehbar (28.10.26)
+  try{ const sk=await api('schrankerl_menu?select=woche,slot,name&order=woche,slot'); (sk||[]).forEach(m=>{ if(m.name && !list.some(x=>x.name===m.name)) list.push({name:m.name,lbl:'🥡 Schrankerl Menü '+m.woche}); }); }catch(e){}
   // Gerichte mit Foto, die nicht mehr im Menü der nächsten Tage sind, trotzdem zeigen
   Object.keys(map).forEach(n=>{ if(!list.some(x=>x.name===n)) list.push({name:n,lbl:'früher'}); });
   const nTest=Object.values(map).filter(r=>r.status==='test').length, nFrei=Object.values(map).filter(r=>r.status==='freigegeben').length;
@@ -8730,8 +8732,9 @@ function gfShow(url,name,hinweis,test){
   document.body.appendChild(o);
 }
 function gfShowIdx(i){ const d=(window._gfList||[])[i], r=d&&(window._gfMap||{})[d.name]; if(r) gfShow(r.foto_url,d.name,r.hinweis,r.status==='test'); }
+function gfShowSk(i){ const r=(window._gfSk||[])[i]; if(r) gfShow(r.foto_url,r.dish_name,r.hinweis,r.status==='test'); }
 function gfShowKd(i){ const r=(window._gfKd||[])[i]; if(r) gfShow(r.foto_url,r.dish_name,r.hinweis,r.status==='test'); }
-Object.assign(window,{gfUpload,gfSetStatus,gfSaveHinweis,gfRemove,gfShow,gfShowIdx,gfShowKd});
+Object.assign(window,{gfUpload,gfSetStatus,gfSaveHinweis,gfRemove,gfShow,gfShowIdx,gfShowKd,gfShowSk});
 
 // ── Menü-Tausch verwalten (Organisation) ──
 function mtCardHtml(todayStr){
@@ -9749,10 +9752,17 @@ async function renderSchrankerlTab(){
   });
   html+=`</div></div>`;
 
+  const _gfIsOrgSk=currentStore?.id==='zentrale';
+  const _gfMapSk=await gfLoad(_gfIsOrgSk).catch(()=>({})); window._gfSk=[];
   ['curry','salat','dessert'].forEach(slot=>{
     const item=menu.find(m=>m.slot===slot);
     if(!item) return;
+    const _gf=_gfMapSk[item.name]; let _gfH='';
+    if(_gf){ window._gfSk.push(_gf); const _k=window._gfSk.length-1;
+      _gfH=`<div onclick="gfShowSk(${_k})" style="position:relative;margin-bottom:8px;cursor:pointer;"><img src="${escAttr(_gf.foto_url)}" alt="" onerror="this.parentNode.style.display='none'" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;display:block;"><span style="position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.65);color:#fff;border-radius:6px;padding:2px 8px;font-size:10px;">📸 So soll's aussehen · zum Vergrößern tippen</span>${_gf.status==='test'?'<span style="position:absolute;right:6px;top:6px;background:#7C3AED;color:#fff;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;">TEST</span>':''}</div>`; }
+    else if(_gfIsOrgSk){ _gfH=`<div style="font-size:10.5px;color:var(--muted);margin-bottom:6px;">📸 Noch kein Soll-Foto — unter Organisation → Soll-Fotos Gerichte hinzufügen.</div>`; }
     html+=`<div class="card" style="padding:12px 14px;margin-bottom:10px;">
+      ${_gfH}
       <div style="font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:2px;">${SLOT_LABEL[slot]}</div>
       <div style="font-size:14px;font-weight:700;margin-bottom:2px;" data-no-translate>${item.name}</div>
       <div style="font-size:10.5px;color:var(--muted);margin-bottom:8px;">${item.grammatur||''}</div>
