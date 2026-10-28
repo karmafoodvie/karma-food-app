@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.234';
+const APP_VERSION='6.99.235';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18880,6 +18880,15 @@ let menuEdits = {}; // store_id agnostic, keyed by "w{n}_{day}_{slot}"
 // (Besucher:innen, dish_name direkt). Gibt für beide Zeiträume Ø, Anzahl, Notizen, Top-Tags zurück.
 // Gäste-Feedback (alt kunden_feedback + Homepage) für die Gericht-Karten: kunden_feedback ist für anon gesperrt, daher
 // über die Edge-Function (führt beides zusammen). Ein Abruf pro Minute für alle Karten, Homepage-Abgleich max. alle 10 Min.
+// Die Homepage führt Gerichte oft mit kürzerem/anderem Namen ("Protein Power Chili mit Quinoa" statt "Proteinreiches Quinoa Chili
+// sin Carne mit Sojahack"). Zuordnung daher über gemeinsame Kernwörter (mind. 2, Wortanfang reicht), nicht über exakten Namen.
+const GFB_STOP=new Set(['mit','und','dem','der','die','das','im','the','with','dip','dressing','sauce','raita','reis','salat','bowl','sin','carne','style','veggie','masala','curry']);
+function gfbToks(n){ return String(n||'').toLowerCase().replace(/[^a-zäöüß0-9 ]+/g,' ').split(/\s+/).filter(w=>w.length>2&&!GFB_STOP.has(w)); }
+function gfbNameMatch(a,b){
+  const A=gfbToks(a), B=gfbToks(b); if(!A.length||!B.length) return false;
+  let hit=0; A.forEach(x=>{ if(B.some(y=>y.startsWith(x)||x.startsWith(y))) hit++; });
+  return hit>=2 || (hit>=1 && Math.min(A.length,B.length)===1);
+}
 let _kaP=null,_kaT=0;
 function gfbKundenAll(){
   if(_kaP && Date.now()-_kaT<60000) return _kaP;
@@ -18894,7 +18903,7 @@ async function getDishFeedbackSummary(dishName, refDateStr){
   const heute=refDateStr || new Date().toISOString().split('T')[0];
   const [teamRows, kundenRows] = await Promise.all([
     api(`essen_feedback?datum=lte.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
-    gfbKundenAll().then(a=>(a||[]).filter(r=>r.dish_name===dishName && String(r.submitted_at||'')<=heute+'T23:59:59'))
+    gfbKundenAll().then(a=>(a||[]).filter(r=>(r.dish_name===dishName||(r.quelle==='homepage'&&gfbNameMatch(r.dish_name,dishName))) && String(r.submitted_at||'')<=heute+'T23:59:59'))
   ]);
 
   function summarizeTeam(dateFilterFn){
