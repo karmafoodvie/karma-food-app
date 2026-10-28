@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.224';
+const APP_VERSION='6.99.225';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9658,6 +9658,10 @@ function getSchrankerlWoche(dateStr){
   const diffDays=Math.round((d-ref)/86400000);
   const weeksSince=Math.floor(diffDays/7);
   const N=window._skN||4;
+  if(N===5){ // Reihenfolge laut Sheet (28.10.26): 26.10 Menü 4, 02.11 Menü 1, 09.11 Menü 2, 16.11 Menü 3, 23.11 Menü 5, dann wieder von vorn
+    const w5=Math.round((d-new Date('2026-10-26T00:00:00'))/86400000/7);
+    return [4,1,2,3,5][((w5%5)+5)%5];
+  }
   return ((weeksSince%N)+N)%N + 1;
 }
 function getNextFriday(){
