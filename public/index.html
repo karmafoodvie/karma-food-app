@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.237';
+const APP_VERSION='6.99.238';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10257,7 +10257,7 @@ async function reduceFruechtebecherBestand(produzierteMenge){
     const artikel=await api('articles?id=in.(132,133)&select=id,name,kuechenlager_bestand').catch(()=>[]);
     for(const a of (artikel||[])){
       const neu=Math.max(0, (a.kuechenlager_bestand||0) - verbrauch);
-      await api(`articles?id=eq.${a.id}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:neu})});
+      await api(`articles?id=eq.${a.id}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:neu,kuechenlager_notiz:null})});
     }
     showToast(`✓ Küchenlager: ${verbrauch} Früchtebecher/Deckel abgezogen`);
   }catch(e){ console.error(e); }
@@ -16517,7 +16517,7 @@ async function kuechenlagerBodyHtml(){
         </td>
         <td>${stabil
           ? `<div style="font-size:10px;color:var(--green);white-space:nowrap;">✓ reicht${stabilDatum?`<div style="font-size:8.5px;color:var(--muted);">seit ${stabilDatum}</div>`:''}</div>`
-          : `<input type="number" step="1" value="${bestand??''}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:56px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};">`}
+          : `<input type="text" inputmode="text" autocomplete="off" maxlength="40" value="${escAttr(a.kuechenlager_notiz||(bestand??''))}" oninput="debounceFieldSave(this,()=>updateKuechenlagerBestand(${a.id},this.value))" onchange="updateKuechenlagerBestand(${a.id},this.value)" style="width:84px;text-align:center;border:1.5px solid ${niedrig?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;padding:5px;background:${niedrig?'#FEE2E2':'#fff'};">`}
         </td>
         <td style="text-align:center;">
           <input type="checkbox" ${stabil?'checked':''} onchange="toggleBestandStabil(${a.id},this.checked)" style="width:18px;height:18px;cursor:pointer;accent-color:var(--green);">
@@ -16561,11 +16561,18 @@ async function renderKuechenlager(){
 window.renderKuechenlager=renderKuechenlager;
 
 async function updateKuechenlagerBestand(articleId, value){
-  const v=value===''?null:parseFloat(String(value).replace(',','.'));
+  // Zahlen UND Buchstaben erlaubt (28.10.26): reine Zahl -> wie bisher; Text mit Zahl ("2 Kisten") -> Zahl wird erkannt, Text bleibt
+  // sichtbar; Text ohne Zahl ("voll") -> nur als Text gespeichert (kein Meldestand-Vergleich möglich).
+  const raw=String(value??'').trim().slice(0,40).replace(/[<>"'`\\]/g,'');
+  let v=null, notiz=null;
+  if(raw!==''){
+    if(/^-?\d+([.,]\d+)?$/.test(raw)) v=parseFloat(raw.replace(',','.'));
+    else { notiz=raw; const m=raw.match(/-?\d+([.,]\d+)?/); v=m?parseFloat(m[0].replace(',','.')):null; }
+  }
   try{
-    await api(`articles?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:v})});
+    await api(`articles?id=eq.${articleId}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:v,kuechenlager_notiz:notiz})});
     const a=articles.find(x=>x.id===articleId);
-    if(a) a.kuechenlager_bestand=v; // lokal auch aktualisieren, für sofortiges rot/normal ohne Reload
+    if(a){ a.kuechenlager_bestand=v; a.kuechenlager_notiz=notiz; } // lokal auch aktualisieren, für sofortiges rot/normal ohne Reload
     showToast('✓ Gespeichert');
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
