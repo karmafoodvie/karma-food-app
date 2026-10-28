@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.233';
+const APP_VERSION='6.99.234';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18885,7 +18885,7 @@ function gfbKundenAll(){
   if(_kaP && Date.now()-_kaT<60000) return _kaP;
   _kaT=Date.now();
   _kaP=(async()=>{
-    try{ if(Date.now()-(window._gfbSyncedAt||0)>10*60*1000){ window._gfbSyncedAt=Date.now(); const r=await gfbSync(); if(!(r&&r.ok)) window._gfbSyncedAt=0; } }catch(e){}
+    try{ if(Date.now()-(window._gfbSyncedAt||0)>2*60*1000){ window._gfbSyncedAt=Date.now(); const r=await gfbSync(); if(!(r&&r.ok)) window._gfbSyncedAt=0; } }catch(e){}
     try{ const r=await fetch(`${SUPABASE_URL}/functions/v1/kunden-feedback-read?limit=1000`,{headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY}}); const j=await r.json(); return Array.isArray(j)?j:[]; }catch(e){ return []; }
   })();
   return _kaP;
@@ -20935,7 +20935,7 @@ async function gfbSync(){
 async function gfbReload(){ window._gfbSyncedAt=0; renderTeamFeedback(); }
 async function renderGaesteTab(el,head){
   let sync=null;
-  if(Date.now()-(window._gfbSyncedAt||0)>10*60*1000){ sync=await gfbSync(); if(sync&&sync.ok) window._gfbSyncedAt=Date.now(); }
+  if(Date.now()-(window._gfbSyncedAt||0)>2*60*1000){ sync=await gfbSync(); if(sync&&sync.ok) window._gfbSyncedAt=Date.now(); }
   const rows=await api('gaeste_feedback?select=*&order=created_at.desc&limit=1000').catch(()=>[]);
   let h=head;
   const esc=x=>escAttr(String(x==null?'':x));
