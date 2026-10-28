@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION = '6.99.222';
+const APP_VERSION = '6.99.223';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -16720,11 +16720,11 @@ async function renderPack(){
   // Gleiches Prinzip wie bei KC: erst die Artikel ohne Bestand-Daten aussortieren, aber jederzeit einsehbar.
   const notOrderedToday=[];
   TRANSPORTER_CATS.forEach(cat=>{
-    articles.filter(a=>a.category===cat && !a.archiviert && !storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0)).forEach(a=>notOrderedToday.push(a));
+    articles.filter(a=>a.category===cat && !a.archiviert).forEach(a=>notOrderedToday.push(a)); // 28.10.26 (Wunsch Gurl): ALLE Artikel, auch bereits bestellte — Lieferbarkeit soll jederzeit direkt änderbar sein (z.B. Pona geht heute aus)
   });
   if(notOrderedToday.length){
     html+=`<details style="margin-top:10px;">
-      <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Alle Artikel — Lieferbarkeit verwalten (${notOrderedToday.length})</summary>
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 2px;">Alle Artikel — Lieferbarkeit jederzeit ändern (${notOrderedToday.length})</summary>
       <div class="card" style="margin-top:6px;">`;
     notOrderedToday.forEach(a=>{
       const verfuegbar=a.verfuegbar!==false;
@@ -16736,6 +16736,7 @@ async function renderPack(){
           ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
+            ${(()=>{ const t=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0); return t?`<div style="font-size:11px;color:var(--sub);">📦 heute bestellt: ${formatQty(t)} ${einheit}</div>`:''; })()}
             ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
             ${meldung?`<div style="font-size:11px;color:#EA580C;font-weight:600;">🛒 Nachbestellung vermerkt${meldung.restmenge!=null?` · noch ca. ${formatQty(meldung.restmenge)} ${einheit}`:''}</div>`:''}
           </div>
