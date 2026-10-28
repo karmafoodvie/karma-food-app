@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.231';
+const APP_VERSION='6.99.232';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -20910,18 +20910,75 @@ async function skRepSave(){
 }
 Object.assign(window,{skRepRead,skRepSave});
 
+// ── Gäste-Feedback von der Homepage (28.10.26) ──
+// Formular auf karmafood.at schreibt anonym in das isolierte Projekt "Karma Feedback external". Die Edge-Function
+// gaeste-feedback-sync holt es (nur lesend) in gaeste_feedback — die App liest nur unsere eigene Tabelle.
+const GFB_LBL=['','😖 Nicht meins','😐 Geht so','🙂 Gut','😋 Lecker','🤩 Liebe es!'];
+async function gfbSync(){
+  try{
+    const r=await fetch(`${SUPABASE_URL}/functions/v1/gaeste-feedback-sync`,{method:'POST',headers:{'apikey':SUPABASE_ANON_KEY,'Authorization':'Bearer '+SUPABASE_ANON_KEY,'Content-Type':'application/json'},body:'{}'});
+    return await r.json();
+  }catch(e){ return {ok:false,error:String(e)}; }
+}
+async function gfbReload(){ window._gfbSyncedAt=0; renderTeamFeedback(); }
+async function renderGaesteTab(el,head){
+  let sync=null;
+  if(Date.now()-(window._gfbSyncedAt||0)>10*60*1000){ sync=await gfbSync(); if(sync&&sync.ok) window._gfbSyncedAt=Date.now(); }
+  const rows=await api('gaeste_feedback?select=*&order=created_at.desc&limit=1000').catch(()=>[]);
+  let h=head;
+  const esc=x=>escAttr(String(x==null?'':x));
+  if(sync&&!sync.ok) h+=`<div class="card" style="padding:10px 12px;margin-bottom:10px;border-left:3px solid #DC2626;font-size:12px;color:#991B1B;">⚠️ Abgleich mit der Homepage nicht möglich: ${esc(sync.error||'')}${sync.detail?' — '+esc(sync.detail):''}<br><span style="color:var(--muted);">Angezeigt wird der zuletzt gespeicherte Stand.</span></div>`;
+  h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:11px;color:var(--muted);">Anonym · direkt vom Formular auf karmafood.at</div><button onclick="gfbReload()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:11.5px;cursor:pointer;">🔄 Abgleichen</button></div>`;
+  if(!rows.length){ el.innerHTML=h+`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Noch kein Gäste-Feedback angekommen.</div>`; translateEl(el); return; }
+  const avg=a=>a.length?(a.reduce((x,y)=>x+y,0)/a.length):null;
+  const rate=r=>Number(r.rating)||0;
+  const all=rows.filter(r=>rate(r)>0);
+  const d30=Date.now()-30*86400000;
+  const last=all.filter(r=>new Date(r.created_at||r.menu_date).getTime()>=d30);
+  const fmt=v=>v==null?'–':v.toFixed(1).replace('.',',');
+  h+=`<div class="card" style="padding:12px;margin-bottom:12px;display:flex;gap:8px;text-align:center;">
+    <div style="flex:1;"><div style="font-size:22px;font-weight:800;">${rows.length}</div><div style="font-size:10.5px;color:var(--muted);">Bewertungen</div></div>
+    <div style="flex:1;"><div style="font-size:22px;font-weight:800;">${fmt(avg(all.map(rate)))}<span style="font-size:12px;color:var(--muted);">/5</span></div><div style="font-size:10.5px;color:var(--muted);">Schnitt gesamt</div></div>
+    <div style="flex:1;"><div style="font-size:22px;font-weight:800;">${fmt(avg(last.map(rate)))}<span style="font-size:12px;color:var(--muted);">/5</span></div><div style="font-size:10.5px;color:var(--muted);">letzte 30 Tage (${last.length})</div></div></div>`;
+  // je Gericht bündeln
+  const by={};
+  rows.forEach(r=>{ const k=r.dish_name||'(ohne Gericht)'; const d=by[k]=by[k]||{v:[],tags:{},cm:[],loc:{}}; if(rate(r)) d.v.push(rate(r)); (r.quick_tags||[]).forEach(t=>d.tags[t]=(d.tags[t]||0)+1); if(r.reason_other) d.tags[r.reason_other]=(d.tags[r.reason_other]||0)+1; if(r.comment) d.cm.push(r); });
+  const dishes=Object.entries(by).sort((a,b)=>b[1].v.length-a[1].v.length);
+  h+=`<div class="section-lbl">Nach Gericht</div>`;
+  dishes.forEach(([name,d])=>{
+    const a=avg(d.v), col=a>=4?'#16A34A':a>=3?'#CA8A04':'#DC2626';
+    const tags=Object.entries(d.tags).sort((x,y)=>y[1]-x[1]).slice(0,5).map(([t,n])=>`<span style="font-size:10.5px;background:#F3F4F6;border-radius:12px;padding:2px 8px;">${esc(t)}${n>1?' ×'+n:''}</span>`).join(' ');
+    h+=`<details class="card" style="padding:10px 12px;margin-bottom:8px;"><summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;">
+      <span style="font-size:15px;font-weight:800;color:${col};min-width:34px;">${fmt(a)}</span>
+      <span style="flex:1;min-width:0;"><span data-no-translate style="font-size:13px;font-weight:700;">${getDishEmoji(name)} ${esc(name)}</span><br><span style="font-size:10.5px;color:var(--muted);">${d.v.length} Bewertung${d.v.length===1?'':'en'}${d.cm.length?' · '+d.cm.length+' Kommentar'+(d.cm.length===1?'':'e'):''}</span></span></summary>
+      ${tags?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">${tags}</div>`:''}
+      ${d.cm.slice(0,8).map(r=>`<div style="margin-top:8px;padding:8px;background:#FAFAF8;border-radius:8px;font-size:12px;line-height:1.45;">${esc(r.comment)}<div style="font-size:10px;color:var(--muted);margin-top:3px;">${GFB_LBL[rate(r)]||''}${r.location?' · '+esc(r.location):''}${r.menu_date?' · '+new Date(r.menu_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</div></div>`).join('')}
+    </details>`;
+  });
+  // freie Kommentare ohne Gericht-Bezug / neueste zuerst
+  const cmAll=rows.filter(r=>r.comment).slice(0,15);
+  if(cmAll.length){
+    h+=`<div class="section-lbl" style="margin-top:14px;">Neueste Kommentare</div>`;
+    cmAll.forEach(r=>{ h+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;font-size:12.5px;line-height:1.45;">${esc(r.comment)}<div style="font-size:10px;color:var(--muted);margin-top:4px;" data-no-translate>${r.dish_name?esc(r.dish_name)+' · ':''}${GFB_LBL[rate(r)]||''}${r.location?' · '+esc(r.location):''}</div></div>`; });
+  }
+  el.innerHTML=h; translateEl(el);
+}
+Object.assign(window,{gfbReload,gfbSync});
+
 async function renderTeamFeedback(){
   const el=document.getElementById('v-teamFeedback');
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   let html=backToHomeHtml();
   html+=pageHeaderHtml('💬','Feedback','Getrennt: Essen (Koch) · App (Tini)','#EC4899');
   const _tab=window._tfTab||'essen';
-  html+=`<div style="display:flex;gap:6px;margin-bottom:14px;">
+  html+=`<div style="display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;">
     <button onclick="window._tfTab='essen';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #EC4899;${_tab==='essen'?'background:#EC4899;color:#fff;':'background:#fff;color:#BE185D;'}">🍽️ An den Koch<div style="font-size:9.5px;font-weight:500;">Essen</div></button>
     <button onclick="window._tfTab='trend';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #DB2777;${_tab==='trend'?'background:#DB2777;color:#fff;':'background:#fff;color:#DB2777;'}">📈 Trend<div style="font-size:9.5px;font-weight:500;">Entwicklung</div></button>
     <button onclick="window._tfTab='schrankerl';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #C1542C;${_tab==='schrankerl'?'background:#C1542C;color:#fff;':'background:#fff;color:#C1542C;'}">🥡 Schrankerl<div style="font-size:9.5px;font-weight:500;">Bewertung</div></button>
+    <button onclick="window._tfTab='gaeste';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #0F766E;${_tab==='gaeste'?'background:#0F766E;color:#fff;':'background:#fff;color:#0F766E;'}">🌐 Gäste<div style="font-size:9.5px;font-weight:500;">Homepage</div></button>
     <button onclick="window._tfTab='app';renderTeamFeedback()" style="flex:1;padding:10px 6px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid #2563EB;${_tab==='app'?'background:#2563EB;color:#fff;':'background:#fff;color:#1D4ED8;'}">📱 An Tini<div style="font-size:9.5px;font-weight:500;">App</div></button>
   </div>`;
+  if(_tab==='gaeste'){ await renderGaesteTab(el,html); return; }
   if(_tab==='app'){ await renderTeamFeedbackApp(el,html); return; }
   if(_tab==='schrankerl'){ el.innerHTML=html+skRepUploadCardHtml()+(await renderSchrankerlFeedbackHtml([])||'<div class="card" style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px;">Noch kein Report hochgeladen.</div>'); translateEl(el); return; }
   if(_tab==='trend'){ el.innerHTML=html+'<div id="td-card"></div>'; await tdLoad(); return; }
