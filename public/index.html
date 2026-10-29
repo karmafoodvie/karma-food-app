@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.240';
+const APP_VERSION='6.99.241';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9717,7 +9717,8 @@ async function renderSchrankerlTab(){
   // Menü-Nr. immer aus dem PRODUKTIONSTAG (Freitag) ableiten, nicht aus "heute" — sonst passte am Wochenende
   // das Menü der alten Woche zum Datum der nächsten Woche (27.10.26, Hinweis Gurl).
   await loadSkMenuCount(); // Anzahl Menüs vor der Berechnung frisch laden (sonst falsche Rotation direkt nach dem Start)
-  const lieferdatum=getNextFriday();
+  const _off=window._skOff||0;
+  const lieferdatum=ftAdd(getNextFriday(),7*_off);
   const woche=getSchrankerlWoche(lieferdatum);
   const _sun=ftAdd(lieferdatum,2), _mon=ftAdd(lieferdatum,3);
   const _kw=(()=>{ const d=new Date(_mon+'T00:00:00'); d.setDate(d.getDate()+3-(d.getDay()+6)%7); const y=new Date(d.getFullYear(),0,4); return 1+Math.round(((d-y)/86400000-3+(y.getDay()+6)%7)/7); })();
@@ -9730,6 +9731,11 @@ async function renderSchrankerlTab(){
   const SLOT_LABEL={curry:'🍛 Curry',salat:'🥗 Salat',dessert:'🍮 Dessert'};
 
   let html=`<div class="card" style="padding:10px 12px;margin-bottom:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+      <button onclick="window._skOff=(window._skOff||0)-1;renderKitchen()" ${_off<=0?'disabled':''} style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:transparent;font-size:13px;cursor:pointer;${_off<=0?'opacity:.35;':''}">‹</button>
+      <div style="text-align:center;font-size:11px;color:var(--muted);">${_off===0?'Diese Produktion':'Vorschau +'+_off+' Woche'+(_off>1?'n':'')}${_off>0?' · <a href="#" onclick="window._skOff=0;renderKitchen();return false;" style="color:#C1542C;">zurück zu aktuell</a>':''}</div>
+      <button onclick="window._skOff=(window._skOff||0)+1;renderKitchen()" ${_off>=12?'disabled':''} style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:transparent;font-size:13px;cursor:pointer;">›</button>
+    </div>
     <div style="font-size:12px;font-weight:700;color:#C1542C;">🥡 Schrankerl-Produktion — Menü ${woche}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:1px;">Produktion: <b>${dateLabel}</b> · Lieferung ${ftFmt(_sun)} · im Verkauf ab ${ftFmt(_mon)} (Schrankerl-Bestellung KW ${_kw})</div>
   </div>`;
