@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.242';
+const APP_VERSION='6.99.243';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8317,7 +8317,7 @@ async function renderHygieneAuswertung(){
   const dateFmt=d=>d?new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):'–';
   const cellStyle=(bad)=>`padding:8px 6px;text-align:center;font-size:13px;${bad?'color:#DC2626;font-weight:700;':'color:#1a1a18;'}`;
 
-  html+=`<div style="font-size:11px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:8px 10px;margin-bottom:14px;">ℹ️ Richtwerte: Kleiner Kühlschrank (Speisen) 4–6°C · Großer Kühlschrank (Getränke) 7–10°C · Wareneingang ≥65°C</div>`;
+  html+=`<div style="font-size:11px;color:var(--muted);background:#F5F5F3;border-radius:8px;padding:8px 10px;margin-bottom:14px;">ℹ️ Richtwerte: Kleiner Kühlschrank (Speisen) 4–6°C · Großer Kühlschrank (Getränke) 7–10°C · Vitrine max. 6°C · Wareneingang ≥65°C</div>`;
 
   html+=`<div class="section-lbl">🧊 Kühlschrank</div>`;
   html+=`<div class="card" style="overflow-x:auto;"><table class="pack-table" style="width:100%;"><thead><tr>
@@ -8327,11 +8327,13 @@ async function renderHygieneAuswertung(){
     const k=latestKuehl[s.id];
     const kleinBad=k && k.temp_klein!=null && (k.temp_klein<4||k.temp_klein>6);
     const grossBad=k && k.temp_gross!=null && (k.temp_gross<7||k.temp_gross>10);
+    const hatVit=(s.id==='boerse'||s.id==='lb'); // Vitrine gibt es nur dort
+    const vitBad=k && k.temp_vitrine!=null && k.temp_vitrine>6;
     html+=`<tr>
       <td data-no-translate style="padding:8px 6px;font-size:12.5px;font-weight:500;">${s.name}</td>
       <td style="${cellStyle(kleinBad)}">${k&&k.temp_klein!=null?k.temp_klein+'°C':'–'}</td>
       <td style="${cellStyle(grossBad)}">${k&&k.temp_gross!=null?k.temp_gross+'°C':'–'}</td>
-      <td style="${cellStyle(false)}">${k&&k.temp_vitrine!=null?k.temp_vitrine+'°C':'–'}</td>
+      <td style="${cellStyle(vitBad)}${hatVit?'':'background:#F0EFEB;color:#B5B3AC;'}">${hatVit?(k&&k.temp_vitrine!=null?k.temp_vitrine+'°C':'–'):'–'}</td>
       <td style="padding:8px 6px;text-align:center;font-size:11px;color:var(--muted);">${k?dateFmt(k.datum):'–'}</td>
     </tr>`;
   });
@@ -14403,7 +14405,7 @@ async function renderDailyCheck(){
     <div class="section-lbl" style="color:var(--green);">❄️ Kühleinrichtungen</div>
     <div class="card" style="border:1.5px solid var(--green);">
       <div style="background:#E6F1FB;border-radius:8px;margin:10px 14px 6px;padding:8px 10px;font-size:11px;color:#0C447C;">
-        ℹ️ <strong>Speisen:</strong> 4–6°C &nbsp;·&nbsp; <strong>Getränke:</strong> 7–10°C
+        ℹ️ <strong>Speisen:</strong> 4–6°C &nbsp;·&nbsp; <strong>Getränke:</strong> 7–10°C${hatVitrine?' &nbsp;·&nbsp; <strong>Vitrine:</strong> max. 6°C':''}
       </div>
       <div class="item-row">
         <div class="item-name">🧊 Kleiner Kühlschrank</div>
@@ -14415,7 +14417,7 @@ async function renderDailyCheck(){
       </div>
       ${hatVitrine?`<div class="item-row">
         <div class="item-name">🧊 Vitrine</div>
-        <input id="kuehl-vitrine" type="number" step="0.1" value="${vitrineDefault}" placeholder="°C" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
+        <input id="kuehl-vitrine" type="number" step="0.1" value="${vitrineDefault}" placeholder="max 6°C" oninput="var v=parseFloat(String(this.value).replace(',','.'));this.style.borderColor=(!isNaN(v)&&v>6)?'#DC2626':'';this.style.color=(!isNaN(v)&&v>6)?'#DC2626':'';" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>`:''}
     </div>
 
