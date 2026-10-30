@@ -14454,7 +14454,9 @@ function dlSizeLabel(dish,g){
 function dailyCheckLieferungHtml(fcRows,supRows,wek,wekPrev){
   const rows=[];
   (fcRows||[]).forEach(f=>rows.push({kind:'dish',name:f.dish_name,groesse:f.groesse||'',exp:parseFloat(f.qty)}));
-  (supRows||[]).forEach(f=>rows.push({kind:'sup',name:f.article_name,groesse:'',exp:parseFloat(f.qty)}));
+  // Beilagen müssen seit 30.10.26 (Wunsch Tini) NICHT mehr bestätigt werden — auf true setzen, um die Abfrage wieder einzuschalten.
+  const DL_BEILAGEN_BESTAETIGEN=false;
+  if(DL_BEILAGEN_BESTAETIGEN) (supRows||[]).forEach(f=>rows.push({kind:'sup',name:f.article_name,groesse:'',exp:parseFloat(f.qty)}));
   if(!rows.length) return '';
   const prev=Array.isArray(wek?.lieferung_abgleich)?wek.lieferung_abgleich:null;
   const existingTemps=wek?.temperaturen||{};
