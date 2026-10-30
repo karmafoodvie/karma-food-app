@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.245';
+const APP_VERSION='6.99.246';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -16698,7 +16698,10 @@ async function renderPack(){
     html+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#9A3412;">📋 Ansicht eines vergangenen Tages — nur Anzeige, "eingepackt" kann hier nicht mehr geändert werden.</div>`;
   }
   const allOrdRaw=await api(`orders?order_date=eq.${bestellDateStr}&select=store_id,article_id,quantity,eingepackt`);
-  const specRaw=await api(`special_orders?order_date=eq.${bestellDateStr}&select=id,store_id,note,antwort,an_simone_gemeldet`).catch(()=>[]);
+  // Offene Sonderbestellungen bleiben sichtbar, bis „erledigt" geklickt wird — auch von den letzten 7 Tagen (30.10.26, Wunsch Tini);
+  // vorher verschwanden unbeantwortete Sonderbestellungen am Folgetag aus der Liste.
+  const _specFrom=new Date(bestellDateStr+'T00:00:00'); _specFrom.setDate(_specFrom.getDate()-7);
+  const specRaw=await api(`special_orders?order_date=gte.${_specFrom.toISOString().split('T')[0]}&order_date=lte.${bestellDateStr}&select=id,store_id,note,antwort,an_simone_gemeldet,order_date&order=order_date.desc,id.desc`).catch(()=>[]);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
@@ -16804,7 +16807,7 @@ async function renderPack(){
         <div style="display:flex;gap:10px;align-items:center;">
           <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
           <div style="flex:1;">
-            <div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}</div>
+            <div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}${s.order_date&&s.order_date!==bestellDateStr?` <span style="font-size:10.5px;font-weight:700;color:#DC2626;">· vom ${new Date(s.order_date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})} · noch offen</span>`:''}</div>
             <div style="font-size:13px;color:var(--sub);">${s.note}</div>
             ${s.antwort?`<div style="font-size:11.5px;color:var(--green);margin-top:4px;">↩️ Deine Antwort: „${s.antwort}"${s.an_simone_gemeldet?' · 📤 Simone benachrichtigt':''}</div>`:''}
           </div>
