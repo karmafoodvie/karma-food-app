@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.244';
+const APP_VERSION='6.99.245';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -15148,11 +15148,20 @@ window.sendTransporterNote=sendTransporterNote;
 async function loadTransporterNoteList(){
   const wrap=document.getElementById('tn-list');
   if(!wrap) return;
-  const rows=await api(`transporter_tasks?created_by=eq.${encodeURIComponent(currentStore.name)}&done=eq.false&select=*&order=created_at.desc&limit=5`).catch(()=>[]);
-  if(!rows?.length){ wrap.innerHTML=''; return; }
-  wrap.innerHTML=rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 0;border-top:0.5px solid var(--border);">
-    <span style="font-size:12px;color:var(--sub);">${r.text}</span>
-    <span style="font-size:10px;color:var(--muted);white-space:nowrap;">offen</span>
+  // Offene Notizen bleiben stehen, bis der Transporter „erledigt" klickt; erledigte noch 2 Tage als Bestätigung sichtbar.
+  const since=new Date(Date.now()-2*86400000).toISOString();
+  const nm=encodeURIComponent(currentStore.name);
+  const [open,done]=await Promise.all([
+    api(`transporter_tasks?created_by=eq.${nm}&done=eq.false&select=*&order=created_at.desc&limit=20`).catch(()=>null),
+    api(`transporter_tasks?created_by=eq.${nm}&done=eq.true&created_at=gte.${since}&select=*&order=created_at.desc&limit=5`).catch(()=>[])
+  ]);
+  if(open===null){ wrap.innerHTML='<div style="font-size:11px;color:#B45309;">Notizen konnten nicht geladen werden — bitte neu laden.</div>'; return; }
+  const rows=[...(open||[]),...(done||[])];
+  if(!rows.length){ wrap.innerHTML=''; return; }
+  const fmt=r=>{ try{ return new Date(r.created_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } };
+  wrap.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--sub);margin:2px 0 4px;">Eure Notizen an den Transporter</div>'+rows.map(r=>`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 10px;margin-bottom:5px;border-radius:8px;border:1px solid ${r.done?'#BBF7D0':'#FED7AA'};background:${r.done?'#F0FDF4':'#FFF7ED'};">
+    <div style="min-width:0;"><div style="font-size:12.5px;color:var(--text);word-break:break-word;">${escAttr(r.text)}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">gesendet ${fmt(r)}</div></div>
+    <span style="font-size:10.5px;font-weight:700;white-space:nowrap;color:${r.done?'#15803D':'#C2410C'};">${r.done?'✓ erledigt':'⏳ offen'}</span>
   </div>`).join('');
 }
 window.loadTransporterNoteList=loadTransporterNoteList;
