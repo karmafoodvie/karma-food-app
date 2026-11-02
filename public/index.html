@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.247';
+const APP_VERSION='6.99.248';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9806,72 +9806,115 @@ function normSchrankerlName(n){
 }
 
 async function renderSchrankerlFeedbackHtml(currentDishNames){
-  const reportRows = await api('schrankerl_reports?select=*&order=zeitraum_bis.desc&limit=1').catch(()=>[]);
-  const report=reportRows?.[0];
-  if(!report) return '';
-  // Gerichte-Statistik gehört zum jeweils AKTUELLEN Report — report_id dynamisch aus dem gerade
-  // geladenen Report nehmen, nicht fix verdrahten. Sonst zeigt die Küche nach jedem neuen Monatsreport
-  // weiterhin die Zahlen des allerersten Reports statt der aktuellen.
-  const statsRows = await api(`schrankerl_dish_stats?select=*&report_id=eq.${report.id}`).catch(()=>[]);
+  // Neu (02.11.26, Wunsch Tini): knapp & ganzheitlich — Kennzahl mit Vergleich zum Vormonat, Entwicklung über alle Reports,
+  // Top/Flop, größte Veränderungen und Kritikgründe auf einen Blick; Einzelgerichte darunter.
+  const reports=(await api('schrankerl_reports?select=*&order=zeitraum_von.asc').catch(()=>[]))||[];
+  if(!reports.length) return '';
+  const report=reports[reports.length-1];
+  const prev=reports.length>1?reports[reports.length-2]:null;
+  const [statsRows, prevStatsRows, kommRows] = await Promise.all([
+    api(`schrankerl_dish_stats?select=*&report_id=eq.${report.id}`).catch(()=>[]),
+    prev?api(`schrankerl_dish_stats?select=*&report_id=eq.${prev.id}`).catch(()=>[]):Promise.resolve([]),
+    api(`schrankerl_kommentare?select=*&order=datum.desc&limit=500`).catch(()=>[])
+  ]);
+  const clean=n=>String(n||'').replace(/\s*\(vv?\)\s*/,'').trim();
+  const colorOf=p=>p==null?'#9CA3AF':p>=85?'#16A34A':p>=70?'#EA580C':'#DC2626';
+  const isMonth=r=>{ const a=new Date(r.zeitraum_von+'T00:00:00'), b=new Date(r.zeitraum_bis+'T00:00:00'); return (b-a)/86400000<45; };
+  const lbl=r=>isMonth(r)?new Date(r.zeitraum_von+'T00:00:00').toLocaleDateString('de-AT',{month:'long',year:'numeric'}):(new Date(r.zeitraum_von+'T00:00:00').toLocaleDateString('de-AT',{month:'short'})+'–'+new Date(r.zeitraum_bis+'T00:00:00').toLocaleDateString('de-AT',{month:'short',year:'2-digit'}));
+  const short=r=>isMonth(r)?new Date(r.zeitraum_von+'T00:00:00').toLocaleDateString('de-AT',{month:'short'}):'Jan–Jul';
+  const delta=(a,b,unit)=>{ if(a==null||b==null) return ''; const d=Math.round(a-b); if(d===0) return `<span style="color:var(--muted);">±0${unit}</span>`; return `<span style="color:${d>0?'#16A34A':'#DC2626'};font-weight:700;">${d>0?'▲ +':'▼ '}${d}${unit}</span>`; };
 
   let html=`<div class="section-lbl" style="margin-top:16px;">🗣️ Kund:innen-Feedback (Schrankerl)</div>`;
-  const vonLabel=new Date(report.zeitraum_von+'T00:00:00').toLocaleDateString('de-AT',{month:'short',year:'2-digit'});
-  const bisLabel=new Date(report.zeitraum_bis+'T00:00:00').toLocaleDateString('de-AT',{month:'short',year:'2-digit'});
-  html+=`<div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;gap:14px;align-items:center;">
-    <div style="text-align:center;">
-      <div style="font-size:24px;font-weight:800;font-family:'Boldonse',sans-serif;color:${report.zustimmung_pct>=85?'#16A34A':report.zustimmung_pct>=70?'#EA580C':'#DC2626'};">${report.zustimmung_pct}%</div>
-      <div style="font-size:9px;color:var(--muted);">Zustimmung</div>
-    </div>
-    <div style="flex:1;font-size:11px;color:var(--sub);">
-      ${vonLabel} – ${bisLabel} · ${report.bewertungen_anzahl} Bewertungen über ${report.gerichte_anzahl} Gerichte<br>
-      <span style="color:#16A34A;">👍 ${report.positiv}</span> · <span style="color:#DC2626;">👎 ${report.negativ}</span>
-    </div>
-  </div>`;
 
-  // Aktuell laufende Gerichte zuerst, gematcht mit den Schrankerl-Statistiken — das ist, was den
-  // Koch gerade konkret interessiert. Mehrere SKU-Zeilen desselben Gerichts werden zusammengezählt.
-  const normCurrent=currentDishNames.map(normSchrankerlName);
-  const relevant=(statsRows||[]).filter(s=>normCurrent.includes(normSchrankerlName(s.gericht)));
-  const grouped={};
-  relevant.forEach(s=>{
-    const key=normSchrankerlName(s.gericht);
-    if(!grouped[key]) grouped[key]={gericht:s.gericht, pos:0, neg:0};
-    grouped[key].pos+=s.positiv||0; grouped[key].neg+=s.negativ||0;
-  });
-  const dishList=Object.values(grouped).map(g=>({...g, pct: g.pos+g.neg>0?Math.round(g.pos/(g.pos+g.neg)*100):null}));
-
-  if(dishList.length){
-    html+=`<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:6px;">DIESE WOCHE IM ANGEBOT</div>`;
-    dishList.forEach(d=>{
-      const barColor=d.pct==null?'#ccc':d.pct>=85?'#16A34A':d.pct>=70?'#EA580C':'#DC2626';
-      const boxId='schr-'+Math.random().toString(36).slice(2,9);
-      html+=`<div class="card" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;" onclick="const b=document.getElementById('${boxId}');const wasOpen=b.style.display==='block';b.style.display=wasOpen?'none':'block';if(!wasOpen)loadSchrankerlKommentare('${boxId}','${d.gericht.replace(/'/g,"\\'")}');">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div style="font-size:12.5px;font-weight:600;flex:1;" data-no-translate>${d.gericht.replace(/\s*\(vv?\)\s*/,'')}</div>
-          <span style="font-size:15px;font-weight:800;color:${barColor};">${d.pct!=null?d.pct+'%':'–'}</span>
-        </div>
-        <div style="height:4px;background:#F3F4F6;border-radius:2px;margin-top:5px;overflow:hidden;">
-          <div style="height:100%;width:${d.pct||0}%;background:${barColor};"></div>
-        </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px;">👍 ${d.pos} · 👎 ${d.neg} · antippen für Kommentare</div>
-        <div id="${boxId}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);" onclick="event.stopPropagation();"></div>
-      </div>`;
-    });
+  // 1) Kennzahl + Vergleich zum Vormonat
+  const cmp=prev?`<div style="font-size:11px;margin-top:2px;">${delta(report.zustimmung_pct,prev.zustimmung_pct,' Pkt.')} <span style="color:var(--muted);">vs. ${isMonth(prev)?new Date(prev.zeitraum_von+'T00:00:00').toLocaleDateString('de-AT',{month:'long'}):lbl(prev)} (${prev.zustimmung_pct}%)</span></div>`:'';
+  html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;">
+    <div style="display:flex;gap:14px;align-items:center;">
+      <div style="text-align:center;min-width:64px;">
+        <div style="font-size:28px;font-weight:800;font-family:'Boldonse',sans-serif;color:${colorOf(report.zustimmung_pct)};line-height:1.1;">${report.zustimmung_pct}%</div>
+        <div style="font-size:9px;color:var(--muted);">Zustimmung</div>
+      </div>
+      <div style="flex:1;font-size:11.5px;color:var(--sub);line-height:1.45;">
+        <div style="font-weight:700;color:var(--text);">${lbl(report)}</div>
+        ${report.bewertungen_anzahl} Bewertungen · ${report.gerichte_anzahl} Gerichte${prev&&isMonth(prev)?` <span style="color:var(--muted);">(Vormonat: ${prev.bewertungen_anzahl})</span>`:''}<br>
+        <span style="color:#16A34A;">👍 ${report.positiv}</span> · <span style="color:#DC2626;">👎 ${report.negativ}</span>
+        ${cmp}
+      </div>
+    </div>`;
+  // 2) Entwicklung über alle Reports (kleines Balkendiagramm)
+  if(reports.length>1){
+    const vals=reports.map(r=>Number(r.zustimmung_pct));
+    const lo=Math.min(60,Math.min(...vals)-5);
+    html+=`<div style="display:flex;align-items:flex-end;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">`+reports.map((r,ix)=>{
+      const h=Math.round(8+(Number(r.zustimmung_pct)-lo)/(100-lo)*44);
+      const cur=ix===reports.length-1;
+      return `<div style="flex:1;text-align:center;"><div style="font-size:10.5px;font-weight:${cur?800:600};color:${cur?colorOf(r.zustimmung_pct):'var(--sub)'};">${r.zustimmung_pct}%</div><div style="height:${h}px;background:${cur?colorOf(r.zustimmung_pct):'#D1D5DB'};border-radius:4px 4px 0 0;margin-top:2px;"></div><div style="font-size:9px;color:var(--muted);margin-top:3px;">${short(r)}</div></div>`;
+    }).join('')+`</div><div style="font-size:9.5px;color:var(--muted);margin-top:4px;text-align:center;">Entwicklung der Zustimmung je Report</div>`;
   }
+  html+=`</div>`;
 
-  // Top-Kritikpunkte insgesamt — hilft, Muster über alle Gerichte hinweg zu erkennen, nicht nur
-  // pro einzelnem Gericht.
-  const grundCounts={};
-  (await api('schrankerl_kommentare?sentiment=eq.kritik&select=grund').catch(()=>[])).forEach(r=>{
-    const g=r.grund||'Ohne Angabe'; grundCounts[g]=(grundCounts[g]||0)+1;
-  });
+  // Gerichte dieses und des Vormonats (Mehrere SKU-Zeilen desselben Gerichts zusammenzählen)
+  const groupBy=rows=>{ const g={}; (rows||[]).forEach(r=>{ const k=normSchrankerlName(r.gericht); if(!g[k]) g[k]={gericht:r.gericht,pos:0,neg:0}; g[k].pos+=r.positiv||0; g[k].neg+=r.negativ||0; }); Object.values(g).forEach(d=>{ d.n=d.pos+d.neg; d.pct=d.n>0?Math.round(d.pos/d.n*100):null; }); return g; };
+  const cur=groupBy(statsRows), prv=groupBy(prevStatsRows);
+  Object.entries(cur).forEach(([k,d])=>{ d.prevPct=prv[k]?.pct ?? null; d.prevN=prv[k]?.n ?? 0; });
+  const all=Object.values(cur);
+  const MIN=4; // Mindestanzahl Bewertungen für Top/Flop, damit Einzelstimmen nicht verzerren
+  const solid=all.filter(d=>d.n>=MIN);
+  const top=[...solid].sort((a,b)=>b.pct-a.pct||b.n-a.n).slice(0,3);
+  const flop=[...solid].sort((a,b)=>a.pct-b.pct||b.n-a.n).slice(0,2).filter(d=>d.pct<85);
+  const moves=all.filter(d=>d.prevPct!=null&&d.n>=3&&d.prevN>=3).map(d=>({...d,diff:d.pct-d.prevPct})).filter(d=>Math.abs(d.diff)>=8).sort((a,b)=>b.diff-a.diff);
+  const dish=d=>`<span data-no-translate>${clean(d.gericht)}</span>`;
+  const row=(ic,title,items)=>items.length?`<div style="display:flex;gap:8px;padding:6px 0;border-top:1px solid var(--border);"><div style="font-size:15px;line-height:1.2;">${ic}</div><div style="flex:1;min-width:0;"><div style="font-size:9.5px;font-weight:700;letter-spacing:.05em;color:var(--muted);">${title}</div>${items.join('')}</div></div>`:'';
+  const line=(d,extra)=>`<div style="font-size:11.5px;line-height:1.35;margin-top:2px;">${dish(d)} <b style="color:${colorOf(d.pct)};">${d.pct}%</b> <span style="color:var(--muted);">(${d.n} Bew.)</span>${extra||''}</div>`;
+  const facts=[
+    row('🏆','TOP',top.map(d=>line(d))),
+    row('⚠️','SCHWÄCHSTE',flop.map(d=>line(d))),
+    row('📈','GRÖSSTE VERBESSERUNG',moves.filter(d=>d.diff>0).slice(0,2).map(d=>line(d,` <span style="color:#16A34A;font-weight:700;">▲ +${d.diff}</span> <span style="color:var(--muted);">vorher ${d.prevPct}%</span>`))),
+    row('📉','GRÖSSTER RÜCKGANG',moves.filter(d=>d.diff<0).reverse().slice(0,2).map(d=>line(d,` <span style="color:#DC2626;font-weight:700;">▼ ${d.diff}</span> <span style="color:var(--muted);">vorher ${d.prevPct}%</span>`)))
+  ].filter(Boolean).join('');
+  if(facts) html+=`<div class="card" style="padding:6px 14px 8px;margin-bottom:8px;"><div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;padding:4px 0;">AUF EINEN BLICK</div>${facts}</div>`;
+
+  // 3) Kritikgründe im Berichtszeitraum + Kundenstimmen
+  const inPeriod=(kommRows||[]).filter(k=>k.datum>=report.zeitraum_von&&k.datum<=report.zeitraum_bis);
+  const grundCounts={}; inPeriod.filter(k=>k.sentiment==='kritik').forEach(k=>{ const g=k.grund||'Ohne Angabe'; grundCounts[g]=(grundCounts[g]||0)+1; });
   const topGruende=Object.entries(grundCounts).sort((a,b)=>b[1]-a[1]);
   if(topGruende.length){
-    html+=`<div class="card" style="padding:10px 14px;margin-top:10px;background:#FFFBEB;border-color:#FDE68A;">
-      <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:4px;">💡 HÄUFIGSTE KRITIKPUNKTE INSGESAMT</div>
+    html+=`<div class="card" style="padding:10px 14px;margin-bottom:8px;background:#FFFBEB;border-color:#FDE68A;">
+      <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:4px;">💡 KRITIKGRÜNDE (mit Kommentar) — ${lbl(report).toUpperCase()}</div>
       <div style="font-size:11.5px;color:#78350F;">${topGruende.map(([g,c])=>`${g} (${c}×)`).join(' · ')}</div>
     </div>`;
   }
+
+  // 4) Aktuell laufende Gerichte (mit Veränderung zum Vormonat), antippen für Kommentare
+  const normCurrent=currentDishNames.map(normSchrankerlName);
+  const dishList=Object.entries(cur).filter(([k])=>normCurrent.includes(k)).map(([,d])=>d);
+  const dishCard=(d)=>{
+    const barColor=colorOf(d.pct);
+    const boxId='schr-'+Math.random().toString(36).slice(2,9);
+    const dl=d.prevPct!=null?` ${delta(d.pct,d.prevPct,'')} <span style="color:var(--muted);">vs. Vormonat</span>`:'';
+    return `<div class="card" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;" onclick="const b=document.getElementById('${boxId}');const wasOpen=b.style.display==='block';b.style.display=wasOpen?'none':'block';if(!wasOpen)loadSchrankerlKommentare('${boxId}','${d.gericht.replace(/'/g,"\\'")}');">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:12.5px;font-weight:600;flex:1;" data-no-translate>${clean(d.gericht)}</div>
+        <span style="font-size:15px;font-weight:800;color:${barColor};">${d.pct!=null?d.pct+'%':'–'}</span>
+      </div>
+      <div style="height:4px;background:#F3F4F6;border-radius:2px;margin-top:5px;overflow:hidden;"><div style="height:100%;width:${d.pct||0}%;background:${barColor};"></div></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px;">👍 ${d.pos} · 👎 ${d.neg}${dl} · antippen für Kommentare</div>
+      <div id="${boxId}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);" onclick="event.stopPropagation();"></div>
+    </div>`;
+  };
+  if(dishList.length){
+    html+=`<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:10px 0 6px;">DIESE WOCHE IM ANGEBOT</div>`+dishList.map(dishCard).join('');
+  } else if(currentDishNames.length){
+    html+=`<div style="font-size:11px;color:var(--muted);margin:10px 0 6px;">Für die Gerichte dieser Woche liegt im ${lbl(report)}-Report noch kein Feedback vor.</div>`;
+  }
+
+  // 5) Alle Gerichte des Reports, eingeklappt
+  const sorted=[...all].sort((a,b)=>(b.pct??-1)-(a.pct??-1)||b.n-a.n);
+  html+=`<details class="card" style="padding:8px 14px;margin-top:6px;"><summary style="font-size:12px;font-weight:700;cursor:pointer;">Alle ${sorted.length} Gerichte im ${lbl(report)}</summary><div style="margin-top:6px;">`+sorted.map(d=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);font-size:11.5px;">
+      <div style="flex:1;min-width:0;" data-no-translate>${clean(d.gericht)}</div>
+      <div style="color:var(--muted);font-size:10px;white-space:nowrap;">👍${d.pos} 👎${d.neg}</div>
+      <div style="width:58px;text-align:right;white-space:nowrap;"><b style="color:${colorOf(d.pct)};">${d.pct!=null?d.pct+'%':'–'}</b>${d.prevPct!=null&&d.n>=3&&d.prevN>=3&&Math.abs(d.pct-d.prevPct)>=1?`<span style="font-size:9.5px;color:${d.pct>d.prevPct?'#16A34A':'#DC2626'};"> ${d.pct>d.prevPct?'▲':'▼'}</span>`:''}</div>
+    </div>`).join('')+`</div><div style="font-size:9.5px;color:var(--muted);margin-top:6px;">▲▼ = Veränderung zum Vormonat (nur bei mind. 3 Bewertungen in beiden Monaten). Top/Schwächste: mind. ${MIN} Bewertungen.</div></details>`;
 
   return html;
 }
