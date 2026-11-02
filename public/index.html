@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.246';
+const APP_VERSION='6.99.247';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -17260,6 +17260,8 @@ async function renderDisposal(dateStr){
   const disp=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=slot,dish_name,sold_out_time,leftover_qty,note`).catch(()=>[]);
   const dispMap={};
   (disp||[]).forEach(d=>dispMap[d.slot]=d);
+  const koe=await api(`kunden_ohne_essen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=anzahl&limit=1`).catch(()=>[]);
+  const koeAnzahl=koe?.[0]?.anzahl;
 
   // Tatsächliche Hauptgerichte aus dem für DIESEN Tag gültigen Menü (Wochenrotation!) — sonst
   // würden beim Nachtragen älterer Tage die falschen Gerichtsnamen der aktuellen Woche gezeigt.
@@ -17315,6 +17317,19 @@ async function renderDisposal(dateStr){
     </tr>`;
   });
   html+='</tbody></table></div>';
+  // Optional (02.11.26, Wunsch Tini): wie viele Kund:innen wurden ca. ohne Essen weggeschickt?
+  html+=`<div class="card" style="padding:10px 12px;margin-top:10px;">
+    <div style="font-size:12.5px;font-weight:700;">😔 Kund:innen ohne Essen weggeschickt <span style="font-weight:500;color:var(--muted);">(optional, ca.)</span></div>
+    <div style="font-size:11px;color:var(--muted);margin:2px 0 8px;">Wenn alles ausverkauft war: wie viele Gäste ungefähr? Hilft uns bei der Mengenplanung.</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="display:flex;align-items:center;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;">
+        <button type="button" onclick="koeStep(-1)" style="width:38px;height:38px;border:none;background:transparent;font-size:20px;cursor:pointer;color:var(--sub);">−</button>
+        <input id="koe-anzahl" type="number" inputmode="numeric" min="0" max="500" step="1" value="${koeAnzahl??''}" placeholder="0" onchange="saveKundenOhneEssen()" style="width:56px;text-align:center;border:none;font-size:16px;font-weight:700;background:transparent;">
+        <button type="button" onclick="koeStep(1)" style="width:38px;height:38px;border:none;background:transparent;font-size:20px;cursor:pointer;color:var(--sub);">+</button>
+      </div>
+      <span style="font-size:11px;color:var(--muted);">${koeAnzahl!=null?'✓ gespeichert':'noch nichts eingetragen'}</span>
+    </div>
+  </div>`;
   html+=`<div style="font-size:11px;color:var(--muted);padding:8px 2px;">Uhrzeit antippen, um sie zu setzen oder nachträglich zu korrigieren. Restmenge in Portionen — bei Bedarf Umrechnungstabelle (i) nutzen. Notiz für Sonderfälle (z.B. Reste über mehrere Tage verteilt).${!isToday?' <strong>Du trägst gerade einen vergangenen Tag nach.</strong>':''}</div>`;
   html+=schichtendeWeiterHtml();
 
@@ -17429,6 +17444,30 @@ async function updateDisposalNote(slot, dishName, value){
 window.updateSoldOutTime=updateSoldOutTime;
 window.updateLeftover=updateLeftover;
 window.updateDisposalNote=updateDisposalNote;
+
+function koeStep(d){
+  const inp=document.getElementById('koe-anzahl'); if(!inp) return;
+  const v=Math.max(0,Math.min(500,(parseInt(inp.value,10)||0)+d));
+  inp.value=v; saveKundenOhneEssen();
+}
+async function saveKundenOhneEssen(){
+  const inp=document.getElementById('koe-anzahl'); if(!inp) return;
+  const day=_disposalDate || new Date().toISOString().split('T')[0];
+  const raw=String(inp.value).trim();
+  try{
+    if(raw===''){
+      await api(`kunden_ohne_essen?store_id=eq.${currentStore.id}&datum=eq.${day}`,{method:'DELETE'});
+      showToast('✓ Eintrag entfernt'); return;
+    }
+    const n=Math.round(Number(raw));
+    if(!isFinite(n)||n<0||n>500){ showToast('Bitte eine Zahl zwischen 0 und 500 eintragen'); return; }
+    const ex=await api(`kunden_ohne_essen?store_id=eq.${currentStore.id}&datum=eq.${day}&select=id`).catch(()=>[]);
+    if(ex?.length) await api(`kunden_ohne_essen?id=eq.${ex[0].id}`,{method:'PATCH',body:JSON.stringify({anzahl:n,updated_at:new Date().toISOString()})});
+    else await api('kunden_ohne_essen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:day,anzahl:n}])});
+    showToast('✓ Gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.koeStep=koeStep; window.saveKundenOhneEssen=saveKundenOhneEssen;
 
 // ---- KÜCHE (Wochenplan + Entsorgung) ----
 const WEEKDAYS=[{k:'mo',l:'Montag'},{k:'di',l:'Dienstag'},{k:'mi',l:'Mittwoch'},{k:'do',l:'Donnerstag'},{k:'fr',l:'Freitag'}];
