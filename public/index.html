@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.248';
+const APP_VERSION='6.99.249';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -17303,6 +17303,17 @@ async function renderDisposal(dateStr){
   const disp=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&select=slot,dish_name,sold_out_time,leftover_qty,note`).catch(()=>[]);
   const dispMap={};
   (disp||[]).forEach(d=>dispMap[d.slot]=d);
+  // Samosas (03.11.26, Wunsch Tini): eigene Tabelle samosa_entsorgung (Stk) — bewusst NICHT in "disposal", damit Forecast/Portions-Auswertungen unberührt bleiben.
+  const wdNum=dObj.getDay(); // 1=Mo..5=Fr
+  const [samTodayRows, samBaseRows, samEntRows] = await Promise.all([
+    api(`samosa_today?store_id=eq.${currentStore.id}&supply_date=eq.${today}&select=qty`).catch(()=>[]),
+    api(`samosa_baseline?store_id=eq.${currentStore.id}&weekday=eq.${wdNum}&select=base_qty`).catch(()=>[]),
+    api(`samosa_entsorgung?store_id=eq.${currentStore.id}&datum=in.(${prevDate},${today})&select=datum,sold_out_time,rest_qty,note`).catch(()=>[])
+  ]);
+  const samBestellt = samTodayRows?.[0]?.qty ?? samBaseRows?.[0]?.base_qty ?? null;
+  const samHeute = (samEntRows||[]).find(r=>r.datum===today);
+  const samGestern = (samEntRows||[]).find(r=>r.datum===prevDate);
+  const samRestVortag = samGestern?.rest_qty ?? null;
   const koe=await api(`kunden_ohne_essen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=anzahl&limit=1`).catch(()=>[]);
   const koeAnzahl=koe?.[0]?.anzahl;
 
@@ -17360,6 +17371,23 @@ async function renderDisposal(dateStr){
     </tr>`;
   });
   html+='</tbody></table></div>';
+  {
+    const soT=samHeute?.sold_out_time?String(samHeute.sold_out_time).slice(0,5):'';
+    const verf=(samBestellt!=null?Number(samBestellt):0)+(samRestVortag!=null?Number(samRestVortag):0);
+    html+=`<div class="card" style="padding:10px 12px;margin-top:10px;">
+      <div style="display:flex;align-items:center;gap:8px;"><img src="/images/dishes/samosa.jpg" alt="" style="width:34px;height:34px;border-radius:8px;object-fit:cover;"><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Samosas 🥟</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.35;">${samBestellt!=null?`bestellt: <b>${formatQty(samBestellt)} Stk</b>`:'keine Bestellmenge hinterlegt'}${samRestVortag?` · Rest vom Vortag: <b>${formatQty(samRestVortag)} Stk</b> → verfügbar ca. <b>${formatQty(verf)} Stk</b>`:''}</div></div></div>
+      <div style="display:flex;gap:10px;margin-top:8px;align-items:flex-end;">
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">Ausverkauft um</div>
+          <input id="sam-time" type="text" inputmode="numeric" value="${soT}" placeholder="hh:mm" maxlength="5" oninput="formatTimeTextInput(this)" onchange="saveSamosaEntsorgung()" style="width:64px;padding:7px;border:1.5px solid ${soT?'#DC2626':'var(--border)'};border-radius:8px;font-size:13px;text-align:center;background:${soT?'#FEF2F2':'#fff'};"></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">Rest (Stk)</div>
+          <input id="sam-rest" type="number" inputmode="numeric" min="0" step="1" value="${samHeute?.rest_qty??''}" placeholder="0" onchange="saveSamosaEntsorgung()" style="width:64px;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:center;"></div>
+        <div style="flex:1;min-width:0;"><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">Notiz</div>
+          <input id="sam-note" type="text" value="${samHeute?.note?escAttr(samHeute.note):''}" placeholder="optional" onchange="saveSamosaEntsorgung()" style="width:100%;box-sizing:border-box;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;"></div>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:6px;">Ein Rest wird am nächsten Tag verkauft (Donnerstag-Rest am Freitag). War es vor Ladenschluss ausverkauft, trag die Uhrzeit ein — so sehen wir, ob die Menge erhöht werden kann.</div>
+    </div>`;
+  }
   // Optional (02.11.26, Wunsch Tini): wie viele Kund:innen wurden ca. ohne Essen weggeschickt?
   html+=`<div class="card" style="padding:10px 12px;margin-top:10px;">
     <div style="font-size:12.5px;font-weight:700;">😔 Kund:innen ohne Essen weggeschickt <span style="font-weight:500;color:var(--muted);">(optional, ca.)</span></div>
@@ -17511,6 +17539,31 @@ async function saveKundenOhneEssen(){
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.koeStep=koeStep; window.saveKundenOhneEssen=saveKundenOhneEssen;
+
+async function saveSamosaEntsorgung(){
+  const day=_disposalDate || new Date().toISOString().split('T')[0];
+  const t=(document.getElementById('sam-time')?.value||'').trim();
+  const r=String(document.getElementById('sam-rest')?.value??'').trim();
+  const note=(document.getElementById('sam-note')?.value||'').trim()||null;
+  let time=null;
+  if(t){
+    const m=t.match(/^(\d{1,2}):?(\d{2})$/);
+    if(!m||parseInt(m[1],10)>23||parseInt(m[2],10)>59){ showToast('Bitte Uhrzeit als hh:mm eingeben, z.B. 13:45'); return; }
+    time=String(parseInt(m[1],10)).padStart(2,'0')+':'+m[2];
+  }
+  const rest=r===''?null:Math.round(Number(r));
+  if(rest!==null&&(!isFinite(rest)||rest<0||rest>1000)){ showToast('Rest bitte als Zahl zwischen 0 und 1000 eintragen'); return; }
+  try{
+    const q=`samosa_entsorgung?store_id=eq.${currentStore.id}&datum=eq.${day}`;
+    if(time===null&&rest===null&&!note){ await api(q,{method:'DELETE'}); showToast('✓ Eintrag entfernt'); return; }
+    const ex=await api(q+'&select=id').catch(()=>[]);
+    const body={sold_out_time:time,rest_qty:rest,note,updated_at:new Date().toISOString()};
+    if(ex?.length) await api(`samosa_entsorgung?id=eq.${ex[0].id}`,{method:'PATCH',body:JSON.stringify(body)});
+    else await api('samosa_entsorgung',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:day,...body}])});
+    showToast('✓ Samosas gespeichert');
+  }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
+}
+window.saveSamosaEntsorgung=saveSamosaEntsorgung;
 
 // ---- KÜCHE (Wochenplan + Entsorgung) ----
 const WEEKDAYS=[{k:'mo',l:'Montag'},{k:'di',l:'Dienstag'},{k:'mi',l:'Mittwoch'},{k:'do',l:'Donnerstag'},{k:'fr',l:'Freitag'}];
