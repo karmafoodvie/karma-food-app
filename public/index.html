@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.249';
+const APP_VERSION='6.99.250';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8790,19 +8790,30 @@ async function renderMenuKontrolle(){
 
   const [diffs, runs, rezepte]=await Promise.all([
     api('menu_sheet_diffs?select=*').catch(()=>[]),
-    api('menu_check_runs?select=*&order=geprueft_am.desc&limit=1').catch(()=>[]),
+    api('menu_check_runs?select=*&order=geprueft_am.desc&limit=12').catch(()=>[]),
     api('allergene_rezepturen?select=gericht,zkey,crew_bestaetigt,zutaten').catch(()=>[])
   ]);
   window._mkDiffs={}; (diffs||[]).forEach(d=>{window._mkDiffs[d.id]=d;});
 
-  // Lebenszeichen der automatischen Prüfung — damit sichtbar ist, dass sie wirklich läuft.
-  const last=(runs||[])[0];
+  // Lebenszeichen der automatischen Prüfung — Fehlläufe zählen NICHT als "geprüft" (Nov 2026: Sheet-Download
+  // scheiterte tagelang, die App zeigte trotzdem ✅).
+  const isFail=(r)=>/^FEHL/i.test(r?.hinweis||'');
+  const lastRun=(runs||[])[0], last=(runs||[]).find(r=>!isFail(r));
   const fmt=(iso)=>iso?new Date(iso).toLocaleString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'–';
   const ageH=last?(Date.now()-new Date(last.geprueft_am).getTime())/3600000:null;
   const stale=ageH===null || ageH>30;
-  html+=`<div style="font-size:11.5px;border-radius:10px;padding:9px 12px;margin-bottom:12px;${stale?'background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;':'background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;'}">
-    ${last?`${stale?'⚠️':'✅'} Zuletzt geprüft: <strong>${fmt(last.geprueft_am)}</strong> · Sheet zuletzt geändert: <strong>${fmt(last.sheet_geaendert_am)}</strong>${stale?'<br>Die automatische Prüfung hat sich länger nicht gemeldet.':''}`:'⚠️ Noch keine automatische Prüfung gelaufen.'}
-  </div>`;
+  html+=`<div style="font-size:11.5px;border-radius:10px;padding:9px 12px;margin-bottom:10px;${stale?'background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;':'background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;'}">
+    ${last?`${stale?'⚠️':'✅'} Letzter erfolgreicher Vergleich: <strong>${fmt(last.geprueft_am)}</strong> · Sheet damals geändert: <strong>${fmt(last.sheet_geaendert_am)}</strong>`:'⚠️ Noch kein erfolgreicher Vergleich.'}
+    ${lastRun&&isFail(lastRun)?`<br>⚠️ Die automatische Prüfung ist zuletzt (${fmt(lastRun.geprueft_am)}) <strong>fehlgeschlagen</strong> – das Sheet ist zu groß für den Download. „Keine Abweichungen“ heißt daher nicht „alles stimmt“. Bitte unten „Sheet jetzt prüfen“ nutzen.`:(stale?'<br>Die automatische Prüfung hat sich länger nicht gemeldet.':'')}
+  </div>
+  <div class="card" style="padding:12px;margin-bottom:12px;border:1.5px solid #C2410C;">
+    <div style="font-size:13px;font-weight:700;margin-bottom:3px;">🔍 Sheet jetzt prüfen</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:9px;">Excel (.xlsm) aus Drive herunterladen und hier auswählen. Verglichen werden die Tabs „Alle Menüs“ und „Schrankerl“ mit der App – die Datei verlässt dein Gerät nicht, es wird nichts geändert, bis du Abweichungen freigibst.</div>
+    <input type="file" id="mk-file" accept=".xlsm,.xlsx,.xls" style="display:none;" onchange="mkCheckFile(this)">
+    <button id="mk-btn" onclick="document.getElementById('mk-file').click()" style="width:100%;padding:11px;border:none;border-radius:10px;background:#C2410C;color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;">📂 Excel auswählen &amp; prüfen</button>
+    <div id="mk-status" style="font-size:11.5px;color:var(--sub);margin-top:8px;"></div>
+  </div>
+  ${window._mkLast?mkLastHtml(window._mkLast):''}`;
 
   // ── 0) Einmalige Menü-Tausch-Ausnahmen (z.B. Feiertag: Dienstag läuft das Montagsmenü)
   await loadMenuTausch();
@@ -8878,6 +8889,141 @@ async function renderMenuKontrolle(){
   translateEl(el);
 }
 window.renderMenuKontrolle=renderMenuKontrolle;
+
+// ── Manueller Gegencheck im Browser (04.11.26): Der automatische Check scheiterte am 7,6-MB-Download über den
+// Drive-Connector. Hier liest die App das Excel selbst (SheetJS, nur die zwei nötigen Tabs), vergleicht mit den
+// App-Daten und legt Abweichungen in menu_sheet_diffs ab — dieselbe Logik wie tools/menu_check.py + schrankerl_check.py.
+const MK_DAYS={montag:'mo',dienstag:'di',mittwoch:'mi',donnerstag:'do',freitag:'fr'};
+const MK_SLOTS={curry:'curry',salad:'salat',salat:'salat',dessert:'dessert'};
+const mkNorm=s=>String(s==null?'':s).replace(/\s+/g,' ').trim().toLowerCase().replace(/lasagna/g,'lasagne');
+const mkNormList=s=>String(s==null?'':s).split(/[,;]/).map(mkNorm).filter(Boolean).sort();
+function mkCodes(v){ const t=String(v==null?'':v).trim(); return (t===''||t==='-')?[]:t.split(/[,;\/\s]+/).map(x=>x.trim().toUpperCase()).filter(Boolean).sort(); }
+function mkCleanZutaten(z){
+  let raw=String(z==null?'':z);
+  const m=raw.match(/^([^,]*?)\b(?:vegan|vegetarisch)(?:\/glutenfrei)?[ \t]{2,}/);
+  if(m) raw=raw.slice(m[0].length);
+  return raw.replace(/\s+/g,' ').trim();
+}
+function mkSim(a,b){ // Dice-Koeffizient auf Bigrammen (Ersatz für difflib)
+  const bg=t=>{const m=new Map();for(let i=0;i<t.length-1;i++){const k=t.substr(i,2);m.set(k,(m.get(k)||0)+1);}return m;};
+  const A=bg(a),B=bg(b); let hit=0,na=0,nb=0; A.forEach(v=>na+=v); B.forEach(v=>nb+=v);
+  A.forEach((v,k)=>{ if(B.has(k)) hit+=Math.min(v,B.get(k)); });
+  return (na+nb)?2*hit/(na+nb):1;
+}
+function mkSheetRows(wb,name){
+  const ws=wb.Sheets[name]; if(!ws) throw new Error('Tab „'+name+'“ nicht gefunden');
+  return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:true});
+}
+function mkSheetMenu(wb){
+  const out={}; let blk=null, day=null;
+  mkSheetRows(wb,'Alle Menüs').slice(0,120).forEach(r=>{
+    const a=r[0];
+    if(typeof a==='string' && a.trim().startsWith('MENÜ')){ blk=parseInt((a.match(/\d/)||[])[0]); day=null; return; }
+    if(typeof a==='string' && MK_DAYS[a.trim().toLowerCase()]) day=MK_DAYS[a.trim().toLowerCase()];
+    const nm=r[2];
+    if(blk && day && typeof nm==='string' && nm.trim() && nm.trim()!=='Gericht DE') (out[blk+'_'+day]=out[blk+'_'+day]||[]).push(nm.replace(/\s+/g,' ').trim());
+  });
+  return out;
+}
+function mkAppMenu(){
+  const era=MENU_ERAS.find(e=>e.key==='herbstwinter2026_27'); const data=(era&&era.data)||{}; const out={};
+  Object.keys(data).forEach(k=>{ const m=k.match(/^w(\d+)_(\w+)$/); if(!m) return; out[m[1]+'_'+m[2]]=(data[k]||[]).filter(e=>e.slot!=='salat'&&e.name).map(e=>String(e.name).trim()); });
+  return out;
+}
+function mkDiffKarma(sheet,app){
+  const diffs=[]; const keys=[...new Set([...Object.keys(sheet),...Object.keys(app)])].sort();
+  keys.forEach(key=>{
+    const s=sheet[key]||[], a=app[key]||[];
+    const sN=new Set(s.map(mkNorm)), aN=new Set(a.map(mkNorm));
+    let sOnly=s.filter(x=>!aN.has(mkNorm(x))), aOnly=a.filter(x=>!sN.has(mkNorm(x)));
+    const [w,d]=key.split('_'); const pairs=[];
+    [...aOnly].forEach(x=>{
+      if(!sOnly.length) return;
+      let best=sOnly[0],br=-1; sOnly.forEach(y=>{const r=mkSim(mkNorm(x),mkNorm(y)); if(r>br){br=r;best=y;}});
+      pairs.push([x,best]); aOnly=aOnly.filter(z=>z!==x); sOnly=sOnly.filter(z=>z!==best);
+    });
+    pairs.forEach(([x,y])=>diffs.push({epoche:'herbstwinter2026_27',woche:+w,tag:d,app_name:x,sheet_name:y,hinweis:null}));
+    aOnly.forEach(x=>diffs.push({epoche:'herbstwinter2026_27',woche:+w,tag:d,app_name:x,sheet_name:null,hinweis:'Steht nur in der App, nicht im Sheet'}));
+    sOnly.forEach(y=>diffs.push({epoche:'herbstwinter2026_27',woche:+w,tag:d,app_name:null,sheet_name:y,hinweis:'Steht nur im Sheet, nicht in der App'}));
+  });
+  return {diffs,geprueft:keys.length};
+}
+function mkDiffSchrankerl(wb,db){
+  const sheet={}; let blk=null;
+  mkSheetRows(wb,'Schrankerl').slice(0,300).forEach(r=>{
+    const a=r[0];
+    if(typeof a==='string' && a.trim().toUpperCase().startsWith('MENÜ')){ blk=parseInt((a.match(/\d+/)||[])[0]); return; }
+    if(blk && typeof a==='string' && MK_SLOTS[a.trim().toLowerCase()]) sheet[blk+'_'+MK_SLOTS[a.trim().toLowerCase()]]={name:r[1],spezial:r[2],zutaten:mkCleanZutaten(r[3])||null,allergene:r[4]};
+  });
+  const app={}; (db||[]).forEach(x=>{app[x.woche+'_'+x.slot]=x;});
+  const rows=[],hint=[],info=[]; let geprueft=0;
+  const tostr=v=>Array.isArray(v)?v.join(', '):(v==null?null:String(v));
+  [...new Set([...Object.keys(sheet),...Object.keys(app)])].sort().forEach(key=>{
+    const [w,slot]=key.split('_'); const s=sheet[key], a=app[key];
+    if(!s){ info.push(`Menü ${w} ${slot}: nur in der App, nicht im Sheet (bleibt unverändert)`); return; }
+    const push=(feld,appV,sheV)=>rows.push({epoche:'schrankerl',woche:+w,tag:slot,app_name:tostr(appV),sheet_name:tostr(sheV),hinweis:feld});
+    if(!a){
+      if(s.name && String(s.name).trim()) push('neu',null,JSON.stringify({name:String(s.name).trim(),spezial:s.spezial,zutaten:s.zutaten||null,allergene_codes:mkCodes(s.allergene)}));
+      return;
+    }
+    geprueft++;
+    if(mkNorm(s.name)!==mkNorm(a.name)) push('name',a.name,s.name);
+    if(s.spezial && mkNorm(s.spezial)!==mkNorm(a.spezial)) push('spezial',a.spezial,s.spezial);
+    if(!s.zutaten) hint.push(`Menü ${w} ${slot}: Zutatenliste im Sheet noch leer`);
+    else if(JSON.stringify(mkNormList(s.zutaten))!==JSON.stringify(mkNormList(a.zutaten))) push('zutaten',a.zutaten,s.zutaten);
+    if(s.allergene==null) hint.push(`Menü ${w} ${slot}: Allergene im Sheet noch leer`);
+    else if(JSON.stringify(mkCodes(s.allergene))!==JSON.stringify([...(a.allergene_codes||[])].sort())) push('allergene',a.allergene_codes,s.allergene);
+  });
+  return {rows,hint,info,geprueft};
+}
+// Abgleich mit menu_sheet_diffs: neue Abweichungen anlegen, nicht mehr vorhandene offene schließen (wie der Auto-Check)
+async function mkSync(rows,isSk){
+  const ex=await api('menu_sheet_diffs?select=*&epoche'+(isSk?'=eq.schrankerl':'=neq.schrankerl'));
+  const key=d=>[d.epoche,d.woche,d.tag,d.app_name||'',d.sheet_name||'',isSk?(d.hinweis||''):''].join('\u0001');
+  const exAll=new Set((ex||[]).map(key)), now=new Set(rows.map(key));
+  const neu=rows.filter(r=>!exAll.has(key(r)));
+  if(neu.length) await api('menu_sheet_diffs',{method:'POST',body:JSON.stringify(neu.map(r=>({...r,status:'offen'})))});
+  const stale=(ex||[]).filter(d=>d.status==='offen'&&!now.has(key(d)));
+  for(const d of stale) await api(`menu_sheet_diffs?id=eq.${d.id}`,{method:'PATCH',body:JSON.stringify({status:'abgelehnt',entschieden_am:new Date().toISOString(),entschieden_von:'auto-check (manuell)'})});
+  return {neu:neu.length};
+}
+function mkLastHtml(r){
+  const li=(arr)=>arr.length?`<ul style="margin:4px 0 0 16px;padding:0;font-size:11px;color:var(--sub);">${arr.map(x=>`<li>${escAttr(x)}</li>`).join('')}</ul>`:'';
+  return `<div class="card" style="padding:12px;margin-bottom:12px;border-left:3px solid ${r.neu?'#C2410C':'#16A34A'};">
+    <div style="font-size:12.5px;font-weight:700;">${r.neu?`🟠 ${r.neu} neue Abweichung${r.neu===1?'':'en'} gefunden`:'✅ Keine neuen Abweichungen'}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escAttr(r.file)} · Karma Food: ${r.kTage} Menütage geprüft · Schrankerl: ${r.skGeprueft} Gerichte geprüft · ${r.offen} offen insgesamt</div>
+    ${r.hint.length?`<div style="font-size:11.5px;margin-top:8px;font-weight:600;color:#92400E;">Im Sheet noch leer (Schrankerl)</div>${li(r.hint)}`:''}
+    ${r.info.length?`<div style="font-size:11.5px;margin-top:8px;font-weight:600;color:var(--sub);">Nur in der App, nicht im Sheet</div>${li(r.info)}`:''}
+  </div>`;
+}
+async function mkCheckFile(inp){
+  const f=inp.files&&inp.files[0]; inp.value=''; if(!f) return;
+  const st=document.getElementById('mk-status'), btn=document.getElementById('mk-btn');
+  const say=t=>{ if(st) st.textContent=t; };
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
+  try{
+    if(typeof XLSX==='undefined') throw new Error('Excel-Bibliothek nicht geladen (offline?)');
+    say('📖 Excel wird gelesen… (kann bei 8 MB ein paar Sekunden dauern)');
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',sheets:['Alle Menüs','Schrankerl'],cellStyles:false,cellFormula:false,cellHTML:false,bookVBA:false});
+    say('🔎 Vergleiche mit der App…');
+    const k=mkDiffKarma(mkSheetMenu(wb),mkAppMenu());
+    const sk=mkDiffSchrankerl(wb,await api('schrankerl_menu?select=woche,slot,name,zutaten,allergene_codes,spezial'));
+    say('💾 Ergebnis speichern…');
+    const [a,b]=[await mkSync(k.diffs,false),await mkSync(sk.rows,true)];
+    const open=await api('menu_sheet_diffs?status=eq.offen&select=id');
+    const neu=a.neu+b.neu;
+    await api('menu_check_runs',{method:'POST',body:JSON.stringify([{sheet_geaendert_am:new Date(f.lastModified).toISOString(),offene_abweichungen:(open||[]).length,neue_abweichungen:neu,hinweis:'Manuell in der App geprüft ('+f.name+')'+(sk.hint.length?' · '+sk.hint.length+' leere Schrankerl-Felder':'')}])});
+    window._mkLast={neu,file:f.name,kTage:k.geprueft,skGeprueft:sk.geprueft,offen:(open||[]).length,hint:sk.hint,info:sk.info};
+    try{ loadMenuKontrolleBadge(); }catch(e){}
+    showToast(neu?`✔ ${neu} neue Abweichung${neu===1?'':'en'} gefunden`:'✔ Alles stimmt überein');
+    renderMenuKontrolle();
+  }catch(e){
+    console.error(e); say('❌ '+(e?.message||String(e)).slice(0,160));
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+  }
+}
+Object.assign(window,{mkCheckFile});
 
 // ── Schrankerl-Menüs (22.10.26): Tab "Schrankerl" im selben Sheet ist führend für schrankerl_menu.
 // Die Prüfung legt Abweichungen in menu_sheet_diffs ab (epoche='schrankerl', woche=Menü-Nr., tag=Slot
