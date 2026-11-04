@@ -26,7 +26,7 @@ norm=lambda s: re.sub(r'\s+',' ',s.strip()).lower().replace('lasagna','lasagne')
 
 def sheet_menu():
     wb=openpyxl.load_workbook(sheet_path,data_only=True)
-    ws=wb['Alle Menüs']
+    ws=wb['Alle Menüs'] if 'Alle Menüs' in wb.sheetnames else wb['Menü']  # Tab wurde am 04.11.26 in "Menü" umbenannt
     out={}; blk=None; day=None
     for r in ws.iter_rows(min_row=1,max_row=120,max_col=4,values_only=True):
         a=r[0]

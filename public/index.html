@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.250';
+const APP_VERSION='6.99.251';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8916,7 +8916,7 @@ function mkSheetRows(wb,name){
 }
 function mkSheetMenu(wb){
   const out={}; let blk=null, day=null;
-  mkSheetRows(wb,'Alle Menüs').slice(0,120).forEach(r=>{
+  mkSheetRows(wb,wb.Sheets['Alle Menüs']?'Alle Menüs':'Menü').slice(0,120).forEach(r=>{
     const a=r[0];
     if(typeof a==='string' && a.trim().startsWith('MENÜ')){ blk=parseInt((a.match(/\d/)||[])[0]); day=null; return; }
     if(typeof a==='string' && MK_DAYS[a.trim().toLowerCase()]) day=MK_DAYS[a.trim().toLowerCase()];
@@ -9005,7 +9005,7 @@ async function mkCheckFile(inp){
     if(typeof XLSX==='undefined') throw new Error('Excel-Bibliothek nicht geladen (offline?)');
     say('📖 Excel wird gelesen… (kann bei 8 MB ein paar Sekunden dauern)');
     const buf=await f.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array',sheets:['Alle Menüs','Schrankerl'],cellStyles:false,cellFormula:false,cellHTML:false,bookVBA:false});
+    const wb=XLSX.read(buf,{type:'array',sheets:['Alle Menüs','Menü','Schrankerl'],cellStyles:false,cellFormula:false,cellHTML:false,bookVBA:false});
     say('🔎 Vergleiche mit der App…');
     const k=mkDiffKarma(mkSheetMenu(wb),mkAppMenu());
     const sk=mkDiffSchrankerl(wb,await api('schrankerl_menu?select=woche,slot,name,zutaten,allergene_codes,spezial'));
