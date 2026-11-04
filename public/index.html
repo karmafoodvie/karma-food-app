@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.251';
+const APP_VERSION='6.99.252';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18473,6 +18473,9 @@ async function renderKitchenDaily(){
   });
   html+='</div>';
 
+  // Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) zum Gegenprüfen und Abhaken
+  html+=`<div id="kd-sg">${await kdSgInner(window._kdSgDatum||todayDate)}</div>`;
+
   // Bereiche — als eine gemeinsame Liste statt sechs einzeln eingefärbter Boxen (18.08.26: an das
   // UX-Muster der normalen Store-Startseite angeglichen, siehe dort der "Guide"-Button bzw. die
   // Links-Liste im Onboarding — neutrale item-rows in einer Karte statt bunter Einzelkacheln).
@@ -18531,6 +18534,66 @@ async function renderKitchenDaily(){
   translateEl(el);
 }
 window.renderKitchenDaily=renderKitchenDaily;
+
+// ── Online-Bestellungen im Kitchen-Daily (04.11.26): was bestellt wurde und was zu packen ist, zum Abhaken.
+// Daten kommen live aus der Bestell-Funktion (wie in der Stadtgemeinde-Ansicht), der Haken ist pro Bestellung
+// in stadtgemeinde_gepackt gespeichert und damit für alle Geräte gleich.
+window._kdSgDatum=null;
+function kdSgNextDay(from){
+  const d=new Date(from+'T12:00:00Z'); do{ d.setUTCDate(d.getUTCDate()+1); }while(d.getUTCDay()===0||d.getUTCDay()===6);
+  return d.toISOString().split('T')[0];
+}
+async function kdSgInner(datum){
+  const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0];
+  const morgen=kdSgNextDay(heute);
+  const chip=(ds,l)=>`<button onclick="kdSgSet('${ds}')" style="padding:5px 12px;border-radius:99px;border:1.5px solid #059669;font-size:11.5px;font-weight:600;cursor:pointer;${ds===datum?'background:#059669;color:#fff;':'background:#fff;color:#059669;'}">${l}</button>`;
+  const head=`<div style="display:flex;align-items:center;gap:8px;margin:4px 0 8px;"><div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;flex:1;">🏛️ ONLINE-BESTELLUNGEN — ZU PACKEN</div>${chip(heute,'Heute')}${chip(morgen,'Morgen')}</div>`;
+  let d;
+  try{ d=await sgCall('?action=list&datum='+datum); }
+  catch(e){ return head+`<div class="card" style="padding:12px;font-size:12px;color:var(--muted);">Bestellungen konnten nicht geladen werden (${escAttr(e.message)}).</div>`; }
+  const stellen=d.stellen||[], nm={}; stellen.forEach(s=>nm[s.id]=s.name);
+  const rows=(d.bestellungen||[]).filter(r=>r.stelle_id&&!r.storniert);
+  if(!rows.length) return head+`<div class="card" style="padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);text-align:center;">Noch keine Online-Bestellungen für diesen Tag.</div>`;
+  const gep=await api(`stadtgemeinde_gepackt?datum=eq.${datum}&select=bestellung_id`).catch(()=>[]);
+  const done=new Set((gep||[]).map(g=>Number(g.bestellung_id)));
+  const sum=rows.reduce((a,r)=>a+Number(r.summe),0), min=Number(d.min_heute||0), ok=sum>=min, final=!!d.final;
+  const st=ok?{t:'Lieferung möglich',bg:'#DCFCE7',c:'#166534'}:final?{t:'Mindestbestellwert nicht erreicht – keine Lieferung',bg:'#FEE2E2',c:'#991B1B'}:{t:'Noch zu wenig – Anmeldung läuft noch bis '+escAttr((d.config&&d.config.cutoff)||'11:40'),bg:'#FEF3C7',c:'#92400E'};
+  const tot={}; rows.forEach(r=>(r.items||[]).forEach(i=>{ if(i.anzahl>0) tot[i.name]=(tot[i.name]||0)+i.anzahl; }));
+  const totList=Object.entries(tot).sort((a,b)=>b[1]-a[1]);
+  const nDone=rows.filter(r=>done.has(Number(r.id))).length, pct=Math.round(100*nDone/rows.length);
+  let h=head;
+  h+=`<div class="card" style="padding:12px;margin-bottom:14px;">
+    <div style="border-radius:9px;padding:7px 10px;font-size:11.5px;font-weight:700;background:${st.bg};color:${st.c};margin-bottom:10px;">${st.t} · ${rows.length} Bestellung${rows.length===1?'':'en'} · ${sgFmt(sum)}</div>
+    <div style="font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:5px;">GESAMT KOCHEN / PACKEN</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">${totList.map(([n,a])=>`<span data-no-translate style="background:var(--surface-1);border-radius:8px;padding:5px 9px;font-size:12px;"><b style="color:#059669;">${a}×</b> ${escAttr(n)}</span>`).join('')}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="flex:1;height:7px;background:#E5E7EB;border-radius:99px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:#059669;"></div></div><div style="font-size:11px;font-weight:700;">${nDone}/${rows.length} gepackt</div></div>`;
+  const byStelle={}; rows.forEach(r=>{ (byStelle[r.stelle_id]=byStelle[r.stelle_id]||[]).push(r); });
+  Object.keys(byStelle).sort((a,b)=>(nm[a]||'').localeCompare(nm[b]||'','de')).forEach(sid=>{
+    h+=`<div style="font-size:11px;font-weight:700;margin:10px 0 4px;color:#059669;">${escAttr(nm[sid]||'?')}</div>`;
+    byStelle[sid].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).forEach(r=>{
+      const dn=done.has(Number(r.id));
+      h+=`<div onclick="kdSgToggle(${r.id},'${datum}',${dn})" style="display:flex;gap:10px;align-items:flex-start;padding:9px 8px;margin-bottom:5px;border-radius:10px;cursor:pointer;border:1.5px solid ${dn?'#86EFAC':'var(--border)'};background:${dn?'#F0FDF4':'#fff'};">
+        <div style="flex:none;width:24px;height:24px;border-radius:7px;border:2px solid ${dn?'#16A34A':'#9CA3AF'};background:${dn?'#16A34A':'#fff'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;">${dn?'✓':''}</div>
+        <div style="flex:1;min-width:0;${dn?'opacity:.6;':''}">
+          <div data-no-translate style="font-size:13px;font-weight:700;">${escAttr(r.name)}${r.zahlung?` <span style="font-size:10px;font-weight:400;color:var(--muted);">· ${r.zahlung==='sodexo'?'Sodexo':r.zahlung==='bar'?'Bar':'Sodexo + Bar'}</span>`:''}</div>
+          <div data-no-translate style="font-size:12px;line-height:1.4;margin-top:1px;${dn?'text-decoration:line-through;':''}">${(r.items||[]).filter(i=>i.anzahl>0).map(i=>`<b>${i.anzahl}×</b> ${escAttr(i.name)}`).join('<br>')}</div>
+          ${r.notiz?`<div data-no-translate style="font-size:10.5px;color:#92400E;margin-top:2px;">📝 ${escAttr(r.notiz)}</div>`:''}
+        </div></div>`;
+    });
+  });
+  h+=`</div>`;
+  return h;
+}
+async function kdSgReload(){ const el=document.getElementById('kd-sg'); if(el) el.innerHTML=await kdSgInner(window._kdSgDatum||new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]); }
+function kdSgSet(ds){ window._kdSgDatum=ds; kdSgReload(); }
+async function kdSgToggle(id,datum,isDone){
+  try{
+    if(isDone) await api(`stadtgemeinde_gepackt?bestellung_id=eq.${id}`,{method:'DELETE'});
+    else await api('stadtgemeinde_gepackt?on_conflict=bestellung_id',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify([{bestellung_id:id,datum,gepackt_von:currentStore?.name||'Kitchen'}])});
+    kdSgReload();
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
+}
+Object.assign(window,{kdSgSet,kdSgToggle,kdSgReload});
 
 async function renderKitchenDailyHtml(){
   // Daily Business: Store-Ansicht für Kitchen 3400 Kassenbereich
