@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.255';
+const APP_VERSION='6.99.256';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4446,6 +4446,7 @@ function notrufHide(id,status){ try{ localStorage.setItem(`notruf_hide_${id}_${s
 window.notrufHide=notrufHide;
 function renderNotrufStatus(rows){
   const el=document.getElementById('essen-notruf-status'); if(!el) return;
+  if(el.querySelector('iframe')) return; // Live-Karte offen → nicht neu zeichnen
   const me=currentStore.id;
   // 07.10.26: Karten lassen sich wegklicken (pro Status — ändert sich der Status, kommt sie wieder)
   rows=(rows||[]).filter(r=>{ try{ return !localStorage.getItem(`notruf_hide_${r.id}_${r.status}`); }catch(e){ return true; } });
@@ -4458,10 +4459,10 @@ function renderNotrufStatus(rows){
     if(mine){
       if(r.status==='offen'){ head=keinerHat?'😕 Niemand hat etwas übrig':'⏳ Notruf gesendet — warte auf Antwort'; body=keinerHat?('Bitte die Zentrale anrufen. '+notrufTelLink('zentrale','Zentrale anrufen','display:inline-block;margin-top:6px;padding:7px 12px;border-radius:8px;background:#991B1B;color:#fff;font-weight:700;text-decoration:none;')):txt; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">Abbrechen</button>`; }
       else if(r.status==='zugesagt'){ head=`✅ ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von} schickt Essen${r.zusage_menge?' ('+r.zusage_menge+' Gebinde)':''}`; body=`${txt}<br><span style="opacity:.8;">Die Zentrale bestellt den Uber…</span>`; }
-      else { head=`🚗 Uber unterwegs${r.ankunft?' — ca. '+r.ankunft+' Uhr':''}`; body=`${txt} von ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}`; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:9px 14px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Angekommen</button>`; }
+      else { head=`🚗 Uber unterwegs${r.ankunft?' — ca. '+r.ankunft+' Uhr':''}`; body=`${txt} von ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}${notrufLiveHtml(r)}`; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:9px 14px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Angekommen</button>`; }
     } else {
       head=r.status==='zugesagt'?'🤝 Danke — bitte Essen bereit stellen':`🚗 Uber holt ab${r.ankunft?' (ca. '+r.ankunft+' Uhr bei '+(NOTRUF_NAMEN[r.von_store]||'')+')':''}`;
-      body=`Essen für ${NOTRUF_NAMEN[r.von_store]||r.von_store}${r.gerichte&&r.gerichte.length?': '+txt:''}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}`;
+      body=`Essen für ${NOTRUF_NAMEN[r.von_store]||r.von_store}${r.gerichte&&r.gerichte.length?': '+txt:''}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}${notrufLiveHtml(r)}`;
     }
     return `<div id="nr-card-${r.id}" class="card" style="padding:12px 14px;margin-bottom:14px;border:1.5px solid #F59E0B;background:#FFFBEB;position:relative;"><button onclick="notrufHide(${r.id},'${r.status}')" title="Wegklicken" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:16px;color:#92400E;cursor:pointer;">✕</button><div style="font-size:13px;font-weight:800;color:#78350F;padding-right:22px;">${head}</div><div data-no-translate style="font-size:12px;color:#78350F;margin-top:3px;">${body}</div>${btn}</div>`;
   }).join('');
@@ -4479,6 +4480,7 @@ async function renderNotrufZentrale(){
     if(neu.length){ neu.forEach(r=>_notrufZentraleSeen.add(r.id)); showToast('🚗 Notruf: Uber bestellen!'); }
     // Eingabefelder nicht überschreiben, wenn gerade getippt wird
     if(el.contains(document.activeElement) && document.activeElement.tagName==='INPUT') return;
+    if(el.querySelector('iframe')) return; // Live-Karte offen → nicht neu zeichnen
     el.innerHTML=aktiv.map(r=>{
       const txt=notrufGerichteText(r);
       const von=NOTRUF_NAMEN[r.zusage_von]||r.zusage_von, nach=NOTRUF_NAMEN[r.von_store]||r.von_store;
@@ -4492,7 +4494,7 @@ async function renderNotrufZentrale(){
         <button onclick="notrufUberBestellt(${r.id})" style="width:100%;padding:10px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✓ Uber bestellt — an ${nach} melden</button></div>`;
       return `<div class="card" style="padding:12px 14px;margin-bottom:12px;border:1.5px solid #F59E0B;background:#FFFBEB;">
         <div style="font-size:13px;font-weight:800;color:#78350F;">🚗 ${head}</div>
-        <div style="font-size:12px;color:#78350F;margin-top:3px;">Ankunft ${r.ankunft||'–'} Uhr${r.uber_link?` · <a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener">Tracking</a>`:''}</div>
+        <div style="font-size:12px;color:#78350F;margin-top:3px;">${r.ankunft?'Ankunft '+r.ankunft+' Uhr':'Uber unterwegs'}${r.uber_link?` · <a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener">Tracking im neuen Tab</a>`:''}</div>${notrufLiveHtml(r)}
         <button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:12px;cursor:pointer;">Erledigt</button></div>`;
     }).join('');
   }catch(e){console.error(e);}
@@ -4505,6 +4507,19 @@ function notrufZentraleUberOpen(){
   window.open(notrufUberUrl(von,nach),'_blank','noopener');
 }
 window.notrufZentraleUberOpen=notrufZentraleUberOpen;
+// 05.11.26: Uber-Live-Karte direkt in der App (Einbettung — falls Uber das blockiert, bleibt der Tracking-Link im neuen Tab).
+function notrufLiveHtml(r){
+  if(!r||!r.uber_link) return '';
+  return `<button onclick="notrufLive('${r.id}',this)" data-link="${escAttr(r.uber_link)}" style="display:block;width:100%;margin-top:8px;padding:10px;border:none;border-radius:9px;background:#000;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">🗺️ Live-Karte hier anzeigen</button><div id="nr-live-${r.id}"></div>`;
+}
+function notrufLive(id,btn){
+  const box=document.getElementById('nr-live-'+id); if(!box) return;
+  if(box.firstChild){ box.innerHTML=''; btn.textContent='🗺️ Live-Karte hier anzeigen'; return; }
+  box.innerHTML=`<iframe src="${escAttr(btn.dataset.link)}" style="width:100%;height:420px;border:1px solid var(--border);border-radius:10px;margin-top:8px;background:#fff;" allow="geolocation" referrerpolicy="no-referrer"></iframe><div style="font-size:10.5px;color:var(--muted);margin-top:4px;">Bleibt die Karte leer, erlaubt Uber das Einbetten nicht — dann den Tracking-Link im neuen Tab öffnen.</div>`;
+  btn.textContent='✕ Live-Karte schließen';
+}
+Object.assign(window,{notrufLive});
+
 async function notrufZentraleAnlegen(){
   const von=document.getElementById('nzn-von')?.value, nach=document.getElementById('nzn-nach')?.value;
   const link=(document.getElementById('nzn-link')?.value||'').trim(), ank=document.getElementById('nzn-ank')?.value||null;
@@ -12771,7 +12786,7 @@ async function loadLieferTracking(){
     wrap.innerHTML=vis.map(r=>`<div id="lt-${r.id}" style="background:#111;color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:10px;position:relative;">
       <button onclick="ltHide(${r.id})" title="Wegklicken" style="position:absolute;top:6px;right:8px;border:none;background:none;color:#fff;font-size:16px;cursor:pointer;">✕</button>
       <div style="font-size:13.5px;font-weight:700;">🚗 ${escAttr(r.hinweis||'Lieferung per Uber unterwegs')}${r.ankunft?' — ca. '+escAttr(r.ankunft)+' Uhr':''}</div>
-      <a href="${escAttr(r.link)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;background:#D4FF3F;color:#111;border-radius:9px;padding:11px;font-size:13.5px;font-weight:800;text-decoration:none;">📍 Fahrer live verfolgen</a></div>`).join('');
+      <a href="${escAttr(r.link)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;background:#D4FF3F;color:#111;border-radius:9px;padding:11px;font-size:13.5px;font-weight:800;text-decoration:none;">📍 Fahrer live verfolgen</a>${notrufLiveHtml({id:'lt'+r.id,uber_link:r.link})}</div>`).join('');
   }catch(e){console.error(e);}
 }
 function ltHide(id){ try{ localStorage.setItem('lt_hide_'+id,'1'); }catch(e){} document.getElementById('lt-'+id)?.remove(); }
