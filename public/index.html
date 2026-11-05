@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.252';
+const APP_VERSION='6.99.253';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4865,6 +4865,7 @@ async function renderHome(){
     ${feiertagBannerHtml()}
     ${messeInfoHtml}
     ${messeBewertungHtml}
+    <div id="lieferung-track-widget"></div>
     <div id="broadcast-banner-widget"></div>
     ${(()=>{ const n=new Date(); const mins=n.getHours()*60+n.getMinutes(); const inWindow=mins>=765&&mins<=795; /* 12:45–13:15 */
       return currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen' && inWindow ? `
@@ -5117,8 +5118,8 @@ async function renderHome(){
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
   if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); }
-  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); }
-  else { loadActiveBroadcastBanner(); }
+  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); }
+  else { loadActiveBroadcastBanner(); loadLieferTracking(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
 }
 
@@ -12315,7 +12316,16 @@ async function renderBroadcast(){
 
   let html=backToHomeHtml();
   html+=pageHeaderHtml('📣','Nachricht an Stores','An alle Filialen, das Team, den Transporter oder eine bestimmte Filiale.','#2B3A67');
-  html+=`<div class="card" style="padding:14px;">
+  html+=`<div class="card" style="padding:14px;margin-bottom:14px;border:1.5px solid #111;">
+    <div style="font-weight:700;margin-bottom:4px;">🚗 Uber-Lieferung live tracken</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">Link einfügen, Stores ankreuzen — dort erscheint oben auf der Startseite „Fahrer live verfolgen“ (nur heute).</div>
+    <input type="text" id="lt-link" placeholder="https://trip.uber.com/…" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;box-sizing:border-box;">
+    <div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:8px;">${allStoresList.filter(s=>s.id!=='kitchen').map(s=>`<label style="font-size:13px;display:flex;align-items:center;gap:5px;"><input type="checkbox" class="lt-store" value="${s.id}"> ${s.name}</label>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;"><input type="time" id="lt-ank" style="flex:1;padding:9px;border:1px solid var(--border);border-radius:8px;"><input type="text" id="lt-hint" placeholder="Hinweis (optional)" style="flex:2;padding:9px;border:1px solid var(--border);border-radius:8px;"></div>
+    <button class="submit-btn" onclick="ltSave()">🚗 Tracking-Link freischalten</button>
+    <div id="lt-list" style="margin-top:10px;"></div>
+  </div>
+  <div class="card" style="padding:14px;">
     <div style="font-weight:500;margin-bottom:8px;">An wen?</div>
     <select id="bc-target" onchange="document.getElementById('bc-kn-box').style.display=this.value==='team'?'block':'none'" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:16px;box-sizing:border-box;">
       <option value="">📢 Alle Filialen</option>
@@ -12359,6 +12369,7 @@ async function renderBroadcast(){
 
   el.innerHTML=html;
   translateEl(el);
+  ltList();
   loadBroadcastHistory(allStoresList);
 }
 
@@ -12716,6 +12727,42 @@ async function loadActiveBroadcastBanner(){
       </div>`).join('');
   }catch(e){console.error(e);}
 }
+
+// 05.11.26: Uber-Tracking-Link für Lieferungen (z.B. Börse + LB) — Banner auf der Startseite der gewählten Stores.
+async function loadLieferTracking(){
+  const wrap=document.getElementById('lieferung-track-widget');
+  if(!wrap || !currentStore || currentStore.id==='zentrale') return;
+  const today=new Date().toISOString().split('T')[0];
+  try{
+    const rows=await api(`lieferung_tracking?datum=eq.${today}&aktiv=eq.true&stores=cs.{${currentStore.id}}&order=created_at.desc&select=*`).catch(()=>[]);
+    const vis=(rows||[]).filter(r=>{ try{ return !localStorage.getItem('lt_hide_'+r.id); }catch(e){ return true; } });
+    wrap.innerHTML=vis.map(r=>`<div id="lt-${r.id}" style="background:#111;color:#fff;border-radius:12px;padding:12px 14px;margin-bottom:10px;position:relative;">
+      <button onclick="ltHide(${r.id})" title="Wegklicken" style="position:absolute;top:6px;right:8px;border:none;background:none;color:#fff;font-size:16px;cursor:pointer;">✕</button>
+      <div style="font-size:13.5px;font-weight:700;">🚗 ${escAttr(r.hinweis||'Lieferung per Uber unterwegs')}${r.ankunft?' — ca. '+escAttr(r.ankunft)+' Uhr':''}</div>
+      <a href="${escAttr(r.link)}" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;background:#D4FF3F;color:#111;border-radius:9px;padding:11px;font-size:13.5px;font-weight:800;text-decoration:none;">📍 Fahrer live verfolgen</a></div>`).join('');
+  }catch(e){console.error(e);}
+}
+function ltHide(id){ try{ localStorage.setItem('lt_hide_'+id,'1'); }catch(e){} document.getElementById('lt-'+id)?.remove(); }
+async function ltSave(){
+  const link=(document.getElementById('lt-link')?.value||'').trim();
+  const stores=[...document.querySelectorAll('.lt-store:checked')].map(c=>c.value);
+  if(!/^https?:\/\//i.test(link)){ showToast('Link muss mit https:// beginnen',true); return; }
+  if(!stores.length){ showToast('Bitte mindestens einen Store ankreuzen',true); return; }
+  try{
+    await api('lieferung_tracking',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify([{datum:new Date().toISOString().split('T')[0],stores,link,ankunft:document.getElementById('lt-ank')?.value||null,hinweis:(document.getElementById('lt-hint')?.value||'').trim()||null,created_by:currentStore?.name||'Organisation'}])});
+    showToast('✓ Tracking-Link ist bei den Stores sichtbar');
+    document.getElementById('lt-link').value=''; document.querySelectorAll('.lt-store').forEach(c=>c.checked=false);
+    ltList();
+  }catch(e){ showToast('Fehler beim Speichern',true); }
+}
+async function ltList(){
+  const el=document.getElementById('lt-list'); if(!el) return;
+  const today=new Date().toISOString().split('T')[0];
+  const rows=await api(`lieferung_tracking?datum=eq.${today}&aktiv=eq.true&order=created_at.desc&select=*`).catch(()=>[]);
+  el.innerHTML=(rows||[]).map(r=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid var(--border);"><div style="flex:1;">✅ ${escAttr((r.stores||[]).join(', '))}${r.ankunft?' · '+escAttr(r.ankunft):''}</div><button onclick="ltEnd(${r.id})" style="border:1px solid var(--border);background:#fff;border-radius:7px;padding:5px 9px;font-size:11.5px;cursor:pointer;">Beenden</button></div>`).join('');
+}
+async function ltEnd(id){ await api(`lieferung_tracking?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({aktiv:false})}).catch(()=>{}); ltList(); }
+Object.assign(window,{loadLieferTracking,ltHide,ltSave,ltList,ltEnd});
 async function bnMarkDone(id){
   await api('org_broadcast_done?on_conflict=broadcast_id,store_id',{method:'POST',headers:{'Prefer':'resolution=ignore-duplicates'},body:JSON.stringify([{broadcast_id:id,store_id:currentStore.id}])});
   const el=document.getElementById('bn-'+id); if(el) el.remove();
