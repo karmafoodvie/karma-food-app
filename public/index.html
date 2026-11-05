@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.253';
+const APP_VERSION='6.99.254';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4461,7 +4461,7 @@ function renderNotrufStatus(rows){
       else { head=`🚗 Uber unterwegs${r.ankunft?' — ca. '+r.ankunft+' Uhr':''}`; body=`${txt} von ${NOTRUF_NAMEN[r.zusage_von]||r.zusage_von}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}`; btn=`<button onclick="essenNotrufErledigt(${r.id})" style="margin-top:8px;padding:9px 14px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">✓ Angekommen</button>`; }
     } else {
       head=r.status==='zugesagt'?'🤝 Danke — bitte Essen bereit stellen':`🚗 Uber holt ab${r.ankunft?' (ca. '+r.ankunft+' Uhr bei '+(NOTRUF_NAMEN[r.von_store]||'')+')':''}`;
-      body=`${r.zusage_menge||''} Gebinde für ${NOTRUF_NAMEN[r.von_store]||r.von_store}: ${txt}`;
+      body=`${r.zusage_menge||''} Gebinde für ${NOTRUF_NAMEN[r.von_store]||r.von_store}: ${txt}${r.uber_link?`<br><a href="${escAttr(r.uber_link)}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:700;">📍 Fahrer live verfolgen</a>`:''}`;
     }
     return `<div id="nr-card-${r.id}" class="card" style="padding:12px 14px;margin-bottom:14px;border:1.5px solid #F59E0B;background:#FFFBEB;position:relative;"><button onclick="notrufHide(${r.id},'${r.status}')" title="Wegklicken" style="position:absolute;top:6px;right:8px;border:none;background:none;font-size:16px;color:#92400E;cursor:pointer;">✕</button><div style="font-size:13px;font-weight:800;color:#78350F;padding-right:22px;">${head}</div><div data-no-translate style="font-size:12px;color:#78350F;margin-top:3px;">${body}</div>${btn}</div>`;
   }).join('');
@@ -4498,6 +4498,22 @@ async function renderNotrufZentrale(){
   }catch(e){console.error(e);}
 }
 window.renderNotrufZentrale=renderNotrufZentrale;
+// 05.11.26: Zentrale legt eine in WhatsApp vereinbarte Umverteilung selbst an (überspringt Alarm/Zusage) → direkt "Uber bestellen" + Tracking für beide Stores.
+async function notrufZentraleAnlegen(){
+  const von=document.getElementById('nzn-von')?.value, nach=document.getElementById('nzn-nach')?.value;
+  const menge=(document.getElementById('nzn-menge')?.value||'').trim(), was=(document.getElementById('nzn-was')?.value||'').trim();
+  if(!von||!nach||von===nach){ showToast('Bitte zwei verschiedene Stores wählen',true); return; }
+  if(!menge){ showToast('Bitte Menge (Gebinde) angeben',true); return; }
+  try{
+    const now=new Date().toISOString();
+    await api('essen_notruf',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify([{von_store:nach,an_stores:[von],gerichte:was?[was]:null,mengen:null,status:'zugesagt',zusage_von:von,zusage_menge:menge,zusage_am:now}])});
+    showToast('✓ Angelegt — jetzt Uber bestellen');
+    ['nzn-menge','nzn-was'].forEach(i=>{const e=document.getElementById(i); if(e) e.value='';});
+    renderNotrufZentrale();
+  }catch(e){ console.error(e); showToast('Fehler beim Anlegen',true); }
+}
+window.notrufZentraleAnlegen=notrufZentraleAnlegen;
+
 // 07.10.26: Zentrale kann eine Notruf-Karte wegklicken, wenn der Uber nicht (mehr) gebraucht wird —
 // schließt die Anfrage für alle ab (wie "Erledigt").
 async function notrufZentraleWeg(id){
@@ -4991,6 +5007,15 @@ async function renderHome(){
     `:''}
     ${currentStore?.id==='zentrale'?`
     <div id="notstand-zentrale-widget"></div>
+    <details class="card" style="padding:10px 14px;margin-bottom:12px;"><summary style="font-size:13px;font-weight:700;cursor:pointer;">🚗 Umverteilung anlegen (per WhatsApp vereinbart)</summary>
+      <div style="display:flex;gap:6px;margin-top:10px;align-items:center;font-size:12.5px;">
+        <select id="nzn-von" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;">${NOTRUF_WIEN.map(i=>`<option value="${i}">${NOTRUF_NAMEN[i]}</option>`).join('')}</select><span>→</span>
+        <select id="nzn-nach" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;">${NOTRUF_WIEN.map((i,k)=>`<option value="${i}"${k==1?' selected':''}>${NOTRUF_NAMEN[i]}</option>`).join('')}</select>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin:3px 0 8px;">Von (gibt Essen ab) → Nach (braucht Essen)</div>
+      <div style="display:flex;gap:6px;"><input id="nzn-menge" type="text" inputmode="numeric" placeholder="Gebinde" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:8px;"><input id="nzn-was" type="text" placeholder="Was? z.B. Dal, Reis (optional)" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;"></div>
+      <button onclick="notrufZentraleAnlegen()" style="width:100%;margin-top:8px;padding:10px;border:none;border-radius:8px;background:#DC2626;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Anlegen → Uber bestellen</button>
+    </details>
     <div id="notruf-zentrale-widget"></div>
     <div id="org-dashboard-widget"></div>
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
