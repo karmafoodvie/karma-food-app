@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.267';
+const APP_VERSION='6.99.268';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4532,8 +4532,8 @@ const ALT_T={
  thanks:{de:'Danke! 🙏',en:'Thank you! 🙏'},
  again:{de:'Neue Zahlung',en:'New payment'},
  close:{de:'Schließen',en:'Close'},
- tileT:{de:'Karte geht nicht? Per QR zahlen',en:'Card not working? Pay by QR'},
- tileS:{de:'Betrag eingeben → QR zeigen → Zahlung bestätigen',en:'Enter amount → show QR → confirm payment'}
+ tileT:{de:'Per QR zahlen',en:'Pay by QR'},
+ tileS:{de:'Karte geht nicht?',en:'Card not working?'}
 };
 function azt(k,...a){ const e=ALT_T[k]; const l=(typeof lang!=='undefined'&&lang==='de')?'de':'en'; const v=e[l]; return typeof v==='function'?v(...a):v; }
 function altZahlenHeute(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -5026,7 +5026,6 @@ async function renderHome(){
     ${feiertagBannerHtml()}
     ${messeInfoHtml}
     ${messeBewertungHtml}
-    ${altZahlenAktiv()&&currentStore?.id!=='zentrale'?`<div class="home-card" onclick="altZahlenOpen()" style="background:#111;color:#fff;border:none;margin-bottom:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;"><span style="font-size:22px;">💳</span><div><div style="font-weight:700;font-size:14px;">${azt('tileT')}</div><div style="font-size:11px;opacity:.75;">${azt('tileS')}</div></div></div>`:''}
     <div id="lieferung-track-widget"></div>
     <div id="broadcast-banner-widget"></div>
     ${(()=>{ const n=new Date(); const mins=n.getHours()*60+n.getMinutes(); const inWindow=mins>=765&&mins<=795; /* 12:45–13:15 */
@@ -5037,14 +5036,15 @@ async function renderHome(){
     </div>
     `:''; })()}
     ${monthlyCleaningHtml}
+    ${(()=>{
+      const showN=currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen';
+      const showQ=altZahlenAktiv() && currentStore?.id!=='zentrale';
+      if(!showN && !showQ) return '';
+      const btnN=`<button onclick="showEssenNotrufConfirm()" style="flex:1;min-width:0;background:#DC2626;color:#fff;border:none;border-radius:12px;padding:9px 10px;cursor:pointer;box-shadow:0 2px 6px rgba(220,38,38,0.3);display:flex;align-items:center;gap:7px;text-align:left;"><span style="font-size:19px;">🆘</span><div style="min-width:0;"><div style="font-size:12.5px;font-weight:800;line-height:1.15;">Brauchen Essen!</div><div style="font-size:9.5px;opacity:.9;line-height:1.2;">Notruf an andere Locations</div></div></button>`;
+      const btnQ=`<button onclick="altZahlenOpen()" style="flex:1;min-width:0;background:#1a1a18;color:#fff;border:none;border-radius:12px;padding:9px 10px;cursor:pointer;display:flex;align-items:center;gap:7px;text-align:left;"><span style="font-size:19px;">💳</span><div style="min-width:0;"><div style="font-size:12.5px;font-weight:800;line-height:1.15;color:#D4FF3F;">${azt('tileT')}</div><div style="font-size:9.5px;opacity:.75;line-height:1.2;">${azt('tileS')}</div></div></button>`;
+      return `<div style="display:flex;gap:8px;margin-bottom:10px;">${showN?btnN:''}${showQ?btnQ:''}</div>`;
+    })()}
     ${currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen'?`
-    <button onclick="showEssenNotrufConfirm()" style="width:100%;background:#DC2626;color:#fff;border:none;border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(220,38,38,0.3);display:flex;align-items:center;gap:10px;">
-      <span style="font-size:24px;">🆘</span>
-      <div style="text-align:left;flex:1;">
-        <div style="font-size:14px;font-weight:800;">Brauchen dringend Essen!</div>
-        <div style="font-size:11px;opacity:0.9;">Sofort-Meldung an die anderen Wiener Locations bei Rush</div>
-      </div>
-    </button>
     <div id="essen-notruf-confirm"></div>
     <div id="essen-notruf-status"></div>
     `:''}
