@@ -147,6 +147,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="/qrcode.js"></script>
 </head>
 <body>
 
@@ -1589,7 +1590,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.257';
+const APP_VERSION='6.99.258';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4507,6 +4508,79 @@ function notrufZentraleUberOpen(){
   window.open(notrufUberUrl(von,nach),'_blank','noopener');
 }
 window.notrufZentraleUberOpen=notrufZentraleUberOpen;
+// ══ 06.11.26: Alternative Zahlung per Überweisungs-QR (EPC), wenn Bankomat/Kartenterminal ausfällt ══
+// Konto hier eintragen; ALT_ZAHLEN.an=false blendet die Kachel wieder aus.
+const ALT_ZAHLEN={an:true, iban:'', bic:'', name:'Raihmann GmbH'};
+function altZahlenEpc(betrag,ref){
+  const iban=String(ALT_ZAHLEN.iban||'').replace(/\s+/g,'').toUpperCase();
+  return ['BCD','002','1','SCT',ALT_ZAHLEN.bic||'',ALT_ZAHLEN.name,iban,'EUR'+Number(betrag).toFixed(2),'','',ref].join('\n');
+}
+function altZahlenQrSvg(text){
+  try{ qrcode.stringToBytes=qrcode.stringToBytesFuncs['UTF-8']; }catch(e){}
+  const qr=qrcode(0,'M'); qr.addData(text); qr.make();
+  return qr.createSvgTag({cellSize:6,margin:2,scalable:true});
+}
+function altZahlenEuro(n){ return Number(n).toLocaleString('de-AT',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function altZahlenOverlay(inner){
+  let ov=document.getElementById('alt-zahlen-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='alt-zahlen-ov'; ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#fff;overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:18px 16px 40px;'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="width:100%;max-width:420px;">${inner}</div>`;
+}
+function altZahlenClose(){ document.getElementById('alt-zahlen-ov')?.remove(); }
+async function altZahlenOpen(){
+  const heute=new Date().toISOString().split('T')[0];
+  const rows=await api(`alt_zahlungen?store_id=eq.${currentStore.id}&erstellt_am=gte.${heute}T00:00:00&status=eq.bestaetigt&select=betrag`).catch(()=>[]);
+  const sum=(rows||[]).reduce((a,r)=>a+Number(r.betrag||0),0);
+  altZahlenOverlay(`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><div style="font-size:18px;font-weight:800;">💳 Per QR zahlen</div><button onclick="altZahlenClose()" style="border:none;background:#eee;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;">✕</button></div>
+    ${ALT_ZAHLEN.iban?'':'<div style="background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B;border-radius:10px;padding:10px;font-size:12.5px;margin-bottom:12px;">⚠️ Es ist noch keine IBAN hinterlegt — QR noch nicht verwenden.</div>'}
+    <div style="font-size:13px;color:#555;margin-bottom:6px;">Betrag (€)</div>
+    <input id="az-betrag" type="text" inputmode="decimal" placeholder="z.B. 12,50" style="width:100%;padding:16px;font-size:28px;font-weight:800;text-align:center;border:2px solid #111;border-radius:14px;box-sizing:border-box;margin-bottom:12px;">
+    <button onclick="altZahlenQr()" style="width:100%;padding:16px;border:none;border-radius:14px;background:#D4FF3F;color:#111;font-size:17px;font-weight:800;cursor:pointer;">QR-Code anzeigen</button>
+    <div style="margin-top:18px;font-size:12px;color:#777;text-align:center;">Heute hier bestätigt: <b>${(rows||[]).length}</b> Zahlung${(rows||[]).length===1?'':'en'} · <b>${altZahlenEuro(sum)}</b></div>`);
+  setTimeout(()=>document.getElementById('az-betrag')?.focus(),50);
+}
+async function altZahlenQr(){
+  const betrag=parseFloat(String(document.getElementById('az-betrag')?.value||'').replace(',','.'));
+  if(!(betrag>0)){ showToast('Bitte einen Betrag eingeben',true); return; }
+  if(!ALT_ZAHLEN.iban){ showToast('IBAN fehlt noch',true); return; }
+  const now=new Date(), dd=String(now.getDate()).padStart(2,'0')+String(now.getMonth()+1).padStart(2,'0');
+  const hh=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+  const ref=`KF ${String(currentStore.id).toUpperCase()} ${dd} ${hh}`;
+  let id=null;
+  try{
+    const r=await api('alt_zahlungen',{method:'POST',headers:{'Prefer':'return=representation'},body:JSON.stringify([{store_id:currentStore.id,betrag,referenz:ref,status:'offen'}])});
+    id=r&&r[0]?r[0].id:null;
+  }catch(e){ console.error(e); showToast('Fehler beim Speichern — bitte nochmal',true); return; }
+  altZahlenOverlay(`
+    <div style="text-align:center;">
+      <div style="font-size:13px;color:#555;">Bitte mit der Banking-App scannen</div>
+      <div style="font-size:40px;font-weight:900;margin:4px 0 10px;">${altZahlenEuro(betrag)}</div>
+      <div style="width:100%;max-width:320px;margin:0 auto;border:2px solid #111;border-radius:16px;padding:8px;box-sizing:border-box;background:#fff;">${altZahlenQrSvg(altZahlenEpc(betrag,ref))}</div>
+      <div style="font-size:11.5px;color:#777;margin-top:8px;">${escAttr(ALT_ZAHLEN.name)} · Verwendungszweck: <b>${escAttr(ref)}</b></div>
+      <div style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:10px;padding:8px 10px;margin:14px 0 10px;">Erst bestätigen, wenn die Zahlung in der Bank-App der Firma eingegangen ist (nicht nur Screenshot der Kundin).</div>
+      <button onclick="altZahlenConfirm(${id},${betrag},'${escAttr(ref)}')" style="width:100%;padding:18px;border:none;border-radius:14px;background:#16A34A;color:#fff;font-size:18px;font-weight:800;cursor:pointer;">✓ Zahlung eingegangen</button>
+      <button onclick="altZahlenCancel(${id})" style="width:100%;margin-top:10px;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;font-size:14px;cursor:pointer;">Abbrechen</button>
+    </div>`);
+}
+async function altZahlenConfirm(id,betrag,ref){
+  const t=new Date();
+  try{ if(id) await api(`alt_zahlungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'bestaetigt',bestaetigt_von:currentStore?.name||currentStore?.id,bestaetigt_am:t.toISOString()})}); }
+  catch(e){ console.error(e); showToast('Bestätigung konnte nicht gespeichert werden',true); return; }
+  altZahlenOverlay(`
+    <div style="text-align:center;padding-top:30px;">
+      <div style="width:120px;height:120px;border-radius:50%;background:#16A34A;color:#fff;font-size:70px;line-height:120px;margin:0 auto 18px;">✓</div>
+      <div style="font-size:26px;font-weight:900;color:#166534;">Zahlung erhalten</div>
+      <div style="font-size:44px;font-weight:900;margin:8px 0;">${altZahlenEuro(betrag)}</div>
+      <div style="font-size:14px;color:#555;">Danke! 🙏</div>
+      <div style="font-size:12px;color:#888;margin-top:14px;">${t.toLocaleDateString('de-AT')} ${t.toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})} · ${escAttr(ref)} · ${escAttr(currentStore?.name||'')}</div>
+      <button onclick="altZahlenOpen()" style="width:100%;margin-top:30px;padding:16px;border:none;border-radius:14px;background:#111;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">Neue Zahlung</button>
+      <button onclick="altZahlenClose()" style="width:100%;margin-top:10px;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;font-size:14px;cursor:pointer;">Schließen</button>
+    </div>`);
+}
+async function altZahlenCancel(id){ try{ if(id) await api(`alt_zahlungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'storniert'})}); }catch(e){} altZahlenOpen(); }
+Object.assign(window,{altZahlenOpen,altZahlenQr,altZahlenConfirm,altZahlenCancel,altZahlenClose});
+
 // 05.11.26: Uber-Live-Karte direkt in der App (Einbettung — falls Uber das blockiert, bleibt der Tracking-Link im neuen Tab).
 function notrufLiveHtml(r){
   if(!r||!r.uber_link) return '';
@@ -4902,6 +4976,7 @@ async function renderHome(){
     ${feiertagBannerHtml()}
     ${messeInfoHtml}
     ${messeBewertungHtml}
+    ${ALT_ZAHLEN.an&&currentStore?.id!=='zentrale'?`<div class="home-card" onclick="altZahlenOpen()" style="background:#111;color:#fff;border:none;margin-bottom:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;"><span style="font-size:22px;">💳</span><div><div style="font-weight:700;font-size:14px;">Karte geht nicht? Per QR zahlen</div><div style="font-size:11px;opacity:.75;">Betrag eingeben → QR zeigen → Zahlung bestätigen</div></div></div>`:''}
     <div id="lieferung-track-widget"></div>
     <div id="broadcast-banner-widget"></div>
     ${(()=>{ const n=new Date(); const mins=n.getHours()*60+n.getMinutes(); const inWindow=mins>=765&&mins<=795; /* 12:45–13:15 */
