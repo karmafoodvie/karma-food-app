@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.263';
+const APP_VERSION='6.99.264';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4541,15 +4541,23 @@ function altZahlenOverlay(inner){
 }
 function altZahlenClose(){ document.getElementById('alt-zahlen-ov')?.remove(); }
 let _azRef='';
-function altZahlenRefNeu(){
+const ALT_STORE_NAME={lb:'Laurenzerberg',boerse:'Boerse','1020':'Ausstellungsstrasse','3400':'Stadtplatz',kitchen:'Kitchen',zentrale:'Zentrale'};
+// Verwendungszweck: "Auftrag <Store> <TTMM>-<laufende Nr. des Tages je Store>" — z.B. "Auftrag Laurenzerberg 0611-03" (ASCII, SEPA-tauglich)
+async function altZahlenRefNeu(){
   const now=new Date(), dd=String(now.getDate()).padStart(2,'0')+String(now.getMonth()+1).padStart(2,'0');
-  const hh=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
-  _azRef=`KF ${String(currentStore.id).toUpperCase()} ${dd} ${hh}`;
+  const start=new Date(now.getFullYear(),now.getMonth(),now.getDate()).toISOString();
+  let n=null;
+  try{
+    const rows=await Promise.race([api(`alt_zahlungen?store_id=eq.${currentStore.id}&erstellt_am=gte.${start}&select=id`),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),1500))]);
+    n=(rows||[]).length+1;
+  }catch(e){ n=null; }
+  const nr=n!=null?String(n).padStart(2,'0'):String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0'); // Fallback: Uhrzeit
+  _azRef=`Auftrag ${ALT_STORE_NAME[currentStore.id]||String(currentStore.name||currentStore.id).replace(/[^A-Za-z0-9 ]/g,'')} ${dd}-${nr}`;
 }
 // QR sofort sichtbar (ohne Betrag = Kund:in tippt selbst); Betrag eintippen → QR aktualisiert sich live, Betrag steckt dann im Zahlungsauftrag.
 async function altZahlenOpen(){
   if(!ALT_ZAHLEN.iban){ showToast('IBAN fehlt',true); return; }
-  altZahlenRefNeu();
+  await altZahlenRefNeu();
   altZahlenOverlay(`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:18px;font-weight:800;">💳 Per QR zahlen</div><button onclick="altZahlenClose()" style="border:none;background:#eee;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;">✕</button></div>
     <input id="az-betrag" type="text" inputmode="decimal" autocomplete="off" oninput="altZahlenUpdate()" placeholder="Betrag in € (optional)" style="width:100%;padding:12px;font-size:22px;font-weight:800;text-align:center;border:2px solid #111;border-radius:14px;box-sizing:border-box;margin-bottom:10px;">
