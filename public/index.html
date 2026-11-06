@@ -1589,7 +1589,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.256';
+const APP_VERSION='6.99.257';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -10502,7 +10502,7 @@ async function reduceFruechtebecherBestand(produzierteMenge){
     const artikel=await api('articles?id=in.(132,133)&select=id,name,kuechenlager_bestand').catch(()=>[]);
     for(const a of (artikel||[])){
       const neu=Math.max(0, (a.kuechenlager_bestand||0) - verbrauch);
-      await api(`articles?id=eq.${a.id}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:neu,kuechenlager_notiz:null})});
+      await api(`articles?id=eq.${a.id}`,{method:'PATCH',body:JSON.stringify({kuechenlager_bestand:neu,kuechenlager_notiz:null,bestand_stabil:false,bestand_stabil_am:null})}); // 06.11.26: "✓ reicht" würde die automatisch geführte Zahl verstecken
     }
     showToast(`✓ Küchenlager: ${verbrauch} Früchtebecher/Deckel abgezogen`);
   }catch(e){ console.error(e); }
