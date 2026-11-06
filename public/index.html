@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.266';
+const APP_VERSION='6.99.267';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4562,9 +4562,9 @@ function altZahlenOverlay(inner){
 function altZahlenClose(){ document.getElementById('alt-zahlen-ov')?.remove(); }
 let _azRef='';
 const ALT_STORE_NAME={lb:'Laurenzerberg',boerse:'Boerse','1020':'Ausstellungsstrasse','3400':'Stadtplatz',kitchen:'Kitchen',zentrale:'Zentrale'};
-// Verwendungszweck: "Auftrag <Store> <TTMM>-<laufende Nr. des Tages je Store>" — z.B. "Auftrag Laurenzerberg 0611-03" (ASCII, SEPA-tauglich)
+// Verwendungszweck: "Auftrag <Store> <TT.MM.JJJJ> Nr <laufende Nr. des Tages je Store>" — z.B. "Auftrag Laurenzerberg 06.11.2026 Nr 03" (ASCII, SEPA-tauglich)
 async function altZahlenRefNeu(){
-  const now=new Date(), dd=String(now.getDate()).padStart(2,'0')+String(now.getMonth()+1).padStart(2,'0');
+  const now=new Date(), dd=String(now.getDate()).padStart(2,'0')+'.'+String(now.getMonth()+1).padStart(2,'0')+'.'+now.getFullYear();
   const start=new Date(now.getFullYear(),now.getMonth(),now.getDate()).toISOString();
   let n=null;
   try{
@@ -4572,7 +4572,7 @@ async function altZahlenRefNeu(){
     n=(rows||[]).length+1;
   }catch(e){ n=null; }
   const nr=n!=null?String(n).padStart(2,'0'):String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0'); // Fallback: Uhrzeit
-  _azRef=`Auftrag ${ALT_STORE_NAME[currentStore.id]||String(currentStore.name||currentStore.id).replace(/[^A-Za-z0-9 ]/g,'')} ${dd}-${nr}`;
+  _azRef=`Auftrag ${ALT_STORE_NAME[currentStore.id]||String(currentStore.name||currentStore.id).replace(/[^A-Za-z0-9 ]/g,'')} ${dd} Nr ${nr}`;
 }
 // QR sofort sichtbar (ohne Betrag = Kund:in tippt selbst); Betrag eintippen → QR aktualisiert sich live, Betrag steckt dann im Zahlungsauftrag.
 async function altZahlenOpen(){
