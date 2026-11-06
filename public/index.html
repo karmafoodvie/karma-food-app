@@ -1079,6 +1079,7 @@ function renderKarmaverse(){
     </div>
     ${lbl('WENN’S STRESSIG WIRD')}
     <div onclick="kvStoryOpen(${KV_START.rush})" style="background:${KV_NEON};color:${KV_INK};border:2px solid ${KV_INK};box-shadow:2px 2px 0 ${KV_INK};border-radius:16px;padding:10px 13px;cursor:pointer;display:flex;align-items:center;gap:11px;"><div style="font-size:28px;line-height:1;">🌬️</div><div><div style="font-size:14px;font-weight:900;line-height:1.2;">Schlange wird lang? Durchatmen.</div><div style="font-size:10.5px;margin-top:2px;opacity:.8;">3 Schritte für Ruhe und Herzlichkeit</div></div></div>
+    <div onclick="altZahlenOpen()" style="background:#fff;color:${KV_INK};border:2px solid ${KV_INK};box-shadow:2px 2px 0 ${KV_INK};border-radius:16px;padding:10px 13px;cursor:pointer;margin-top:9px;display:flex;align-items:center;gap:10px;"><span style="font-size:22px;">💳</span><div><div style="font-size:14px;font-weight:900;">Notfall: Kartenzahlung geht nicht</div><div style="font-size:11.5px;opacity:.7;">Per QR-Überweisung zahlen lassen</div></div></div>
     ${lbl('UNSER KARMA · SO LEBEN WIR ES')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
       ${tile(KV_NEON,'🌅','Wohin wir wollen','Vision',`kvStoryOpen(${KV_START.vision})`)}
@@ -1590,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.261';
+const APP_VERSION='6.99.262';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4510,7 +4511,19 @@ function notrufZentraleUberOpen(){
 window.notrufZentraleUberOpen=notrufZentraleUberOpen;
 // ══ 06.11.26: Alternative Zahlung per Überweisungs-QR (EPC), wenn Bankomat/Kartenterminal ausfällt ══
 // Konto hier eintragen; ALT_ZAHLEN.an=false blendet die Kachel wieder aus.
-const ALT_ZAHLEN={an:true, iban:'AT192011183992704700', bic:'', name:'RAIHMANN GMBH'};
+// Startseiten-Kachel nur bis einschließlich 'bis' (danach automatisch weg); der Notfall-Button im Karmaverse bleibt immer.
+const ALT_ZAHLEN={bis:'2026-11-06', iban:'AT192011183992704700', bic:'', name:'RAIHMANN GMBH'};
+function altZahlenHeute(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function altZahlenAktiv(){ return altZahlenHeute()<=ALT_ZAHLEN.bis; }
+function altZahlenStepsHtml(){
+  const st=(n,ico,t,sub)=>`<div style="display:flex;align-items:center;gap:12px;background:#F7F7F4;border-radius:14px;padding:10px 12px;"><div style="width:46px;height:46px;border-radius:50%;background:#111;color:#D4FF3F;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${ico}</div><div style="text-align:left;"><div style="font-size:15px;font-weight:800;line-height:1.2;">${n}. ${t}</div><div style="font-size:11.5px;color:#666;margin-top:1px;">${sub}</div></div></div>`;
+  return `<div style="margin-top:16px;"><div style="font-size:15px;font-weight:900;text-align:center;margin-bottom:8px;">So funktioniert’s</div><div style="display:flex;flex-direction:column;gap:7px;">
+    ${st(1,'🏦','Bankkonto-App öffnen','Deine normale Banking-App (George, ELBA, …)')}
+    ${st(2,'➕','Neue Überweisung','oder „Zahlen mit Code“')}
+    ${st(3,'📷','QR-Code scannen','in der Banking-App – nicht mit der Handy-Kamera')}
+    ${st(4,'✅','Betrag überweisen','Betrag stimmt schon – nur noch bestätigen')}
+  </div></div>`;
+}
 function altZahlenEpc(betrag,ref){
   const iban=String(ALT_ZAHLEN.iban||'').replace(/\s+/g,'').toUpperCase();
   return ['BCD','002','1','SCT',ALT_ZAHLEN.bic||'',ALT_ZAHLEN.name,iban,'EUR'+Number(betrag).toFixed(2),'','',ref].join('\n');
@@ -4554,10 +4567,11 @@ async function altZahlenQr(){
   }catch(e){ console.error(e); showToast('Fehler beim Speichern — bitte nochmal',true); return; }
   altZahlenOverlay(`
     <div style="text-align:center;">
-      <div style="font-size:14px;color:#111;font-weight:700;">In der <u>Banking-App</u> scannen</div><div style="font-size:12px;color:#555;">„Zahlen mit Code“ / „QR scannen“ öffnen — nicht mit der Handy-Kamera (die zeigt nur Text bzw. Google)</div>
+      <div style="font-size:14px;color:#111;font-weight:700;">In der <u>Banking-App</u> scannen</div>
       <div style="font-size:40px;font-weight:900;margin:4px 0 10px;">${altZahlenEuro(betrag)}</div>
       <div style="width:100%;max-width:320px;margin:0 auto;border:2px solid #111;border-radius:16px;padding:8px;box-sizing:border-box;background:#fff;">${altZahlenQrSvg(altZahlenEpc(betrag,ref))}</div>
       <div style="font-size:11.5px;color:#777;margin-top:8px;">${escAttr(ALT_ZAHLEN.name)} · Verwendungszweck: <b>${escAttr(ref)}</b></div>
+      ${altZahlenStepsHtml()}
       <div style="font-size:12px;color:#92400E;background:#FFFBEB;border-radius:10px;padding:8px 10px;margin:14px 0 10px;">Erst bestätigen, wenn die Zahlung in der Bank-App der Firma eingegangen ist (nicht nur Screenshot der Kundin).</div>
       <button onclick="altZahlenConfirm(${id},${betrag},'${escAttr(ref)}')" style="width:100%;padding:18px;border:none;border-radius:14px;background:#16A34A;color:#fff;font-size:18px;font-weight:800;cursor:pointer;">✓ Zahlung eingegangen</button>
       <button onclick="altZahlenCancel(${id})" style="width:100%;margin-top:10px;padding:12px;border:1px solid #ddd;border-radius:12px;background:#fff;font-size:14px;cursor:pointer;">Abbrechen</button>
@@ -4976,7 +4990,7 @@ async function renderHome(){
     ${feiertagBannerHtml()}
     ${messeInfoHtml}
     ${messeBewertungHtml}
-    ${ALT_ZAHLEN.an&&currentStore?.id!=='zentrale'?`<div class="home-card" onclick="altZahlenOpen()" style="background:#111;color:#fff;border:none;margin-bottom:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;"><span style="font-size:22px;">💳</span><div><div style="font-weight:700;font-size:14px;">Karte geht nicht? Per QR zahlen</div><div style="font-size:11px;opacity:.75;">Betrag eingeben → QR zeigen → Zahlung bestätigen</div></div></div>`:''}
+    ${altZahlenAktiv()&&currentStore?.id!=='zentrale'?`<div class="home-card" onclick="altZahlenOpen()" style="background:#111;color:#fff;border:none;margin-bottom:10px;padding:12px 14px;display:flex;align-items:center;gap:10px;"><span style="font-size:22px;">💳</span><div><div style="font-weight:700;font-size:14px;">Karte geht nicht? Per QR zahlen</div><div style="font-size:11px;opacity:.75;">Betrag eingeben → QR zeigen → Zahlung bestätigen</div></div></div>`:''}
     <div id="lieferung-track-widget"></div>
     <div id="broadcast-banner-widget"></div>
     ${(()=>{ const n=new Date(); const mins=n.getHours()*60+n.getMinutes(); const inWindow=mins>=765&&mins<=795; /* 12:45–13:15 */
