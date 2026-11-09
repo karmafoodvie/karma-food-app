@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.269';
+const APP_VERSION='6.99.270';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4609,13 +4609,16 @@ function altZahlenUpdate(){
   const qr=document.getElementById('az-qr'); if(qr) qr.innerHTML=altZahlenQrSvg(altZahlenEpc(b,_azRef));
   const l=document.getElementById('az-label'); if(l) l.innerHTML=b?`${azt('lblAmt')} <b style="font-size:20px;color:#1a1a18;">${altZahlenEuro(b)}</b>`:azt('lblNone');
 }
+let _azBusy=false;
 async function altZahlenConfirm(){
+  if(_azBusy) return; // Doppelklick-Schutz: sonst wird dieselbe Zahlung mehrfach gebucht
   const betrag=altZahlenBetrag();
   if(!betrag){ showToast(azt('needAmt'),true); return; }
+  _azBusy=true;
   const t=new Date();
   try{ await api('alt_zahlungen',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify([{store_id:currentStore.id,betrag,referenz:_azRef,status:'bestaetigt',bestaetigt_von:currentStore?.name||currentStore?.id,bestaetigt_am:t.toISOString()}])}); }
-  catch(e){ console.error(e); showToast('Bestätigung konnte nicht gespeichert werden — bitte nochmal',true); return; }
-  const ref=_azRef;
+  catch(e){ console.error(e); showToast('Bestätigung konnte nicht gespeichert werden — bitte nochmal',true); _azBusy=false; return; }
+  const ref=_azRef; _azBusy=false;
   altZahlenOverlay(`
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 20px;">
       <div style="width:120px;height:120px;border-radius:50%;background:#16A34A;color:#fff;font-size:66px;line-height:120px;margin-bottom:18px;box-shadow:5px 5px 0 #D4FF3F;">✓</div>
