@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.270';
+const APP_VERSION='6.99.271';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -11509,6 +11509,22 @@ async function renderOrgStoreForecast(){
         if(catFallback) suggRegReason=`anderes Gericht, Kategorie ${cat}, gleicher Wochentag: ${suggRegReason}`;
         if(calT.pct!==0) suggRegReason+=` · ${calT.calText||('Kalender '+calT.pct+'%')}`;
       }
+      // 09.11.26: Reis zieht mit Dal/Curry mit — Untergrenze ½ × (Dal + Curry + Tofu-Masala) des Tages in diesem Store
+      // (Verhältnis der letzten Wochen 0,47–0,61; am Mo waren Börse/LB trotz ok-Vorschlag um 13 Uhr ausverkauft,
+      // weil der Reis-Vorschlag nur aus Rest/Ausverkauft der Vorwochen kam und nicht aus den Hauptgerichten).
+      let reisWarn='';
+      if(cat==='Reis' && !dayClosed){
+        const dc=['Dal','Curry','Tofu'].reduce((sum,c)=>sum+(catIndex[dateStr+'|'+c]||[]).reduce((a,x)=>a+(Number(x.qty)||0),0),0);
+        if(dc>0){
+          const floorQ=Math.round(dc*0.5*4)/4;
+          if(cur!=null && cur>0 && cur<floorQ*0.8) reisWarn=`<div style="font-size:9px;color:#DC2626;font-weight:700;line-height:1.2;">⚠ wenig Reis<br>sonst ≈ ${formatQty(floorQ)}</div>`;
+          if(suggRegQty==null || suggRegQty<floorQ){
+            const old=suggRegQty;
+            suggRegQty=floorQ;
+            suggRegReason=`Reis ≈ ½ × Dal+Curry (${formatQty(dc)})`+(old!=null?` statt Ø ${formatQty(old)}`:'');
+          }
+        }
+      }
       if(suggRegQty!=null && dateStr>todayStr) orgEstLogRows.push({store_id:orgPlanStore, forecast_date:dateStr, dish_name:dish, category:cat, suggested_qty:suggRegQty, suggestion_reason:suggRegReason.slice(0,500)});
       html+=`<td style="padding:5px 3px;vertical-align:top;">
         ${dishLabelHtml}
@@ -11519,6 +11535,7 @@ async function renderOrgStoreForecast(){
           style="width:52px;text-align:center;border:1.5px solid ${bCol};border-radius:6px;font-size:13.5px;font-weight:${isStore?'700':'400'};padding:5px 2px;background:${bBg};">
         ${srcLbl}
         ${dispLine}
+        ${reisWarn}
       </td>`;
       return;
     });
