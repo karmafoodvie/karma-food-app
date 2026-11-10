@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.277';
+const APP_VERSION='6.99.278';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18814,7 +18814,7 @@ async function kdSgInner(datum){
   const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0];
   const morgen=kdSgNextDay(heute);
   const chip=(ds,l)=>`<button onclick="kdSgSet('${ds}')" style="padding:5px 12px;border-radius:99px;border:1.5px solid #059669;font-size:11.5px;font-weight:600;cursor:pointer;${ds===datum?'background:#059669;color:#fff;':'background:#fff;color:#059669;'}">${l}</button>`;
-  const head=`<div style="display:flex;align-items:center;gap:8px;margin:4px 0 8px;"><div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;flex:1;">🏛️ ONLINE-BESTELLUNGEN — ZU PACKEN</div>${chip(heute,'Heute')}${chip(morgen,'Morgen')}</div>`;
+  const head=`<div style="display:flex;align-items:center;gap:8px;margin:4px 0 8px;"><div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;flex:1;">🏛️ ONLINE-BESTELLUNGEN — ZU PACKEN</div>${chip(heute,'Heute')}${chip(morgen,'Morgen')}<button onclick="kdSgHistOpen()" style="padding:5px 12px;border-radius:99px;border:1.5px solid #6B7280;font-size:11.5px;font-weight:600;cursor:pointer;background:#fff;color:#374151;">Verlauf</button></div>`;
   let d;
   try{ d=await sgCall('?action=list&datum='+datum); }
   catch(e){ return head+`<div class="card" style="padding:12px;font-size:12px;color:var(--muted);">Bestellungen konnten nicht geladen werden (${escAttr(e.message)}).</div>`; }
@@ -18828,6 +18828,7 @@ async function kdSgInner(datum){
   const tot={}; rows.forEach(r=>(r.items||[]).forEach(i=>{ if(i.anzahl>0) tot[i.name]=(tot[i.name]||0)+i.anzahl; }));
   const totList=Object.entries(tot).sort((a,b)=>b[1]-a[1]);
   const nDone=rows.filter(r=>done.has(Number(r.id))).length, pct=Math.round(100*nDone/rows.length);
+  if(nDone===rows.length) return head+`<div class="card" style="padding:12px;margin-bottom:14px;font-size:12.5px;color:#166534;text-align:center;font-weight:600;">✓ Alles gepackt (${rows.length} Bestellung${rows.length===1?'':'en'}) — im Verlauf nachzulesen</div>`;
   let h=head;
   h+=`<div class="card" style="padding:12px;margin-bottom:14px;">
     <div style="border-radius:9px;padding:7px 10px;font-size:11.5px;font-weight:700;background:${st.bg};color:${st.c};margin-bottom:10px;">${st.t} · ${rows.length} Bestellung${rows.length===1?'':'en'} · ${sgFmt(sum)}</div>
@@ -18869,13 +18870,19 @@ async function kdSgTopHtml(){
       <div style="font-size:12px;margin-top:3px;line-height:1.4;">${offen?'Anmeldung läuft noch bis '+escAttr((d.config&&d.config.cutoff)||'11:40')+'. ':''}Stadtgemeinde, KH, Essl, Baubehörde: <b>${offen?'bisher keine Bestellung':'nichts zu packen, nichts zu liefern'}</b>.</div></div>`;
   }
   const sum=rows.reduce((a,r)=>a+Number(r.summe),0), min=Number(d.min_heute||0), ok=sum>=min, final=!!d.final;
+  // 10.11.26: alles gepackt -> verschwindet von der Fläche, bleibt nur eine schmale Zeile mit Zugang zum Verlauf
+  const gepH=await api(`stadtgemeinde_gepackt?datum=eq.${heute}&select=bestellung_id`).catch(()=>[]);
+  const doneH=new Set((gepH||[]).map(g=>Number(g.bestellung_id)));
+  if(ok && rows.every(r=>doneH.has(Number(r.id)))){
+    return `<div onclick="kdSgHistOpen()" style="cursor:pointer;display:flex;align-items:center;gap:8px;border-radius:10px;padding:8px 12px;margin-bottom:12px;background:#F3F4F6;border:1px solid #E5E7EB;font-size:12px;color:#4B5563;"><span style="font-weight:700;color:#166534;">✓ Online-Bestellungen heute gepackt</span><span style="flex:1"></span><span style="font-weight:600;">Verlauf ›</span></div>`;
+  }
   const col=ok?{bg:'#DCFCE7',bd:'#16A34A'}:final?{bg:'#FEE2E2',bd:'#DC2626'}:{bg:'#FEF3C7',bd:'#F59E0B'};
   const head=ok?'📦 Heute packen & liefern':final?'🚫 Mindestbestellwert nicht erreicht – NICHT liefern':'⏳ Bestellt, Mindestbestellwert noch offen';
   return `<div onclick="kdSgPopupCheck(true)" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:${col.bg};border:1.5px solid ${col.bd};">
     <div style="font-size:14px;font-weight:700;">${head}</div>
     ${bestellt.map(x=>`<div data-no-translate style="font-size:12.5px;margin-top:4px;"><b>${escAttr(x.name)}</b>: ${port(by[x.id])} Portionen (${by[x.id].length} Bestellung${by[x.id].length===1?'':'en'})</div>`).join('')}
     ${leer.length?`<div data-no-translate style="font-size:12px;margin-top:5px;color:#4B5563;">Heute nichts bestellt: ${leer.map(x=>escAttr(x.name)).join(', ')}</div>`:''}
-    <div style="font-size:11px;margin-top:6px;color:#4B5563;">${ok?'Summe '+sgFmt(sum)+' · Antippen: Details & Abhaken':final?'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Kund:innen informieren':'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Anmeldung bis '+escAttr((d.config&&d.config.cutoff)||'11:40')}</div></div>`;
+    <div style="font-size:11px;margin-top:6px;color:#4B5563;display:flex;gap:8px;align-items:center;"><span style="flex:1;">${ok?'Summe '+sgFmt(sum)+' · Antippen: Details & Abhaken':final?'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Kund:innen informieren':'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Anmeldung bis '+escAttr((d.config&&d.config.cutoff)||'11:40')}</span><button onclick="event.stopPropagation();kdSgHistOpen()" style="border:1px solid #9CA3AF;background:#fff;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;">Verlauf ›</button></div></div>`;
 }
 
 // ── Pop-up Online-Bestellungen (10.11.26): geht beim Öffnen der Küche automatisch auf, solange heute noch nicht
@@ -18942,7 +18949,7 @@ function kdSgPopupDraw(){
     h+=`<div style="text-align:center;font-size:15px;font-weight:700;color:#166534;padding:14px 0 6px;">✓ Alles gepackt</div>`;
   }
   if(erl.length) h+=`<div style="font-size:10.5px;font-weight:700;color:#9CA3AF;margin:12px 0 4px;">SCHON GEPACKT</div>`+erl.map(r=>`<div data-no-translate onclick="kdSgPopToggle(${r.id})" style="font-size:11.5px;color:#9CA3AF;padding:3px 2px;cursor:pointer;">✓ ${escAttr(nm[r.stelle_id]||'?')} · ${escAttr(r.name||'–')} · ${(r.items||[]).filter(i=>i.anzahl>0).map(i=>i.anzahl+'× '+escAttr(i.name)).join(', ')}</div>`).join('');
-  h+=`</div>`;
+  h+=`<button onclick="kdSgHistOpen()" style="width:100%;margin-top:12px;padding:9px;border:1.5px solid #D1D5DB;border-radius:10px;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">Verlauf vergangene Bestellungen ›</button></div>`;
   ov.innerHTML=h;
 }
 async function kdSgPopToggle(id){
@@ -18959,6 +18966,56 @@ async function kdSgPopToggle(id){
 }
 function kdSgPopupClose(){ document.getElementById('kd-sg-pop')?.remove(); window._kdSgPop=null; kdSgReload(); }
 Object.assign(window,{kdSgPopupCheck,kdSgPopToggle,kdSgPopupClose});
+
+// ── Verlauf Online-Bestellungen (10.11.26): vergangene Tage mit Stelle, Person/Durchwahl, Gerichten, Zahlung, gepackt-Status.
+// Die Tabellen sind per RLS gesperrt, daher je Liefertag ein Aufruf der Edge Function (parallel).
+async function kdSgHistOpen(n){
+  n=n||15; window._kdSgHistN=n;
+  let ov=document.getElementById('kd-sg-hist');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='kd-sg-hist';
+    ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;';
+    ov.onclick=e=>{ if(e.target===ov) kdSgHistClose(); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML=`<div style="background:#fff;width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:24px;text-align:center;color:#6B7280;">Verlauf wird geladen…</div>`;
+  const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0];
+  const dates=[]; const dd=new Date(heute+'T12:00:00Z');
+  while(dates.length<n){ if(dd.getUTCDay()!==0&&dd.getUTCDay()!==6) dates.push(dd.toISOString().split('T')[0]); dd.setUTCDate(dd.getUTCDate()-1); }
+  const res=await Promise.all(dates.map(ds=>sgCall('?action=list&datum='+ds).then(x=>({ds,x})).catch(()=>({ds,x:null}))));
+  const gep=await api(`stadtgemeinde_gepackt?datum=gte.${dates[dates.length-1]}&select=bestellung_id`).catch(()=>[]);
+  const done=new Set((gep||[]).map(g=>Number(g.bestellung_id)));
+  const wt=ds=>new Date(ds+'T12:00:00Z').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit',timeZone:'UTC'});
+  let h=`<div style="background:#fff;width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 14px 22px;box-shadow:0 -6px 30px rgba(0,0,0,.25);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><div style="flex:1;font-size:16px;font-weight:800;">🏛️ Verlauf Online-Bestellungen</div><button onclick="kdSgHistClose()" style="border:none;background:#F3F4F6;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">Schließen</button></div>`;
+  let any=false;
+  res.forEach(({ds,x})=>{
+    if(!x) return;
+    const nm={}; (x.stellen||[]).forEach(s=>nm[s.id]=s.name);
+    const all=(x.bestellungen||[]).filter(r=>r.stelle_id);
+    const rows=all.filter(r=>!r.storniert);
+    if(!all.length) return;
+    any=true;
+    const sum=rows.reduce((a,r)=>a+Number(r.summe),0), min=Number(x.min_heute||0), ok=sum>=min;
+    const fin=ds<heute||!!x.final;
+    const tag=!rows.length?{t:'alles storniert',c:'#6B7280'}:ok?{t:'geliefert',c:'#166534'}:fin?{t:'nicht geliefert (Mindestwert)',c:'#991B1B'}:{t:'Mindestwert offen',c:'#92400E'};
+    h+=`<div style="margin:12px 0 5px;display:flex;align-items:baseline;gap:8px;"><span style="font-size:13px;font-weight:800;">${wt(ds)}</span><span style="font-size:11px;color:#6B7280;">${rows.length} Bestellung${rows.length===1?'':'en'} · ${sgFmt(sum)}</span><span style="flex:1"></span><span style="font-size:10.5px;font-weight:700;color:${tag.c};">${tag.t}</span></div>`;
+    all.forEach(r=>{
+      const dn=done.has(Number(r.id));
+      const zl=r.zahlung==='sodexo'?'Sodexo':r.zahlung==='bar'?'Bar':r.zahlung?'Sodexo + Bar':'';
+      h+=`<div data-no-translate style="border:1px solid #E5E7EB;border-radius:10px;padding:8px 10px;margin-bottom:5px;${r.storniert?'opacity:.5;text-decoration:line-through;':''}">
+        <div style="display:flex;align-items:baseline;gap:6px;font-size:12px;"><b style="color:#059669;">${escAttr(nm[r.stelle_id]||'?')}</b><b>👤 ${escAttr(r.name&&r.name!=='–'?r.name:'–')}</b><span style="color:#6B7280;">${zl}</span><span style="flex:1"></span><span style="font-size:11px;color:${r.storniert?'#6B7280':dn?'#166534':'#9CA3AF'};">${r.storniert?'storniert':dn?'✓ gepackt':'nicht abgehakt'}</span></div>
+        <div style="font-size:12.5px;line-height:1.45;margin-top:2px;">${(r.items||[]).filter(i=>i.anzahl>0).map(i=>`<b>${i.anzahl}×</b> ${escAttr(i.name)}`).join(' · ')} <span style="color:#6B7280;">· ${sgFmt(r.summe)}</span></div>
+        ${r.notiz?`<div style="font-size:11px;color:#92400E;margin-top:2px;">📝 ${escAttr(r.notiz)}</div>`:''}
+      </div>`;
+    });
+  });
+  if(!any) h+=`<div style="text-align:center;color:#6B7280;font-size:13px;padding:18px 0;">In den letzten ${n} Liefertagen gab es keine Bestellungen.</div>`;
+  h+=`<button onclick="kdSgHistOpen(${n+15})" style="width:100%;margin-top:12px;padding:10px;border:1.5px solid #D1D5DB;border-radius:10px;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;">Weitere 15 Liefertage laden</button><div style="font-size:10.5px;color:#9CA3AF;text-align:center;margin-top:6px;">Namen/Durchwahlen werden nach 90 Tagen automatisch anonymisiert.</div></div>`;
+  ov.innerHTML=h;
+}
+function kdSgHistClose(){ document.getElementById('kd-sg-hist')?.remove(); }
+Object.assign(window,{kdSgHistOpen,kdSgHistClose});
 async function kdSgReload(){ const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]; const top=await kdSgTopHtml().catch(()=>''); const inner=await kdSgInner(window._kdSgDatum||heute); document.querySelectorAll('.kd-sg-top').forEach(e=>e.innerHTML=top); document.querySelectorAll('.kd-sg').forEach(e=>e.innerHTML=inner); }
 function kdSgSet(ds){ window._kdSgDatum=ds; kdSgReload(); }
 async function kdSgToggle(id,datum,isDone){
