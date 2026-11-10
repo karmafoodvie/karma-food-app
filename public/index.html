@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.274';
+const APP_VERSION='6.99.275';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5039,6 +5039,10 @@ async function renderHome(){
     </div>
     `:''; })()}
     ${monthlyCleaningHtml}
+    ${(()=>{ /* 10.11.26: Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) für Kitchen + Stadtplatz: Status-Zeile + Pop-up */
+      const sgShow=currentStore?.id==='kitchen' || currentStore?.id==='3400';
+      if(sgShow) setTimeout(()=>{ kdSgReload().catch(()=>{}); kdSgPopupCheck(false); },600);
+      return sgShow?'<div class="kd-sg-top"></div>':''; })()}
     ${(()=>{
       const showN=currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen';
       const showQ=altZahlenAktiv() && currentStore?.id!=='zentrale';
