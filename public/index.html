@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.278';
+const APP_VERSION='6.99.279';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5042,7 +5042,7 @@ async function renderHome(){
     `:''; })()}
     ${monthlyCleaningHtml}
     ${(()=>{ /* 10.11.26: Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) für Kitchen + Stadtplatz: Status-Zeile + Pop-up */
-      const sgShow=currentStore?.id==='kitchen' || currentStore?.id==='3400';
+      const sgShow=currentStore?.id==='kitchen' && !!window._homeHideRoles; // nur im Daily (Wunsch 10.11.)
       if(sgShow) setTimeout(()=>{ kdSgReload().catch(()=>{}); kdSgPopupCheck(false); },600);
       return sgShow?'<div class="kd-sg-top"></div>':''; })()}
     ${(()=>{
@@ -19265,10 +19265,6 @@ async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam</div>`;
   html+=await zmCardHtml().catch(()=>'');
-  // 10.11.26: Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) auch hier oben, nicht nur im Daily
-  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
-  html+=`<div class="kd-sg">${await kdSgInner(window._kdSgDatum||new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]).catch(()=>'')}</div>`;
-  setTimeout(()=>kdSgPopupCheck(false),500);
   // Für das Tab-Label: nächster Kochtermin = morgen, Sa/So übersprungen (an denen wird nicht gekocht)
   const nextCookDay=new Date();
   nextCookDay.setDate(nextCookDay.getDate()+1);
@@ -22109,6 +22105,9 @@ async function renderSweets(){
   const sweetsDateLabel=sweetsViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
 
   let html=tabsHtml;
+  // 10.11.26: Online-Bestellungen (Status + Pop-up + Verlauf) — nur im Daily und hier bei Kassa/Everton
+  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
+  setTimeout(()=>kdSgPopupCheck(false),500);
 
   if(teamTab==='stadtgemeinde'){
     html+=await stadtgemeindeBodyHtml();
