@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.276';
+const APP_VERSION='6.99.277';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4840,7 +4840,7 @@ async function renderHome(){
 
   let remindersHtml='';
   let monthlyCleaningHtml='';
-  let dcStatus={wek:false,reinCount:0,kuehl:false};
+  let dcStatus={wek:false,reinCount:0,kuehl:false,wolt:false};
   let gamificationHtml='';
   let disposalDone=false;
   let feedbackDoneHome=false;
@@ -4857,11 +4857,13 @@ async function renderHome(){
     const reminders=[];
 
     try{
-      const [wekToday,reinToday,kuehlToday]=await Promise.all([
+      const [wekToday,reinToday,kuehlToday,woltTodayH]=await Promise.all([
         api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=id`).catch(()=>[]),
         api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]),
-        api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=id`).catch(()=>[])
+        api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=id`).catch(()=>[]),
+        api(`wolt_check?store_id=eq.${currentStore.id}&datum=eq.${todayDate}&select=handy_an`).catch(()=>[])
       ]);
+      dcStatus.wolt=(woltTodayH||[]).length>0;
       dcStatus.wek=(wekToday||[]).length>0;
       const r=(reinToday||[])[0];
       dcStatus.reinCount=r?(r.reinigung_erledigt?1:0)+(r.desinfektion_erledigt?1:0):0;
@@ -5083,6 +5085,7 @@ async function renderHome(){
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
         ${dcStatus.wek?'<span class="badge badge-ok" style="font-size:10px;">Wareneingang ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Wareneingang</span>'}
         ${dcStatus.kuehl?'<span class="badge badge-ok" style="font-size:10px;">Kühlung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Kühlung</span>'}
+        ${dcStatus.wolt?'<span class="badge badge-ok" style="font-size:10px;">Wolt ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Wolt</span>'}
       </div>
     </div>
     <div onclick="goTo('oeffnungHilfe')" style="text-align:center;margin:-4px 0 10px;">
@@ -14753,15 +14756,17 @@ async function renderDailyCheck(){
     return;
   }
   const today=new Date().toISOString().split('T')[0];
-  const [wekRows,reinRows,kuehlRows,wekPrevRows,kuehlPrevRows,dlFcRows,dlSupRows]=await Promise.all([
+  const [wekRows,reinRows,kuehlRows,wekPrevRows,kuehlPrevRows,dlFcRows,dlSupRows,woltRows]=await Promise.all([
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temperatur,temperaturen&order=datum.desc&limit=1`).catch(()=>[]),
     api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=lt.${today}&select=temp_klein,temp_gross&order=datum.desc&limit=1`).catch(()=>[]),
     api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=eq.${today}&qty=gt.0&select=dish_name,qty,groesse&order=dish_name.asc`).catch(()=>[]),
-    api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${today}&qty=gt.0&select=article_name,qty&order=article_name.asc`).catch(()=>[])
+    api(`kitchen_supply_today?store_id=eq.${currentStore.id}&supply_date=eq.${today}&qty=gt.0&select=article_name,qty&order=article_name.asc`).catch(()=>[]),
+    api(`wolt_check?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[])
   ]);
+  const woltToday=(woltRows||[])[0]||null;
   const wek=(wekRows||[])[0];
   const wareOkDefault=!wek || wek.ware_ok!==false;
   const reinig=(reinRows||[])[0];
@@ -14783,7 +14788,7 @@ async function renderDailyCheck(){
       <div style="flex:1;height:6px;border-radius:4px;background:var(--green);"></div>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Schritt 2 von 2</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Beide Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Alle Bereiche ausfüllen — am Ende gemeinsam abschicken.</div>
 
     ${dailyCheckLieferungHtml(dlFcRows,dlSupRows,wek,wekPrev)}
     <div class="section-lbl" style="color:var(--green);">🌡️ Wareneingangskontrolle</div>
@@ -14852,6 +14857,18 @@ async function renderDailyCheck(){
         <div class="item-name">🧊 Vitrine</div>
         <input id="kuehl-vitrine" type="number" step="0.1" value="${vitrineDefault}" placeholder="max 6°C" oninput="var v=parseFloat(String(this.value).replace(',','.'));this.style.borderColor=(!isNaN(v)&&v>6)?'#DC2626':'';this.style.color=(!isNaN(v)&&v>6)?'#DC2626':'';" style="width:64px;text-align:center;border:1.5px solid var(--border);border-radius:6px;font-size:13px;padding:6px 4px;">
       </div>`:''}
+    </div>
+
+    <div class="section-lbl" style="color:#009DE0;">🛵 Wolt</div>
+    <div class="card" style="border:1.5px solid #009DE0;padding:4px 14px 12px;">
+      ${[['handy','📱','Wolt-Handy / Tablet ist angeschaltet',woltToday?.handy_an],
+         ['menue','📋','Wolt-Menü stimmt (heutige Gerichte) und ist eingeschaltet',woltToday?.menue_ok],
+         ['combo','🍱','Alles für die Lunch Combo ist da',woltToday?.combo_ok]].map(([k,ic,t,v])=>`
+      <div class="cl-item" style="padding:10px 0;" onclick="toggleWoltItem('${k}')">
+        <div class="check-box${v?' done':''}" id="wolt-box-${k}" data-value="${v?'1':'0'}">${v?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+        <span class="cl-text">${ic} ${t}</span>
+      </div>`).join('')}
+      <input id="wolt-notiz" type="text" placeholder="Falls etwas nicht passt: was fehlt? (Pflicht)" value="${escAttr(woltToday?.notiz||'')}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;margin-top:4px;font-size:13px;">
     </div>
 
     <button class="submit-btn" style="margin-top:16px;font-size:15px;padding:14px;" onclick="saveDailyCheckAll()">
@@ -15079,6 +15096,10 @@ async function saveDailyCheckAll(){
   const vitrineEl=document.getElementById('kuehl-vitrine');
   const vitrine=vitrineEl?parseFloat(String(vitrineEl.value).replace(',','.')):NaN;
   if(vitrineEl && isNaN(vitrine)){ showToast('Bitte auch die Vitrinen-Temperatur eintragen'); return; }
+  const woltV=k=>document.getElementById('wolt-box-'+k)?.dataset.value==='1';
+  const woltNotiz=(document.getElementById('wolt-notiz')?.value||'').trim();
+  const woltAlles=woltV('handy')&&woltV('menue')&&woltV('combo');
+  if(!woltAlles && !woltNotiz){ showToast('Wolt: bitte alles abhaken — oder eintragen, was nicht passt'); document.getElementById('wolt-notiz')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
   const _dlDish={}; dl.rows.filter(r=>r.kind==='dish').forEach(r=>{_dlDish[r.name]=(_dlDish[r.name]||0)+r.geliefert;});
   const ware=dl.rows.some(r=>r.kind==='dish')?Object.keys(_dlDish).filter(n=>_dlDish[n]>0).join(', '):(getSelectedWaren()||'');
   const wareOk=document.getElementById('wek-ware-ok-box')?.dataset.value==='1';
@@ -15088,6 +15109,10 @@ async function saveDailyCheckAll(){
       (async()=>{
         await api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
         await api('wareneingang',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,lieferant:FIXER_LIEFERANT||null,ware:ware||null,ware_ok:wareOk,temperatur:minTemp,temperaturen,massnahme:massnahme||null,mitarbeiter:currentStore.name,lieferung_abgleich:dl.rows.length?dl.rows:null}])});
+      })(),
+      (async()=>{
+        await api(`wolt_check?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
+        await api('wolt_check',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,handy_an:woltV('handy'),menue_ok:woltV('menue'),combo_ok:woltV('combo'),notiz:woltNotiz||null,mitarbeiter:currentStore.name}])});
       })(),
       (async()=>{
         await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
@@ -15223,6 +15248,14 @@ function getSelectedWaren(){
   return sel.join(', ');
 }
 
+function toggleWoltItem(k){
+  const box=document.getElementById('wolt-box-'+k); if(!box) return;
+  const next=box.dataset.value!=='1';
+  box.dataset.value=next?'1':'0';
+  box.classList.toggle('done', next);
+  box.innerHTML=next?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':'';
+}
+window.toggleWoltItem=toggleWoltItem;
 function toggleWareOkUI(){
   const box=document.getElementById('wek-ware-ok-box');
   const next=!(box.dataset.value==='1');
