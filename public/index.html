@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.271';
+const APP_VERSION='6.99.272';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18665,6 +18665,7 @@ async function renderKitchenDaily(){
     <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${woche}</span>
   </div>`;
   html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
+  html+=`<div id="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
 
   // Start-/Ende-Schicht — bewusst KEINE eigene Kitchen-Logik gebaut, sondern die exakt gleichen
   // generischen Store-Screens verlinkt, die auch Ausstellungsstraße & Co. nutzen (Wareneingang,
@@ -18792,7 +18793,7 @@ async function kdSgInner(datum){
   catch(e){ return head+`<div class="card" style="padding:12px;font-size:12px;color:var(--muted);">Bestellungen konnten nicht geladen werden (${escAttr(e.message)}).</div>`; }
   const stellen=d.stellen||[], nm={}; stellen.forEach(s=>nm[s.id]=s.name);
   const rows=(d.bestellungen||[]).filter(r=>r.stelle_id&&!r.storniert);
-  if(!rows.length) return head+`<div class="card" style="padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);text-align:center;">Noch keine Online-Bestellungen für diesen Tag.</div>`;
+  if(!rows.length) return head+`<div class="card" style="padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);text-align:center;">Für diesen Tag nichts bestellt – nichts zu packen.</div>`;
   const gep=await api(`stadtgemeinde_gepackt?datum=eq.${datum}&select=bestellung_id`).catch(()=>[]);
   const done=new Set((gep||[]).map(g=>Number(g.bestellung_id)));
   const sum=rows.reduce((a,r)=>a+Number(r.summe),0), min=Number(d.min_heute||0), ok=sum>=min, final=!!d.final;
@@ -18823,7 +18824,33 @@ async function kdSgInner(datum){
   h+=`</div>`;
   return h;
 }
-async function kdSgReload(){ const el=document.getElementById('kd-sg'); if(el) el.innerHTML=await kdSgInner(window._kdSgDatum||new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]); }
+// 10.11.26: Klare Status-Zeile ganz oben im Kitchen-Daily — pro Bestellstelle (Stadtgemeinde, KH, Essl, Baubehörde):
+// entweder "heute nichts bestellt" oder was zu liefern ist. Kein Suchen in der Liste weiter unten nötig.
+async function kdSgTopHtml(){
+  const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0];
+  const d=await sgCall('?action=list&datum='+heute);
+  const stellen=(d.stellen||[]).filter(x=>x.aktiv!==false);
+  const rows=(d.bestellungen||[]).filter(r=>r.stelle_id&&!r.storniert);
+  const by={}; rows.forEach(r=>{ (by[r.stelle_id]=by[r.stelle_id]||[]).push(r); });
+  const port=rr=>rr.reduce((a,r)=>a+(r.items||[]).reduce((x,i)=>x+(i.anzahl||0),0),0);
+  const bestellt=stellen.filter(x=>by[x.id]), leer=stellen.filter(x=>!by[x.id]);
+  const jump=`document.getElementById('kd-sg')?.scrollIntoView({behavior:'smooth',block:'start'})`;
+  if(!rows.length){
+    const offen=!d.final;
+    return `<div style="border-radius:12px;padding:12px 14px;margin-bottom:14px;background:${offen?'#FEF3C7':'#F3F4F6'};border:1.5px solid ${offen?'#F59E0B':'#D1D5DB'};">
+      <div style="font-size:14px;font-weight:700;">${offen?'⏳ Noch nichts bestellt':'🚫 Heute nichts bestellt'}</div>
+      <div style="font-size:12px;margin-top:3px;line-height:1.4;">${offen?'Anmeldung läuft noch bis '+escAttr((d.config&&d.config.cutoff)||'11:40')+'. ':''}Stadtgemeinde, KH, Essl, Baubehörde: <b>${offen?'bisher keine Bestellung':'nichts zu packen, nichts zu liefern'}</b>.</div></div>`;
+  }
+  const sum=rows.reduce((a,r)=>a+Number(r.summe),0), min=Number(d.min_heute||0), ok=sum>=min, final=!!d.final;
+  const col=ok?{bg:'#DCFCE7',bd:'#16A34A'}:final?{bg:'#FEE2E2',bd:'#DC2626'}:{bg:'#FEF3C7',bd:'#F59E0B'};
+  const head=ok?'📦 Heute packen & liefern':final?'🚫 Mindestbestellwert nicht erreicht – NICHT liefern':'⏳ Bestellt, Mindestbestellwert noch offen';
+  return `<div onclick="${jump}" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:${col.bg};border:1.5px solid ${col.bd};">
+    <div style="font-size:14px;font-weight:700;">${head}</div>
+    ${bestellt.map(x=>`<div data-no-translate style="font-size:12.5px;margin-top:4px;"><b>${escAttr(x.name)}</b>: ${port(by[x.id])} Portionen (${by[x.id].length} Bestellung${by[x.id].length===1?'':'en'})</div>`).join('')}
+    ${leer.length?`<div data-no-translate style="font-size:12px;margin-top:5px;color:#4B5563;">Heute nichts bestellt: ${leer.map(x=>escAttr(x.name)).join(', ')}</div>`:''}
+    <div style="font-size:11px;margin-top:6px;color:#4B5563;">${ok?'Summe '+sgFmt(sum)+' · Details & Abhaken unten ↓':final?'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Kund:innen informieren':'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Anmeldung bis '+escAttr((d.config&&d.config.cutoff)||'11:40')}</div></div>`;
+}
+async function kdSgReload(){ const tp=document.getElementById('kd-sg-top'); if(tp) tp.innerHTML=await kdSgTopHtml().catch(()=>''); const el=document.getElementById('kd-sg'); if(el) el.innerHTML=await kdSgInner(window._kdSgDatum||new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]); }
 function kdSgSet(ds){ window._kdSgDatum=ds; kdSgReload(); }
 async function kdSgToggle(id,datum,isDone){
   try{
