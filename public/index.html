@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.281';
+const APP_VERSION='6.99.282';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -14847,16 +14847,13 @@ async function renderDailyCheck(){
       </div>`:''}
     </div>
 
-    <div class="section-lbl" style="color:#009DE0;">🛵 Wolt</div>
-    <div class="card" style="border:1.5px solid #009DE0;padding:4px 14px 12px;">
-      ${[['handy','📱','Wolt-Handy / Tablet ist angeschaltet',woltToday?.handy_an],
-         ['menue','📋','Wolt-Menü stimmt (heutige Gerichte) und ist eingeschaltet',woltToday?.menue_ok],
-         ['combo','🍱','Alles für die Lunch Combo ist da',woltToday?.combo_ok]].map(([k,ic,t,v])=>`
-      <div class="cl-item" style="padding:10px 0;" onclick="toggleWoltItem('${k}')">
-        <div class="check-box${v?' done':''}" id="wolt-box-${k}" data-value="${v?'1':'0'}">${v?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
-        <span class="cl-text">${ic} ${t}</span>
-      </div>`).join('')}
-      <input id="wolt-notiz" type="text" placeholder="Falls etwas nicht passt: was fehlt? (Pflicht)" value="${escAttr(woltToday?.notiz||'')}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;margin-top:4px;font-size:13px;">
+    <div class="card" style="border:1.5px solid #009DE0;padding:6px 14px;margin-top:12px;">
+      <div class="cl-item" style="padding:10px 0;" onclick="toggleWoltItem('alle')">
+        <div class="check-box${woltToday&&woltToday.handy_an&&woltToday.menue_ok&&woltToday.combo_ok?' done':''}" id="wolt-box-alle" data-value="${woltToday&&woltToday.handy_an&&woltToday.menue_ok&&woltToday.combo_ok?'1':'0'}">${woltToday&&woltToday.handy_an&&woltToday.menue_ok&&woltToday.combo_ok?'<svg width="12" height="12" viewBox="0 0 24 24" stroke="#fff" stroke-width="3" fill="none"><polyline points="20 6 9 17 4 12"/></svg>':''}</div>
+        <span class="cl-text">🛵 <b>Wolt ist startklar</b><br><span style="font-size:11px;color:var(--muted);">Handy an · Menü stimmt &amp; ist eingeschaltet · Zutaten für Lunch Combo da</span></span>
+      </div>
+      <div onclick="document.getElementById('wolt-notiz-wrap').style.display='block';this.style.display='none'" style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;padding:0 0 8px 34px;${woltToday?.notiz?'display:none;':''}">Etwas passt nicht? Kurz eintragen</div>
+      <div id="wolt-notiz-wrap" style="display:${woltToday?.notiz?'block':'none'};padding-bottom:8px;"><input id="wolt-notiz" type="text" placeholder="Was fehlt / was geht nicht?" value="${escAttr(woltToday?.notiz||'')}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;font-size:13px;"></div>
     </div>
 
     <button class="submit-btn" style="margin-top:16px;font-size:15px;padding:14px;" onclick="saveDailyCheckAll()">
@@ -15084,10 +15081,10 @@ async function saveDailyCheckAll(){
   const vitrineEl=document.getElementById('kuehl-vitrine');
   const vitrine=vitrineEl?parseFloat(String(vitrineEl.value).replace(',','.')):NaN;
   if(vitrineEl && isNaN(vitrine)){ showToast('Bitte auch die Vitrinen-Temperatur eintragen'); return; }
-  const woltV=k=>document.getElementById('wolt-box-'+k)?.dataset.value==='1';
+  const woltV=k=>document.getElementById('wolt-box-alle')?.dataset.value==='1';
   const woltNotiz=(document.getElementById('wolt-notiz')?.value||'').trim();
   const woltAlles=woltV('handy')&&woltV('menue')&&woltV('combo');
-  if(!woltAlles && !woltNotiz){ showToast('Wolt: bitte alles abhaken — oder eintragen, was nicht passt'); document.getElementById('wolt-notiz')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  if(!woltAlles && !woltNotiz){ showToast('Wolt: bitte „startklar“ abhaken — oder eintragen, was nicht passt'); document.getElementById('wolt-box-alle')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
   const _dlDish={}; dl.rows.filter(r=>r.kind==='dish').forEach(r=>{_dlDish[r.name]=(_dlDish[r.name]||0)+r.geliefert;});
   const ware=dl.rows.some(r=>r.kind==='dish')?Object.keys(_dlDish).filter(n=>_dlDish[n]>0).join(', '):(getSelectedWaren()||'');
   const wareOk=document.getElementById('wek-ware-ok-box')?.dataset.value==='1';
