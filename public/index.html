@@ -1591,7 +1591,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.272';
+const APP_VERSION='6.99.273';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18665,7 +18665,7 @@ async function renderKitchenDaily(){
     <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${woche}</span>
   </div>`;
   html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
-  html+=`<div id="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
+  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
 
   // Start-/Ende-Schicht — bewusst KEINE eigene Kitchen-Logik gebaut, sondern die exakt gleichen
   // generischen Store-Screens verlinkt, die auch Ausstellungsstraße & Co. nutzen (Wareneingang,
@@ -18714,7 +18714,7 @@ async function renderKitchenDaily(){
   html+='</div>';
 
   // Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) zum Gegenprüfen und Abhaken
-  html+=`<div id="kd-sg">${await kdSgInner(window._kdSgDatum||todayDate)}</div>`;
+  html+=`<div class="kd-sg">${await kdSgInner(window._kdSgDatum||todayDate)}</div>`;
 
   // Bereiche — als eine gemeinsame Liste statt sechs einzeln eingefärbter Boxen (18.08.26: an das
   // UX-Muster der normalen Store-Startseite angeglichen, siehe dort der "Guide"-Button bzw. die
@@ -18834,7 +18834,7 @@ async function kdSgTopHtml(){
   const by={}; rows.forEach(r=>{ (by[r.stelle_id]=by[r.stelle_id]||[]).push(r); });
   const port=rr=>rr.reduce((a,r)=>a+(r.items||[]).reduce((x,i)=>x+(i.anzahl||0),0),0);
   const bestellt=stellen.filter(x=>by[x.id]), leer=stellen.filter(x=>!by[x.id]);
-  const jump=`document.getElementById('kd-sg')?.scrollIntoView({behavior:'smooth',block:'start'})`;
+  const jump=`(Array.from(document.querySelectorAll('.kd-sg')).find(e=>e.offsetParent)||document.querySelector('.kd-sg'))?.scrollIntoView({behavior:'smooth',block:'start'})`;
   if(!rows.length){
     const offen=!d.final;
     return `<div style="border-radius:12px;padding:12px 14px;margin-bottom:14px;background:${offen?'#FEF3C7':'#F3F4F6'};border:1.5px solid ${offen?'#F59E0B':'#D1D5DB'};">
@@ -18850,7 +18850,7 @@ async function kdSgTopHtml(){
     ${leer.length?`<div data-no-translate style="font-size:12px;margin-top:5px;color:#4B5563;">Heute nichts bestellt: ${leer.map(x=>escAttr(x.name)).join(', ')}</div>`:''}
     <div style="font-size:11px;margin-top:6px;color:#4B5563;">${ok?'Summe '+sgFmt(sum)+' · Details & Abhaken unten ↓':final?'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Kund:innen informieren':'Summe '+sgFmt(sum)+' von '+sgFmt(min)+' · Anmeldung bis '+escAttr((d.config&&d.config.cutoff)||'11:40')}</div></div>`;
 }
-async function kdSgReload(){ const tp=document.getElementById('kd-sg-top'); if(tp) tp.innerHTML=await kdSgTopHtml().catch(()=>''); const el=document.getElementById('kd-sg'); if(el) el.innerHTML=await kdSgInner(window._kdSgDatum||new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]); }
+async function kdSgReload(){ const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]; const top=await kdSgTopHtml().catch(()=>''); const inner=await kdSgInner(window._kdSgDatum||heute); document.querySelectorAll('.kd-sg-top').forEach(e=>e.innerHTML=top); document.querySelectorAll('.kd-sg').forEach(e=>e.innerHTML=inner); }
 function kdSgSet(ds){ window._kdSgDatum=ds; kdSgReload(); }
 async function kdSgToggle(id,datum,isDone){
   try{
@@ -19097,6 +19097,9 @@ async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam</div>`;
   html+=await zmCardHtml().catch(()=>'');
+  // 10.11.26: Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) auch hier oben, nicht nur im Daily
+  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
+  html+=`<div class="kd-sg">${await kdSgInner(window._kdSgDatum||new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]).catch(()=>'')}</div>`;
   // Für das Tab-Label: nächster Kochtermin = morgen, Sa/So übersprungen (an denen wird nicht gekocht)
   const nextCookDay=new Date();
   nextCookDay.setDate(nextCookDay.getDate()+1);
