@@ -206,6 +206,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   </div>
 
   <div id="bday-banner"></div>
+  <div id="sg-global"></div>
 
   <div id="content">
     <div id="v-home" class="view show"></div>
@@ -1594,7 +1595,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.285';
+const APP_VERSION='6.99.286';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2249,6 +2250,7 @@ async function loginAs(store){
     await loadAll();
     checkForBroadcasts();
     bdayLoad();
+    kdSgGlobal(); if(!window._kdSgGlobalTimer) window._kdSgGlobalTimer=setInterval(kdSgGlobal,60000);
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
     const orgViews=['management','maengel','grundreinigung','kuechenlager','catering','feuerloescher'];
@@ -19096,7 +19098,7 @@ async function kdSgHistOpen(n){
 }
 function kdSgHistClose(){ document.getElementById('kd-sg-hist')?.remove(); }
 Object.assign(window,{kdSgHistOpen,kdSgHistClose});
-async function kdSgReload(){ const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]; const top=await kdSgTopHtml().catch(e=>`<div onclick="kdSgReload()" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#FEE2E2;border:1.5px solid #DC2626;"><div style="font-size:14px;font-weight:700;">⚠️ Online-Bestellungen konnten nicht geladen werden</div><div style="font-size:12px;margin-top:3px;">Antippen = nochmal versuchen. Fehler: ${escAttr(String((e&&e.message)||e).slice(0,80))}</div></div>`); const inner=await kdSgInner(window._kdSgDatum||heute); document.querySelectorAll('.kd-sg-top').forEach(e=>e.innerHTML=top); document.querySelectorAll('.kd-sg').forEach(e=>e.innerHTML=inner); }
+async function kdSgReload(){ kdSgGlobal(); const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]; const top=await kdSgTopHtml().catch(e=>`<div onclick="kdSgReload()" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#FEE2E2;border:1.5px solid #DC2626;"><div style="font-size:14px;font-weight:700;">⚠️ Online-Bestellungen konnten nicht geladen werden</div><div style="font-size:12px;margin-top:3px;">Antippen = nochmal versuchen. Fehler: ${escAttr(String((e&&e.message)||e).slice(0,80))}</div></div>`); const inner=await kdSgInner(window._kdSgDatum||heute); document.querySelectorAll('.kd-sg-top').forEach(e=>e.innerHTML=top); document.querySelectorAll('.kd-sg').forEach(e=>e.innerHTML=inner); }
 function kdSgSet(ds){ window._kdSgDatum=ds; kdSgReload(); }
 async function kdSgToggle(id,datum,isDone){
   try{
@@ -19106,6 +19108,34 @@ async function kdSgToggle(id,datum,isDone){
   }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
 }
 Object.assign(window,{kdSgSet,kdSgToggle,kdSgReload});
+
+// ── Globale Online-Bestell-Leiste (12.11.26): in der Kitchen auf JEDER Seite sichtbar, bis alles gepackt ist
+// (Haken im Pop-up) — damit alle mitdenken. Antippen öffnet das Pop-up. Prüft jede Minute; neue Bestellungen
+// öffnen das Pop-up automatisch (kdSgPopupCheck(false)).
+async function kdSgGlobal(){
+  const el=document.getElementById('sg-global'); if(!el) return;
+  if(currentStore?.id!=='kitchen'){ el.innerHTML=''; return; }
+  try{
+    const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0];
+    const d=await sgCall('?action=list&datum='+heute);
+    const rows=(d.bestellungen||[]).filter(r=>r.stelle_id&&!r.storniert);
+    const gep=await api(`stadtgemeinde_gepackt?datum=eq.${heute}&select=bestellung_id`).catch(()=>[]);
+    const done=new Set((gep||[]).map(g=>Number(g.bestellung_id)));
+    const offen=rows.filter(r=>!done.has(Number(r.id)));
+    const sum=rows.reduce((a,r)=>a+Number(r.summe),0), min=Number(d.min_heute||0), ok=sum>=min, final=!!d.final;
+    if(!offen.length || (!ok && final)){
+      el.innerHTML = (!ok && final && rows.length && offen.length)
+        ? `<div onclick="kdSgPopupCheck(true)" style="cursor:pointer;background:#FEE2E2;color:#991B1B;padding:8px 14px;font-size:13px;font-weight:700;text-align:center;border-bottom:2px solid #DC2626;">🚫 Online-Bestellung: Mindestwert nicht erreicht – NICHT liefern · antippen</div>` : '';
+      return;
+    }
+    const port=offen.reduce((a,r)=>a+(r.items||[]).reduce((x,i)=>x+(i.anzahl||0),0),0);
+    el.innerHTML=`<div onclick="kdSgPopupCheck(true)" style="cursor:pointer;background:${ok?'#16A34A':'#F59E0B'};color:#fff;padding:9px 14px;font-size:13.5px;font-weight:800;text-align:center;">${ok?'📦 Online-Bestellung heute packen & liefern':'⏳ Online-Bestellung (Mindestwert offen)'}: ${port} Portionen offen · antippen</div>`;
+    kdSgPopupCheck(false);
+  }catch(e){ /* still: nächster Versuch in 1 Minute */ }
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) kdSgGlobal(); });
+Object.assign(window,{kdSgGlobal});
+
 
 async function renderKitchenDailyHtml(){
   // Daily Business: Store-Ansicht für Kitchen 3400 Kassenbereich
