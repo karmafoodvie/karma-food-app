@@ -205,6 +205,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     </div>
   </div>
 
+  <div id="bday-banner"></div>
+
   <div id="content">
     <div id="v-home" class="view show"></div>
     <div id="v-order" class="view"></div>
@@ -230,6 +232,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="v-messen" class="view"></div>
     <div id="v-dienstplan" class="view"></div>
     <div id="v-todos" class="view"></div>
+    <div id="v-geburtstage" class="view"></div>
     <div id="v-verfuegbarkeit" class="view"></div>
     <div id="v-schichtende" class="view"></div>
     <div id="v-waehrend" class="view"></div>
@@ -1591,7 +1594,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.283';
+const APP_VERSION='6.99.284';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2245,6 +2248,7 @@ async function loginAs(store){
   try{
     await loadAll();
     checkForBroadcasts();
+    bdayLoad();
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
     const orgViews=['management','maengel','grundreinigung','kuechenlager','catering','feuerloescher'];
@@ -2343,11 +2347,11 @@ function goTo(v, noPush=false){
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
     else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
-    else if(v==='management' || v==='hygieneSchulung' || v==='schulung' || v==='feuerloescher' || v==='teamFeedback' || v==='kundenfeedback' || v==='teamRating' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan' || v==='todos') navId='nav-org-management';
+    else if(v==='management' || v==='hygieneSchulung' || v==='schulung' || v==='feuerloescher' || v==='teamFeedback' || v==='kundenfeedback' || v==='teamRating' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan' || v==='todos' || v==='geburtstage') navId='nav-org-management';
   }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={gerichtFotos:'Soll-Fotos Gerichte',kochkurse:'Kochkurse',produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos'};
+  const subs={gerichtFotos:'Soll-Fotos Gerichte',kochkurse:'Kochkurse',produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos',geburtstage:'Geburtstage'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -2356,7 +2360,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={gerichtFotos:renderGerichtFotos,kochkurse:renderKochkurse,produkte:renderProdukte,karmaverse:renderKarmaverse,home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,todos:renderTodos,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={geburtstage:renderGeburtstage,gerichtFotos:renderGerichtFotos,kochkurse:renderKochkurse,produkte:renderProdukte,karmaverse:renderKarmaverse,home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,todos:renderTodos,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -9587,6 +9591,13 @@ async function renderManagement(){
         <span class="org-btn-sub">Aufgaben mit Datum verknüpfen — erscheint direkt beim Transporter im Info-Tab</span>
       </div>
     </button>
+    <button class="org-btn" onclick="goTo('geburtstage')" style="border-color:#E94E1B;">
+      <span class="org-btn-icon">🎂</span>
+      <div class="org-btn-text">
+        <span class="org-btn-title" style="color:#E94E1B;">Geburtstage</span>
+        <span class="org-btn-sub">Eintragen — am Tag erscheint oben in der App „It's … Birthday“</span>
+      </div>
+    </button>
     <button class="org-btn" onclick="goTo('todos')" style="border-color:#2B3A67;">
       <span class="org-btn-icon">✅</span>
       <div class="org-btn-text">
@@ -14598,6 +14609,89 @@ async function tdDel(id){
   try{ await api(`org_todos?id=eq.${id}`,{method:'DELETE'}); }catch(e){ showToast('Fehler beim Löschen',true); tdLoad(); }
 }
 Object.assign(window,{renderTodos,tdAdd});
+
+// ==== GEBURTSTAGE (13.11.26) — in Organisation eintragen, am Tag erscheint oben in der App ein Banner ====
+let _bdayList=[];
+function bdayEsc(t){ return String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function bdayTodayKey(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+async function bdayLoad(){
+  try{ _bdayList=await api('geburtstage?select=*&order=name') || []; }catch(e){ _bdayList=[]; }
+  bdayPaint();
+}
+function bdayPaint(){
+  const el=document.getElementById('bday-banner'); if(!el) return;
+  const d=new Date(), tag=d.getDate(), mon=d.getMonth()+1, y=d.getFullYear();
+  const heute=(_bdayList||[]).filter(b=>b.tag===tag && b.monat===mon);
+  let hidden=''; try{ hidden=localStorage.getItem('kf_bday_hide')||''; }catch(e){}
+  if(!heute.length || hidden===bdayTodayKey()){ el.innerHTML=''; return; }
+  if(!document.getElementById('bday-css')){
+    const st=document.createElement('style'); st.id='bday-css';
+    st.textContent='@keyframes bdayFloat{0%{transform:translateY(40px) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(-70px) rotate(25deg);opacity:0}}@keyframes bdayShine{0%{background-position:0% 50%}100%{background-position:200% 50%}}#bday-banner .bd{position:relative;overflow:hidden;padding:12px 40px 12px 14px;background:linear-gradient(100deg,#D4FF3F,#FFE14D,#E94E1B,#FFE14D,#D4FF3F);background-size:200% 100%;animation:bdayShine 5s linear infinite;color:#1a1a18;text-align:center}#bday-banner .bd-t{font-weight:900;font-size:16px;letter-spacing:.2px;position:relative;z-index:1}#bday-banner .bd-s{font-size:12px;font-weight:600;margin-top:2px;position:relative;z-index:1}#bday-banner .bd i{position:absolute;bottom:0;font-style:normal;font-size:18px;animation:bdayFloat 3.2s ease-in infinite;pointer-events:none}#bday-banner .bd-x{position:absolute;right:8px;top:8px;width:26px;height:26px;border:none;border-radius:50%;background:rgba(0,0,0,.15);color:#1a1a18;font-size:14px;cursor:pointer;z-index:2}';
+    document.head.appendChild(st);
+  }
+  const emo=['🎉','🎂','🎈','✨','🥳','🎊','🍰','🌟'];
+  let conf=''; for(let i=0;i<14;i++){ conf+=`<i style="left:${(i*7.3+3)%97}%;animation-delay:${(i*0.37).toFixed(2)}s">${emo[i%emo.length]}</i>`; }
+  const namen=heute.map(b=>b.name);
+  const titel=namen.length===1 ? `It's ${bdayEsc(namen[0])}'s Birthday!` : `It's ${namen.map(bdayEsc).join(' & ')}'s Birthday!`;
+  const alter=heute.filter(b=>b.jahr).map(b=>`${bdayEsc(b.name)} wird ${y-b.jahr}`);
+  const sub=alter.length ? alter.join(' · ')+' — alles Gute! 🎂' : 'Alles Gute zum Geburtstag — Karma Food feiert mit dir! 🎂';
+  el.innerHTML=`<div class="bd" data-no-translate>${conf}<div class="bd-t">🎉 ${titel} 🎂</div><div class="bd-s">${sub}</div><button class="bd-x" onclick="bdayHide()" aria-label="Schließen">✕</button></div>`;
+}
+function bdayHide(){ try{ localStorage.setItem('kf_bday_hide',bdayTodayKey()); }catch(e){} const el=document.getElementById('bday-banner'); if(el) el.innerHTML=''; }
+function bdayNext(b){
+  const now=new Date(); now.setHours(0,0,0,0);
+  let n=new Date(now.getFullYear(),b.monat-1,b.tag); if(n<now) n=new Date(now.getFullYear()+1,b.monat-1,b.tag);
+  return Math.round((n-now)/86400000);
+}
+async function renderGeburtstage(){
+  const el=document.getElementById('v-geburtstage');
+  await bdayLoad();
+  const MON=['Jänner','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+  const list=[..._bdayList].sort((a,b)=>bdayNext(a)-bdayNext(b));
+  let html=backToHomeHtml();
+  html+=pageHeaderHtml('🎂','Geburtstage','Eintragen — am Geburtstag erscheint oben in der App ein Banner für alle. Läuft jedes Jahr von selbst.','#E94E1B');
+  html+=`<div class="card" style="padding:12px;margin-bottom:12px;">
+    <input id="bd-name" type="text" placeholder="Name (z.B. Eva)" autocomplete="off" style="width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:8px;">
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input id="bd-tag" type="number" inputmode="numeric" min="1" max="31" placeholder="Tag" style="flex:1;min-width:0;padding:11px;border:1px solid var(--border);border-radius:10px;font-size:14px;">
+      <select id="bd-mon" style="flex:2;min-width:0;padding:11px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:#fff;">${MON.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('')}</select>
+      <input id="bd-jahr" type="number" inputmode="numeric" placeholder="Jahr (optional)" style="flex:2;min-width:0;padding:11px;border:1px solid var(--border);border-radius:10px;font-size:14px;">
+    </div>
+    <button onclick="bdayAdd()" style="width:100%;padding:12px;border:none;border-radius:10px;background:#E94E1B;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">🎂 Geburtstag speichern</button>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">Mit Geburtsjahr steht im Banner auch „wird 30“. Ohne Jahr nur der Gruß.</div>
+  </div>`;
+  if(!list.length) html+=`<div class="card" style="padding:14px;color:var(--muted);font-size:13px;">Noch keine Geburtstage eingetragen.</div>`;
+  list.forEach(b=>{
+    const dn=bdayNext(b);
+    const wann=dn===0?'🎉 HEUTE':dn===1?'morgen':'in '+dn+' Tagen';
+    html+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${dn===0?'border:2px solid #E94E1B;':''}">
+      <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:14px;" data-no-translate>${bdayEsc(b.name)}</div>
+      <div style="font-size:12px;color:var(--muted);">${b.tag}. ${MON[b.monat-1]}${b.jahr?' '+b.jahr:''} · ${wann}</div></div>
+      <button onclick="bdayDel(${b.id})" style="border:none;background:none;color:#B91C1C;font-size:18px;cursor:pointer;" aria-label="Löschen">🗑️</button>
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+async function bdayAdd(){
+  const name=(document.getElementById('bd-name').value||'').trim();
+  const tag=parseInt(document.getElementById('bd-tag').value,10);
+  const monat=parseInt(document.getElementById('bd-mon').value,10);
+  const jahrRaw=parseInt(document.getElementById('bd-jahr').value,10);
+  if(!name){ showToast('Bitte einen Namen eintragen'); return; }
+  if(!(tag>=1&&tag<=31)){ showToast('Bitte einen gültigen Tag eintragen'); return; }
+  const jahr=(jahrRaw>=1900&&jahrRaw<=new Date().getFullYear())?jahrRaw:null;
+  try{
+    await api('geburtstage',{method:'POST',body:JSON.stringify([{name,tag,monat,jahr}])});
+    showToast('🎂 Gespeichert'); renderGeburtstage();
+  }catch(e){ showToast('Fehler beim Speichern: '+(e?.message||e),true); }
+}
+async function bdayDel(id){
+  if(!confirm('Geburtstag löschen?')) return;
+  try{ await api(`geburtstage?id=eq.${id}`,{method:'DELETE'}); renderGeburtstage(); }catch(e){ showToast('Fehler beim Löschen',true); }
+}
+Object.assign(window,{renderGeburtstage,bdayAdd,bdayDel,bdayHide,bdayLoad});
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && document.getElementById('bday-banner')) bdayLoad(); });
+
 
 
 function backToHomeHtml(){
