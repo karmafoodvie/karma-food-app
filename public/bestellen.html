@@ -90,6 +90,10 @@ async function renderPublicBestellen(){
     raw.forEach(e=>{ const m=zu.get(e); e._kat=(m&&m.kat==='Special')?'Special':'Gericht'; e._preis=Number(e._kat==='Special'?P.special:P.gericht)||0; });
     const menu=raw.filter(e=>e._preis>0);
     if(Number(P.combo)>0) menu.push({slot:'combo',name:'Lunch Combo',_kat:'Combo',_preis:Number(P.combo)});
+    const nvT=t.nicht_verfuegbar||[], X=_sbInfo.extras||{};
+    menu.forEach(e=>{ e._nv=nvT.includes(e.slot); });
+    if(X.samosa) menu.push({slot:'samosa',name:X.samosa.name||'Samosa',_kat:'Extra',_preis:Number(X.samosa.preis),_extra:true,_nv:nvT.includes('samosa')});
+    if(X.chutney) menu.push({slot:'chutney',name:X.chutney.name||'Chutney',_kat:'Extra',_preis:Number(X.chutney.preis),_extra:true,_dep:'samosa',_nv:nvT.includes('chutney')});
     _sbDays[t.datum]={t,menu,roh:raw};
     _sbCarts[t.datum]={};
   });
@@ -114,7 +118,20 @@ window.sbComboTxt=sbComboTxt; window.sbComboMixed=sbComboMixed;
 function sbComboName(d){ const c=_sbCombo[d]||{}; const x=c.mixed?'mixed':String(c.txt||'').trim(); return x?`Lunch Combo – ${x}`:''; }
 function sbDaySum(d){ const c=_sbCarts[d]||{}; return (_sbDays[d]?_sbDays[d].menu:[]).reduce((s,e)=>s+(c[e.slot]||0)*(e._preis||0),0); }
 function sbOpenDay(d){ _sbOpen=d; sbDraw(); setTimeout(()=>document.getElementById('sbday-'+d)?.scrollIntoView({behavior:'smooth',block:'start'}),30); }
-function sbChg(d,slot,n){ const c=_sbCarts[d]; c[slot]=Math.max(0,Math.min(20,(c[slot]||0)+n)); sbDraw(); }
+function sbChg(d,slot,n){ const c=_sbCarts[d]; c[slot]=Math.max(0,Math.min(20,(c[slot]||0)+n)); if(slot==='samosa'&&!c.samosa) c.chutney=0; sbDraw(); }
+// Sonderzeilen: "leider nicht verfügbar" (grau, ohne Knöpfe) und Extras (Samosa, Chutney nur wenn Samosa gewählt). null = normale Zeile.
+function sbRowX(d,e,ac){
+  const c=_sbCarts[d]||{};
+  if(e._dep && !(c[e._dep]>0)) return '';
+  if(e._nv) return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:4px;background:#F3F4F6;border-radius:11px;opacity:.85;"><div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:600;color:#888;text-decoration:line-through;line-height:1.25;">${escAttr(e.name)}</div><div style="font-size:11.5px;font-weight:700;color:#B4380F;">leider nicht verfügbar</div></div></div>`;
+  if(e._extra) return `<div style="display:flex;align-items:center;gap:8px;padding:4px 10px;margin-bottom:4px;background:#fff;border-radius:11px;border:1.5px dashed ${ac};${e._dep?'margin-left:14px;':''}">
+    <div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:600;color:#222;line-height:1.25;">${e._dep?'+ ':''}${escAttr(e.name)} <span style="font-size:10px;background:#EEE;border-radius:6px;padding:1px 6px;">${e._dep?'optional':'Extra'}</span></div>
+      <div style="font-size:11px;color:#888;">${e._preis>0?sgFmt(e._preis):'inklusive'}</div></div>
+    <button onclick="sbChg('${d}','${e.slot}',-1)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid ${ac};background:#fff;color:#222;font-size:18px;line-height:1;cursor:pointer;">−</button>
+    <div style="width:20px;text-align:center;font-size:16px;font-weight:700;">${c[e.slot]||0}</div>
+    <button onclick="sbChg('${d}','${e.slot}',1)" style="width:32px;height:32px;border-radius:50%;border:none;background:${ac};color:#fff;font-size:18px;line-height:1;font-weight:700;cursor:pointer;">+</button></div>`;
+  return null;
+}
 function sbDraw(){
   const I=_sbInfo, tage=I.tage;
   const heuteT=tage.find(t=>t.datum===I.heute);
@@ -142,7 +159,7 @@ function sbDraw(){
       body=`<div style="padding:0 10px 10px;">
         <div style="display:flex;align-items:center;gap:8px;margin:0 2px 6px;"><div style="flex:1;height:6px;background:#fff;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${ok?'#1D9E75':'#E94E1B'};"></div></div>
           <div style="font-size:11.5px;font-weight:700;color:${ok?'#1D9E75':'#B4380F'};white-space:nowrap;">${ok?'Lieferung möglich ✓':`noch ${sgFmt(t.min-gesamt)}`}</div></div>
-        ${D.menu.length?D.menu.map(e=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 10px;margin-bottom:4px;background:#fff;border-radius:11px;">
+        ${D.menu.length?D.menu.map(e=>sbRowX(t.datum,e,cAc)??`<div style="display:flex;align-items:center;gap:8px;padding:4px 10px;margin-bottom:4px;background:#fff;border-radius:11px;">
           <div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:600;color:#222;line-height:1.25;">${escAttr(e.name)}${e._kat==='Special'?' <span style="font-size:10px;background:#D4FF3F;border-radius:6px;padding:1px 6px;">Special</span>':''}</div>
             <div style="font-size:11px;color:#888;">${sgFmt(e._preis)}</div></div>
           <button onclick="sbChg('${t.datum}','${e.slot}',-1)" style="width:32px;height:32px;border-radius:50%;border:1.5px solid ${cAc};background:#fff;color:#222;font-size:18px;line-height:1;cursor:pointer;">−</button>
