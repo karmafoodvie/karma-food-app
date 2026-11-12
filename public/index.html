@@ -207,6 +207,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 
   <div id="bday-banner"></div>
   <div id="sg-global"></div>
+  <div id="np-global"></div>
 
   <div id="content">
     <div id="v-home" class="view show"></div>
@@ -405,6 +406,9 @@ const TRANSPORTER_CATS = ['Verpackungen','Alltag','Food & Drinks','Reinigung'];
 // gebündelt). Bewusst getrennt von ✅/❌ "Lieferbar" — das bleibt Info für die Stores, DAS hier ist
 // der proaktive Nachbestell-Hinweis für Simone, bevor es wirklich leer ist.
 const NACHSCHUB_CATS = ['Verpackungen','Alltag','Reinigung'];
+// 12.11.26: selbst produzierte Artikel (Masala Chai, Mango Lassi, Chili Mango Sauce + Kashmiri Chili Crisp Großglas):
+// "Aus" geht NICHT an Simone/Involo, sondern als Nachproduktions-Hinweis an die Küche (Leiste, bis "in Produktion" getippt).
+const PRODUKTION_IDS = [27,114,180,181];
 const KC_CATS = ['Webshop-Produkte'];
 const SWEETS_CATS = ['Sweets'];
 const CATS = [...TRANSPORTER_CATS, ...KC_CATS, ...SWEETS_CATS];
@@ -1595,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.289';
+const APP_VERSION='6.99.290';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2250,7 +2254,7 @@ async function loginAs(store){
     await loadAll();
     checkForBroadcasts();
     bdayLoad();
-    kdSgGlobal(); if(!window._kdSgGlobalTimer) window._kdSgGlobalTimer=setInterval(kdSgGlobal,60000);
+    kdNachprodGlobal(); kdSgGlobal(); if(!window._kdSgGlobalTimer) window._kdSgGlobalTimer=setInterval(()=>{ kdSgGlobal(); kdNachprodGlobal(); },60000);
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
     const orgViews=['management','maengel','grundreinigung','kuechenlager','catering','feuerloescher'];
@@ -16550,7 +16554,7 @@ function showNachschubModal(articleId){
   ov.id='nachschub-modal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:340px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
-    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">🛒 Fast aus — nachbestellen?</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">${PRODUKTION_IDS.includes(articleId)?'🏭 Aus — Nachproduktion nötig?':'🛒 Fast aus — nachbestellen?'}</div>
     <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">${a.name}</div>
     ${schon?`<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#92400E;margin-bottom:12px;">Bereits gemeldet${schon.restmenge!=null?` (noch ca. ${formatQty(schon.restmenge)} ${einheit})`:''} — erneutes Melden aktualisiert die Menge.</div>`:''}
     <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Noch ca. <span style="color:var(--sub);">(optional)</span></label>
@@ -16587,7 +16591,7 @@ async function meldeNachschub(articleId){
     closeNachschubModal();
     await ladeNachschubOffen();
     if(currentView==='sweets') renderSweets(); else renderPack();
-    showToast('🛒 Für Nachbestellung vermerkt');
+    showToast(PRODUKTION_IDS.includes(articleId)?'🏭 Küche sieht: Nachproduktion nötig':'🛒 Für Nachbestellung vermerkt'); try{ kdNachprodGlobal(); }catch(e){}
   }catch(e){ console.error(e); showToast('Fehler beim Melden: '+(e?.message||String(e)).slice(0,120),true); }
 }
 window.meldeNachschub=meldeNachschub;
@@ -17274,7 +17278,7 @@ async function renderPack(){
     items.forEach(a=>{
       const total=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0);
       const verfuegbar=a.verfuegbar!==false;
-      const istNachschub=NACHSCHUB_CATS.includes(a.category);
+      const istNachschub=NACHSCHUB_CATS.includes(a.category)||PRODUKTION_IDS.includes(a.id);
       const nachschubGemeldet=istNachschub && !!nachschubOffen[a.id];
       html+=`<tr><td style="padding:5px 4px;"><div style="display:flex;align-items:center;gap:4px;">
         <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:11px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
@@ -17377,7 +17381,7 @@ async function renderPack(){
       <div class="card" style="margin-top:6px;">`;
     notOrderedToday.forEach(a=>{
       const verfuegbar=a.verfuegbar!==false;
-      const istNachschub=NACHSCHUB_CATS.includes(a.category);
+      const istNachschub=NACHSCHUB_CATS.includes(a.category)||PRODUKTION_IDS.includes(a.id);
       const meldung=istNachschub?nachschubOffen[a.id]:null;
       const einheit=a.unit||'';
       html+=`<div class="item-row" style="flex-wrap:wrap;align-items:flex-start;row-gap:8px;">
@@ -19133,8 +19137,48 @@ async function kdSgGlobal(){
     kdSgPopupCheck(false);
   }catch(e){ /* still: nächster Versuch in 1 Minute */ }
 }
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden) kdSgGlobal(); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ kdSgGlobal(); kdNachprodGlobal(); } });
 Object.assign(window,{kdSgGlobal});
+
+// ── Nachproduktions-Leiste (12.11.26): Masala Chai, Mango Lassi, Chili Mango Sauce & Kashmiri Chili Crisp (Großglas)
+// Wenn "aus" gemeldet (Transporter/Stores/Organisation über den Fast-aus-Button), sieht die KÜCHE (und Organisation)
+// auf jeder Seite eine Leiste, bis jemand "in Produktion" tippt (Status 'produziert'). Geht nicht an Simone/Involo.
+async function kdNachprodGlobal(){
+  const el=document.getElementById('np-global'); if(!el) return;
+  if(currentStore?.id!=='kitchen' && currentStore?.id!=='zentrale'){ el.innerHTML=''; return; }
+  try{
+    const rows=await api(`nachschub_meldungen?status=eq.offen&article_id=in.(${PRODUKTION_IDS.join(',')})&select=id,article_id,restmenge,gemeldet_von,created_at&order=created_at.asc`);
+    window._npRows=rows||[];
+    if(!rows||!rows.length){ el.innerHTML=''; return; }
+    const nm=r=>{ const a=(articles||[]).find(x=>x.id===r.article_id); return a?a.name.replace(/ \(.*?\)/,'').replace(' – Großglas',' Großglas'):'Artikel '+r.article_id; };
+    el.innerHTML=`<div onclick="kdNachprodOpen()" style="cursor:pointer;background:#7C3AED;color:#fff;padding:9px 14px;font-size:13.5px;font-weight:800;text-align:center;">🏭 Nachproduktion nötig: ${rows.map(nm).join(', ')} · antippen</div>`;
+  }catch(e){ /* nächster Versuch in 1 Minute */ }
+}
+function kdNachprodOpen(){
+  const rows=window._npRows||[]; if(!rows.length) return;
+  let ov=document.getElementById('np-pop');
+  if(!ov){ ov=document.createElement('div'); ov.id='np-pop'; ov.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px;'; ov.onclick=e=>{ if(e.target===ov) ov.remove(); }; document.body.appendChild(ov); }
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;width:100%;max-width:380px;max-height:80vh;overflow:auto;padding:16px;">
+    <div style="font-size:16px;font-weight:800;margin-bottom:10px;">🏭 Nachproduktion nötig</div>
+    ${rows.map(r=>{ const a=(articles||[]).find(x=>x.id===r.article_id)||{name:'Artikel '+r.article_id,unit:''};
+      const t=new Date(r.created_at).toLocaleString('de-AT',{weekday:'short',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Vienna'});
+      return `<div data-no-translate style="display:flex;align-items:center;gap:8px;padding:10px;margin-bottom:8px;border:1.5px solid #C4B5FD;border-radius:12px;background:#F5F3FF;">
+        <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${escAttr(a.name)}</div>
+        <div style="font-size:11.5px;color:var(--muted);">${r.restmenge!=null?'noch '+formatQty(r.restmenge)+' '+escAttr(a.unit||'')+' · ':''}gemeldet von ${escAttr(r.gemeldet_von||'?')} · ${t}</div></div>
+        <button onclick="kdNachprodErledigt(${r.id})" style="padding:8px 12px;border:none;border-radius:9px;background:#7C3AED;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">✓ in Produktion</button></div>`; }).join('')}
+    <button onclick="document.getElementById('np-pop').remove()" style="width:100%;margin-top:4px;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff;font-size:13px;cursor:pointer;">Schließen</button></div>`;
+}
+async function kdNachprodErledigt(id){
+  try{
+    await api(`nachschub_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'produziert',bestellt_am:new Date().toISOString()})});
+    document.getElementById('np-pop')?.remove();
+    await kdNachprodGlobal(); try{ await ladeNachschubOffen(); }catch(e){}
+    if((window._npRows||[]).length) kdNachprodOpen();
+    showToast('✔ Als „in Produktion“ vermerkt');
+  }catch(e){ showToast('Fehler: '+(e?.message||e),true); }
+}
+Object.assign(window,{kdNachprodGlobal,kdNachprodOpen,kdNachprodErledigt});
+
 
 // ── Verfügbarkeit & Extras (12.11.26): Gericht/Extra für einen Tag als "leider nicht verfügbar" sperren (auf der
 // Bestellseite grau + durchgestrichen, nicht bestellbar). Samosa/Chutney = optionale Extras mit eigenem Preis;
