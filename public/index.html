@@ -1594,7 +1594,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.284';
+const APP_VERSION='6.99.285';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18771,7 +18771,7 @@ async function renderKitchenDaily(){
     <span style="font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;font-size:11px;color:#1a1a18;">Woche ${woche}</span>
   </div>`;
   html+=`<div style="font-size:14px;font-weight:600;padding:2px 0 12px;">🏪 Daily Business <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
-  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
+  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(e=>`<div onclick="kdSgReload()" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#FEE2E2;border:1.5px solid #DC2626;"><div style="font-size:14px;font-weight:700;">⚠️ Online-Bestellungen konnten nicht geladen werden</div><div style="font-size:12px;margin-top:3px;">Antippen = nochmal versuchen. Fehler: ${escAttr(String((e&&e.message)||e).slice(0,80))}</div></div>`)}</div>`;
   setTimeout(()=>kdSgPopupCheck(false),500);
 
   // Start-/Ende-Schicht — bewusst KEINE eigene Kitchen-Logik gebaut, sondern die exakt gleichen
@@ -19096,7 +19096,7 @@ async function kdSgHistOpen(n){
 }
 function kdSgHistClose(){ document.getElementById('kd-sg-hist')?.remove(); }
 Object.assign(window,{kdSgHistOpen,kdSgHistClose});
-async function kdSgReload(){ const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]; const top=await kdSgTopHtml().catch(()=>''); const inner=await kdSgInner(window._kdSgDatum||heute); document.querySelectorAll('.kd-sg-top').forEach(e=>e.innerHTML=top); document.querySelectorAll('.kd-sg').forEach(e=>e.innerHTML=inner); }
+async function kdSgReload(){ const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0]; const top=await kdSgTopHtml().catch(e=>`<div onclick="kdSgReload()" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#FEE2E2;border:1.5px solid #DC2626;"><div style="font-size:14px;font-weight:700;">⚠️ Online-Bestellungen konnten nicht geladen werden</div><div style="font-size:12px;margin-top:3px;">Antippen = nochmal versuchen. Fehler: ${escAttr(String((e&&e.message)||e).slice(0,80))}</div></div>`); const inner=await kdSgInner(window._kdSgDatum||heute); document.querySelectorAll('.kd-sg-top').forEach(e=>e.innerHTML=top); document.querySelectorAll('.kd-sg').forEach(e=>e.innerHTML=inner); }
 function kdSgSet(ds){ window._kdSgDatum=ds; kdSgReload(); }
 async function kdSgToggle(id,datum,isDone){
   try{
@@ -19118,7 +19118,7 @@ async function renderKitchenDailyHtml(){
   const salatName=getSalatNameForDate(todayDate);
 
   let html=`<div style="font-size:14px;font-weight:600;padding:2px 0 10px;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>`;
-  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
+  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(e=>`<div onclick="kdSgReload()" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#FEE2E2;border:1.5px solid #DC2626;"><div style="font-size:14px;font-weight:700;">⚠️ Online-Bestellungen konnten nicht geladen werden</div><div style="font-size:12px;margin-top:3px;">Antippen = nochmal versuchen. Fehler: ${escAttr(String((e&&e.message)||e).slice(0,80))}</div></div>`)}</div>`;
   setTimeout(()=>kdSgPopupCheck(false),500);
 
   const _WOCHE_COLORS_KD={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
@@ -22186,7 +22186,7 @@ async function renderSweets(){
 
   let html=tabsHtml;
   // 10.11.26: Online-Bestellungen (Status + Pop-up + Verlauf) — nur im Daily und hier bei Kassa/Everton
-  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(()=>'')}</div>`;
+  html+=`<div class="kd-sg-top">${await kdSgTopHtml().catch(e=>`<div onclick="kdSgReload()" style="cursor:pointer;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#FEE2E2;border:1.5px solid #DC2626;"><div style="font-size:14px;font-weight:700;">⚠️ Online-Bestellungen konnten nicht geladen werden</div><div style="font-size:12px;margin-top:3px;">Antippen = nochmal versuchen. Fehler: ${escAttr(String((e&&e.message)||e).slice(0,80))}</div></div>`)}</div>`;
   setTimeout(()=>kdSgPopupCheck(false),500);
 
   if(teamTab==='stadtgemeinde'){
