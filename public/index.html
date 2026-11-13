@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.290';
+const APP_VERSION='6.99.291';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -14632,16 +14632,19 @@ function bdayPaint(){
   if(!heute.length || hidden===bdayTodayKey()){ el.innerHTML=''; return; }
   if(!document.getElementById('bday-css')){
     const st=document.createElement('style'); st.id='bday-css';
-    st.textContent='@keyframes bdayFloat{0%{transform:translateY(40px) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(-70px) rotate(25deg);opacity:0}}@keyframes bdayShine{0%{background-position:0% 50%}100%{background-position:200% 50%}}#bday-banner .bd{position:relative;overflow:hidden;padding:12px 40px 12px 14px;background:linear-gradient(100deg,#D4FF3F,#FFE14D,#E94E1B,#FFE14D,#D4FF3F);background-size:200% 100%;animation:bdayShine 5s linear infinite;color:#1a1a18;text-align:center}#bday-banner .bd-t{font-weight:900;font-size:16px;letter-spacing:.2px;position:relative;z-index:1}#bday-banner .bd-s{font-size:12px;font-weight:600;margin-top:2px;position:relative;z-index:1}#bday-banner .bd i{position:absolute;bottom:0;font-style:normal;font-size:18px;animation:bdayFloat 3.2s ease-in infinite;pointer-events:none}#bday-banner .bd-x{position:absolute;right:8px;top:8px;width:26px;height:26px;border:none;border-radius:50%;background:rgba(0,0,0,.15);color:#1a1a18;font-size:14px;cursor:pointer;z-index:2}';
+    st.textContent='@keyframes bdayFall{0%{transform:translateY(-20px) rotate(0);opacity:0}10%{opacity:1}100%{transform:translateY(120px) rotate(540deg);opacity:.9}}@keyframes bdayPop{0%,100%{transform:scale(1) rotate(-1.5deg)}50%{transform:scale(1.04) rotate(1.5deg)}}@keyframes bdayRibbon{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}@keyframes bdayFloat{0%{transform:translateY(40px) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(-70px) rotate(25deg);opacity:0}}#bday-banner .bd{position:relative;overflow:hidden;background:#1a1a18;color:#F6F0E4;text-align:center;border-bottom:3px solid #D4FF3F;padding:12px 40px 0 14px}#bday-banner .bd-k{position:absolute;top:-10px;width:8px;height:12px;border-radius:2px;animation:bdayFall 3.6s linear infinite;pointer-events:none}#bday-banner .bd-top{position:relative;z-index:1;font-size:10px;font-weight:700;letter-spacing:3px;color:#E94E1B;text-transform:uppercase}#bday-banner .bd-t{position:relative;z-index:1;font-family:\'Boldonse\',sans-serif;font-weight:400;font-size:17px;line-height:1.5;color:#D4FF3F;text-shadow:2px 2px 0 #E94E1B;margin:4px 0 2px;animation:bdayPop 1.6s ease-in-out infinite}#bday-banner .bd-s{position:relative;z-index:1;font-size:12px;font-weight:600;color:#F6F0E4;margin-bottom:10px}#bday-banner .bd-r{position:relative;z-index:1;margin:0 -40px 0 -14px;background:#E94E1B;color:#1a1a18;overflow:hidden;white-space:nowrap;padding:5px 0}#bday-banner .bd-r div{display:inline-block;font-family:\'Boldonse\',sans-serif;font-size:10px;letter-spacing:1px;animation:bdayRibbon 12s linear infinite}#bday-banner .bd i{position:absolute;bottom:20px;font-style:normal;font-size:18px;animation:bdayFloat 3.2s ease-in infinite;pointer-events:none}#bday-banner .bd-x{position:absolute;right:8px;top:8px;width:26px;height:26px;border:none;border-radius:50%;background:rgba(246,240,228,.18);color:#F6F0E4;font-size:14px;cursor:pointer;z-index:3}';
     document.head.appendChild(st);
   }
-  const emo=['🎉','🎂','🎈','✨','🥳','🎊','🍰','🌟'];
-  let conf=''; for(let i=0;i<14;i++){ conf+=`<i style="left:${(i*7.3+3)%97}%;animation-delay:${(i*0.37).toFixed(2)}s">${emo[i%emo.length]}</i>`; }
+  const emo=['🎉','🎂','🎈','🥳','🍰','🎊'];
+  const cols=['#D4FF3F','#E94E1B','#F6F0E4','#FFE14D'];
+  let conf=''; for(let i=0;i<22;i++){ const r=(i*37)%11; conf+=`<span class="bd-k" style="left:${(i*4.7+2)%98}%;background:${cols[i%4]};animation-delay:${(i*0.29).toFixed(2)}s;animation-duration:${(2.8+r*0.15).toFixed(2)}s;${i%3===0?'border-radius:50%;width:9px;height:9px;':''}"></span>`; }
+  for(let i=0;i<5;i++){ conf+=`<i style="left:${(i*21+6)%92}%;animation-delay:${(i*0.6).toFixed(2)}s">${emo[i%emo.length]}</i>`; }
   const namen=heute.map(b=>b.name);
   const titel=namen.length===1 ? `It's ${bdayEsc(namen[0])}'s Birthday!` : `It's ${namen.map(bdayEsc).join(' & ')}'s Birthday!`;
   const alter=heute.filter(b=>b.jahr).map(b=>`${bdayEsc(b.name)} wird ${y-b.jahr}`);
-  const sub=alter.length ? alter.join(' · ')+' — alles Gute! 🎂' : 'Alles Gute zum Geburtstag — Karma Food feiert mit dir! 🎂';
-  el.innerHTML=`<div class="bd" data-no-translate>${conf}<div class="bd-t">🎉 ${titel} 🎂</div><div class="bd-s">${sub}</div><button class="bd-x" onclick="bdayHide()" aria-label="Schließen">✕</button></div>`;
+  const sub=alter.length ? alter.join(' · ')+' — alles Gute!' : 'Alles Gute zum Geburtstag — Karma Food feiert mit dir!';
+  const rb=('HAPPY BIRTHDAY ✦ '+namen.map(bdayEsc).join(' & ').toUpperCase()+' ✦ ').repeat(6);
+  el.innerHTML=`<div class="bd" data-no-translate>${conf}<div class="bd-top">★ Heute wird gefeiert ★</div><div class="bd-t">${titel}</div><div class="bd-s">${sub} 🎂</div><div class="bd-r"><div>${rb}</div></div><button class="bd-x" onclick="bdayHide()" aria-label="Schließen">✕</button></div>`;
 }
 function bdayHide(){ try{ localStorage.setItem('kf_bday_hide',bdayTodayKey()); }catch(e){} const el=document.getElementById('bday-banner'); if(el) el.innerHTML=''; }
 function bdayNext(b){
