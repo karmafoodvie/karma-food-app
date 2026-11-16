@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.293';
+const APP_VERSION='6.99.294';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8215,8 +8215,53 @@ async function sendSweetsNachtrag(){
   }catch(e){ console.error(e); showToast('Fehler beim Senden',true); }
   if(btn) btn.disabled=false;
 }
+// 16.11.26 (Wunsch Gurl): "eingearbeitet" trägt den Nachtrag direkt in die Tabelle des Tages ein
+// (Menge wird zur vorhandenen Bestellung der Filiale addiert); danach verschwindet er aus der Box oben.
+// "nicht mehr möglich" wird NICHT in die Tabelle übernommen. Erkennung: "3 coco, 2 mango" oder "coco 3".
+function snNorm(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ß/g,'ss'); }
+function snParse(text){
+  const out=[]; const parts=String(text||'').split(/[,;\n+&]|\bund\b/i);
+  for(const raw of parts){
+    const t=raw.trim(); if(!t) continue;
+    let m=t.match(/^(\d+)\s*[x×]?\s*(.+)$/i), n, name;
+    if(m){ n=+m[1]; name=m[2]; }
+    else if((m=t.match(/^(.+?)\s*[x×]?\s*(\d+)$/i))){ n=+m[2]; name=m[1]; }
+    else { out.push({n:0,name:t,raw:t}); continue; }
+    out.push({n,name:name.trim(),raw:t});
+  }
+  return out;
+}
+function snMatch(name,items){
+  const q=snNorm(name).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=3 && !['cake','raw','kuchen','stk','stueck','mal'].includes(w));
+  if(!q.length) return null;
+  const hits=items.filter(a=>{ const nm=snNorm(a.name); return q.every(w=>nm.split(/[^a-z0-9]+/).some(x=>x.startsWith(w)) || nm.includes(w)); });
+  return hits.length===1 ? hits[0] : null;
+}
 async function setSweetsNachtragStatus(id,status){
-  try{ await api(`sweets_nachtraege?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})}); showToast('✓ Gespeichert'); renderSweets(); }
+  try{
+    let msg='✓ Gespeichert';
+    if(status==='ja'){
+      const rr=await api(`sweets_nachtraege?id=eq.${id}&select=*`); const r=(rr||[])[0];
+      if(!r) throw new Error('Nachtrag nicht gefunden');
+      if(r.status!=='ja'){
+        const items=(articles||[]).filter(a=>a.category==='Sweets' && !a.archiviert);
+        const parsed=snParse(r.text), ok=[], bad=[];
+        for(const p of parsed){ const a=p.n>0 ? snMatch(p.name,items) : null; if(a) ok.push({a,n:p.n}); else bad.push(p.raw); }
+        if(ok.length){
+          const ids=[...new Set(ok.map(o=>o.a.id))].join(',');
+          const ex=await api(`orders?store_id=eq.${r.store_id}&order_date=eq.${r.order_date}&article_id=in.(${ids})&select=article_id,quantity`).catch(()=>[]);
+          const cur={}; (ex||[]).forEach(e=>{ cur[e.article_id]=Number(e.quantity)||0; });
+          const add={}; ok.forEach(o=>{ add[o.a.id]=(add[o.a.id]||0)+o.n; });
+          const rows=Object.keys(add).map(aid=>({store_id:r.store_id,article_id:Number(aid),order_date:r.order_date,quantity:(cur[aid]||0)+add[aid]}));
+          await api('orders?on_conflict=store_id,article_id,order_date',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=representation'},body:JSON.stringify(rows)});
+          msg='✓ In die Tabelle eingetragen: '+ok.map(o=>`${o.n}× ${o.a.name}`).join(', ');
+        }
+        if(bad.length){ msg=(ok.length?msg+' — ':'')+'⚠️ nicht erkannt, bitte selbst eintragen: '+bad.join(', '); }
+      }
+    }
+    await api(`sweets_nachtraege?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status})});
+    showToast(msg, msg.includes('⚠️')); renderSweets();
+  }
   catch(e){ console.error(e); showToast('Fehler',true); }
 }
 Object.assign(window,{sendSweetsNachtrag,setSweetsNachtragStatus,loadSweetsNachtraegeStore});
@@ -22487,7 +22532,7 @@ async function renderSweets(){
   }
 
   try{
-    const nts=await api(`sweets_nachtraege?order_date=eq.${sweetsDateStr}&select=*&order=created_at.asc`).catch(()=>[]);
+    const nts=((await api(`sweets_nachtraege?order_date=eq.${sweetsDateStr}&select=*&order=created_at.asc`).catch(()=>[]))||[]).filter(r=>!r.status||r.status==='offen');
     if((nts||[]).length){
       const sn=Object.fromEntries((stores||[]).map(s=>[s.id,s.name]));
       html+=`<div class="card" style="padding:12px 14px;margin:10px 0;border:1.5px solid #F59E0B;background:#FFFBEB;">
