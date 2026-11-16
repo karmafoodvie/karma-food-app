@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.292';
+const APP_VERSION='6.99.293';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1671,7 +1671,13 @@ function navBeilagenToday(){ transporterBeilagenDateOffset=0; renderPack(); }
 window.navBeilagenDate=navBeilagenDate;
 window.navBeilagenToday=navBeilagenToday;
 let sweetsDateOffset = 0; // 0=heute, -1=gestern, ... für Sweets-Verlauf
-function navSweetsDate(delta){ sweetsDateOffset+=delta; renderSweets(); }
+// 16.11.26 (Wunsch Gurl): Sa/So gibt es bei der Sweets-Bestellung nicht — beim Blättern überspringen.
+function navSweetsDate(delta){
+  sweetsDateOffset+=delta;
+  let d=new Date(); d.setDate(d.getDate()+sweetsDateOffset);
+  while([0,6].includes(d.getDay())){ sweetsDateOffset+=(delta>=0?1:-1); d=new Date(); d.setDate(d.getDate()+sweetsDateOffset); }
+  renderSweets();
+}
 function navSweetsToday(){ sweetsDateOffset=0; renderSweets(); }
 window.navSweetsDate=navSweetsDate;
 window.navSweetsToday=navSweetsToday;
@@ -22324,6 +22330,8 @@ async function renderSweets(){
   // bedeutet also: Datenbank-Abfrage auf HEUTE, nicht auf gestern (war vorher fälschlich -1 Tag
   // versetzt wie beim Transporter — dadurch sah das Team nie die frisch eingegangenen Bestellungen
   // desselben Tages, sondern nur die vom Vortag, die schon gepackt waren).
+  { let _d=new Date(); _d.setDate(_d.getDate()+sweetsDateOffset);
+    while([0,6].includes(_d.getDay())){ sweetsDateOffset--; _d=new Date(); _d.setDate(_d.getDate()+sweetsDateOffset); } }
   const sweetsViewDate=new Date(); sweetsViewDate.setDate(sweetsViewDate.getDate()+sweetsDateOffset);
   const sweetsEntryDate=new Date(sweetsViewDate);
   const sweetsDateStr=sweetsEntryDate.toISOString().split('T')[0];
