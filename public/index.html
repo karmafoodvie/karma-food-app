@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.295';
+const APP_VERSION='6.99.296';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5677,6 +5677,10 @@ function renderOrder(){
 
   const tab=ORDER_TABS[activeOrderTab];
   html+=notstandButtonHtml();
+  // 17.11.26 (Wunsch Gurl): Filialen können zurückschauen, ob/was sie an früheren Tagen bestellt haben — weniger Rückfragen.
+  if(tab?.cats?.length && currentStore?.id!=='zentrale'){
+    html+=`<button onclick="showOrderHistory('${activeOrderTab}')" style="width:100%;margin:0 0 10px;padding:10px 12px;border:1.5px solid ${tab.color};border-radius:12px;background:${tab.color}12;color:${tab.color};font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Meine letzten Bestellungen ansehen</button>`;
+  }
 
   if(activeOrderTab==='kc'){
     renderKCOrderTab(el, html);
@@ -8189,6 +8193,46 @@ function showOrderReceipt(rows, tabTitle, onClose){
   };
 }
 window.showOrderReceipt=showOrderReceipt;
+
+// Bestell-Verlauf der eigenen Filiale (letzte 14 Tage, nur Werktage) — "habe ich das bestellt?"
+async function showOrderHistory(tabKey){
+  const tab=ORDER_TABS[tabKey]; if(!tab||!currentStore) return;
+  const ov=document.createElement('div');
+  ov.id='order-history-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML=`<div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:0 0 20px;box-shadow:0 -4px 30px rgba(0,0,0,0.15);"><div style="padding:30px;text-align:center;color:var(--muted);">Lade …</div></div>`;
+  document.body.appendChild(ov);
+  const box=ov.firstElementChild;
+  try{
+    const ids=(articles||[]).filter(a=>tab.cats.includes(a.category)).map(a=>a.id);
+    const von=new Date(); von.setDate(von.getDate()-14);
+    const vonStr=von.toISOString().split('T')[0];
+    const rows=ids.length ? await api(`orders?store_id=eq.${currentStore.id}&order_date=gte.${vonStr}&article_id=in.(${ids.join(',')})&quantity=gt.0&select=order_date,article_id,quantity&order=order_date.desc`) : [];
+    const nts=tabKey==='sweets' ? await api(`sweets_nachtraege?store_id=eq.${currentStore.id}&order_date=gte.${vonStr}&select=order_date,text,status&order=created_at.asc`).catch(()=>[]) : [];
+    const byDay={}; (rows||[]).forEach(r=>{ (byDay[r.order_date]=byDay[r.order_date]||[]).push(r); });
+    const ntDay={}; (nts||[]).forEach(r=>{ (ntDay[r.order_date]=ntDay[r.order_date]||[]).push(r); });
+    const days=[]; const d=new Date();
+    for(let i=0;i<=14;i++){ const x=new Date(); x.setDate(d.getDate()-i); if([0,6].includes(x.getDay())) continue; days.push(x); }
+    const todayStr=new Date().toISOString().split('T')[0];
+    const SNS={ja:'✅ eingearbeitet',nein:'❌ nicht mehr möglich',offen:'⏳ noch offen'};
+    const body=days.map(x=>{
+      const ds=x.toISOString().split('T')[0];
+      const list=byDay[ds]||[]; const nl=ntDay[ds]||[];
+      const label=x.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'})+(ds===todayStr?' · heute':'');
+      const items=list.map(r=>{ const a=articles.find(z=>z.id===r.article_id); return `<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span>${a?.name||'Artikel #'+r.article_id}</span><span style="font-weight:700;">${r.quantity}</span></div>`; }).join('');
+      const nHtml=nl.map(n=>`<div style="font-size:11.5px;color:#92400E;background:#FFFBEB;border-radius:6px;padding:4px 8px;margin-top:4px;">📝 Nachtrag: ${escAttr(n.text)} · ${SNS[n.status||'offen']||''}</div>`).join('');
+      return `<div style="padding:10px 16px;border-bottom:0.5px solid var(--border);">
+        <div style="font-size:12px;font-weight:700;color:${list.length?'#15803D':'var(--muted)'};margin-bottom:3px;">${label} ${list.length?'· ✓ bestellt':'· keine Bestellung'}</div>
+        ${items}${nHtml}</div>`;
+    }).join('');
+    box.innerHTML=`<div style="position:sticky;top:0;background:#fff;padding:16px 16px 10px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;"><div style="font-size:16px;font-weight:700;">📋 Meine letzten Bestellungen</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:2px;">${tab.title} · ${escAttr(currentStore.name||'')} · Eintragstag, letzte 2 Wochen</div></div>
+      <button onclick="document.getElementById('order-history-overlay').remove()" style="border:none;background:#F3F4F6;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">✕</button></div>${body}`;
+  }catch(e){ console.error(e); box.innerHTML='<div style="padding:24px;text-align:center;color:#B91C1C;">Verlauf konnte nicht geladen werden — bitte nochmal versuchen.</div>'; }
+}
+window.showOrderHistory=showOrderHistory;
 
 // 05.10.26 (Wunsch Tini): Sweets-Bestellung für den nächsten Tag ist ab 14:00 Uhr (Wiener Zeit) gesperrt —
 // danach darf nichts mehr eingetragen oder angepasst werden. Organisation ist ausgenommen.
