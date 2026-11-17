@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.294';
+const APP_VERSION='6.99.295';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -17338,11 +17338,12 @@ async function renderPack(){
 
   let hasAny=false;
   const storeColWidth=(60/(storeList.length+1)).toFixed(1); // % je Filiale + Summe, Rest für Artikel
-  TRANSPORTER_CATS.forEach(cat=>{
+  // 17.11.26 (Wunsch Gurl): Sweets gehören mit in die Transporter-Bestellliste (Verteilung auf die Filialen auf einen Blick).
+  [...TRANSPORTER_CATS,'Sweets'].forEach(cat=>{
     const items=articles.filter(a=>a.category===cat&&storeList.some(s=>(allOrd[a.id]||{})[s.id]?.quantity>0));
     if(!items.length) return;
     hasAny=true;
-    html+=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${cat}</div><div class="card" style="overflow:hidden;"><table class="pack-table" style="width:100%;table-layout:fixed;">
+    html+=`<div class="section-lbl" style="font-size:11px;color:${cat==='Sweets'?'#EC4899':'var(--muted)'};font-weight:${cat==='Sweets'?'700':'500'};">${cat==='Sweets'?'🍰 Sweets — Verteilung':cat}</div><div class="card" style="overflow:hidden;"><table class="pack-table" style="width:100%;table-layout:fixed;">
       <thead><tr><th style="width:40%;text-align:left;padding:6px 4px;font-size:11px;">Artikel</th>`;
     storeList.forEach(s=>html+=`<th style="width:${storeColWidth}%;color:${STORE_COLORS[s.id]||'#888'};padding:6px 2px;font-size:9.5px;font-weight:700;" data-no-translate>${STORE_SHORT[s.id]||s.name.split(' ')[0]}</th>`);
     html+=`<th style="width:${storeColWidth}%;color:${activeColor};padding:6px 2px;font-size:10px;">∑</th></tr></thead><tbody>`;
@@ -18903,6 +18904,22 @@ async function renderKitchenDaily(){
   // Bereiche — als eine gemeinsame Liste statt sechs einzeln eingefärbter Boxen (18.08.26: an das
   // UX-Muster der normalen Store-Startseite angeglichen, siehe dort der "Guide"-Button bzw. die
   // Links-Liste im Onboarding — neutrale item-rows in einer Karte statt bunter Einzelkacheln).
+  // 17.11.26 (Wunsch Gurl): Küchenlager-Inventur muss auch in der Kitchen sichtbar sein — Dienstag ist Zähltag
+  // (Auswertung geht um 15:00 automatisch an Simone). Zeigt, wie viele Artikel noch ohne Eintrag sind.
+  try{
+    const _kl=(articles||[]).filter(a=>a.category==='Kuechenlager' && !a.archiviert && !a.bestand_stabil);
+    const _klOffen=_kl.filter(a=>(a.kuechenlager_bestand==null||a.kuechenlager_bestand==='') && !String(a.kuechenlager_notiz||'').trim());
+    const _heuteDi=new Date().getDay()===2;
+    if(_heuteDi){
+      const _c=_klOffen.length?'#EA580C':'#16A34A';
+      html+=`<div onclick="goTo('kuechenlager')" style="cursor:pointer;background:${_klOffen.length?'#FFF7ED':'#F0FDF4'};border:1.5px solid ${_c};border-radius:12px;padding:11px 14px;margin:10px 0;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">🏭</span>
+        <div style="flex:1;"><div style="font-size:13px;font-weight:800;color:${_c};">${_klOffen.length?'Heute ist Dienstag — Küchenlager-Inventur fällig':'Küchenlager-Inventur: alles eingetragen'}</div>
+        <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">${_klOffen.length?`Noch ${_klOffen.length} Artikel ohne Bestand · bis 15:00 Uhr eintragen, dann geht die Auswertung an Simone`:'Bitte nur noch kurz auf Richtigkeit prüfen — um 15:00 Uhr geht die Auswertung an Simone'}</div></div>
+        <span style="font-size:12px;font-weight:700;color:${_c};white-space:nowrap;">Zählen →</span>
+      </div>`;
+    }
+  }catch(e){ console.error(e); }
   html+=`<div class="section-lbl" style="margin-top:4px;">🔗 Bereiche</div><div class="card">`;
   const kdLinks=[
     {icon:'🍽️', label:'Catering', sub:'Produktionspläne & Packliste', action:"goTo('catering')"},
