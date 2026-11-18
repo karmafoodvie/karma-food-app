@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.300';
+const APP_VERSION='6.99.301';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -14504,13 +14504,20 @@ async function zmCardHtml(){
   const rows=await api('zutaten_meldungen?status=eq.offen&select=*&order=id.desc&limit=30');
   if(!rows||!rows.length) return '';
   const ago=iso=>{ const m=Math.max(0,Math.round((Date.now()-new Date(iso).getTime())/60000)); return m<60?`vor ${m} Min`:(m<1440?`vor ${Math.round(m/60)} Std`:`vor ${Math.round(m/1440)} T`); };
+  // 18.11.26: Zutat bei englischer App-Sprache auf Englisch anzeigen (gespeichert bleibt sie deutsch). Erst feste
+  // Bezeichnung aus der Zutaten-Datenbank (Fisolen → Green beans), sonst automatische Übersetzung.
+  if(lang!=='de'){
+    try{ await getZutatenMaster(); }catch(e){}
+    await Promise.all(rows.map(async r=>{ if(r.zutat){ try{ r._zEn=getEffectiveEn(r.zutat)||await txToEnglish(r.zutat); }catch(e){} } }));
+  }
+  const zShow=r=>escAttr((lang!=='de'&&r._zEn)?r._zEn:r.zutat);
   return `<div id="zm-card" style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:12px;padding:12px;margin-bottom:12px;">
     <div style="font-size:12px;font-weight:700;color:#B91C1C;margin-bottom:8px;">⚠️ ZUTATENLISTE — Änderungen aus den Filialen (${rows.length})</div>
     <div style="font-size:10.5px;color:#7F1D1D;margin-bottom:8px;">Schon sichtbar für alle Filialen. „Stimmt" übernimmt es dauerhaft, „Zurücknehmen" entfernt es wieder.</div>
     ${rows.map(r=>{ const typed=(r.typ==='add'||r.typ==='remove');
       return `<div style="background:#fff;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
       <div style="font-size:12px;font-weight:700;" data-no-translate>${escAttr(r.gericht)}</div>
-      <div style="font-size:13px;margin:2px 0;" data-no-translate>${typed?(r.typ==='add'?'➕ ergänzt: ':'➖ entfernt: ')+'<b>'+escAttr(r.zutat)+'</b>':(r.typ==='neu'?'🆕 Zutat fehlt in der Liste: <b>'+escAttr(r.zutat)+'</b>':escAttr(r.text))}</div>
+      <div style="font-size:13px;margin:2px 0;" data-no-translate>${typed?(r.typ==='add'?'➕ ergänzt: ':'➖ entfernt: ')+'<b>'+zShow(r)+'</b>':(r.typ==='neu'?'🆕 Zutat fehlt in der Liste: <b>'+zShow(r)+'</b>':escAttr(r.text))}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
         <span style="font-size:10.5px;color:var(--muted);">${escAttr(r.store_name||'')} · ${ago(r.created_at)}</span>
         <span style="display:flex;gap:6px;">
