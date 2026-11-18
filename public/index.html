@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.301';
+const APP_VERSION='6.99.302';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5193,6 +5193,7 @@ async function renderHome(){
     <!-- Karma heute / Guide: jetzt im Karmaverse (Nav unten) -->
     `:''}
     ${currentStore?.id==='zentrale'?`
+    <div id="zm-org-host"></div>
     <div id="notstand-zentrale-widget"></div>
     <details class="card" style="padding:10px 14px;margin-bottom:12px;"><summary style="font-size:13px;font-weight:700;cursor:pointer;">🚗 Essen-Transfer per Uber (schnell)</summary>
       <div style="display:flex;gap:6px;margin-top:10px;align-items:center;font-size:12.5px;">
@@ -5307,7 +5308,7 @@ async function renderHome(){
   </div>`;
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
-  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); }
+  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); }
   else { loadActiveBroadcastBanner(); loadLieferTracking(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
@@ -14528,6 +14529,9 @@ async function zmCardHtml(){
       </div></div>`;}).join('')}
   </div>`;
 }
+function zmRerender(){ if(currentView==='kitchen') renderKitchen(); else loadZmOrg(); }
+async function loadZmOrg(){ const h=document.getElementById('zm-org-host'); if(!h) return; if(currentStore?.id!=='zentrale'){ h.innerHTML=''; return; } try{ h.innerHTML=await zmCardHtml(); }catch(e){} }
+window.loadZmOrg=loadZmOrg;
 async function zmConfirm(id){
   try{
     const r=(await api(`zutaten_meldungen?id=eq.${id}&select=*`))[0]; if(!r) return;
@@ -14547,7 +14551,7 @@ async function zmConfirm(id){
     }
     await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'bestaetigt',erledigt_am:new Date().toISOString()})});
     showToast('✔ Übernommen um '+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'}));
-    renderKitchen();
+    zmRerender();
   }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
 }
 async function zmNeuConfirm(id){
@@ -14565,11 +14569,11 @@ async function zmNeuConfirm(id){
   }catch(e){ console.error(e); showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
 }
 async function zmReject(id){
-  try{ await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'abgelehnt',erledigt_am:new Date().toISOString()})}); showToast('Zurückgenommen'); renderKitchen(); }
+  try{ await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'abgelehnt',erledigt_am:new Date().toISOString()})}); showToast('Zurückgenommen'); zmRerender(); }
   catch(e){ showToast('Fehler beim Speichern',true); }
 }
 async function zmDone(id){
-  try{ await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}); renderKitchen(); }
+  try{ await api(`zutaten_meldungen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}); zmRerender(); }
   catch(e){ showToast('Fehler beim Speichern',true); }
 }
 // Auto-Refresh: bestätigt/ändert die Küche etwas, sieht die Filiale es nach spätestens 60 Sekunden —
@@ -14594,7 +14598,7 @@ async function zmRefreshPanels(){
     });
   }catch(e){ console.error('zmRefreshPanels',e); }
 }
-if(!window._zmTimer){ window._zmTimer=setInterval(zmRefreshPanels,60000); }
+if(!window._zmTimer){ window._zmTimer=setInterval(()=>{ zmRefreshPanels(); if(currentStore?.id==='zentrale'&&document.getElementById('zm-org-host')&&currentView==='home') loadZmOrg(); },60000); }
 Object.assign(window,{zmOpen,zmDone,zmConfirm,zmReject,zmTile,zmSubmit,zmRefreshPanels});
 
 // ==== TO-DOS (13.10.26, Wunsch Tini) — Organisation: Liste links, "Heute" rechts, per Drag & Drop ====
@@ -19630,7 +19634,7 @@ window.submitKitchenMonitoring=submitKitchenMonitoring;
 async function renderKitchen(){
   const el=document.getElementById('v-kitchen');
   let html=`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">👨‍🍳 Küchenteam</div>`;
-  html+=await zmCardHtml().catch(()=>'');
+  if(currentStore?.id==='zentrale') html+=await zmCardHtml().catch(()=>''); // 18.11.26: Küche sieht die Zutaten-Anfragen nicht mehr, nur Organisation
   // Für das Tab-Label: nächster Kochtermin = morgen, Sa/So übersprungen (an denen wird nicht gekocht)
   const nextCookDay=new Date();
   nextCookDay.setDate(nextCookDay.getDate()+1);
