@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.298';
+const APP_VERSION='6.99.299';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4393,6 +4393,19 @@ function notrufBeep(){
     navigator.vibrate?.([300,150,300,150,300]);
   }catch(e){}
 }
+// 18.11.26: sanfter "Bing" (zwei Töne) für neue Bestellungen — bewusst anders als der Alarm-Ton vom Essen-Notruf
+function kfBing(){
+  try{
+    notrufUnlockAudio(); const ctx=_notrufCtx; if(!ctx) return;
+    [[0,880],[0.16,1318]].forEach(([d,f])=>{
+      const o=ctx.createOscillator(), g=ctx.createGain(); o.type='sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,ctx.currentTime+d); g.gain.exponentialRampToValueAtTime(0.35,ctx.currentTime+d+0.02); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+d+0.7);
+      o.connect(g); g.connect(ctx.destination); o.start(ctx.currentTime+d); o.stop(ctx.currentTime+d+0.75);
+    });
+    navigator.vibrate?.([120,80,120]);
+  }catch(e){}
+}
+window.kfBing=kfBing;
 let _notrufLoop=null;
 function notrufStartLoop(){
   if(_notrufLoop) return;
@@ -4822,7 +4835,8 @@ async function renderNotstandZentrale(){
     const rows=await api(`notstand_meldungen?status=eq.offen&select=*&order=id.asc`).catch(()=>null);
     if(!rows) return;
     const neu=rows.filter(r=>!_notstandSeen.has(r.id));
-    if(neu.length){ neu.forEach(r=>_notstandSeen.add(r.id)); showToast('🚨 Dringend: '+neu.map(r=>r.produkt).join(', '),true); }
+    if(neu.length){ neu.forEach(r=>_notstandSeen.add(r.id)); showToast('🚨 Dringend: '+neu.map(r=>r.produkt).join(', '),true); if(window._notstandInit) notrufBeep(); }
+    window._notstandInit=true;
     const heute=notstandDatum(0), morgen=notstandDatum(1);
     const bisLabel=d=>!d?'':(d<=heute?'HEUTE':(d===morgen?'MORGEN':new Date(d+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})));
     const unitOf=r=>{ const a=r.article_id?(articles||[]).find(x=>x.id===r.article_id):null; return a?.unit||''; };
@@ -19124,6 +19138,10 @@ async function kdSgPopupCheck(force){
     if(!offen.length) return;
     if(offen.every(r=>window._kdSgPopSeen.has(Number(r.id)))) return;
   }
+  if(!force){ try{
+    const k='kf_sg_bing_'+heute; const known=new Set(JSON.parse(localStorage.getItem(k)||'[]'));
+    if(offen.some(r=>!known.has(Number(r.id)))){ kfBing(); offen.forEach(r=>known.add(Number(r.id))); localStorage.setItem(k,JSON.stringify([...known])); }
+  }catch(e){} }
   offen.forEach(r=>window._kdSgPopSeen.add(Number(r.id)));
   window._kdSgPop={heute,d,rows,done};
   const ov=document.createElement('div');
