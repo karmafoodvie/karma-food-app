@@ -2166,7 +2166,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.323';
+const APP_VERSION='6.99.324';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2916,6 +2916,7 @@ function goTo(v, noPush=false){
   if(!noPush) history.pushState({view:v, storeId:currentStore?.id}, '', location.pathname);
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('show'));
   document.getElementById('v-'+v).classList.add('show');
+  const _prevNav=document.querySelector('.nav-btn.active'); // Unterseiten ohne eigenen Menüpunkt behalten die Hervorhebung ihrer Elternseite
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   let navId=(v==='order' && activeOrderTab==='forecast')?'nav-forecast':'nav-'+v;
   if(v==='check'||v==='guide'||v==='hilfe'||v==='produkte'||v==='kochkurse') navId='nav-karmaverse'; // Unterpunkte des Karmaverse (nur Store-Nav; Org hat eigene Zuordnung unten)
@@ -2934,7 +2935,7 @@ function goTo(v, noPush=false){
     else if(v==='management' || v==='hygieneSchulung' || v==='schulung' || v==='feuerloescher' || v==='teamFeedback' || v==='kundenfeedback' || v==='teamRating' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan' || v==='todos' || v==='geburtstage') navId='nav-org-management';
   }
   const nb=document.getElementById(navId);
-  if(nb) nb.classList.add('active');
+  if(nb && nb.offsetParent!==null) nb.classList.add('active'); else if(_prevNav && _prevNav.offsetParent!==null) _prevNav.classList.add('active'); else if(nb) nb.classList.add('active');
   const subs={gerichtFotos:'Soll-Fotos Gerichte',kochkurse:'Kochkurse',produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos',geburtstage:'Geburtstage'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
