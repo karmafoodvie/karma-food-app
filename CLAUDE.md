@@ -1,6 +1,6 @@
 # Karma Food App — Übergabe & Entwicklerleitfaden
 
-Stand: 19.11.2026 · App-Version 6.99.303 · Zweck: Wer an der App weiterarbeitet (Mensch oder Claude Code), findet hier alles Wichtige an einem Ort.
+Stand: 19.11.2026 · App-Version 6.99.307 · Zweck: Wer an der App weiterarbeitet (Mensch oder Claude Code), findet hier alles Wichtige an einem Ort.
 Diese Datei kann 1:1 als `CLAUDE.md` im Repo-Root verwendet werden.
 
 ---
@@ -120,12 +120,33 @@ Wichtig:
 
 - **Sweets:** keine Bestellung für Samstag/Sonntag (`navSweetsDate` überspringt Wochenenden). Nachträge nach 14:00 gehen über `sweets_nachtraege`; "nicht mehr möglich" wird nicht eingetragen. Sweets erscheinen in der Transporter-Liste als eigener Block "🍰 Sweets — Verteilung".
 - **Transporter-Liste:** Kategorien `TRANSPORTER_CATS = ['Verpackungen','Alltag','Food & Drinks','Reinigung']` + Sweets; Zeile mit Artikelfoto. Zweiter Reiter "📦 Inventur Verpackungen & Lager" = zentrales Küchenlager (die frühere Filial-Inventur gibt es nicht mehr; die Funktion `renderInventurTab` ist unbenutzt).
-- **Kitchen:** Dienstags erscheint der Hinweis zur Küchenlager-Inventur. Neue Online-Bestellungen (Stadtgemeinde & Co.) lösen ein "Bing" aus (`kfBing`, einmal pro Bestellung und Gerät); Notruf nutzt den Alarmton (`notrufBeep`, wiederholt bis zur Antwort), neue Dringend-Meldungen ebenfalls. Browser-Regel: Ton erst nach dem ersten Tipp auf der Seite; bei gesperrtem Bildschirm gibt es keinen Ton (dafür wären Push-Notifications nötig, noch nicht gebaut).
+- **Kitchen:** Dienstags erscheint der Hinweis zur Küchenlager-Inventur.
+- **Töne/Signale:** siehe eigenen Abschnitt 6a.
 - **Zutaten-Meldungen der Filialen:** Stadtplatz meldet "fehlt/angepasst". Die Meldung ist sofort für alle Filialen sichtbar (Overlay), die Karte "ZUTATENLISTE — Änderungen aus den Filialen" erscheint **nur in der Organisation** (Küche ist damit nicht belastet). Bestätigen schreibt in `allergene_rezepturen`. Bei englischer Sprache wird die Zutat englisch angezeigt, gespeichert wird deutsch.
 - **Zutaten-Editor (Küche):** Änderungen gelten erst nach Klick auf "💾 Speichern". Tap daneben oder "Abbrechen" verwirft still. Freitext-Zutaten, die nicht in der Master-Liste stehen, werden nicht gespeichert (kurzer Toast). → Bekannter Schwachpunkt (siehe Abschnitt 9).
 - **Geburtstage:** Tabelle `geburtstage` (name, tag, monat, jahr optional). Banner mit Boldonse, Konfetti-Burst einmal pro Tag und Gerät.
 - **Wechselgeld:** Anfrage an den Transporter, nicht mehr als ca. 150 € in der Kassa; Ablauf-Info als Aufklapper (Kuvert für den Fahrer, Münzen einsortieren, **nicht in den Safe**).
 - **Weniger Klicks:** Bei "Start your shift" und Daily Check-up so wenige Abfragen wie möglich — sonst wird nichts mehr ausgefüllt.
+
+
+### 6a. Töne und Signale (Web Audio, seit 18./19.11.2026)
+
+Alle Töne werden im Browser erzeugt (Web Audio API, **keine Audiodateien**), über den gemeinsamen `AudioContext` `_notrufCtx`, der beim ersten Tippen/Tastendruck entsperrt wird (`notrufUnlockAudio`).
+
+| Funktion | Klang | Wird ausgelöst bei |
+|---|---|---|
+| `kfBing()` | zwei weiche Sinus-Töne (880 Hz, dann 1318 Hz nach 0,16 s), ca. 0,7 s, Vibration kurz | **Essen-Notruf** (Wiener Locations, wiederholt alle 5 s bis zur Antwort), **Notruf-Info** für Stadtplatz/Kitchen/Organisation, **Dringend-Meldung** (🚨 Produkt fehlt) in der Organisation |
+| `notrufBeep()` | ruft nur noch `kfBing()` auf (der frühere schrille Dreifach-Alarmton ist entfernt, 19.11.) | Essen-Notruf-Alarm (`showEssenNotrufAlarm` → `notrufBeep` + `notrufStartLoop`) |
+| `kfChime()` | aufsteigender Dreiklang (C5 523 Hz, E5 659 Hz, G5 784 Hz, Dreieckwelle), je ca. 1,1 s ausklingend, Vibration kurz | **Neue Online-Bestellung** (Stadtgemeinde, KH, Essl, Baubehörde u. a. über `bestellen.html`) in der Kitchen |
+
+Details und Regeln:
+- **Online-Bestellungen:** `kdSgPopupCheck(false)` (Kitchen, Abfrage jede Minute) vergleicht die offenen Bestellungen mit `localStorage['kf_sg_bing_<Datum>']`. Nur neue IDs lösen `kfChime()` aus — pro Gerät und Tag einmal je Bestellung, nach einem Neuladen kein erneuter Ton. Wenn das Bestell-Pop-up schon offen ist, kommt kein zweiter Ton.
+- **Essen-Notruf:** Empfänger sind `NOTRUF_WIEN = ['lb','boerse','1020']` (ohne den Absender, ohne Standorte, die abgesagt haben) mit Alarm-Overlay und Antwort-Buttons. Alle anderen Standorte (Stadtplatz `3400`, `kitchen`, `zentrale`) bekommen über `notrufInfoPing(rows)` ein einmaliges Bing plus Toast "🆘 Notruf: <Standort> braucht Essen" — ohne Overlay und ohne Antwort-Buttons. Beim ersten Laden der Seite gibt es keinen Ton für bereits offene Notrufe (`_notrufPingInit`).
+- **Abfrage-Takt:** `checkEssenNotruf` läuft alle 10 s (`setInterval(checkEssenNotruf, 10000)`), Online-Bestellungen jede Minute (`_kdSgGlobalTimer`).
+- **Dringend-Meldung (`renderNotstandZentrale`):** Toast + Bing nur in der Organisation, nicht beim allerersten Laden (`window._notstandInit`).
+- **Grenzen:** Browser erlauben Ton erst nach der ersten Interaktion mit der Seite; bei gesperrtem Bildschirm oder geschlossener App kommt **kein** Ton; auf iPhone/iPad hängt die Lautstärke am Stumm-Schalter. Abhilfe wären echte Push-Benachrichtigungen (Service Worker + Web Push) — noch nicht gebaut.
+- **Hörproben:** Die Töne lassen sich als WAV nachrechnen (Parameter siehe oben); für Änderungen nur die Zahlen in `kfBing()`/`kfChime()` anpassen (`frequency`, Anstieg `0.02`/`0.03` s, Ausklang `0.7`/`1.1` s, Lautstärke `0.35`/`0.3`).
+- **Wenn der Ton fehlt:** 1) Wurde nach dem App-Start einmal getippt? 2) Stumm-Schalter/Lautstärke? 3) Ist die Bestellung/der Notruf wirklich neu (Gerät hat die ID schon gemerkt)? 4) Konsole auf Fehler prüfen (`try/catch` schluckt Fehler absichtlich).
 
 ---
 
@@ -168,6 +189,10 @@ Asana: Simone `1205949823315374`, Tini `1208203554133464`, Adi `1206121517642047
 
 ## 9. Changelog (Auszug, neueste zuerst)
 
+- **6.99.307** Eigener Dreiklang (`kfChime`) für neue Online-Bestellungen in der Kitchen
+- **6.99.306** Notruf-Alarm: schriller Alarmton ersetzt, überall nur noch das sanfte Bing
+- **6.99.305** Notruf-Info (Bing + Hinweis) auch für Stadtplatz, Kitchen und Organisation
+- **6.99.304** Kashmiri Kokos Curry: "Glutenfrei ohne Chili Crisp" statt "ohne geröstete Zwiebel"; Chili-Crisp-Foto statt Chilischote auf den Gerichte-Karten (`dishTopIconHtml`)
 - **6.99.303** Wechselgeld-Ablauf als aufklappbare Info
 - **6.99.302** Zutaten-Anfragen der Filialen nur noch in der Organisation (nicht mehr in der Küche)
 - **6.99.301** Zutaten-Änderungen bei englischer Sprache auf Englisch angezeigt
@@ -195,7 +220,7 @@ Direkte DB-Änderungen der letzten Tage (nicht im Code): Geburtstage Samer (25.0
 - Onboarding für Transporter: Tabelle `onboarding_program` fehlt noch (Migration hing), Entwurf in `claude/transporter_onboarding_entwurf.md` im Projekt.
 - Asana-Reminder für Ines (Deckel/Becher): Link zur Liste ergänzen — Task im Asana noch nicht identifiziert.
 - Breitere Artikelspalte/größere Fotos in der Transporter-Liste; Test-Button für den Geburtstags-Burst.
-- Push-Notifications (Ton bei geschlossener App).
+- Push-Notifications (Ton bei geschlossener App/gesperrtem Bildschirm) — Töne laufen derzeit nur bei geöffneter App (siehe 6a).
 - Wochen-Forecast-Modul (Organisation plant, Stores sehen/ändern mit Log; Salat als Sonderfall), Marktamtkontrolle-Modul (Konzept fertig, kein Code).
 - Weitere: Samosa/Chutney-Preise, Wareneingangskontrolle-Fehler (Ausstellungsstraße, Fehlertext fehlt), Sojabohnen-Inventur, Becher-/Deckel-Zählung, ENLIT-Mengenanpassung, doppelte `alt_zahlungen`-Zeilen (ids 7, 10, 11).
 - Kunden-Allergenkennzeichnung: Älteren Wochen und weitere Nuss-Zutaten (Pesto, Marzipan …) auf fehlende `H`-Codes prüfen.
@@ -224,10 +249,11 @@ Direkte DB-Änderungen der letzten Tage (nicht im Code): Geburtstage Samer (25.0
 
 ---
 
-## 13. Test- und Design-Arbeit (Stand 19.11.2026)
+## 13. Apple-Design (Option, Stand 19.11.2026)
 
-- Es gibt eine **Test-Kopie der App mit eigener Test-Datenbank und Apple-Design (iOS „Liquid Glass“)**. Sie liegt nicht in diesem Repo, sondern nur in der jeweiligen Claude-Session (`karma-food-app-kopie/test-db/`: `schema.sql`, `04_seed.sql`, `core.js`, `mem-core.js`, `apple-skin.css`, `build_standalone.js`). Sie basiert auf Version 6.99.248 und muss vor jeder Übernahme auf den aktuellen `main` übertragen werden.
-- **In die echte App gehört nur die Design-Schicht** (`<style id="apple-skin">`, Schrift auf Apple-System-Schrift, Meta-Tags `viewport-fit=cover`). **Nicht** übernehmen: `SUPABASE_URL` auf `localhost`, gesperrtes EmailJS, Test-Banner, Offline-Datenbank/`fetch`-Umleitung.
-- Design-Regeln aus Apples HIG: Glas nur auf der Funktionsebene (obere Leiste, Tab-Leiste, Menüs, Toast), Inhalt in ruhigen Flächen; Akzentfarbe sparsam; Rückfälle für „Transparenz reduzieren“ / „Kontrast erhöhen“ / „Bewegung reduzieren“; Text-Kontrast mindestens 4,5:1. Kein Dunkelmodus (viele Inline-Farben sind fest hell).
-- Die CI-Schrift Boldonse wird in der Design-Variante bewusst durch die Apple-System-Schrift ersetzt (Wunsch aus der Design-Anfrage). **Vor dem Livegang mit Simone/Adi abklären**, weil das die Marken-Regel „Boldonse für Überschriften“ ändert.
-- Nur außerhalb der Betriebszeiten live nehmen (Regel 7), Vercel-Preview vorher durchklicken.
+- Branch **`claude/apple-design`** (Version 6.99.308, Basis 6.99.307): iOS-„Liquid Glass“-Optik als **Option**. Standardmäßig **aus**; einschalten mit `?design=apple` an der Adresse (merkt sich der Browser in `localStorage.kf_design`), ausschalten mit `?design=off`. Alles Design-CSS steht in `<style id="apple-skin">` und wirkt nur mit der Klasse `html.apple`. Keine Logik-, Daten- oder Login-Änderung.
+- **Schriftarten bleiben unverändert** (Boldonse für Überschriften wie bisher). Das Design ändert nur Flächen, Glas, Farben, Abstände.
+- Glas nur auf der Funktionsebene (obere Leiste, Tab-Leiste, Menüs, Toast), Inhalt in ruhigen Flächen; Rückfälle für „Transparenz reduzieren“, „Kontrast erhöhen“, „Bewegung reduzieren“, fehlende Unterstützung und schwache Geräte (`html.apple.noglass`, auch per `localStorage.kf_glass='off'`). Kein Dunkelmodus (viele Inline-Farben sind fest hell).
+- Geprüft in einer lokalen Test-Umgebung (nicht im Repo): 40 Ansichten × 5 Rollen × Handy/Desktop, jeweils mit und ohne Design: kein Überlauf, keine neuen JS-Fehler. **Nicht geprüft:** echte Geräte (iPhone, Android-Tablets) und die Vercel-Preview.
+- Livegang-Plan: Vercel-Preview mit `?design=apple` durchklicken, zuerst auf einem Gerät pilotieren, dann für alle einschalten; nur außerhalb der Betriebszeiten (Regel 7). Rückweg: `?design=off` oder Revert/Rollback in Vercel.
+- Vor dem Merge den Branch auf den aktuellen `main` rebasen und `APP_VERSION` neu setzen (andere Commits zählen die Version hoch).
