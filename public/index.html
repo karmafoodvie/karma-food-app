@@ -169,9 +169,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 
 @media (min-width:700px){ .kf-dishes{gap:8px !important;} .kf-dish-col{max-width:none !important;} .kf-dish-col > div:first-child{padding:12px 10px !important;} }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="/qrcode.js"></script>
+<script src="/qrcode.js" defer></script>
 <script id="kf-a11y">/* Namen für Symbol-Knöpfe und unbeschriftete Felder (Screenreader/Sprachsteuerung). Ändert nichts am Aussehen. */
 (function(){
   var MAP={'🔔':'Meldungen','🌐':'Sprache','−':'Weniger','-':'Weniger','+':'Mehr','＋':'Hinzufügen','✕':'Entfernen','×':'Schließen','←':'Zurück','→':'Weiter','🔄':'Aktualisieren','i':'Info','?':'Hilfe','Aa':'Textgröße'};
@@ -1458,6 +1456,15 @@ html.apple #content button[onclick*="Step"],html.apple #content .ist-step button
 html.apple #content button:not(td button):not(th button):not(.kf-tab){min-width:44px;}
 /* Auswahl-Reihen (z. B. Filial-Umschalter in Operations-Mengen) immer mittig; bei Überbreite linksbündig und wischbar */
 html.apple #content div[style*="display:flex"][style*="overflow-x:auto"]{justify-content:safe center;}
+/* Kopfzeile am Handy kompakter: Titel oben, darunter Untertitel links und Knöpfe rechts in EINER Zeile (spart rund 40 px Höhe) */
+@media (max-width:560px){
+  html.apple.apple #topbar{row-gap:8px;padding-top:calc(12px + var(--sat,0px)) !important;padding-bottom:12px !important;min-height:0 !important;align-items:center !important;}
+  html.apple.apple #topbar > div:first-child{display:contents !important;}
+  html.apple.apple #topbar .tb-title{flex:1 1 100%;order:1;}
+  html.apple.apple #topbar .tb-sub{flex:1 1 0;order:2;min-width:0;padding-left:0 !important;align-self:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  html.apple.apple #topbar > div:last-child{order:3;width:auto !important;flex:none;gap:6px !important;}
+  html.apple.apple #topbar .size-btn,html.apple.apple #topbar .lang-btn,html.apple.apple #topbar button[onclick="goTo('hilfe')"],html.apple.apple #topbar button[onclick="doLogout()"],html.apple.apple #topbar button[onclick*="maengel"]{width:44px !important;height:44px !important;min-width:44px !important;min-height:44px !important;}
+}
 /* kf-calm:end */
 /* kf-themes:start */
 /* GENERIERT von gen_themes.py (Theme lav): setzt nur Farb-Variablen */
@@ -1835,6 +1842,7 @@ html.karma [style*="font-size:8px" i],html.karma [style*="font-size:9px" i],html
 .kf-story-f{margin-top:10px;font-size:12px;color:var(--muted);}
 /* Tippen: kein Warten auf Doppeltipp-Zoom, keine graue Markierung */
 button,[onclick],a,summary,label,input,select{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+#kf-offline{position:fixed;left:12px;right:12px;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:9000;background:#8B0000;color:#fff;font-size:14px;font-weight:600;line-height:1.35;padding:12px 14px;border-radius:8px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.25);}
 </style>
 </head>
 <body>
@@ -2039,7 +2047,7 @@ button,[onclick],a,summary,label,input,select{touch-action:manipulation;-webkit-
       <span style="font-weight:600;font-size:15px;color:#0EA5E9;">Nachricht von der Organisation</span>
     </div>
     <div id="bc-modal-message" style="font-size:14px;color:#1a1a18;background:#F0F9FF;border-radius:10px;padding:12px;margin-bottom:14px;white-space:pre-wrap;"></div>
-    <img id="bc-modal-photo" style="max-width:100%;border-radius:10px;margin-bottom:14px;display:none;">
+    <img loading="lazy" decoding="async" id="bc-modal-photo" style="max-width:100%;border-radius:10px;margin-bottom:14px;display:none;">
     <div id="bc-modal-rating" style="display:none;gap:6px;margin-bottom:12px;">
       <button type="button" class="bc-rating-btn" data-v="1" onclick="setBcRating(1)" style="flex:1;padding:10px 0;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;">😖</button>
       <button type="button" class="bc-rating-btn" data-v="2" onclick="setBcRating(2)" style="flex:1;padding:10px 0;font-size:22px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;">😐</button>
@@ -2711,7 +2719,7 @@ function kvSlideHtml(sl){
   const promise=sl.promise?`<div class="kv-up3" style="background:#fff;border:2.5px solid ${KV_INK};border-radius:22px;padding:16px 18px;margin-top:16px;box-shadow:4px 4px 0 ${KV_INK};"><div style="font-size:10px;font-weight:800;letter-spacing:.12em;color:${KV_ORANGE};margin-bottom:6px;">${sl.promise.k}</div><div style="font-size:20px;font-weight:900;line-height:1.2;">${sl.promise.de}<br>${sl.promise.de2}</div><div style="font-size:11px;opacity:.55;margin-top:6px;">${sl.promise.en}</div></div>`:'';
   const steps=sl.steps?`<div class="kv-up3" style="margin-top:18px;">${sl.steps.map(([i,t,d],k)=>`<div style="display:flex;align-items:center;gap:12px;background:${[KV_NEON,KV_PEACH,KV_CREAM,'#fff'][k]};border:2.5px solid ${KV_INK};border-radius:18px;padding:10px 12px;margin-bottom:${k<sl.steps.length-1?'18':'0'}px;position:relative;"><div style="flex-shrink:0;width:46px;height:46px;border-radius:50%;background:#fff;border:2px solid ${KV_INK};display:flex;align-items:center;justify-content:center;font-size:24px;">${i}</div><div><div style="font-size:14.5px;font-weight:900;">${k+1}. ${t}</div><div style="font-size:12.5px;line-height:1.35;margin-top:2px;opacity:.85;">${d}</div></div>${k<sl.steps.length-1?`<div style="position:absolute;left:30px;bottom:-17px;font-weight:900;color:${KV_ORANGE};font-size:16px;">↓</div>`:''}</div>`).join('')}</div>`:''
   const exH=sl.ex?`<div class="kv-up3" style="margin-top:18px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:8px;">SO SIEHT DAS IM ALLTAG AUS</div>${sl.ex.map(([i,t,d])=>`<div style="display:flex;gap:11px;align-items:flex-start;background:#fff;border:2.5px solid ${KV_INK};border-radius:16px;padding:10px 12px;margin-bottom:8px;box-shadow:2px 2px 0 ${KV_INK};"><div style="flex-shrink:0;font-size:24px;line-height:1.1;">${i}</div><div><div style="font-size:14px;font-weight:900;line-height:1.2;">${t}</div><div style="font-size:12.5px;line-height:1.4;margin-top:2px;opacity:.85;">${d}</div></div></div>`).join('')}</div>`:'';
-  const prH=sl.prods?`<div class="kv-up3" style="margin-top:12px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:8px;">DAS STECKT DRIN</div><div style="display:grid;grid-template-columns:repeat(${sl.prods.length},1fr);gap:8px;">${sl.prods.map(n=>`<div style="text-align:center;"><div style="aspect-ratio:1/1;background:#fff;border:2.5px solid ${KV_INK};border-radius:14px;overflow:hidden;box-shadow:2px 2px 0 ${KV_INK};"><img src="${KV_IMG_BASE}${KV_PROD_IMG[n]}&width=240" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div><div style="font-size:11px;font-weight:800;line-height:1.15;margin-top:5px;">${n}</div></div>`).join('')}</div></div>`:'';
+  const prH=sl.prods?`<div class="kv-up3" style="margin-top:12px;"><div style="font-size:10px;font-weight:900;letter-spacing:.12em;opacity:.65;margin-bottom:8px;">DAS STECKT DRIN</div><div style="display:grid;grid-template-columns:repeat(${sl.prods.length},1fr);gap:8px;">${sl.prods.map(n=>`<div style="text-align:center;"><div style="aspect-ratio:1/1;background:#fff;border:2.5px solid ${KV_INK};border-radius:14px;overflow:hidden;box-shadow:2px 2px 0 ${KV_INK};"><img loading="lazy" decoding="async" src="${KV_IMG_BASE}${KV_PROD_IMG[n]}&width=240" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div><div style="font-size:11px;font-weight:800;line-height:1.15;margin-top:5px;">${n}</div></div>`).join('')}</div></div>`:'';
   return `<div style="color:${KV_INK};">
     <div style="display:inline-block;background:${sl.bg==='#fff'?KV_NEON:'#fff'};border:2px solid ${KV_INK};border-radius:99px;padding:7px 14px;font-size:10.5px;font-weight:900;letter-spacing:.12em;">${sl.pill}</div>
     ${sl.breath?`<div style="margin:10px 0 10px;display:flex;align-items:center;gap:14px;"><div class="kv-breath" style="width:76px;height:76px;border-radius:50%;background:#fff;border:3px solid ${KV_INK};box-shadow:4px 4px 0 ${KV_INK};display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;">🌬️</div><div style="position:relative;height:24px;flex:1;font-size:15px;font-weight:900;"><span class="kv-in" style="position:absolute;left:0;top:0;">… einatmen …</span><span class="kv-out" style="position:absolute;left:0;top:0;">… und langsam ausatmen …</span></div></div>`:`<div style="margin:${sl.steps?'14px 0 14px':'26px 0 22px'};">${kvSticker(sl.ico,sl.steps?64:112,sl.bg==='#fff'?KV_PEACH:'#fff')}</div>`}
@@ -2889,7 +2897,7 @@ function kvKkSheetBody(){
   const box=(t)=>`<div style="font-size:13px;line-height:1.55;">${t}</div>`;
   const short=c=>kvKkShort(c);
   const mc=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">`+KV_KOCHKURSE.map((c,i)=>`<div id="kv-kk-t${i}" onclick="kvKkPick(${i})" style="cursor:pointer;border:2px solid ${KV_INK};border-radius:14px;overflow:hidden;background:#fff;">
-      <div style="aspect-ratio:1/1;background:${c.bg};"><img src="${c.img}&width=300" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+      <div style="aspect-ratio:1/1;background:${c.bg};"><img loading="lazy" decoding="async" src="${c.img}&width=300" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
       <div style="padding:6px 6px 8px;text-align:center;"><div style="font-size:11.5px;font-weight:900;line-height:1.15;">${c.n.replace('Best of ','')}</div><div style="font-size:10px;opacity:.7;margin-top:2px;">${c.tag}</div><div id="kv-kk-s${i}" style="font-size:10px;font-weight:800;margin-top:3px;">${short(c)}</div></div></div>`).join('')+`</div><div id="kv-kk-detail" style="margin-top:10px;"></div>`;
   const faq=(q,a)=>`<details style="border-top:1.5px solid #e5e0d3;padding:8px 0;"><summary style="font-size:13px;font-weight:800;cursor:pointer;">${q}</summary><div style="font-size:13px;line-height:1.5;margin-top:5px;">${a}</div></details>`;
   return h('KOCHKURS: ECHT INDISCHE KÜCHE MIT DEM PROFI')
@@ -2913,7 +2921,7 @@ function kvProdOpen(name){
   d.onclick=e=>{ if(e.target===d) kvProdClose(); };
   d.innerHTML=`<div style="background:#fff;color:${KV_INK};width:100%;max-width:520px;max-height:88vh;overflow-y:auto;border:2px solid ${KV_INK};border-bottom:none;border-radius:24px 24px 0 0;padding:16px 16px 28px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="width:40px;height:5px;border-radius:9px;background:#ddd;"></div><button onclick="kvProdClose()" style="border:2px solid ${KV_INK};background:#fff;border-radius:99px;width:34px;height:34px;font-size:16px;font-weight:900;cursor:pointer;">✕</button></div>
-    <div style="display:flex;gap:14px;align-items:center;"><div style="width:110px;height:110px;flex-shrink:0;background:${x.bg};border:2px solid ${KV_INK};border-radius:18px;overflow:hidden;"><img src="${kvProdImg(x,400)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;"></div>
+    <div style="display:flex;gap:14px;align-items:center;"><div style="width:110px;height:110px;flex-shrink:0;background:${x.bg};border:2px solid ${KV_INK};border-radius:18px;overflow:hidden;"><img loading="lazy" decoding="async" src="${kvProdImg(x,400)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;"></div>
       <div><div style="font-size:21px;font-weight:900;line-height:1.1;">${x.n}</div><div style="font-size:13px;font-weight:800;opacity:.6;margin-top:4px;">${x.p}</div>${x.pn?`<div style="font-size:11px;opacity:.6;">${x.pn}</div>`:''}<div style="margin-top:6px;">${x.t.map(kvProdTag).join('')}</div></div></div>
     <div style="font-size:14px;line-height:1.45;margin:14px 0;${x.kkAll?'display:none;':''}">${x.b}</div>
     ${x.kkAll?kvKkSheetBody():''}
@@ -3312,7 +3320,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.376';
+const APP_VERSION='6.99.377';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -3533,7 +3541,15 @@ async function _apiCore(path, opts={}) {
 // Hülle: kennzeichnet Fehler mit der Methode, damit fehlgeschlagenes Speichern nicht still bleibt (siehe Grundlagen-Skript oben)
 async function api(path, opts={}) {
   try{ return await _apiCore(path, opts); }
-  catch(e){ if(e&&typeof e==='object'){ try{ e.apiMethod=((opts&&opts.method)||'GET').toUpperCase(); }catch(_){} } throw e; }
+  catch(e0){
+    let e=e0;
+    // Netzwackler (Zeitüberschreitung, Verbindung kurz weg): reine Lesezugriffe einmal wiederholen. Schreibzugriffe NIE automatisch wiederholen.
+    const _m=((opts&&opts.method)||'GET').toUpperCase();
+    if(_m==='GET' && e && (e.name==='AbortError'||e.name==='TypeError')){
+      await new Promise(r=>setTimeout(r,700));
+      try{ return await _apiCore(path, opts); }catch(e2){ e=e2; }
+    }
+    if(e&&typeof e==='object'){ try{ e.apiMethod=((opts&&opts.method)||'GET').toUpperCase(); }catch(_){} } throw e; }
 }
 
 // Holt ALLE Zeilen über die projektweite Supabase "Max Rows"-Grenze hinweg (Standard 1000, wird
@@ -5570,7 +5586,7 @@ function getDishImage(name){
 function dishImgHtml(name, size=36, style=''){
   const src = getDishImage(name);
   const r = Math.round(size * 0.25);
-  if(src) return `<img src="${src}" alt="" style="width:${size}px;height:${size}px;border-radius:${r}px;object-fit:cover;flex-shrink:0;${style}">`;
+  if(src) return `<img loading="lazy" decoding="async" src="${src}" alt="" style="width:${size}px;height:${size}px;border-radius:${r}px;object-fit:cover;flex-shrink:0;${style}">`;
   return `<span style="font-size:${Math.round(size*0.55)}px;line-height:1;">${getDishEmoji(name)}</span>`;
 }
 
@@ -5583,7 +5599,7 @@ function getDishHinweis(name){
 }
 // 19.11.26 (Tini): Beim Kashmiri Kokos Curry steht oben statt der Chilischote das kleine Foto vom Kashmiri Chili Crisp.
 function dishTopIconHtml(name, px){
-  if(/KASHMIRI KOKOS/i.test(name||'')) return `<img src="images/products/kashmiri-chili-crisp.jpg" alt="Kashmiri Chili Crisp" style="width:${px}px;height:${px}px;border-radius:${Math.round(px*0.22)}px;object-fit:cover;vertical-align:middle;">`;
+  if(/KASHMIRI KOKOS/i.test(name||'')) return `<img loading="lazy" decoding="async" src="images/products/kashmiri-chili-crisp.jpg" alt="Kashmiri Chili Crisp" style="width:${px}px;height:${px}px;border-radius:${Math.round(px*0.22)}px;object-fit:cover;vertical-align:middle;">`;
   return getDishEmoji(name);
 }
 function getDishEmoji(name){
@@ -7206,7 +7222,7 @@ function renderVerfuegbarkeit(){
       const verfuegbar=a.verfuegbar!==false;
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
-          ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;">${verfuegbarLabel(a)}</div>`:''}
@@ -7360,7 +7376,7 @@ function renderOrderSection(cats, label, color, icon){
       const zutatenInline='';
       html+=`<div class="item-row">
         <div style="display:flex;align-items:center;gap:10px;flex:1;">
-          ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+          ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             <div class="item-unit">${a.unit}</div>
@@ -7440,7 +7456,7 @@ function renderVariantGroupRow(groupKey, groupItems){
   const canAddMore=rows.length<groupItems.length;
   return `<div class="item-row" style="flex-direction:column;align-items:stretch;gap:0;${allUnavailable?'opacity:0.35;pointer-events:none;':''}">
     <div style="display:flex;align-items:center;gap:10px;">
-      ${groupItems[0].image_url?`<img src="${groupItems[0].image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+      ${groupItems[0].image_url?`<img loading="lazy" decoding="async" src="${groupItems[0].image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
       <div class="item-name">${g.label}</div>
     </div>
     ${rowsHtml}
@@ -7691,7 +7707,7 @@ async function renderKCOrderTab(el, tabHtml){
     const updatedLabel=rec?.updated_date ? new Date(rec.updated_date).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}) : '';
     const verfuegbar=a.verfuegbar!==false;
     html+=`<tr${(!isOrg && !verfuegbar)?' style="opacity:0.4;"':''}>
-      <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
+      <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
       <td>
         <div class="ist-step"><input type="number" inputmode="numeric" min="0" value="${ist}" onfocus="this.select()" oninput="debounceFieldSave(this,()=>updateIstBestandStore(${a.id}, this.value, this),1200)" onchange="updateIstBestandStore(${a.id}, this.value, this)" style="text-align:center;border:1.5px solid ${updatedToday?'#22C55E':'var(--border)'};border-radius:8px;background:${updatedToday?'#F0FDF4':'#fff'};"></div>
         ${updatedLabel?`<div style="font-size:9px;color:${updatedToday?'#22C55E':'var(--muted)'};margin-top:2px;">${updatedLabel}</div>`:''}
@@ -7900,7 +7916,7 @@ async function renderStoreSamosaHtml(weekDates){
   </tr></thead><tbody><tr>
     <td style="font-size:13px;font-weight:600;color:#C2410C;white-space:nowrap;">
       <div style="display:flex;align-items:center;gap:6px;">
-        <img src="/images/dishes/samosa.jpg" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">
+        <img loading="lazy" decoding="async" src="/images/dishes/samosa.jpg" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">
         <div>Samosas<div style="font-size:9.5px;font-weight:400;color:var(--muted);">Stk</div></div>
       </div>
     </td>
@@ -8020,7 +8036,7 @@ async function renderKuecheOrderTab(el, tabHtml){
       matrixHtml+=`<tr>
         <td data-no-translate style="font-size:13px;font-weight:600;color:${color};white-space:nowrap;">
           <div style="display:flex;align-items:center;gap:6px;">
-            ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+            ${KITCHEN_SUPPLY_IMAGES[name]?`<img loading="lazy" decoding="async" src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
             <div>${name}<div style="font-size:9.5px;font-weight:400;color:var(--muted);">${unit}</div></div>
           </div>
         </td>
@@ -8093,7 +8109,7 @@ async function renderStoreBeilagenMiniMatrixHtml(weekDates, isCurrentWeek, accen
     html+=`<tr>
       <td data-no-translate style="font-size:12.5px;font-weight:600;color:${color};white-space:nowrap;padding:6px 8px;">
         <div style="display:flex;align-items:center;gap:6px;">
-          ${KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
+          ${KITCHEN_SUPPLY_IMAGES[name]?`<img loading="lazy" decoding="async" src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:20px;height:20px;border-radius:4px;object-fit:cover;flex-shrink:0;">`:''}
           <div>${name}<div style="font-size:9px;font-weight:400;color:var(--muted);">${unit}</div></div>
         </div>
       </td>
@@ -8295,7 +8311,7 @@ async function renderEndkontrolleHtml(){
         const img=KITCHEN_SUPPLY_IMAGES[s.article_name];
         html+=`<div onclick="toggleKuecheEingepackt('${st.id}','${escAttr(s.article_name)}','${dateStr}',${s.qty},${!!s.eingepackt})"
           style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:0.5px solid var(--border);cursor:pointer;background:${s.eingepackt?'var(--green-light)':'transparent'};">
-          ${img?`<img src="${img}" alt="" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;">`:'<span style="font-size:22px;flex-shrink:0;">🥗</span>'}
+          ${img?`<img loading="lazy" decoding="async" src="${img}" alt="" style="width:32px;height:32px;border-radius:7px;object-fit:cover;flex-shrink:0;">`:'<span style="font-size:22px;flex-shrink:0;">🥗</span>'}
           <div style="flex:1;" data-no-translate>
             <div style="font-size:13px;font-weight:500;text-decoration:${s.eingepackt?'line-through':'none'};color:${s.eingepackt?'var(--green)':'inherit'};">${s.article_name}</div>
             <div style="font-size:11px;color:var(--muted);">${formatQty(s.qty)}</div>
@@ -8331,6 +8347,27 @@ let _forecastSettingsCache = {}; // storeId -> settings row
 // Bricht Anfragen (Supabase & externe wie Wetter) nach einer festen Zeit ab, statt die Seite bei einer
 // langsamen/gestörten Verbindung (Mittagsstoßzeit, schlechtes WLAN) unbegrenzt hängen zu lassen.
 // WICHTIG: options (headers, method, body...) werden durchgereicht — sonst gehen z.B. Auth-Header verloren.
+
+// Bibliotheken erst laden, wenn sie gebraucht werden (19.11.26): Die Excel-Bibliothek (nur Umsatz-/Menü-Import) und EmailJS
+// (nur beim Mail-Versand) blockierten bisher jeden App-Start. kfNeedLib lädt sie einmalig nach und meldet einen klaren Fehler.
+const KF_LIBS={
+  xlsx:{url:'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',ok:()=>typeof window.XLSX!=='undefined'},
+  emailjs:{url:'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js',ok:()=>typeof window.emailjs!=='undefined',after:()=>{ try{ emailjs.init('8gD6YlYH0PVsMf7w-'); }catch(e){} }}
+};
+const _kfLibP={};
+function kfNeedLib(name){
+  const L=KF_LIBS[name]; if(!L) return Promise.reject(new Error('Unbekannte Bibliothek '+name));
+  if(L.ok()) return Promise.resolve();
+  if(_kfLibP[name]) return _kfLibP[name];
+  _kfLibP[name]=new Promise((resolve,reject)=>{
+    const sc=document.createElement('script'); sc.src=L.url; sc.async=true;
+    sc.onload=()=>{ if(L.ok()){ try{ L.after&&L.after(); }catch(e){} resolve(); } else { delete _kfLibP[name]; reject(new Error('Bibliothek '+name+' konnte nicht geladen werden')); } };
+    sc.onerror=()=>{ delete _kfLibP[name]; reject(new Error('Bibliothek '+name+' konnte nicht geladen werden — Internetverbindung prüfen')); };
+    document.head.appendChild(sc);
+  });
+  return _kfLibP[name];
+}
+window.kfNeedLib=kfNeedLib;
 function fetchWithTimeout(url, options={}, ms=8000){
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(), ms);
@@ -9119,6 +9156,7 @@ async function renderUmsatzContent(){
 const UMSATZ_STORE_MAP={'Ausstellungsstraße':'1020','Börse':'boerse','Kitchen':'kitchen','Laurenzerberg':'lb','Stadtplatz':'3400'};
 
 async function handleUmsatzUpload(inputEl){
+  try{ await kfNeedLib('xlsx'); }catch(e){ showToast(e.message,true); return; }
   const file=inputEl.files?.[0];
   if(!file) return;
   const btn=document.getElementById('umsatz-upload-btn');
@@ -10844,7 +10882,7 @@ async function renderGerichtFotos(){
     h+=`<div class="card" style="padding:12px;margin-bottom:10px;${r&&!frei?'border-left:3px solid #7C3AED;':frei?'border-left:3px solid #16A34A;':''}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="flex:1;"><div data-no-translate style="font-size:13px;font-weight:700;">${getDishEmoji(d.name)} ${escAttr(d.name)}</div><div style="font-size:10px;color:var(--muted);">${d.lbl}</div></div>
         ${r?`<span style="font-size:10px;font-weight:700;border-radius:6px;padding:3px 8px;${frei?'background:#DCFCE7;color:#166534;':'background:#EDE9FE;color:#5B21B6;'}">${frei?'✓ für Küche sichtbar':'🔒 Test'}</span>`:''}</div>
-      ${r?`<img src="${escAttr(r.foto_url)}" alt="" onclick="gfShowIdx(${i})" onerror="this.style.display='none'" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:8px;cursor:pointer;">
+      ${r?`<img loading="lazy" decoding="async" src="${escAttr(r.foto_url)}" alt="" onclick="gfShowIdx(${i})" onerror="this.style.display='none'" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;margin-bottom:8px;cursor:pointer;">
       <textarea id="gf-h-${i}" placeholder="Worauf achten? (Anrichten, Garnitur, Menge …)" onchange="gfSaveHinweis(${i})" style="width:100%;min-height:44px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;box-sizing:border-box;margin-bottom:8px;">${escAttr(r.hinweis||'')}</textarea>`:''}
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <label style="flex:1;min-width:120px;text-align:center;padding:9px;border:1.5px dashed #7C3AED;border-radius:9px;background:#fff;color:#7C3AED;font-size:12px;font-weight:700;cursor:pointer;">📷 ${r?'Foto ersetzen':'Foto hinzufügen'}<input type="file" accept="image/*" style="display:none;" onchange="gfUpload(${i},this)"></label>
@@ -10897,7 +10935,7 @@ function gfShow(url,name,hinweis,test){
   o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;';
   o.onclick=()=>o.remove();
   o.innerHTML=`<div style="color:#fff;font-size:13px;font-weight:700;margin-bottom:8px;text-align:center;">📸 So soll es aussehen${test?' <span style="background:#7C3AED;border-radius:6px;padding:2px 7px;font-size:10px;">TEST – nur Orga</span>':''}<div data-no-translate style="font-weight:400;font-size:12px;opacity:.85;margin-top:2px;">${escAttr(name)}</div></div>
-    <img src="${escAttr(url)}" alt="" style="max-width:100%;max-height:68vh;border-radius:12px;object-fit:contain;">
+    <img loading="lazy" decoding="async" src="${escAttr(url)}" alt="" style="max-width:100%;max-height:68vh;border-radius:12px;object-fit:contain;">
     ${hinweis?`<div style="color:#fff;font-size:12.5px;margin-top:10px;max-width:480px;text-align:center;line-height:1.5;white-space:pre-wrap;">${escAttr(hinweis)}</div>`:''}
     <div style="color:#fff;opacity:.6;font-size:11px;margin-top:12px;">Tippen zum Schließen</div>`;
   document.body.appendChild(o);
@@ -11163,6 +11201,7 @@ function mkLastHtml(r){
   </div>`;
 }
 async function mkCheckFile(inp){
+  try{ await kfNeedLib('xlsx'); }catch(e){ showToast(e.message,true); return; }
   const f=inp.files&&inp.files[0]; inp.value=''; if(!f) return;
   const st=document.getElementById('mk-status'), btn=document.getElementById('mk-btn');
   const say=t=>{ if(st) st.textContent=t; };
@@ -12073,7 +12112,7 @@ async function renderSchrankerlTab(){
     const _gf=_gfMapSk[item.name]; let thumb='';
     if(_gf){ window._gfSk.push(_gf); const _k=window._gfSk.length-1;
       thumb=`<div onclick="gfShowSk(${_k})" style="position:relative;flex-shrink:0;width:104px;height:130px;background:#F3F1EC;border-radius:10px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;">
-        <img src="${escAttr(_gf.foto_url)}" alt="" onerror="this.parentNode.style.display='none'" style="max-width:100%;max-height:100%;object-fit:contain;display:block;">
+        <img loading="lazy" decoding="async" src="${escAttr(_gf.foto_url)}" alt="" onerror="this.parentNode.style.display='none'" style="max-width:100%;max-height:100%;object-fit:contain;display:block;">
         <span style="position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:1px 6px;font-size:10px;">🔍</span>
         ${_gf.status==='test'?'<span style="position:absolute;left:4px;top:4px;background:#7C3AED;color:#fff;border-radius:5px;padding:1px 5px;font-size:8.5px;font-weight:700;">TEST</span>':''}</div>`; }
     else { thumb=`<div style="flex-shrink:0;width:104px;height:130px;background:#F3F1EC;border-radius:10px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;color:var(--muted);padding:6px;box-sizing:border-box;">${_gfIsOrgSk?'📸 Foto fehlt<br>(Orga → Soll-Fotos)':'kein Foto'}</div>`; }
@@ -14542,7 +14581,7 @@ async function renderBroadcast(){
     <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Z.B. um zu zeigen, wie du dir ein Gericht/eine Idee vorstellst.</div>
     <input type="file" id="bc-photo-input" accept="image/*" onchange="previewBcPhoto(this)" style="margin-bottom:8px;">
     <div id="bc-photo-preview" style="display:none;margin-bottom:12px;">
-      <img id="bc-photo-preview-img" style="max-width:160px;max-height:160px;border-radius:10px;display:block;">
+      <img loading="lazy" decoding="async" id="bc-photo-preview-img" style="max-width:160px;max-height:160px;border-radius:10px;display:block;">
       <button type="button" onclick="removeBcPhoto()" style="margin-top:6px;font-size:11px;color:#DC2626;background:none;border:none;cursor:pointer;text-decoration:underline;">Foto entfernen</button>
     </div>
     <div style="font-weight:500;margin-bottom:6px;">Dein Name</div>
@@ -14644,7 +14683,7 @@ async function loadBroadcastHistory(storeList){
         <span style="font-size:10.5px;color:var(--muted);">${new Date(b.created_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
       </div>
       <div style="font-size:13px;color:#1a1a18;margin-top:4px;">${linkifyText(b.message)}</div>
-      ${b.photo_url?`<img src="${b.photo_url}" style="max-width:200px;border-radius:10px;margin-top:6px;display:block;">`:""}
+      ${b.photo_url?`<img loading="lazy" decoding="async" src="${b.photo_url}" style="max-width:200px;border-radius:10px;margin-top:6px;display:block;">`:""}
       ${isTransporter?'':`<div style="font-size:10.5px;color:var(--muted);margin-top:6px;">👁️ Gelesen: ${readCount}/${targetStores.length}${b.show_until?` · ✅ Erledigt: ${doneCount}/${targetStores.length}${doneCount<targetStores.length?' (offen: '+targetStores.filter(id=>!doneSet.has(id)).map(id=>storeMap[id]||id).join(', ')+')':''}`:''}</div>`}
       ${myReplies.length?`<div style="margin-top:8px;border-top:0.5px solid var(--border);padding-top:6px;">
         ${myReplies.map(r=>{
@@ -14901,7 +14940,7 @@ async function loadActiveBroadcastBanner(){
           <span style="font-size:16px;">📌</span>
           <div style="flex:1;">
             <div style="font-size:12.5px;color:#78350F;line-height:1.4;">${linkifyText(b.message)}</div>
-            ${b.photo_url?`<img src="${b.photo_url}" style="max-width:180px;border-radius:8px;margin-top:6px;display:block;">`:""}
+            ${b.photo_url?`<img loading="lazy" decoding="async" src="${b.photo_url}" style="max-width:180px;border-radius:8px;margin-top:6px;display:block;">`:""}
             <div style="font-size:10px;color:#92660A;margin-top:3px;">sichtbar bis ${new Date(b.show_until+'T00:00:00').toLocaleDateString('de-AT')}</div>
           </div>
         </div>
@@ -15893,7 +15932,7 @@ async function checkAndNotifyOverdueHygiene(byName, ausgeschiedenMap){
   });
   if(!toNotify.length) return;
   try{
-    await emailjs.send('service_xla195w','template_9uiq1wf',{
+    await kfNeedLib('emailjs'); await emailjs.send('service_xla195w','template_9uiq1wf',{
       name: 'Hygiene-Schulung fällig',
       time: new Date().toLocaleString('de-AT'),
       message: `Folgende Personen sind mit ihrer Hygiene-Schulung überfällig (älter als 12 Monate):\n\n${toNotify.map(n=>`- ${n} (zuletzt: ${new Date(byName[n].datum).toLocaleDateString('de-AT')})`).join('\n')}\n\nBitte neue Schulung einplanen.`,
@@ -17017,7 +17056,7 @@ function dailyCheckLieferungHtml(fcRows,supRows,wek,wekPrev){
     const state=p?(val===r.exp?'ok':'diff'):'';
     const isDish=r.kind==='dish';
     const img=!isDish?(typeof KITCHEN_SUPPLY_IMAGES!=='undefined'?KITCHEN_SUPPLY_IMAGES[r.name]:null):null;
-    const icon=isDish?`<span style="font-size:19px;flex-shrink:0;">${dishIcon(r.name)}</span>`:(img?`<img src="${img}" alt="" style="width:24px;height:24px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:'<span style="font-size:19px;flex-shrink:0;">🥗</span>');
+    const icon=isDish?`<span style="font-size:19px;flex-shrink:0;">${dishIcon(r.name)}</span>`:(img?`<img loading="lazy" decoding="async" src="${img}" alt="" style="width:24px;height:24px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:'<span style="font-size:19px;flex-shrink:0;">🥗</span>');
     let tempHtml='';
     if(isDish){
       if(!seenDish[r.name]){
@@ -17514,7 +17553,7 @@ function mangelFormHtml(storeOptions){
         <input type="file" id="mangel-foto-input" accept="image/*" capture="environment" onchange="previewMangelFoto(this)" style="display:none;">
         <button type="button" onclick="document.getElementById('mangel-foto-input').click()" style="background:none;border:1.5px dashed var(--border);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--sub);cursor:pointer;width:100%;">📷 Foto hinzufügen (optional)</button>
         <div id="mangel-foto-preview" style="margin-top:8px;display:none;position:relative;">
-          <img id="mangel-foto-img" style="max-width:100%;max-height:180px;border-radius:10px;display:block;">
+          <img loading="lazy" decoding="async" id="mangel-foto-img" style="max-width:100%;max-height:180px;border-radius:10px;display:block;">
           <button type="button" onclick="clearMangelFoto()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:14px;cursor:pointer;">✕</button>
         </div>
       </div>
@@ -17927,7 +17966,7 @@ async function openMangelDetail(id){
           <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
         </div>
         <div style="font-size:13.5px;color:var(--sub);margin-top:10px;line-height:1.4;">${escHtml(m.beschreibung)}</div>
-        ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:block;object-fit:cover;"></a>`:''}
+        ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" src="${m.foto_url}" style="max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:block;object-fit:cover;"></a>`:''}
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
           ${isOrg && status!=='behoben'?`
             ${status==='offen'?`<button onclick="setMangelStatus(${m.id},'in_bearbeitung')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;color:#0369A1;cursor:pointer;">▶ In Bearbeitung</button>`:''}
@@ -18753,7 +18792,7 @@ async function renderInventurTab(storeList){
       const soll=a.min_stock||0;
       const bedarf=(ist!=='' && ist!=null)?(soll-ist):null;
       html+=`<tr>
-        <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
+        <td style="font-size:12px;"><div style="display:flex;align-items:center;gap:8px;">${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span></div></td>
         <td><input type="number" value="${ist}" oninput="debounceFieldSave(this,()=>updateIstBestandFuerFiliale('${storeId}',${a.id},this.value))" onchange="updateIstBestandFuerFiliale('${storeId}',${a.id},this.value)" style="width:48px;text-align:center;border:1.5px solid var(--border);border-radius:5px;font-size:12px;padding:5px;"></td>
         <td style="color:var(--muted);text-align:center;">${soll}</td>
         <td style="font-weight:600;text-align:center;color:${bedarf===null?'var(--muted)':bedarf>0?'#A32D2D':'#3B6D11'};">${bedarf===null?'·':bedarf}</td>
@@ -19107,7 +19146,7 @@ async function kuechenlagerBodyHtml(){
       html+=`<tr style="${stabil?'background:#F0FDF4;':(niedrig?'background:#FEF2F2;':'')}">
         <td style="font-size:12px;">
           <div style="display:flex;align-items:center;gap:8px;">
-            ${a.image_url?`<img src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;border:0.5px solid var(--border);">`:`<div style="width:32px;height:32px;border-radius:6px;background:var(--surface-1);flex-shrink:0;"></div>`}
+            ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;border:0.5px solid var(--border);">`:`<div style="width:32px;height:32px;border-radius:6px;background:var(--surface-1);flex-shrink:0;"></div>`}
             <div>${a.name} <span style="color:var(--muted);">(${a.unit||''})</span></div>
           </div>
         </td>
@@ -19413,7 +19452,7 @@ async function renderPack(){
       const einheit=a.unit||'';
       html+=`<div class="item-row" style="flex-wrap:wrap;align-items:flex-start;row-gap:8px;">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:160px;">
-          ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+          ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:32px;height:32px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
           <div>
             <div class="item-name">${a.name}</div>
             ${(()=>{ const t=storeList.reduce((acc,s)=>acc+((allOrd[a.id]||{})[s.id]?.quantity||0),0); return t?`<div style="font-size:11px;color:var(--sub);">📦 heute bestellt: ${formatQty(t)} ${einheit}</div>`:''; })()}
@@ -19497,7 +19536,7 @@ async function renderKCOverview(el, tabHtml, storeList){
     let totalBedarf=0;
     let r=`<tr><td style="position:sticky;left:0;background:#fff;z-index:1;"><div style="display:flex;align-items:center;gap:6px;">
       <button onclick="toggleArticleVerfuegbarPack(${a.id},${verfuegbar})" title="${verfuegbar?'Lieferbar':'Nicht lieferbar'}" style="font-size:12px;padding:0;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;">${verfuegbar?'✅':'❌'}</button>
-      ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
+      ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}
       <span>${a.name}</span>
     </div></td>`;
     storeList.forEach(s=>{
@@ -19577,7 +19616,7 @@ async function kcAllesErledigt(){
     }])}).catch(()=>{});
 
     // 2. EmailJS Benachrichtigung an Transporter — ebenfalls mit Filialnamen
-    await emailjs.send('service_xla195w','template_9uiq1wf',{
+    await kfNeedLib('emailjs'); await emailjs.send('service_xla195w','template_9uiq1wf',{
       subject:'📦 Shop Produkte abholbereit',
       message:`Hallo,\n\nInes hat die Shop Produkte eingepackt. Abholbereit für: ${storeListText}\n\n`+new Date().toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'})+' Uhr',
       to_email:'tini@karmafood.at'
@@ -19655,7 +19694,6 @@ async function renderMsg(){
   translateEl(el);
 }
 // EmailJS
-emailjs.init('8gD6YlYH0PVsMf7w-');
 
 async function sendTransportNote(){
   const note=document.getElementById('transport-note')?.value?.trim();
@@ -19667,7 +19705,7 @@ async function sendTransportNote(){
     await api(`special_orders?store_id=eq.zentrale&order_date=eq.${today}`,{method:'DELETE'});
     await api('special_orders',{method:'POST',body:JSON.stringify([{store_id:'zentrale',note,order_date:today}])});
     // Send Email
-    await emailjs.send('service_xla195w','template_9uiq1wf',{
+    await kfNeedLib('emailjs'); await emailjs.send('service_xla195w','template_9uiq1wf',{
       name: 'Transporter / Organisation',
       time: now,
       message: note,
@@ -19904,7 +19942,7 @@ async function renderDisposal(dateStr){
     const soT=samHeute?.sold_out_time?String(samHeute.sold_out_time).slice(0,5):'';
     const verf=(samBestellt!=null?Number(samBestellt):0)+(samRestVortag!=null?Number(samRestVortag):0);
     html+=`<div class="card" style="padding:10px 12px;margin-top:10px;">
-      <div style="display:flex;align-items:center;gap:8px;"><img src="/images/dishes/samosa.jpg" alt="" style="width:34px;height:34px;border-radius:8px;object-fit:cover;"><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Samosas 🥟</div>
+      <div style="display:flex;align-items:center;gap:8px;"><img loading="lazy" decoding="async" src="/images/dishes/samosa.jpg" alt="" style="width:34px;height:34px;border-radius:8px;object-fit:cover;"><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Samosas 🥟</div>
         <div style="font-size:11px;color:var(--muted);line-height:1.35;">${samBestellt!=null?`bestellt: <b>${formatQty(samBestellt)} Stk</b>`:'keine Bestellmenge hinterlegt'}${samRestVortag?` · Rest vom Vortag: <b>${formatQty(samRestVortag)} Stk</b> → verfügbar ca. <b>${formatQty(verf)} Stk</b>`:''}</div></div></div>
       <div style="display:flex;gap:10px;margin-top:8px;align-items:flex-end;">
         <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px;">Ausverkauft um</div>
@@ -20451,7 +20489,7 @@ async function renderTransporterInfoTabHtml(){
         <button onclick="dismissTransporterBroadcast(${b.id})" style="font-size:10.5px;color:var(--muted);background:none;border:none;cursor:pointer;">✕ ausblenden</button>
       </div>
       <div style="font-size:14px;color:#0C4A6E;margin-top:4px;">${linkifyText(b.message)}</div>
-      ${b.photo_url?`<img src="${b.photo_url}" style="max-width:180px;border-radius:8px;margin-top:6px;display:block;">`:""}
+      ${b.photo_url?`<img loading="lazy" decoding="async" src="${b.photo_url}" style="max-width:180px;border-radius:8px;margin-top:6px;display:block;">`:""}
     </div>`).join('');
   }
   if(!tasks?.length){
@@ -20652,7 +20690,7 @@ async function renderTransporterBeilagenHtml(){
 
   allArticles.forEach(name=>{
     const unit=baseline.find(b=>b.article_name===name)?.unit||'';
-    const img=KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:
+    const img=KITCHEN_SUPPLY_IMAGES[name]?`<img loading="lazy" decoding="async" src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:
       `<span style="font-size:20px;">${getDishEmoji(name)}</span>`;
 
     const cells=storeList.map(st=>{
@@ -20756,7 +20794,7 @@ async function renderBeilagenTableHtml(mode='kueche'){
 
     allArticles.forEach(name=>{
       const unit=baseline.find(b=>b.article_name===name)?.unit||'';
-      const img=KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:4px;">`:'' ;
+      const img=KITCHEN_SUPPLY_IMAGES[name]?`<img loading="lazy" decoding="async" src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:16px;height:16px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:4px;">`:'' ;
       const cells=activeDays.map(wd=>{
         const dateStr=weekDates[wd];
         const isToday=wd===todayWeekday;
@@ -20841,7 +20879,7 @@ async function renderKitchenDaily(){
     const entry=menuEntries.find(e=>e.name===d.name||e.slot===d.slot);
     const _gf=_gfMapKd[d.name]; let _gfHtml='';
     if(_gf){ window._gfKd.push(_gf); const _k=window._gfKd.length-1;
-      _gfHtml=`<div onclick="event.stopPropagation();gfShowKd(${_k})" style="position:relative;margin-bottom:6px;"><img src="${escAttr(_gf.foto_url)}" alt="" onerror="this.parentNode.style.display='none'" style="width:100%;height:84px;object-fit:cover;border-radius:6px;display:block;"><span style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.65);color:#fff;border-radius:5px;padding:1px 6px;font-size:9px;">📸 So soll's aussehen</span>${_gf.status==='test'?'<span style="position:absolute;right:4px;top:4px;background:#7C3AED;color:#fff;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;">TEST</span>':''}</div>`; }
+      _gfHtml=`<div onclick="event.stopPropagation();gfShowKd(${_k})" style="position:relative;margin-bottom:6px;"><img loading="lazy" decoding="async" src="${escAttr(_gf.foto_url)}" alt="" onerror="this.parentNode.style.display='none'" style="width:100%;height:84px;object-fit:cover;border-radius:6px;display:block;"><span style="position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.65);color:#fff;border-radius:5px;padding:1px 6px;font-size:9px;">📸 So soll's aussehen</span>${_gf.status==='test'?'<span style="position:absolute;right:4px;top:4px;background:#7C3AED;color:#fff;border-radius:5px;padding:1px 6px;font-size:9px;font-weight:700;">TEST</span>':''}</div>`; }
     const allergene=entry?.allergene?.main?.length?entry.allergene.main.join(', '):(entry?.allergene_codes?.length?entry.allergene_codes.join(', '):'');
     const zutaten=entry?.zutaten||'';
     const detailId=`kd-detail-${i}`;
@@ -22412,7 +22450,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
     const beilagen=getDishBeilagen(dish);
     if(!beilagen.length) return '';
     const chips=beilagen.map(b=>{
-      const img=KITCHEN_SUPPLY_IMAGES[b]?`<img src="${KITCHEN_SUPPLY_IMAGES[b]}" alt="" style="width:14px;height:14px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:3px;">`:'';
+      const img=KITCHEN_SUPPLY_IMAGES[b]?`<img loading="lazy" decoding="async" src="${KITCHEN_SUPPLY_IMAGES[b]}" alt="" style="width:14px;height:14px;border-radius:3px;object-fit:cover;vertical-align:middle;margin-right:3px;">`:'';
       return `<span style="display:inline-flex;align-items:center;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:5px;padding:2px 6px;font-size:10px;color:#166534;">${img}${b}</span>`;
     }).join('');
     return `<div style="display:flex;align-items:center;gap:6px;padding:4px 2px;flex-wrap:wrap;">
@@ -22509,7 +22547,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       </tr></thead><tbody>`;
     allBeilagenMorgen.forEach(name=>{
       const unit=(beilagenBaselineMorgen||[]).find(b=>b.article_name===name)?.unit||'';
-      const img=KITCHEN_SUPPLY_IMAGES[name]?`<img src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:22px;height:22px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;">`:'' ;
+      const img=KITCHEN_SUPPLY_IMAGES[name]?`<img loading="lazy" decoding="async" src="${KITCHEN_SUPPLY_IMAGES[name]}" alt="" style="width:22px;height:22px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;">`:'' ;
       const cells=storeList.map(st=>{
         const b=(beilagenBaselineMorgen||[]).find(x=>x.store_id===st.id&&x.article_name===name);
         const rec=(beilagenValMapMorgen[st.id]||{})[name];
@@ -24430,7 +24468,7 @@ async function renderSweets(){
         const verfuegbar=a.verfuegbar!==false;
         html+=`<div class="item-row">
           <div style="display:flex;align-items:center;gap:10px;flex:1;">
-            ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
+            ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0;">`:''}
             <div><div class="item-name">${a.name}</div><div class="item-unit">${a.unit}</div>
             ${!verfuegbar?`<div style="font-size:11px;color:#DC2626;font-weight:500;margin-top:2px;">❌ derzeit nicht lieferbar <span style="color:var(--muted);font-weight:400;">· Menge wird vorgemerkt</span></div>`:''}</div>
           </div>
@@ -24481,7 +24519,7 @@ async function renderSweets(){
         const schonGemeldet=!!nachschubOffen[a.id];
         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);">
           <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-            ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
+            ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;">`:''}
             <span style="font-size:13px;" data-no-translate>${a.name}</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
@@ -24501,7 +24539,7 @@ async function renderSweets(){
         <div class="card" style="padding:4px 0;">
           ${archivierteSweets.map(a=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);opacity:0.7;">
             <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-              ${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;filter:grayscale(1);">`:''}
+              ${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0;filter:grayscale(1);">`:''}
               <span style="font-size:13px;" data-no-translate>${a.name}</span>
             </div>
             <button onclick="reaktiviereArtikel(${a.id})" style="background:var(--surface-1);color:var(--sub);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:11.5px;cursor:pointer;white-space:nowrap;">↩️ Wieder aufnehmen</button>
@@ -24555,7 +24593,7 @@ async function renderSweets(){
   sweetsItems.forEach(a=>{
     const eingeschraenkt=restrictedArticles.has(a.id);
     if(eingeschraenkt) hatEingeschraenkte=true;
-    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span>${eingeschraenkt?' 🔒':''}</div></td>`;
+    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span>${eingeschraenkt?' 🔒':''}</div></td>`;
     storeList.forEach(s=>{
       const v=(allOrd[a.id]||{})[s.id]||0;
       const hasOrder=sweetsItems.some(x=>(allOrd[x.id]||{})[s.id]>0);
@@ -24720,7 +24758,26 @@ function debounceFieldSave(el, fn, ms=600){
 window.debounceFieldSave=debounceFieldSave;
 
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.setAttribute('role',isError?'alert':'status');t.setAttribute('aria-live',isError?'assertive':'polite');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?6000:2500);}
-window.addEventListener('online',()=>{});
+// Offline-Hinweis (19.11.26): ohne Netz wird nichts gespeichert — das muss sichtbar sein.
+function kfNetBar(){
+  let b=document.getElementById('kf-offline');
+  if(navigator.onLine){ if(b){ b.remove(); showToast('Wieder verbunden'); } return; }
+  if(b) return;
+  b=document.createElement('div'); b.id='kf-offline'; b.setAttribute('role','alert');
+  b.textContent='Keine Internetverbindung — Eingaben werden gerade nicht gespeichert.';
+  document.body.appendChild(b);
+}
+window.addEventListener('online',kfNetBar); window.addEventListener('offline',kfNetBar);
+document.addEventListener('DOMContentLoaded',()=>{ if(!navigator.onLine) kfNetBar(); });
+// Doppel-Tipp-Schutz: derselbe Speichern-/Absenden-/Löschen-Knopf reagiert innerhalb von 0,7 s nur einmal (kein doppeltes Speichern).
+document.addEventListener('click',function(ev){
+  const b=ev.target&&ev.target.closest&&ev.target.closest('button'); if(!b) return;
+  const oc=b.getAttribute('onclick')||'';
+  if(!(b.classList.contains('submit-btn')||b.classList.contains('login-btn')||b.classList.contains('ns-btn')||/(save|submit|send|abschick|speicher|erledigt|delete|loesch|lösch|uebernehm|übernehm|anlegen|bestaetig|bestätig)/i.test(oc))) return;
+  const now=Date.now(), last=Number(b.dataset.kfLast||0);
+  if(now-last<700){ ev.stopImmediatePropagation(); ev.preventDefault(); return; }
+  b.dataset.kfLast=String(now);
+},true);
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
