@@ -4778,6 +4778,7 @@ html.karma [style*="font-size:8px" i],html.karma [style*="font-size:9px" i],html
   <div class="login-card" id="store-picker">
     <div style="font-size:13px;color:#666;margin-bottom:4px;">Filiale wählen:</div>
     <div id="store-list"></div>
+    <div id="kf-wochenstory-login" style="margin-top:18px;text-align:left;"></div>
   </div>
   <div class="login-card" id="pin-form" style="display:none;">
     <div style="font-size:14px;font-weight:500;" id="pin-store-name"></div>
@@ -6245,7 +6246,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.370';
+const APP_VERSION='6.99.371';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6506,6 +6507,7 @@ async function initLogin() {
     });
     const list = document.getElementById('store-list');
     if (!stores?.length) { list.innerHTML='<p style="color:red;font-size:12px;">Verbindungsfehler</p>'; return; }
+    setTimeout(()=>{ try{ kfWochenStory('kf-wochenstory-login','all'); }catch(e){} },400);
     list.innerHTML = stores.map(s => {
       const loginCol = STORE_LOGIN_COLORS[s.id];
       if(loginCol){
@@ -10677,12 +10679,14 @@ function escForInlineHandler(s){
 // "Zusammenfassung der letzten Woche" (19.11.26): kleine aufklappbare Zeile auf der Startseite. Erzählt aus den Daten der
 // Vorwoche (Mo–Fr) eine kurze Geschichte: Aufhänger -> Zahlen -> wichtigste Erkenntnis -> nächster Schritt.
 // Nur lesend (disposal, essen_feedback, orders). Filiale: eigene Daten; Organisation: alle Filialen.
-async function kfWochenStory(){
-  const host=document.getElementById('kf-wochenstory'); if(!host||!currentStore) return;
+async function kfWochenStory(hostId, scope){
+  hostId=hostId||'kf-wochenstory';
+  const all=scope==='all'; // filialübergreifend (Anmeldeseite), ohne Anmeldung
+  const host=document.getElementById(hostId); if(!host||(!all&&!currentStore)) return;
   const wd=getWeekdayDates(-1), von=wd[1], bis=wd[5], kw=getIsoWeekNumber(von);
-  const isOrg=currentStore.id==='zentrale';
+  const isOrg=all||currentStore.id==='zentrale';
   const sf=isOrg?'':`store_id=eq.${currentStore.id}&`;
-  const key='kfstory|'+currentStore.id+'|'+von;
+  const key='kfstory|'+(isOrg?'alle':currentStore.id)+'|'+von;
   let d=window._kfStoryCache&&window._kfStoryCache.key===key?window._kfStoryCache.d:null;
   if(!d){
     const [disp,fb,ord]=await Promise.all([
@@ -10693,7 +10697,7 @@ async function kfWochenStory(){
     d={disp:disp||[],fb:fb||[],ord:ord||[],fail:(disp===null&&fb===null&&ord===null)};
     window._kfStoryCache={key,d};
   }
-  if(!document.getElementById('kf-wochenstory')) return;
+  if(!document.getElementById(hostId)) return;
   const tag=dt=>new Date(dt+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long'});
   const sName=id=>(typeof NOTRUF_NAMEN!=='undefined'&&NOTRUF_NAMEN[id])||id;
   // Kennzahlen
@@ -10732,7 +10736,7 @@ async function kfWochenStory(){
   }
   const open=window._kfStoryOpen?' open':'';
   host.innerHTML=`<details class="card kf-story kf-story-${tone}"${open} ontoggle="window._kfStoryOpen=this.open">
-    <summary><span class="kf-story-k">Zusammenfassung der letzten Woche · KW ${kw}</span><span class="kf-story-h" data-no-translate>${escHtml(hook)}</span></summary>
+    <summary><span class="kf-story-k">Zusammenfassung der letzten Woche · KW ${kw}${all?' · alle Filialen':''}</span><span class="kf-story-h" data-no-translate>${escHtml(hook)}</span></summary>
     ${lines.length?'<dl class="kf-story-l">'+lines.map(l=>`<div><dt>${l[0]}</dt><dd data-no-translate>${escHtml(l[1])}</dd></div>`).join('')+'</dl>':''}
     <div class="kf-story-f">Zeitraum ${new Date(von+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(bis+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})} · aus Entsorgung, Team-Feedback und Bestellungen</div>
   </details>`;
