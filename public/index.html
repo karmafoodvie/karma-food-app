@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.305';
+const APP_VERSION='6.99.306';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4401,18 +4401,8 @@ let _notrufCtx=null;
 function notrufUnlockAudio(){ try{ const A=window.AudioContext||window.webkitAudioContext; if(!A) return; if(!_notrufCtx) _notrufCtx=new A(); if(_notrufCtx.state==='suspended') _notrufCtx.resume(); }catch(e){} }
 ['pointerdown','touchstart','keydown'].forEach(ev=>document.addEventListener(ev,notrufUnlockAudio,{passive:true}));
 function notrufBeep(){
-  try{
-    notrufUnlockAudio(); const ctx=_notrufCtx; if(!ctx) return;
-    [0,0.35,0.7].forEach(delay=>{
-      const osc=ctx.createOscillator(), gain=ctx.createGain();
-      osc.type='square'; osc.frequency.value=880;
-      gain.gain.setValueAtTime(0.3, ctx.currentTime+delay);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+delay+0.25);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(ctx.currentTime+delay); osc.stop(ctx.currentTime+delay+0.3);
-    });
-    navigator.vibrate?.([300,150,300,150,300]);
-  }catch(e){}
+  // 19.11.26 (Tini): überall nur noch das sanfte Bing (kein schriller Alarmton mehr)
+  kfBing();
 }
 // 18.11.26: sanfter "Bing" (zwei Töne) für neue Bestellungen — bewusst anders als der Alarm-Ton vom Essen-Notruf
 function kfBing(){
