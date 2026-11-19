@@ -49,6 +49,7 @@ ${rd('src/fixtures.js')}
   function save(){ clearTimeout(timer); timer=setTimeout(function(){ try{ localStorage.setItem(KEY, JSON.stringify(mem.DATA)); }catch(e){} },300); }
   var mem=KarmaMem.makeMem(META,DATA,save);
   window.__resetTestDb=function(){ try{ localStorage.removeItem(KEY); }catch(e){} location.reload(); };
+  try{ if(!localStorage.getItem('kf_design')) localStorage.setItem('kf_design','${process.env.DEFAULT_DESIGN||'off'}'); }catch(e){}
   var realFetch=window.fetch.bind(window), BASE='${BASE}';
   window.fetch=function(input,init){
     var url=typeof input==='string'?input:(input&&input.url)||'';
@@ -63,11 +64,11 @@ ${rd('src/fixtures.js')}
     });
   };
   document.addEventListener('DOMContentLoaded',function(){
-    var cur='off'; try{ cur=localStorage.getItem('kf_design')==='apple'?'apple':'off'; }catch(e){}
+    var cur='off'; try{ var cd=localStorage.getItem('kf_design'); cur=(cd==='apple'||cd==='karma')?cd:'off'; }catch(e){}
     var b=document.createElement('div'); b.id='__testbanner';
     b.style.cssText='background:#FFF3E0;color:#7A5710;font:600 11px/18px -apple-system,Helvetica,sans-serif;text-align:center;padding:2px 8px;position:relative;z-index:5;';
     function a(label,key){ return '<a href="#" data-d="'+key+'" style="color:inherit;margin:0 4px;'+(cur===key?'text-decoration:underline;font-weight:800;':'font-weight:500;')+'">'+label+'</a>'; }
-    b.innerHTML='ARBEITSUMGEBUNG · lokale Testdaten, keine E-Mails'+${hasDesign ? "' · Design: '+a('Neu','apple')+'|'+a('Alt','off')" : "''"}+' · <a href="#" data-r="1" style="color:inherit;margin-left:4px;font-weight:500;">Daten zurücksetzen</a>';
+    b.innerHTML='ARBEITSUMGEBUNG · lokale Testdaten, keine E-Mails'+${hasDesign ? "' · Design: '+a('Karma','karma')+'|'+a('Apple','apple')+'|'+a('Alt','off')" : "''"}+' · <a href="#" data-r="1" style="color:inherit;margin-left:4px;font-weight:500;">Daten zurücksetzen</a>';
     b.addEventListener('click',function(e){ var t=e.target; if(!t||!t.getAttribute) return; e.preventDefault();
       if(t.getAttribute('data-d')){ try{ localStorage.setItem('kf_design',t.getAttribute('data-d')); }catch(x){} location.reload(); }
       else if(t.getAttribute('data-r')){ window.__resetTestDb(); } });

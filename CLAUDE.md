@@ -293,3 +293,26 @@ Ziel: Die laufende App und die echte Datenbank lassen sich **nicht versehentlich
 
 **Grenzen (ehrlich):** Das ist ein Schutz gegen Versehen, keine Sicherheitsmauer. Er greift nur, wenn die Dateien aus `.claude/` im ausgecheckten Branch liegen. Er deckt nicht ab: Änderungen an Shopify, Asana, Mails oder Canva, Änderungen direkt im Supabase- oder Vercel-Dashboard und Pushes von Rechnern ohne aktivierten Hook. Der stärkste Schutz ist eine GitHub-Schutzregel auf `main` (Pull Request verpflichtend, kein Force-Push): Sie schützt auch gegen alle anderen Wege, ändert aber den Ablauf des ganzen Teams.
 **Selbsttests:** `python3 .claude/hooks/test_live_guard.py` und `python3 .claude/hooks/test_pre_push.py` (pushen nichts).
+
+---
+
+## 16. Logik-Prüfung und Karma-Food-Design (Stand 19.11.2026, Branch `entwicklung`, Version 6.99.313)
+
+**Behoben in 6.99.312** (jeweils vorher/nachher in der Testumgebung belegt: `test-env/tests/verify_logic_fixes.js`):
+- **Epochen-Check** (`renderEpochenCheck`): Tage wurden unter dem Vortag abgelegt (Datum um lokale Mitternacht, dann `toISOString()` = UTC). Folge in Wien: korrekte Forecast-Zeilen wurden als „Karteileichen“ gemeldet (Test: 18 von 24), der rote „Aufräumen“-Knopf hätte gültige Daten gelöscht.
+- **Feuerlöscher** (`flAddYear`): Fälligkeit einen Tag zu früh (2026-03-15 → 2027-03-14).
+- **„Heute“ nach Mitternacht:** 113 Stellen nutzten `new Date().toISOString().split('T')[0]` (UTC). Jetzt Helfer `todayISO()` / `isoLocal(d)` (lokale Zeit). **Regel 5 gilt weiter:** nie ein Datum um lokale Mitternacht mit `toISOString()` ausgeben.
+- **Fehlgeschlagenes Speichern:** `api()`-Fehler tragen jetzt die Methode; ein nicht abgefangener Fehler bei Schreibzugriffen zeigt eine Meldung (vorher: stille Untätigkeit, z. B. Checkliste abhaken).
+- **Freitexte:** 34 Anzeige-Stellen (Notizen, Kommentare, Meldungen, Titel …) laufen über `escHtml()`. Vorher führte ein `<img onerror=…>` in einer Mangel-Beschreibung Skript-Code aus (gespeichertes XSS), und ein `<` zerstörte die Anzeige.
+- **Browser ohne nutzbaren Speicher** (privater Modus): Login und App funktionieren mit Ersatzspeicher (vorher: Anmeldung unmöglich).
+
+**Offene Befunde (Entscheidung nötig, nicht verändert):**
+- `kc_submissions`: `api('kc_submissions',{method:'DELETE'})` ohne Filter beim „Shop Produkte abholbereit“ (um Zeile 17895 in 6.99.311). Mit Supabase-Schutz gegen ungefilterte DELETEs scheitert das still (Aufräumen findet nie statt); ohne diesen Schutz würde es **alle** Meldungen löschen. Gewünschtes Verhalten klären, dann auf Datum/Filiale eingrenzen.
+- `name`-Felder (Personen, Gerichte) werden weiter ungeprüft in HTML geschrieben (66 Stellen); sie enthalten fast nur Code-Konstanten. Vollständige Lösung: durchgehend `escHtml()` und RLS auf den Tabellen (Abschnitt 11).
+- `confirm()`/`alert()` blockieren auf Handys; ersetzen durch eigene Dialoge, wenn das UI ohnehin überarbeitet wird.
+
+**Karma-Food-Design** (Schalter `?design=karma`, Standard bleibt das bisherige Aussehen, ausschalten `?design=off`):
+- Quelle: Artefakt „Karma Food Designvorlagen“, Theme **„Instrument“ (Karma-Standard)**: Hintergrund `#f6f6f3`, Karte `#fff`, Ink `#0c2a2b`, Akzent `#c8401a`, Plus `#2f7d4a`/`#e6efe6`, Minus `#b3203f`/`#f9e8ea`, Linie `#dcd7c8`, Rundung 10 px, Text Geist, Überschriften weiter Boldonse. Das Artefakt weist selbst darauf hin: **Farben aus Screenshots geschätzt, nicht aus dem Quellcode.**
+- Code: `test-env/design/karma-skin.css` (Quelle) → `python3 test-env/design/apply_karma.py` bindet es in `public/index.html` ein (`<style id="karma-skin">`, Aktivierung per `html.karma`). Nur CSS, keine Änderung an Abläufen, Texten oder Daten. Signalfarben behalten ihre Bedeutung (Rot = Problem/Notruf, Grün = erledigt, Akzent = Aktion); sie werden nur auf die Karma-Werte abgebildet (nur exakte Farbwerte, nicht Tönungen wie `#F9731612`).
+- Gemessen mit `test-env/tests/ui_audit.js` (HIG-Maßstäbe), vorher → nachher: Tippflächen unter 28 px 27 % → 3 %, Schrift unter 11 px 17,4 % → 0,5 %, Kontrast unter Grenzwert 29,7 % → 3,8 %. Unter 44 px (HIG-Standard) liegen weiter 76 % (dichte Tabellen; dort nur unsichtbar vergrößerte Tippfläche).
+- Entwürfe „Karma-App Startseite: Design-Varianten“ und „Karma Crew App“ (Artefakte) sind **nicht** umgesetzt: Ihre Prinzipien (dem Schichtverlauf folgen, ein Plus-Knopf für Meldungen, höchstens fünf Tabs) würden den Aufbau der App ändern. Das ist ein eigener Schritt mit dem Team (Regeln der Nutzerführung, Küche/Transporter/Ines unverändert halten).
