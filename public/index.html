@@ -4754,6 +4754,19 @@ html.karma [style*="font-size:8px" i],html.karma [style*="font-size:9px" i],html
 .kf-svg{display:inline-block;width:1.05em;height:1.05em;vertical-align:-0.16em;flex:none;}
 .kf-svg svg{display:block;width:100%;height:100%;}
 .kf-e{display:none !important;}
+/* Zusammenfassung der letzten Woche */
+.kf-story{padding:14px 16px !important;margin:0 0 12px !important;}
+.kf-story summary{cursor:pointer;display:flex;flex-direction:column;gap:2px;list-style:none;}
+.kf-story summary::-webkit-details-marker{display:none;}
+.kf-story-k{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.kf-story-k::after{content:" ▾";}
+.kf-story[open] .kf-story-k::after{content:" ▴";}
+.kf-story-h{font-size:16px;font-weight:600;line-height:1.35;}
+.kf-story-l{margin:12px 0 0;display:grid;gap:10px;}
+.kf-story-l div{border-top:1px solid var(--border);padding-top:10px;}
+.kf-story-l dt{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.kf-story-l dd{margin:2px 0 0;font-size:16px;line-height:1.45;}
+.kf-story-f{margin-top:10px;font-size:12px;color:var(--muted);}
 </style>
 </head>
 <body>
@@ -6232,7 +6245,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.369';
+const APP_VERSION='6.99.370';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -9814,6 +9827,7 @@ async function renderHome(){
     `:''}
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles)?`
 
+    ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
     <!-- START BUTTON -->
     <div class="kf-phase" data-ph="1">
     <div class="kf-start" onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
@@ -9909,6 +9923,7 @@ async function renderHome(){
     <!-- Karma heute / Guide: jetzt im Karmaverse (Nav unten) -->
     `:''}
     ${currentStore?.id==='zentrale'?`
+    ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
     <div id="zm-org-host"></div>
     <div id="notstand-zentrale-widget"></div>
     <details class="card" style="padding:10px 14px;margin-bottom:12px;"><summary style="font-size:13px;font-weight:700;cursor:pointer;">🚗 Essen-Transfer per Uber (schnell)</summary>
@@ -10658,6 +10673,71 @@ function escForInlineHandler(s){
   // Sicher als String-Literal INNERHALB eines onclick="...('...')" — erst JS-Escaping, dann HTML-Escaping der Anführungszeichen
   return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,'\\n');
 }
+
+// "Zusammenfassung der letzten Woche" (19.11.26): kleine aufklappbare Zeile auf der Startseite. Erzählt aus den Daten der
+// Vorwoche (Mo–Fr) eine kurze Geschichte: Aufhänger -> Zahlen -> wichtigste Erkenntnis -> nächster Schritt.
+// Nur lesend (disposal, essen_feedback, orders). Filiale: eigene Daten; Organisation: alle Filialen.
+async function kfWochenStory(){
+  const host=document.getElementById('kf-wochenstory'); if(!host||!currentStore) return;
+  const wd=getWeekdayDates(-1), von=wd[1], bis=wd[5], kw=getIsoWeekNumber(von);
+  const isOrg=currentStore.id==='zentrale';
+  const sf=isOrg?'':`store_id=eq.${currentStore.id}&`;
+  const key='kfstory|'+currentStore.id+'|'+von;
+  let d=window._kfStoryCache&&window._kfStoryCache.key===key?window._kfStoryCache.d:null;
+  if(!d){
+    const [disp,fb,ord]=await Promise.all([
+      api(`disposal?${sf}disposal_date=gte.${von}&disposal_date=lte.${bis}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time&limit=2000`).catch(()=>null),
+      api(`essen_feedback?${sf}datum=gte.${von}&datum=lte.${bis}&select=store_id,datum,ratings&limit=1000`).catch(()=>null),
+      api(`orders?${sf}order_date=gte.${von}&order_date=lte.${bis}&quantity=gt.0&select=store_id,order_date&limit=5000`).catch(()=>null)
+    ]);
+    d={disp:disp||[],fb:fb||[],ord:ord||[],fail:(disp===null&&fb===null&&ord===null)};
+    window._kfStoryCache={key,d};
+  }
+  if(!document.getElementById('kf-wochenstory')) return;
+  const tag=dt=>new Date(dt+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long'});
+  const sName=id=>(typeof NOTRUF_NAMEN!=='undefined'&&NOTRUF_NAMEN[id])||id;
+  // Kennzahlen
+  const sold=d.disp.filter(r=>r.sold_out_time).sort((a,b)=>String(a.sold_out_time).localeCompare(String(b.sold_out_time)));
+  const soldDays=new Set(sold.map(r=>r.store_id+'|'+r.disposal_date)).size;
+  const restByDish={}; let restSum=0;
+  d.disp.forEach(r=>{const q=Number(r.leftover_qty)||0; if(q>0){restByDish[r.dish_name]=(restByDish[r.dish_name]||0)+q; restSum+=q;}});
+  const topRest=Object.entries(restByDish).sort((a,b)=>b[1]-a[1])[0];
+  const rate={};
+  d.fb.forEach(f=>{const r=f.ratings||{}; Object.keys(r).forEach(g=>{const v=typeof r[g]==='object'&&r[g]?Number(r[g].v):Number(r[g]); if(v>=1&&v<=5){(rate[g]=rate[g]||[]).push(v);}});});
+  const avg=Object.entries(rate).filter(e=>e[1].length>=1).map(e=>[e[0],e[1].reduce((a,b)=>a+b,0)/e[1].length,e[1].length]).sort((a,b)=>b[1]-a[1]);
+  const best=avg[0], worst=avg.length>1?avg[avg.length-1]:null;
+  const ordDays=new Set(d.ord.map(o=>o.store_id+'|'+o.order_date)).size;
+  const dispDays=new Set(d.disp.map(r=>r.store_id+'|'+r.disposal_date)).size;
+  const hasData=d.disp.length||d.fb.length||d.ord.length;
+  // Geschichte: Aufhänger
+  let hook, tone='neutral';
+  if(!hasData){ hook=d.fail?'Die Daten der letzten Woche konnten nicht geladen werden.':'Für die letzte Woche gibt es noch keine Einträge.'; }
+  else if(soldDays>=3){ hook=`Die Nachfrage war höher als die Menge: an ${soldDays} ${isOrg?'Filial-Tagen':'Tagen'} war etwas ausverkauft.`; tone='warn'; }
+  else if(restSum>=20){ hook=`Es blieb einiges übrig: ${formatQty(restSum)} Portionen Rest in der Woche.`; tone='warn'; }
+  else if(soldDays>=1){ hook=`Fast eine Punktlandung: nur ${soldDays===1?'einmal':soldDays+'-mal'} ausverkauft und ${formatQty(restSum)} Portionen Rest.`; tone='ok'; }
+  else if(d.disp.length){ hook=`Eine ruhige Woche: nichts ausverkauft, ${formatQty(restSum)} Portionen Rest.`; tone='ok'; }
+  else { hook='Zur Entsorgung wurde letzte Woche nichts eingetragen.'; }
+  const lines=[];
+  if(hasData){
+    lines.push(['In Zahlen',`Entsorgung an ${dispDays} ${isOrg?'Filial-Tagen':'von 5 Tagen'} eingetragen, ${d.fb.length} Team-Feedback${d.fb.length===1?'':'s'}, Bestellungen an ${ordDays} ${isOrg?'Filial-Tagen':'Tagen'}.`]);
+    if(sold.length){ const f=sold[0]; lines.push(['Am schnellsten weg',`${f.dish_name} war am ${tag(f.disposal_date)}${isOrg?' in '+sName(f.store_id):''} schon um ${String(f.sold_out_time).slice(0,5)} Uhr ausverkauft.`]); }
+    if(topRest){ lines.push(['Am meisten übrig',`${topRest[0]}: ${formatQty(topRest[1])} Portionen über die Woche.`]); }
+    if(best){ lines.push(['Dem Team hat geschmeckt',`${best[0]} (Ø ${best[1].toFixed(1).replace('.',',')} von 5${worst&&worst[0]!==best[0]&&worst[1]<best[1]?`), am schwächsten ${worst[0]} (Ø ${worst[1].toFixed(1).replace('.',',')}`:''}).`]); }
+    let next='';
+    if(soldDays>=2&&sold.length) next=`Für diese Woche die Menge bei ${sold[0].dish_name} im Forecast prüfen, sie war zu knapp.`;
+    else if(topRest&&topRest[1]>=10) next=`Für diese Woche bei ${topRest[0]} etwas weniger einplanen.`;
+    else if(dispDays<(isOrg?10:4)) next='Bitte die Entsorgung jeden Tag eintragen, sonst fehlt die Grundlage für die Mengenplanung.';
+    else next='Mengen passen, so weitermachen.';
+    lines.push(['Nächster Schritt',next]);
+  }
+  const open=window._kfStoryOpen?' open':'';
+  host.innerHTML=`<details class="card kf-story kf-story-${tone}"${open} ontoggle="window._kfStoryOpen=this.open">
+    <summary><span class="kf-story-k">Zusammenfassung der letzten Woche · KW ${kw}</span><span class="kf-story-h" data-no-translate>${escHtml(hook)}</span></summary>
+    ${lines.length?'<dl class="kf-story-l">'+lines.map(l=>`<div><dt>${l[0]}</dt><dd data-no-translate>${escHtml(l[1])}</dd></div>`).join('')+'</dl>':''}
+    <div class="kf-story-f">Zeitraum ${new Date(von+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(bis+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})} · aus Entsorgung, Team-Feedback und Bestellungen</div>
+  </details>`;
+}
+window.kfWochenStory=kfWochenStory;
 function formatQty(n){
   if(n===null||n===undefined||n==='') return '';
   const num=parseFloat(n);
