@@ -1186,6 +1186,15 @@ html.apple .role-btn-color .role-btn-name,html.apple .role-btn-color [class*="su
 /* Untertitel unter dem Filialnamen (nicht unter dem Logo) */
 html.apple .tb-sub{padding-left:60px;}
 @media (max-width:560px){html.apple .tb-sub{padding-left:54px;}}
+/* Startseite: drei eigene Rahmen (vor / während / nach der Schicht) */
+html.apple .kf-phase{background:rgba(255,255,255,.58);border:1px solid rgba(60,60,67,.14);border-radius:12px;padding:16px;margin:0 0 20px;-webkit-backdrop-filter:blur(18px) saturate(170%);backdrop-filter:blur(18px) saturate(170%);box-shadow:0 8px 24px rgba(28,28,30,.08),inset 0 1px 0 rgba(255,255,255,.9);}
+html.apple .kf-phase > .section-lbl{margin:0 0 12px !important;}
+html.apple .kf-phase > :last-child{margin-bottom:0 !important;}
+/* "Let's start the shift!": grüner Hintergrund, Chips in Kontrastfarbe (Orange) */
+html.apple .kf-start{background:#248A3D !important;border-color:#248A3D !important;}
+html.apple .kf-start .badge{background:#FF9500 !important;color:#1C1C1E !important;border:none !important;font-weight:700;}
+html.apple .kf-start .badge-ok{background:#fff !important;color:#248A3D !important;}
+html.apple .kf-dish-col > div:last-child{background:#E3F5E8 !important;}
 /* kf-calm:end */
 </style>
 <style id="karma-skin">
@@ -2771,7 +2780,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.331';
+const APP_VERSION='6.99.332';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6320,6 +6329,7 @@ async function renderHome(){
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles)?`
 
     <!-- START BUTTON -->
+    <div class="kf-phase" data-ph="1">
     <div class="kf-start" onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div>
@@ -6337,8 +6347,10 @@ async function renderHome(){
     <div onclick="goTo('oeffnungHilfe')" style="text-align:center;margin:-4px 0 10px;">
       <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe beim Eröffnen des Stores? Checkliste ansehen</span>
     </div>
+    </div>
 
     <!-- PHASE 2: WÄHREND DER SCHICHT -->
+    <div class="kf-phase" data-ph="2">
     <div class="section-lbl" style="margin-top:4px;margin-bottom:4px;">☕ Während der Schicht</div>
     ${(()=>{
       const _todayStrHome=todayISO();
@@ -6383,8 +6395,10 @@ async function renderHome(){
     <div class="kf-reinigung" onclick="goTo('reinigungHilfe')" style="text-align:center;margin:-2px 0 8px;">
       <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe bei der Reinigung? Checkliste ansehen</span>
     </div>
+    </div>
 
     <!-- PHASE 3: NACH DER SCHICHT -->
+    <div class="kf-phase" data-ph="3">
     <div class="section-lbl" style="margin-top:6px;margin-bottom:4px;">🌙 Nach der Schicht</div>
     ${remindersHtml}
     <div class="kf-wrap" onclick="goTo('schichtende')" style="background:#E0521F;border-radius:12px;padding:10px 14px;cursor:pointer;margin-bottom:6px;">
@@ -6403,6 +6417,7 @@ async function renderHome(){
         ${disposalDone?'<span class="badge badge-ok" style="font-size:10px;">Entsorgung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Entsorgung</span>'}
         ${dcStatus.reinCount===2?'<span class="badge badge-ok" style="font-size:10px;">Reinigung & Desinfektion ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Reinigung & Desinfektion</span>'}
       </div>
+    </div>
     </div>
 
     <!-- Karma heute / Guide: jetzt im Karmaverse (Nav unten) -->
