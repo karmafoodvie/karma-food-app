@@ -257,3 +257,15 @@ Direkte DB-Änderungen der letzten Tage (nicht im Code): Geburtstage Samer (25.0
 - Geprüft in einer lokalen Test-Umgebung (nicht im Repo): 40 Ansichten × 5 Rollen × Handy/Desktop, jeweils mit und ohne Design: kein Überlauf, keine neuen JS-Fehler. **Nicht geprüft:** echte Geräte (iPhone, Android-Tablets) und die Vercel-Preview.
 - Livegang-Plan: Vercel-Preview mit `?design=apple` durchklicken, zuerst auf einem Gerät pilotieren, dann für alle einschalten; nur außerhalb der Betriebszeiten (Regel 7). Rückweg: `?design=off` oder Revert/Rollback in Vercel.
 - Vor dem Merge den Branch auf den aktuellen `main` rebasen und `APP_VERSION` neu setzen (andere Commits zählen die Version hoch).
+
+---
+
+## 14. Arbeitsumgebung (Test) und Arbeitsweise (Stand 19.11.2026)
+
+- Zum Umbauen und Weiterentwickeln gibt es den Branch **`entwicklung`** und den Ordner **`test-env/`** (Anleitung: `test-env/README.md`). Dort baut `node test-env/build.js` aus `public/index.html` eine eigenständige Test-Seite mit **eigener Test-Datenbank im Browser**. Login im Test: beliebige Filiale + PIN `1234`.
+- **Die echte App und die echte Datenbank werden dabei nie berührt.** Der Bau bricht ab, wenn eine Supabase-Adresse in der Test-Seite übrig bleibt. E-Mails sind gesperrt, Edge Functions und Storage antworten im Test mit 501.
+- **Arbeitsweise:** Änderungen auf `entwicklung` (oder Unter-Branch), nie direkt auf `main`. Nach jeder Änderung `APP_VERSION` hochzählen, Syntax prüfen (Regel 9), Testumgebung neu bauen, `node test-env/tests/regress.js` laufen lassen, durchklicken. Nach `main` nur mit ausdrücklichem „Live“ und außerhalb der Betriebszeiten (Regel 7). Vor dem Merge `entwicklung` auf den aktuellen `main` rebasen und die Versionsnummer neu setzen, denn das Team zählt `main` laufend hoch.
+- **Vercel-Preview:** Ein Preview-Link eines Branches nutzt die **echte Datenbank** (Adresse fest in `index.html`). Zum Ansehen ok, zum Eingeben von Daten nicht. Zum Ausprobieren immer die Testumgebung nehmen.
+- **Datenbank-Änderungen** (SQL, Migrationen) laufen nicht über Git und wirken sofort in der echten Datenbank: erst lesen, nur mit ausdrücklichem Okay schreiben, SQL zusätzlich als Datei ins Repo legen.
+- Die Testumgebung ersetzt keinen Test auf echten Geräten (iPhone, Android-Tablets) und kennt keine RLS-Regeln, Cron-Jobs oder Edge Functions.
+- Hinweis: Der ältere Branch `dev` (Juli 2026, Datei-Uploads) hat nichts mit dieser Arbeitsumgebung zu tun und weicht stark von `main` ab. Nicht damit arbeiten und nicht überschreiben.
