@@ -8,9 +8,9 @@ s=re.sub(r'<style id="(apple|karma)-skin">.*?</style>','',s,flags=re.S)
 s=re.sub(r'<script id="kf-[a-z]+">.*?</script>','',s,flags=re.S)
 hexes=sorted(set(h.upper() for h in re.findall(r'#[0-9a-fA-F]{6}\b',s)))
 # Apple-Systemfarben (iOS, hell): Blau = Aktion/Info, Grün = erledigt, Rot = Problem, Orange = Hinweis, Grau = neutral, Tinte #1C1C1E
-STRONG={'err':'#D92D20','ok':'#248A3D','acc':'#E94E1B','warn':'#E8A317','info':'#E94E1B','ink':'#1C1C1E','neu':'#8E8E93'}
+STRONG={'err':'#D92D20','ok':'#1E7A34','acc':'#D1400E','warn':'#E8A317','info':'#D1400E','ink':'#1C1C1E','neu':'#8E8E93'}
 LIGHT={'err':'#FDE8E6','ok':'#E3F5E8','acc':'#FDEEE7','warn':'#FFF4D6','info':'#FDEEE7','ink':'#1C1C1E','neu':'#F6F1EC'}
-TEXT={'err':'#B42318','ok':'#248A3D','acc':'#C93F12','warn':'#8A5A00','info':'#C93F12','ink':'#1C1C1E','neu':'#6C6C70'}
+TEXT={'err':'#B42318','ok':'#1B6E31','acc':'#BF370A','warn':'#8A5A00','info':'#BF370A','ink':'#1C1C1E','neu':'#6C6C70'}
 BORD={'err':'#F4B8B2','ok':'#B7E4C4','acc':'#F5C7B3','warn':'#F2D68A','info':'#F5C7B3','ink':'#1C1C1E','neu':'#E8DDD3'}
 def fam(h):
     r,g,b=[int(h[i:i+2],16)/255 for i in (1,3,5)]
