@@ -5793,7 +5793,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.350';
+const APP_VERSION='6.99.351';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6483,7 +6483,30 @@ async function loginAs(store){
     }
   }
 }
-function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store'); location.reload(); } }
+function doLogout(){
+  // Eigener Dialog statt confirm(): in geschützten Rahmen (z. B. eingebettete Vorschau) und auf manchen Handys wird confirm() unterdrückt, dann passierte beim Abmelden nichts.
+  try{
+    if(document.getElementById('kf-logout-dlg')) return;
+    var en=(typeof lang!=='undefined'&&lang==='en');
+    var ov=document.createElement('div'); ov.id='kf-logout-dlg'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(3,39,43,.45);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML='<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:22px 20px 18px;box-shadow:0 24px 60px rgba(3,39,43,.35);text-align:center;font-family:inherit;">'
+      +'<div style="font-size:18px;font-weight:700;color:#03272B;margin-bottom:6px;">'+(en?'Log out?':'Abmelden?')+'</div>'
+      +'<div style="font-size:14px;color:#566F73;margin-bottom:18px;">'+(en?'You can log in again with your PIN.':'Du kannst dich danach wieder mit deiner PIN anmelden.')+'</div>'
+      +'<div style="display:flex;gap:10px;">'
+      +'<button type="button" id="kf-logout-no" style="flex:1;min-height:48px;border-radius:8px;border:1px solid #D3CEC5;background:#fff;color:#03272B;font-size:16px;font-weight:600;cursor:pointer;">'+(en?'Cancel':'Abbrechen')+'</button>'
+      +'<button type="button" id="kf-logout-yes" style="flex:1;min-height:48px;border-radius:8px;border:none;background:#B3261E;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">'+(en?'Log out':'Abmelden')+'</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    function close(){ try{ov.remove();}catch(e){} document.removeEventListener('keydown',onKey); }
+    function onKey(e){ if(e.key==='Escape') close(); }
+    document.addEventListener('keydown',onKey);
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+    document.getElementById('kf-logout-no').onclick=close;
+    document.getElementById('kf-logout-yes').onclick=function(){ try{localStorage.removeItem('kf_store');}catch(e){} location.reload(); };
+    document.getElementById('kf-logout-no').focus();
+  }catch(e){ try{localStorage.removeItem('kf_store');}catch(x){} location.reload(); }
+}
 
 async function loadNotifBadge(){
   if(currentStore?.id!=='zentrale') return;
