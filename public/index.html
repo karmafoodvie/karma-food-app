@@ -1449,6 +1449,29 @@ window.renderKochkurse=renderKochkurse;
 
 Object.assign(window,{kvStoryOpen,kvStoryStep,kvStoryClose});
 
+// 19.11.26 (Wunsch Tini, Mitarbeiterwechsel): kompakte Spielregeln "App oder Chat?" für neue Mitarbeitende
+function soLaeuftsHtml(open){
+  const wien=(typeof NOTRUF_WIEN!=='undefined'&&NOTRUF_WIEN.includes(currentStore?.id));
+  const row=(ic,was,wo,go)=>`<div ${go?`onclick="goTo('${go}')"`:''} style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid #E5E7EB;${go?'cursor:pointer;':''}"><span style="font-size:17px;line-height:1.2;">${ic}</span><div style="flex:1;"><div style="font-size:12.5px;font-weight:700;">${was}</div><div style="font-size:11.5px;color:var(--sub);margin-top:1px;line-height:1.4;">${wo}</div></div>${go?'<span style="color:var(--green);">→</span>':''}</div>`;
+  return `<details ${open?'open':''} style="margin-bottom:14px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:10px 12px;">
+    <summary style="cursor:pointer;font-size:13px;font-weight:800;color:#166534;">ℹ️ So läuft's bei uns: App oder Chat?</summary>
+    <div style="font-size:11.5px;color:#14532D;margin:6px 0 4px;line-height:1.45;">Alles, was es in der App gibt, bitte dort melden. Im Chat bleiben Fragen und Absprachen. So muss niemand zehnmal nachfragen und die Info geht auch bei Teamwechsel nicht verloren.</div>
+    ${wien?row('🆘','Viel zu wenig Essen / Ansturm','Essen-Notruf auf der Startseite drücken, nicht im Chat schreiben.'):''}
+    ${row('📦','Etwas geht aus / Nachschub','In der App melden (Bestellung bzw. Nachschub), nicht im Chat.','order')}
+    ${row('🔧','Etwas ist kaputt oder beschädigt','„Schaden melden“ mit Foto, dann sehen alle den Status.','maengel')}
+    ${row('⚠️','Zutat oder Allergen stimmt nicht','Beim Gericht „Zutat stimmt nicht“ tippen. Das Management prüft es, die Küche muss nichts ändern.')}
+    ${row('💶','Wechselgeld','In der Bestellung „Wechselgeld anfragen“, Ablauf steht dort.','order')}
+    ${row('✅','Schichtende','„Schicht abschließen“, damit die nächste Schicht alles sieht.','schichtende')}
+    <div style="border-top:1px solid #E5E7EB;padding-top:8px;margin-top:2px;font-size:12px;font-weight:800;">💬 Im Chat (Support)</div>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.5;margin-top:3px;">
+      • Frage in einer Nachricht: <b>Store, Thema, Foto, Uhrzeit</b>, z. B. „Börse, Reis, 30 % übrig, 12:40“<br>
+      • Übrig gebliebenes Essen: <b>Stores stimmen sich bis ca. 12:45 direkt untereinander ab</b>, das Management nur bei Konflikt<br>
+      • Nicht dringend? Bitte bis 14 Uhr, in der Mittagsspitze zählt zuerst, was brennt<br>
+      • Dringend: Notruf in der App oder anrufen (Hilfe → Ansprechpartner)
+    </div>
+  </details>`;
+}
+window.soLaeuftsHtml=soLaeuftsHtml;
 async function renderHilfe(){
   const el=document.getElementById('v-hilfe');
   let html=backToHomeHtml();
@@ -1463,6 +1486,7 @@ async function renderHilfe(){
     </div>
     <div id="qa-search-results" style="margin-top:10px;"></div>
   </div>`;
+  html+=soLaeuftsHtml(true);
   // Onboarding-Button vorübergehend deaktiviert (auf Wunsch von Tini, 30.07.26) — evtl. Verknüpfung
   // mit einer separaten Onboarding-App geplant. Code bleibt erhalten, nur auskommentiert.
   /* html+=`<div onclick="goTo('onboarding')" style="display:flex;align-items:center;gap:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:10px 14px;margin-bottom:14px;cursor:pointer;">
@@ -5461,6 +5485,7 @@ async function renderHome(){
     </div>
     <span style="color:#B45309;">→</span>
   </div>`;
+  if(currentStore?.id!=='zentrale'&&currentStore?.id!=='kitchen') el.innerHTML+=soLaeuftsHtml(false);
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
   if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
