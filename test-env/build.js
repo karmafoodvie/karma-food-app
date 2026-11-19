@@ -67,10 +67,13 @@ ${rd('src/fixtures.js')}
     var cur='off'; try{ var cd=localStorage.getItem('kf_design'); cur=(cd==='apple'||cd==='karma')?cd:'off'; }catch(e){}
     var b=document.createElement('div'); b.id='__testbanner';
     b.style.cssText='background:#FFF3E0;color:#7A5710;font:600 11px/18px -apple-system,Helvetica,sans-serif;text-align:center;padding:2px 8px;position:relative;z-index:5;';
+    var curF='archivo'; try{ curF=localStorage.getItem('kf_font')||'archivo'; }catch(e){}
+    function f(label,key){ return '<a href="#" data-f="'+key+'" style="color:inherit;margin:0 4px;'+(curF===key?'text-decoration:underline;font-weight:800;':'font-weight:500;')+'">'+label+'</a>'; }
     function a(label,key){ return '<a href="#" data-d="'+key+'" style="color:inherit;margin:0 4px;'+(cur===key?'text-decoration:underline;font-weight:800;':'font-weight:500;')+'">'+label+'</a>'; }
-    b.innerHTML='ARBEITSUMGEBUNG · lokale Testdaten, keine E-Mails'+${hasDesign ? "' · Design: '+a('Karma','karma')+'|'+a('Apple','apple')+'|'+a('Alt','off')" : "''"}+' · <a href="#" data-r="1" style="color:inherit;margin-left:4px;font-weight:500;">Daten zurücksetzen</a>';
+    b.innerHTML='ARBEITSUMGEBUNG · lokale Testdaten, keine E-Mails'+${hasDesign ? "' · Design: '+a('Karma','karma')+'|'+a('Apple','apple')+'|'+a('Alt','off')" : "''"}+' · Schrift: '+f('Archivo Black','archivo')+'|'+f('Geist 700','geist')+'|'+f('Boldonse','boldonse')+' · <a href="#" data-r="1" style="color:inherit;margin-left:4px;font-weight:500;">Daten zurücksetzen</a>';
     b.addEventListener('click',function(e){ var t=e.target; if(!t||!t.getAttribute) return; e.preventDefault();
       if(t.getAttribute('data-d')){ try{ localStorage.setItem('kf_design',t.getAttribute('data-d')); }catch(x){} location.reload(); }
+      else if(t.getAttribute('data-f')){ try{ localStorage.setItem('kf_font',t.getAttribute('data-f')); }catch(x){} location.reload(); }
       else if(t.getAttribute('data-r')){ window.__resetTestDb(); } });
     document.body.insertBefore(b,document.body.firstChild);
   });

@@ -12,11 +12,13 @@ s = open(p, encoding='utf-8').read()
 a = s.index('<style id="apple-skin">'); b = s.index('</style>', a)
 blk = s[a:b]
 blk = re.sub(r'/\* kf-tabs:start \*/.*?/\* kf-tabs:end \*/\n?', '', blk, flags=re.S)
+blk = re.sub(r'/\* kf-shape:start \*/.*?/\* kf-shape:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-fit:start \*/.*?/\* kf-fit:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-glass:start \*/.*?/\* kf-glass:end \*/\n?', '', blk, flags=re.S)
 blk += '/* kf-glass:start */\n' + rd('apple-glass.css') + '/* kf-glass:end */\n'
 blk += '/* kf-tabs:start */\n' + rd('apple-tabs.css') + '/* kf-tabs:end */\n'
 blk += '/* kf-fit:start */\n' + rd('apple-fit.css') + '/* kf-fit:end */\n'
+blk += '/* kf-shape:start */\n' + rd('apple-shape.css') + '/* kf-shape:end */\n'
 s = s[:a] + blk + s[b:]
 
 # 2) Anpass-Skript: Schrift und Symbol der Reiter schrumpfen, bis alles ins Quadrat passt (nur im Apple-Design aktiv)
