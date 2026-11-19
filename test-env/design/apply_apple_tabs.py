@@ -25,6 +25,7 @@ s = open(p, encoding='utf-8').read()
 a = s.index('<style id="apple-skin">'); b = s.index('</style>', a)
 blk = s[a:b]
 blk = re.sub(r'/\* kf-tabs:start \*/.*?/\* kf-tabs:end \*/\n?', '', blk, flags=re.S)
+blk = re.sub(r'/\* kf-themes:start \*/.*?/\* kf-themes:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-calm:start \*/.*?/\* kf-calm:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-shape:start \*/.*?/\* kf-shape:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-fit:start \*/.*?/\* kf-fit:end \*/\n?', '', blk, flags=re.S)
@@ -34,6 +35,7 @@ blk += '/* kf-tabs:start */\n' + rd('apple-tabs.css') + '/* kf-tabs:end */\n'
 blk += '/* kf-fit:start */\n' + rd('apple-fit.css') + '/* kf-fit:end */\n'
 blk += '/* kf-shape:start */\n' + rd('apple-shape.css') + '/* kf-shape:end */\n'
 blk += '/* kf-calm:start */\n' + expand(rd('apple-calm-auto.css')) + expand(rd('apple-calm.css')) + '/* kf-calm:end */\n'
+blk += '/* kf-themes:start */\n' + rd('apple-theme-lav.css') + rd('apple-theme-vio.css') + '/* kf-themes:end */\n'
 s = s[:a] + blk + s[b:]
 
 # 2) Anpass-Skript: Schrift und Symbol der Reiter schrumpfen, bis alles ins Quadrat passt (nur im Apple-Design aktiv)
@@ -56,8 +58,10 @@ fit = '''<script id="kf-tabfit">/* Reiter-Quadrate: Schrift und Symbol so anpass
 })();
 </script>
 '''
+s = re.sub(r'<script id="kf-theme">.*?</script>\n', '', s, flags=re.S)
 s = re.sub(r'<script id="kf-tabfit">.*?</script>\n', '', s, flags=re.S)
 i = s.index('<style id="apple-skin">')
-s = s[:i] + fit + s[i:]
+theme_js = '<script id="kf-theme">(function(){try{var m=location.search.match(/[?&]theme=(apple|lav|vio)\\b/);if(m)localStorage.setItem("kf_theme",m[1]);var t=localStorage.getItem("kf_theme");if(t==="lav"||t==="vio")document.documentElement.classList.add("theme-"+t);}catch(e){}})();</script>\n'
+s = s[:i] + theme_js + fit + s[i:]
 open(p, 'w', encoding='utf-8').write(s)
 print('Glas-Regeln, Reiter-Quadrate und Anpass-Skript eingefügt')
