@@ -517,6 +517,23 @@ html.apple.apple .nav-btn.active{background:#0F6E56 !important;color:#fff !impor
 html.apple.apple .nav-btn.active svg{stroke:#D4FF3F !important;}
 html.apple.apple .nav-btn.active::after{content:"";position:absolute;left:22%;right:22%;top:3px;height:3px;border-radius:2px;background:#D4FF3F;}
 html.apple.apple .nav-btn:not(.active){color:#4b5563;}
+/* Gerichte-Karten (Startseite): Text unter dem Titel doppelt so groß (bis zu 3 Zeilen), Felder wachsen mit */
+html.apple .kf-dishes{gap:12px !important;}
+html.apple .kf-dish-col{min-width:min(100%,230px) !important;max-width:none !important;flex:1 1 230px !important;}
+html.apple .kf-dish-sub,html.apple .kf-dish-allerg,html.apple .kf-third-sub{font-size:19px !important;line-height:1.3 !important;overflow-wrap:break-word;hyphens:auto;-webkit-hyphens:auto;}
+html.apple .kf-dish-sub{margin-top:6px !important;}
+html.apple .kf-dish-allerg{padding:4px 2px;}
+html.apple .kf-dish-col > div{padding-top:12px;padding-bottom:12px;}
+html.apple .kf-dish-col > div:last-child{margin-top:8px !important;}
+html.apple .kf-third-sub{margin-top:6px !important;}
+html.apple .home-card:has(.kf-third-sub) > div{padding:14px 10px !important;}
+@media (max-width:560px){
+  html.apple .kf-third-sub{font-size:16px !important;}
+  html.apple .home-card:has(.kf-third-sub){flex-wrap:wrap;}
+  html.apple .home-card:has(.kf-third-sub) > div{flex:1 1 100% !important;border-right:none !important;border-bottom:.5px solid var(--border);}
+}
+html.apple .kf-dish-col > div:first-child > div:has(+ .kf-dish-sub){font-size:21px !important;letter-spacing:.02em;margin-top:6px !important;}
+html.apple .home-card:has(.kf-third-sub) > div > div:first-child{font-size:21px !important;}
 /* kf-fit:end */
 /* kf-shape:start */
 /* GENERIERT von gen_shape.py: eckigere Rundungen (nur Apple-Design) */
@@ -571,6 +588,7 @@ html.apple.apple /* Große Knöpfe: Absenden,html.apple.apple Organisation,html.
 html.apple .submit-btn{border-radius:5px !important;}
 html.apple.apple .card{border-radius:6px !important;}
 html.apple.apple .store-btn-color,html.apple.apple .store-btn{border-radius:7px !important;}
+html.apple.apple.apple .nav-btn.active::after{border-radius:2px !important;}
 html.apple.apple [style*="border-radius:5px"],html.apple.apple [style*="border-radius: 5px"]{border-radius:4px !important;}
 html.apple.apple [style*="border-radius:6px"],html.apple.apple [style*="border-radius: 6px"]{border-radius:4px !important;}
 html.apple.apple [style*="border-radius:7px"],html.apple.apple [style*="border-radius: 7px"]{border-radius:4px !important;}
@@ -2171,7 +2189,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.325';
+const APP_VERSION='6.99.326';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4771,12 +4789,12 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
       <div onclick="toggleDishAllergeneCard('${idPrefix}${i}')" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
         ${dishVisual}
         <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
-        <div data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
+        <div class="kf-dish-sub" data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
         ${getDishHinweis(d.name)?`<div style="font-size:9.5px;font-weight:700;color:#C2410C;margin-top:3px;line-height:1.25;">🌶️ ${getDishHinweis(d.name)}</div>`:''}
         <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes, zutatenMerged)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}${scharfBadgeHtml(d.name)}</div>
       </div>
       <div style="background:var(--green-light);border-radius:8px;padding:6px;margin-top:4px;">
-        <div style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${(()=>{
+        <div class="kf-dish-allerg" style="font-size:9.5px;color:#3B6D11;text-align:center;line-height:1.4;">${(()=>{
           if(allNames.length) return allNames.join(', ');
           const computed=computeDishAllergeneFromZutaten(zutatenMerged);
           if(computed && computed.codes.length) return computed.codes.map(c=>ALLERGEN_NAMES_FULL[c]||c).join(', ');
@@ -4821,15 +4839,15 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
   const thirdsRow=`<div class="home-card" style="display:flex;padding:0;margin-bottom:6px;overflow:hidden;">
     <div onclick="toggleDishAllergeneCard('${idPrefix}reis')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:0.5px solid var(--border);">
       <div style="font-size:12px;font-weight:600;">Reis 🍚</div>
-      <div data-no-translate style="font-size:9px;color:var(--muted);margin-top:1px;">${REIS_DISH_NAME}</div>
+      <div class="kf-third-sub" data-no-translate style="font-size:9px;color:var(--muted);margin-top:1px;">${REIS_DISH_NAME}</div>
     </div>
     <div onclick="toggleDishAllergeneCard('${idPrefix}samosa')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:0.5px solid var(--border);">
       <div style="font-size:12px;font-weight:600;">Samosas 🥟</div>
-      <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
+      <div class="kf-third-sub" style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
     <div onclick="toggleDishAllergeneCard('${idPrefix}sweets')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;">
       <div style="font-size:12px;font-weight:600;">Sweets 🍰</div>
-      <div style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
+      <div class="kf-third-sub" style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
   </div>`;
 
