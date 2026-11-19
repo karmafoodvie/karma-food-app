@@ -5,6 +5,19 @@ import os, re
 here = os.path.dirname(__file__)
 root = os.path.abspath(os.path.join(here, '..', '..'))
 p = os.path.join(root, 'public', 'index.html')
+def expand(c):
+    """BG/FG/BD(#hex,...){...} -> Selektoren, die NUR exakte Farbwerte in Inline-Stilen treffen (Tönungen wie #F9731612 bleiben unberührt)."""
+    def sel(kind, hexes):
+        out = []
+        for h in [x.strip() for x in hexes.split(',')]:
+            if kind == 'BG':
+                out += ['html.apple [style*="background:%s;" i]' % h, 'html.apple [style$="background:%s" i]' % h]
+            elif kind == 'FG':
+                out += ['html.apple [style*=";color:%s;" i]' % h, 'html.apple [style^="color:%s;" i]' % h, 'html.apple [style$=";color:%s" i]' % h]
+            else:
+                out += ['html.apple [style*="solid %s" i]' % h]
+        return ','.join(out)
+    return re.sub(r'^(BG|FG|BD)\(([^)]*)\)\{', lambda m: sel(m.group(1), m.group(2)) + '{', c, flags=re.M)
 rd = lambda f: open(os.path.join(here, f), encoding='utf-8').read()
 s = open(p, encoding='utf-8').read()
 
@@ -12,6 +25,7 @@ s = open(p, encoding='utf-8').read()
 a = s.index('<style id="apple-skin">'); b = s.index('</style>', a)
 blk = s[a:b]
 blk = re.sub(r'/\* kf-tabs:start \*/.*?/\* kf-tabs:end \*/\n?', '', blk, flags=re.S)
+blk = re.sub(r'/\* kf-calm:start \*/.*?/\* kf-calm:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-shape:start \*/.*?/\* kf-shape:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-fit:start \*/.*?/\* kf-fit:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-glass:start \*/.*?/\* kf-glass:end \*/\n?', '', blk, flags=re.S)
@@ -19,6 +33,7 @@ blk += '/* kf-glass:start */\n' + rd('apple-glass.css') + '/* kf-glass:end */\n'
 blk += '/* kf-tabs:start */\n' + rd('apple-tabs.css') + '/* kf-tabs:end */\n'
 blk += '/* kf-fit:start */\n' + rd('apple-fit.css') + '/* kf-fit:end */\n'
 blk += '/* kf-shape:start */\n' + rd('apple-shape.css') + '/* kf-shape:end */\n'
+blk += '/* kf-calm:start */\n' + expand(rd('apple-calm-auto.css')) + expand(rd('apple-calm.css')) + '/* kf-calm:end */\n'
 s = s[:a] + blk + s[b:]
 
 # 2) Anpass-Skript: Schrift und Symbol der Reiter schrumpfen, bis alles ins Quadrat passt (nur im Apple-Design aktiv)
