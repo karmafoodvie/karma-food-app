@@ -14,11 +14,11 @@ def hexrgb(h): h=h.lstrip('#'); return '%d,%d,%d'%tuple(int(h[i:i+2],16) for i i
 
 # Schlüssel = Apple-Werte, Werte = Theme-Werte
 def palette(acc,accD,accL,accB,accMid,ink,mute,gray,bg,bord,ok,okL,okB,err,errT,errL,errB,warn,warnT,warnL,warnB,grad):
-    keys=['#E94E1B','#C93F12','#FDEEE7','#F5C7B3','#F08A5F','#1C1C1E','#6C6C70','#8E8E93','#F6F1EC','#E8DDD3','#248A3D','#E3F5E8','#B7E4C4','#D92D20','#B42318','#FDE8E6','#F4B8B2','#E8A317','#8A5A00','#FFF4D6','#F2D68A','#FF3B31','#EBDDD2','#F0D9CB','#D1400E','#BF370A','#1E7A34','#1B6E31','#C43B0C','#F26A3D','#F8C9B0']
-    vals=[acc,accD,accL,accB,accMid,ink,mute,gray,bg,bord,ok,okL,okB,err,errT,errL,errB,warn,warnT,warnL,warnB,grad,bord,bord,acc,accD,ok,darken(ok,.25),accD,accMid,accB]
+    keys=['#E95028','#C93F12','#FDEEE7','#F5C7B3','#F08A5F','#03272B','#566F73','#6F8588','#F5F2EC','#E3DDD2','#108474','#E0F2EF','#A9D8D0','#A61E1E','#8B0000','#FBE9E7','#F0B8B2','#E8A53A','#7A4E0A','#FDF1D9','#F0D497','#FF3B31','#E3DDD2','#F0D9CB','#D0431B','#BF370A','#0F7A6C','#0B6A5D','#C43B0C','#F26A3D','#F8C9B0','#E0FF4F']
+    vals=[acc,accD,accL,accB,accMid,ink,mute,gray,bg,bord,ok,okL,okB,err,errT,errL,errB,warn,warnT,warnL,warnB,grad,bord,bord,acc,accD,ok,darken(ok,.25),accD,accMid,accB,accB]
     m=dict(zip(keys,vals))
-    rgb={'233,78,27':hexrgb(acc),'244,120,70':hexrgb(accMid),'28,28,30':hexrgb(ink),'60,60,67':hexrgb(mute),'120,120,128':hexrgb(gray),
-         '36,138,61':hexrgb(ok),'76,160,104':hexrgb(ok),'33,128,56':hexrgb(ok),'30,122,52':hexrgb(ok),'214,70,18':hexrgb(acc),'201,63,18':hexrgb(accD)}
+    rgb={'233,80,40':hexrgb(acc),'244,120,70':hexrgb(accMid),'3,39,43':hexrgb(ink),'86,111,115':hexrgb(mute),'120,120,128':hexrgb(gray),
+         '16,132,116':hexrgb(ok),'16,132,116':hexrgb(ok),'33,128,56':hexrgb(ok),'30,122,52':hexrgb(ok),'214,70,18':hexrgb(acc),'201,63,18':hexrgb(accD)}
     return m,rgb
 
 THEMES={

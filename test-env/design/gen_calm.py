@@ -7,12 +7,14 @@ s=open(os.path.join(root,'public','index.html'),encoding='utf-8').read()
 s=re.sub(r'<style id="(apple|karma)-skin">.*?</style>','',s,flags=re.S)
 s=re.sub(r'<script id="kf-[a-z]+">.*?</script>','',s,flags=re.S)
 hexes=sorted(set(h.upper() for h in re.findall(r'#[0-9a-fA-F]{6}\b',s)))
-# Apple-Systemfarben (iOS, hell): Blau = Aktion/Info, Grün = erledigt, Rot = Problem, Orange = Hinweis, Grau = neutral, Tinte #1C1C1E
-STRONG={'err':'#D92D20','ok':'#1E7A34','acc':'#D1400E','warn':'#E8A317','info':'#D1400E','ink':'#1C1C1E','neu':'#8E8E93'}
-LIGHT={'err':'#FDE8E6','ok':'#E3F5E8','acc':'#FDEEE7','warn':'#FFF4D6','info':'#FDEEE7','ink':'#1C1C1E','neu':'#F6F1EC'}
-TEXT={'err':'#B42318','ok':'#1B6E31','acc':'#BF370A','warn':'#8A5A00','info':'#BF370A','ink':'#1C1C1E','neu':'#6C6C70'}
-BORD={'err':'#F4B8B2','ok':'#B7E4C4','acc':'#F5C7B3','warn':'#F2D68A','info':'#F5C7B3','ink':'#1C1C1E','neu':'#E8DDD3'}
+# Apple-Systemfarben (iOS, hell): Blau = Aktion/Info, Grün = erledigt, Rot = Problem, Orange = Hinweis, Grau = neutral, Tinte #03272B
+STRONG={'err':'#A61E1E','ok':'#0F7A6C','acc':'#D0431B','warn':'#E8A53A','info':'#D0431B','ink':'#03272B','neu':'#6F8588'}
+LIGHT={'err':'#FBE9E7','ok':'#E0F2EF','acc':'#FDEEE7','warn':'#FDF1D9','info':'#FDEEE7','ink':'#03272B','neu':'#F5F2EC'}
+TEXT={'err':'#8B0000','ok':'#0B6A5D','acc':'#BF370A','warn':'#7A4E0A','info':'#BF370A','ink':'#03272B','neu':'#566F73'}
+BORD={'err':'#F0B8B2','ok':'#A9D8D0','acc':'#F5C7B3','warn':'#F0D497','info':'#F5C7B3','ink':'#03272B','neu':'#E3DDD2'}
+BRAND_ORANGE={'#E94E1B','#E95028','#E0521F','#F15941','#E87B4B'}
 def fam(h):
+    if h.upper() in BRAND_ORANGE: return 'acc',0.5
     r,g,b=[int(h[i:i+2],16)/255 for i in (1,3,5)]
     hh,l,sat=colorsys.rgb_to_hls(r,g,b); hh*=360
     if l>0.97: return None,l
@@ -33,17 +35,17 @@ for h in hexes:
     cnt[f]+=1
     # Hintergrund
     if f=='ink': bg=STRONG['ink']
-    elif f=='neu': bg=LIGHT['neu'] if l>0.8 else ('#1C1C1E' if l<0.3 else '#8E8E93')
+    elif f=='neu': bg=LIGHT['neu'] if l>0.8 else ('#03272B' if l<0.3 else '#6F8588')
     else: bg=LIGHT[f] if l>0.82 else STRONG[f]
     out.append('BG(%s){background:%s !important;}'%(h,bg))
     # Text
-    if f=='neu': fg='#1C1C1E' if l<0.3 else '#6C6C70'
-    elif f=='ink': fg='#1C1C1E'
+    if f=='neu': fg='#03272B' if l<0.3 else '#566F73'
+    elif f=='ink': fg='#03272B'
     elif l>0.8: fg=None  # helle Schrift auf dunklem Grund unverändert lassen
     else: fg=TEXT[f]
     if fg: out.append('FG(%s){color:%s !important;}'%(h,fg))
     # Rahmen
-    bd=BORD[f] if f!='ink' else '#1C1C1E'
+    bd=BORD[f] if f!='ink' else '#03272B'
     out.append('BD(%s){border-color:%s !important;}'%(h,bd))
 open(os.path.join(here,'apple-calm-auto.css'),'w',encoding='utf-8').write('\n'.join(out)+'\n')
 print(len(hexes),'Farben ->',dict(cnt))
