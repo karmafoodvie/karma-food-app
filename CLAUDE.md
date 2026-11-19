@@ -269,3 +269,27 @@ Direkte DB-Änderungen der letzten Tage (nicht im Code): Geburtstage Samer (25.0
 - **Datenbank-Änderungen** (SQL, Migrationen) laufen nicht über Git und wirken sofort in der echten Datenbank: erst lesen, nur mit ausdrücklichem Okay schreiben, SQL zusätzlich als Datei ins Repo legen.
 - Die Testumgebung ersetzt keinen Test auf echten Geräten (iPhone, Android-Tablets) und kennt keine RLS-Regeln, Cron-Jobs oder Edge Functions.
 - Hinweis: Der ältere Branch `dev` (Juli 2026, Datei-Uploads) hat nichts mit dieser Arbeitsumgebung zu tun und weicht stark von `main` ab. Nicht damit arbeiten und nicht überschreiben.
+
+---
+
+## 15. Live-Schutz (Schutz vor versehentlichen Live-Änderungen, Stand 19.11.2026)
+
+Ziel: Die laufende App und die echte Datenbank lassen sich **nicht versehentlich** verändern. Live geht nur durch eine bewusste Handlung eines Menschen.
+
+**Was blockiert wird** (in jeder Claude-Session in diesem Repo; Hook `.claude/hooks/live_guard.py`, eingebunden über `.claude/settings.json`):
+- Push auf `main`/`master` (auch `HEAD:main`, `:main`, `--force`, `--all`, `--mirror`), Löschen von `main`, `gh pr merge`, schreibende GitHub-API-Aufrufe auf `main`/Schutzregeln, `vercel --prod` und andere Vercel-Produktionsbefehle.
+- Auf `main`/`master`: `git commit`, `merge`, `rebase`, `reset`, `cherry-pick` und das Bearbeiten von `public/` (der ausgelieferten App).
+- Alles Schreibende in der echten Supabase-Datenbank: `apply_migration`, `deploy_edge_function`, Secrets, Branch-/Projekt-Aktionen und `execute_sql` mit `insert/update/delete/alter/drop/create/…`. **Lesen (`select`) bleibt erlaubt.**
+- Das Anlegen der Freigabe-Datei durch Claude.
+
+**Was erlaubt bleibt:** Arbeiten und Pushen auf `entwicklung` und Feature-Branches, Pull Requests anlegen, Datenbank lesen, Testumgebung bauen.
+
+**Zweite Sicherung:** Der git-Hook `.githooks/pre-push` blockiert jeden Push, der `main`/`master` verändert oder löscht, auch über Umwege (andere Branch-Namen, Variablen). Der SessionStart-Hook aktiviert ihn mit `git config core.hooksPath .githooks`. Auf einem eigenen Rechner einmalig selbst ausführen: `git config core.hooksPath .githooks`.
+
+**So geht man bewusst live:**
+1. Code: Pull Request von `entwicklung` nach `main` in GitHub **selbst mergen** (Merge-Knopf). Vorher `entwicklung` auf den aktuellen `main` rebasen und `APP_VERSION` neu setzen; außerhalb der Betriebszeiten (Regel 7).
+2. Datenbank: SQL im Supabase-Editor **selbst** ausführen (Datei dafür vorher mit Claude ins Repo legen).
+3. Ausnahme, wenn Claude etwas Live direkt tun soll: Freigabe-Datei `.claude/live-unlock` selbst anlegen, Inhalt = Ablaufzeit als Unix-Sekunden, **höchstens 2 Stunden** in der Zukunft (z. B. `date -d '+1 hour' +%s`). Die Datei steht in `.gitignore`. Danach wieder löschen.
+
+**Grenzen (ehrlich):** Das ist ein Schutz gegen Versehen, keine Sicherheitsmauer. Er greift nur, wenn die Dateien aus `.claude/` im ausgecheckten Branch liegen. Er deckt nicht ab: Änderungen an Shopify, Asana, Mails oder Canva, Änderungen direkt im Supabase- oder Vercel-Dashboard und Pushes von Rechnern ohne aktivierten Hook. Der stärkste Schutz ist eine GitHub-Schutzregel auf `main` (Pull Request verpflichtend, kein Force-Push): Sie schützt auch gegen alle anderen Wege, ändert aber den Ablauf des ganzen Teams.
+**Selbsttests:** `python3 .claude/hooks/test_live_guard.py` und `python3 .claude/hooks/test_pre_push.py` (pushen nichts).

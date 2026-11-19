@@ -1,0 +1,19 @@
+#!/bin/bash
+# Live-Schutz (git pre-push): blockiert jeden Push, der main oder master verändert oder löscht.
+# Aktiv, wenn `git config core.hooksPath .githooks` gesetzt ist (macht der SessionStart-Hook in .claude/settings.json).
+# Freigabe: Datei .claude/live-unlock mit Ablaufzeit (Unix-Sekunden, max. 2 Std. in der Zukunft), nur von Menschen anzulegen.
+root="$(git rev-parse --show-toplevel)"
+unlocked() {
+  local exp now; exp="$(head -c 20 "$root/.claude/live-unlock" 2>/dev/null | tr -dc '0-9')"; now="$(date +%s)"
+  [ -n "$exp" ] && [ "$exp" -gt "$now" ] && [ "$exp" -le $((now + 7200)) ]
+}
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      if unlocked; then continue; fi
+      echo "LIVE-SCHUTZ: Push auf ${remote_ref#refs/heads/} ist gesperrt (löst einen Live-Deploy aus)." >&2
+      echo "Live geht nur bewusst: Pull Request in GitHub selbst mergen oder Freigabe-Datei .claude/live-unlock anlegen." >&2
+      exit 1;;
+  esac
+done
+exit 0
