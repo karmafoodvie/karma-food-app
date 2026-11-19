@@ -172,6 +172,35 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="/qrcode.js"></script>
+<script id="kf-a11y">/* Namen für Symbol-Knöpfe und unbeschriftete Felder (Screenreader/Sprachsteuerung). Ändert nichts am Aussehen. */
+(function(){
+  var MAP={'🔔':'Meldungen','🌐':'Sprache','−':'Weniger','-':'Weniger','+':'Mehr','＋':'Hinzufügen','✕':'Entfernen','×':'Schließen','←':'Zurück','→':'Weiter','🔄':'Aktualisieren','i':'Info','?':'Hilfe','Aa':'Textgröße'};
+  function txt(e){return (e.textContent||'').replace(/\s+/g,' ').trim();}
+  function run(){
+    try{
+      var bs=document.querySelectorAll('button:not([aria-label])');
+      for(var i=0;i<bs.length;i++){var b=bs[i],t=txt(b);
+        if(t.replace(/[^A-Za-zÄÖÜäöüß]/g,'').length>=3) continue;
+        var oc=b.getAttribute('onclick')||'';
+        var l=b.title||MAP[t]||(oc.indexOf('doLogout')>=0?'Abmelden':'')||(oc.indexOf('maengel')>=0?'Meldungen':'');
+        if(l) b.setAttribute('aria-label',l);}
+      var fs=document.querySelectorAll('input:not([type=hidden]):not([aria-label]),select:not([aria-label]),textarea:not([aria-label])');
+      for(var j=0;j<fs.length;j++){var f=fs[j];
+        if(f.closest('label')||(f.id&&document.querySelector('label[for="'+f.id+'"]'))) continue;
+        var n='';
+        if(f.dataset&&f.dataset.dish) n='Menge '+f.dataset.dish+(f.dataset.groesse?' ('+f.dataset.groesse+')':'');
+        if(!n){var row=f.closest('.item-row');var nm=row&&row.querySelector('.item-name');if(nm) n='Menge '+txt(nm);}
+        if(!n&&f.placeholder&&f.placeholder.length>1&&f.placeholder!=='–') n=f.placeholder==='hh:mm'?'Uhrzeit (hh:mm)':f.placeholder;
+        if(!n&&f.title) n=f.title;
+        if(!n&&f.tagName==='SELECT') n='Auswahl';
+        if(!n) n='Eingabe';
+        f.setAttribute('aria-label',n.slice(0,120));}
+    }catch(e){}
+  }
+  var tm;function sched(){clearTimeout(tm);tm=setTimeout(run,300);}
+  document.addEventListener('DOMContentLoaded',function(){try{new MutationObserver(sched).observe(document.body,{childList:true,subtree:true});}catch(e){} sched();});
+})();
+</script>
 <script id="kf-font">(function(){try{var m=location.search.match(/[?&]font=(inter|archivo|geist|boldonse)\b/);if(m)localStorage.setItem("kf_font2",m[1]);var f=localStorage.getItem("kf_font2")||"inter";document.documentElement.classList.add("f-"+f);}catch(e){document.documentElement.classList.add("f-inter");}})();</script>
 <script id="kf-theme">(function(){try{var m=location.search.match(/[?&]theme=(apple|lav|vio)\b/);if(m)localStorage.setItem("kf_theme",m[1]);var t=localStorage.getItem("kf_theme");if(t==="lav"||t==="vio")document.documentElement.classList.add("theme-"+t);}catch(e){}})();</script>
 <script id="kf-tabfit">/* Reiter-Quadrate: Schrift und Symbol so anpassen, dass nichts abgeschnitten wird (nur mit Apple-Design) */
@@ -1366,6 +1395,24 @@ html.apple #v-karmaverse [style*="grid-template-columns:1fr 1fr"]{gap:12px !impo
 html.apple #v-karmaverse [style*="2px 2px 0"]{margin-top:0;}
 html.apple #v-karmaverse > div[style*="2px 2px 0"]{margin-top:12px !important;}
 html.apple.apple #v-karmaverse button[onclick="kvStoryOpen(0)"]{background:var(--green) !important;color:#fff !important;border-radius:8px !important;min-height:48px;padding:0 16px !important;font-size:16px !important;}
+/* ===== UI-UX-Pro-Max-Prüfung: Tippflächen, Fokus, Zeiger, Übergänge, Zeilenhöhe ===== */
+/* Tippflächen: Knöpfe mindestens 44 px hoch (außer in Tabellenzellen und Reitern, die eigene Maße haben) */
+html.apple #content button:not(td button):not(th button):not(.kf-tab):not(.qty-btn):not(.dsp-btn):not(.ns-btn),html.apple #content select{min-height:44px;}
+html.apple #content .ofc-dish,html.apple #content .fc-dishname{min-height:44px;display:flex;align-items:center;}
+/* kleine Text-Links und Mini-Schalter: unsichtbar vergrößerte Tippfläche, Layout bleibt gleich */
+html.apple #content [onclick][style*="underline"],html.apple #content [onclick] > span[style*="underline"],html.apple #content a,html.apple #content td button,html.apple #content th button,html.apple #content .lt-store{position:relative;}
+html.apple #content [onclick][style*="underline"]::after,html.apple #content [onclick] > span[style*="underline"]::after,html.apple #content a::after,html.apple #content td button::after,html.apple #content th button::after,html.apple #content .lt-store::after{content:"";position:absolute;inset:-14px -6px;}
+html.apple #content input[type=checkbox],html.apple #content input[type=radio]{width:28px;height:28px;accent-color:var(--green);}
+/* Sichtbarer Fokusring für Tastatur */
+html.apple :focus-visible{outline:3px solid var(--green) !important;outline-offset:2px !important;border-radius:6px;}
+/* Zeiger auf allem Klickbaren */
+html.apple button:not(:disabled),html.apple [onclick],html.apple summary,html.apple label[for]{cursor:pointer;}
+html.apple button:disabled{cursor:not-allowed;}
+/* Übergänge kurz und ruhig (150–300 ms) */
+html.apple #content button,html.apple #content [onclick],html.apple .nav-btn,html.apple .qty-btn,html.apple .login-btn,html.apple .submit-btn,html.apple .store-btn-color{transition-duration:.2s !important;}
+/* Fließtext: Zeilenhöhe 1,5 */
+html.apple #content{line-height:1.5;}
+html.apple #content button[style*="border-radius:50%"]{min-width:44px;width:44px !important;height:44px !important;}
 /* kf-calm:end */
 /* kf-themes:start */
 /* GENERIERT von gen_themes.py (Theme lav) */
@@ -2072,6 +2119,24 @@ html.apple.theme-lav #v-karmaverse [style*="grid-template-columns:1fr 1fr"]{gap:
 html.apple.theme-lav #v-karmaverse [style*="2px 2px 0"]{margin-top:0;}
 html.apple.theme-lav #v-karmaverse > div[style*="2px 2px 0"]{margin-top:12px !important;}
 html.apple.theme-lav.apple #v-karmaverse button[onclick="kvStoryOpen(0)"]{background:var(--green) !important;color:#fff !important;border-radius:8px !important;min-height:48px;padding:0 16px !important;font-size:16px !important;}
+/* ===== UI-UX-Pro-Max-Prüfung: Tippflächen, Fokus, Zeiger, Übergänge, Zeilenhöhe ===== */
+/* Tippflächen: Knöpfe mindestens 44 px hoch (außer in Tabellenzellen und Reitern, die eigene Maße haben) */
+html.apple.theme-lav #content button:not(td button):not(th button):not(.kf-tab):not(.qty-btn):not(.dsp-btn):not(.ns-btn),html.apple.theme-lav #content select{min-height:44px;}
+html.apple.theme-lav #content .ofc-dish,html.apple.theme-lav #content .fc-dishname{min-height:44px;display:flex;align-items:center;}
+/* kleine Text-Links und Mini-Schalter: unsichtbar vergrößerte Tippfläche, Layout bleibt gleich */
+html.apple.theme-lav #content [onclick][style*="underline"],html.apple.theme-lav #content [onclick] > span[style*="underline"],html.apple.theme-lav #content a,html.apple.theme-lav #content td button,html.apple.theme-lav #content th button,html.apple.theme-lav #content .lt-store{position:relative;}
+html.apple.theme-lav #content [onclick][style*="underline"]::after,html.apple.theme-lav #content [onclick] > span[style*="underline"]::after,html.apple.theme-lav #content a::after,html.apple.theme-lav #content td button::after,html.apple.theme-lav #content th button::after,html.apple.theme-lav #content .lt-store::after{content:"";position:absolute;inset:-14px -6px;}
+html.apple.theme-lav #content input[type=checkbox],html.apple.theme-lav #content input[type=radio]{width:28px;height:28px;accent-color:var(--green);}
+/* Sichtbarer Fokusring für Tastatur */
+html.apple.theme-lav :focus-visible{outline:3px solid var(--green) !important;outline-offset:2px !important;border-radius:6px;}
+/* Zeiger auf allem Klickbaren */
+html.apple.theme-lav button:not(:disabled),html.apple.theme-lav [onclick],html.apple.theme-lav summary,html.apple.theme-lav label[for]{cursor:pointer;}
+html.apple.theme-lav button:disabled{cursor:not-allowed;}
+/* Übergänge kurz und ruhig (150–300 ms) */
+html.apple.theme-lav #content button,html.apple.theme-lav #content [onclick],html.apple.theme-lav .nav-btn,html.apple.theme-lav .qty-btn,html.apple.theme-lav .login-btn,html.apple.theme-lav .submit-btn,html.apple.theme-lav .store-btn-color{transition-duration:.2s !important;}
+/* Fließtext: Zeilenhöhe 1,5 */
+html.apple.theme-lav #content{line-height:1.5;}
+html.apple.theme-lav #content button[style*="border-radius:50%"]{min-width:44px;width:44px !important;height:44px !important;}
 /* Lavendel: weiches Periwinkle-Glas, tiefes Marineblau, Mint als Erfolg (Inspiration 1) */
 html.apple.theme-lav #topbar{background:rgba(226,229,248,.78) !important;border-bottom:1px solid rgba(255,255,255,.75) !important;box-shadow:0 10px 30px rgba(92,99,216,.14),inset 0 1px 0 rgba(255,255,255,.8) !important;}
 html.apple.theme-lav .card,html.apple.theme-lav .kf-phase{box-shadow:0 14px 34px rgba(92,99,216,.14),0 2px 6px rgba(92,99,216,.08),inset 0 1px 0 rgba(255,255,255,.9) !important;}
@@ -2783,6 +2848,24 @@ html.apple.theme-vio #v-karmaverse [style*="grid-template-columns:1fr 1fr"]{gap:
 html.apple.theme-vio #v-karmaverse [style*="2px 2px 0"]{margin-top:0;}
 html.apple.theme-vio #v-karmaverse > div[style*="2px 2px 0"]{margin-top:12px !important;}
 html.apple.theme-vio.apple #v-karmaverse button[onclick="kvStoryOpen(0)"]{background:var(--green) !important;color:#fff !important;border-radius:8px !important;min-height:48px;padding:0 16px !important;font-size:16px !important;}
+/* ===== UI-UX-Pro-Max-Prüfung: Tippflächen, Fokus, Zeiger, Übergänge, Zeilenhöhe ===== */
+/* Tippflächen: Knöpfe mindestens 44 px hoch (außer in Tabellenzellen und Reitern, die eigene Maße haben) */
+html.apple.theme-vio #content button:not(td button):not(th button):not(.kf-tab):not(.qty-btn):not(.dsp-btn):not(.ns-btn),html.apple.theme-vio #content select{min-height:44px;}
+html.apple.theme-vio #content .ofc-dish,html.apple.theme-vio #content .fc-dishname{min-height:44px;display:flex;align-items:center;}
+/* kleine Text-Links und Mini-Schalter: unsichtbar vergrößerte Tippfläche, Layout bleibt gleich */
+html.apple.theme-vio #content [onclick][style*="underline"],html.apple.theme-vio #content [onclick] > span[style*="underline"],html.apple.theme-vio #content a,html.apple.theme-vio #content td button,html.apple.theme-vio #content th button,html.apple.theme-vio #content .lt-store{position:relative;}
+html.apple.theme-vio #content [onclick][style*="underline"]::after,html.apple.theme-vio #content [onclick] > span[style*="underline"]::after,html.apple.theme-vio #content a::after,html.apple.theme-vio #content td button::after,html.apple.theme-vio #content th button::after,html.apple.theme-vio #content .lt-store::after{content:"";position:absolute;inset:-14px -6px;}
+html.apple.theme-vio #content input[type=checkbox],html.apple.theme-vio #content input[type=radio]{width:28px;height:28px;accent-color:var(--green);}
+/* Sichtbarer Fokusring für Tastatur */
+html.apple.theme-vio :focus-visible{outline:3px solid var(--green) !important;outline-offset:2px !important;border-radius:6px;}
+/* Zeiger auf allem Klickbaren */
+html.apple.theme-vio button:not(:disabled),html.apple.theme-vio [onclick],html.apple.theme-vio summary,html.apple.theme-vio label[for]{cursor:pointer;}
+html.apple.theme-vio button:disabled{cursor:not-allowed;}
+/* Übergänge kurz und ruhig (150–300 ms) */
+html.apple.theme-vio #content button,html.apple.theme-vio #content [onclick],html.apple.theme-vio .nav-btn,html.apple.theme-vio .qty-btn,html.apple.theme-vio .login-btn,html.apple.theme-vio .submit-btn,html.apple.theme-vio .store-btn-color{transition-duration:.2s !important;}
+/* Fließtext: Zeilenhöhe 1,5 */
+html.apple.theme-vio #content{line-height:1.5;}
+html.apple.theme-vio #content button[style*="border-radius:50%"]{min-width:44px;width:44px !important;height:44px !important;}
 /* Violett: kräftiges Violett-Kopfband, Navy, Koralle als Warnung, Aqua als Zweitakzent (Inspiration 2) */
 html.apple.theme-vio #topbar{background:linear-gradient(135deg,rgba(75,43,181,.96),rgba(108,63,214,.94)) !important;color:#fff !important;border-bottom:none !important;box-shadow:0 14px 34px rgba(75,43,181,.30),inset 0 1px 0 rgba(255,255,255,.22) !important;}
 html.apple.theme-vio .tb-title{color:#fff !important;}
@@ -6120,7 +6203,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.367';
+const APP_VERSION='6.99.368';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
