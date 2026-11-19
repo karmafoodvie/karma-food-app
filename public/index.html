@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.304';
+const APP_VERSION='6.99.305';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4345,6 +4345,21 @@ window.sendEssenNotruf=sendEssenNotruf;
 
 // Empfangsseite + Status der eigenen Anfrage: regelmäßig prüfen.
 let _essenNotrufSeen=new Set();
+// 19.11.26 (Tini): Alle Standorte (auch Stadtplatz, Kitchen, Organisation) bekommen bei einem neuen Notruf ein "Bing" + Hinweis.
+// Die Wiener Lunch-Locations haben weiterhin den lauten Alarm mit Antwort-Buttons, die anderen nur die Info.
+const _notrufPingSeen=new Set(); let _notrufPingInit=false;
+function notrufInfoPing(rows){
+  try{
+    const offen=(rows||[]).filter(r=>r.status==='offen' && r.von_store!==currentStore?.id);
+    const neu=offen.filter(r=>!_notrufPingSeen.has(r.id));
+    offen.forEach(r=>_notrufPingSeen.add(r.id));
+    if(neu.length && _notrufPingInit){
+      kfBing();
+      showToast('🆘 Notruf: '+neu.map(r=>NOTRUF_NAMEN[r.von_store]||r.von_store).join(', ')+' braucht Essen',true);
+    }
+    _notrufPingInit=true;
+  }catch(e){}
+}
 async function checkEssenNotruf(){
   if(!currentStore) return;
   if(currentStore.id==='zentrale'){ renderNotrufZentrale(); renderNotstandZentrale(); return; }
@@ -4352,6 +4367,7 @@ async function checkEssenNotruf(){
     const rows=await api(`essen_notruf?erledigt=eq.false&select=*`).catch(()=>null);
     if(!rows) return;
     const me=currentStore.id;
+    if(!(typeof NOTRUF_WIEN!=='undefined'&&NOTRUF_WIEN.includes(me))) notrufInfoPing(rows);
     const relevant=rows.filter(r=>(r.an_stores||[]).includes(me) && r.status==='offen' && !(r.absagen||[]).includes(me));
     const neu=relevant.filter(r=>!_essenNotrufSeen.has(r.id));
     if(neu.length){
@@ -4512,6 +4528,7 @@ async function renderNotrufZentrale(){
   try{
     const rows=await api(`essen_notruf?erledigt=eq.false&select=*&order=id.asc`).catch(()=>null);
     if(!rows) return;
+    notrufInfoPing(rows);
     const aktiv=rows.filter(r=>r.status==='zugesagt'||r.status==='uber_bestellt');
     const neu=aktiv.filter(r=>r.status==='zugesagt' && !_notrufZentraleSeen.has(r.id));
     if(neu.length){ neu.forEach(r=>_notrufZentraleSeen.add(r.id)); showToast('🚗 Notruf: Uber bestellen!'); }
