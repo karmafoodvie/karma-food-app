@@ -35,7 +35,7 @@ blk += '/* kf-tabs:start */\n' + rd('apple-tabs.css') + '/* kf-tabs:end */\n'
 blk += '/* kf-fit:start */\n' + rd('apple-fit.css') + '/* kf-fit:end */\n'
 blk += '/* kf-shape:start */\n' + rd('apple-shape.css') + '/* kf-shape:end */\n'
 blk += '/* kf-calm:start */\n' + expand(rd('apple-calm-auto.css')) + expand(rd('apple-calm.css')) + '/* kf-calm:end */\n'
-blk += '/* kf-themes:start */\n' + rd('apple-theme-lav.css') + rd('apple-theme-vio.css') + '/* kf-themes:end */\n'
+blk += '/* kf-themes:start */\n' + rd('apple-theme-lav.css') + rd('apple-theme-vio.css') + rd('apple-stores.css') + '/* kf-themes:end */\n'
 s = s[:a] + blk + s[b:]
 
 # 2) Anpass-Skript: Schrift und Symbol der Reiter schrumpfen, bis alles ins Quadrat passt (nur im Apple-Design aktiv)
