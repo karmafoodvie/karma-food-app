@@ -4540,6 +4540,33 @@ html.karma [style*="font-size:8px" i],html.karma [style*="font-size:9px" i],html
 @media (max-width:560px){.dsp-fields{grid-template-columns:auto minmax(0,1fr);}.dsp-f-note{grid-column:1 / -1;}.dsp-rest{width:100%;}}
 #sam-time,#sam-rest,#sam-note{height:48px !important;box-sizing:border-box;font-size:16px !important;border-radius:8px !important;}
 #sam-time,#sam-rest{width:84px !important;}
+/* Operations — Mengen: je Tag eine Karte, je Gericht eine Zeile (Umbau 19.11.26; Zellen und Speicher-Logik unverändert, nur Darstellung) */
+.ofc-short{display:none;}
+.ofc-wrap{margin-bottom:12px;}
+#orgfc-content .ofc-table,#orgfc-content .ofc-table tbody{display:block;width:100%;border:none;background:none;}
+#orgfc-content .ofc-table thead{display:none;}
+#orgfc-content .ofc-table tbody{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
+@media (min-width:900px){#orgfc-content .ofc-table tbody{grid-template-columns:repeat(2,minmax(0,1fr));}}
+#orgfc-content .ofc-table tr{display:block;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;padding:14px 16px;box-shadow:0 6px 18px rgba(3,39,43,.06);}
+#orgfc-content .ofc-table td{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 14px;padding:12px 0 !important;border:none !important;border-top:1px solid var(--border) !important;text-align:left !important;min-width:0 !important;background:none !important;}
+#orgfc-content .ofc-table td:first-child{display:block;border-top:none !important;padding:0 0 10px !important;font-size:18px !important;font-weight:700 !important;}
+#orgfc-content .ofc-table td:first-child div{font-size:14px !important;margin-top:4px !important;white-space:normal !important;}
+#orgfc-content .ofc-table td:not(:first-child)::before{grid-column:1 / -1;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+#orgfc-content .ofc-herbst td:nth-child(2)::before{content:"Gericht 1";}
+#orgfc-content .ofc-herbst td:nth-child(3)::before{content:"Gericht 2";}
+#orgfc-content .ofc-herbst td:nth-child(4)::before{content:"Gericht 3";}
+#orgfc-content .ofc-herbst td:nth-child(5)::before{content:"Reis";}
+#orgfc-content .ofc-sommer td:nth-child(2)::before{content:"Salat";}
+#orgfc-content .ofc-sommer td:nth-child(3)::before{content:"Gericht 1";}
+#orgfc-content .ofc-sommer td:nth-child(4)::before{content:"Gericht 2";}
+#orgfc-content .ofc-sommer td:nth-child(5)::before{content:"Reis";}
+#orgfc-content .ofc-table .ofc-dish{grid-column:1;font-size:16px !important;font-weight:600;line-height:1.3 !important;color:inherit !important;margin:0 !important;overflow-wrap:anywhere;text-underline-offset:3px;}
+#orgfc-content .ofc-table td > input{grid-column:2;width:84px !important;height:48px;font-size:18px !important;padding:0 !important;border-radius:8px !important;box-sizing:border-box;}
+#orgfc-content .ofc-table td > div[style*="grid-template-columns"]{grid-column:1 / -1;grid-template-columns:minmax(0,1fr) 84px !important;gap:8px 14px !important;margin-top:4px;}
+#orgfc-content .ofc-table td > div[style*="grid-template-columns"] span{font-size:14px !important;}
+#orgfc-content .ofc-table td > div[style*="grid-template-columns"] input{width:84px !important;height:48px;font-size:18px !important;padding:0 !important;border-radius:8px !important;box-sizing:border-box;}
+#orgfc-content .ofc-table td > div:not(.ofc-dish):not([style*="grid-template-columns"]){grid-column:1 / -1;font-size:13px !important;line-height:1.35 !important;}
+#orgfc-content div[style*="color:var(--border)"]{color:var(--muted) !important;}
 </style>
 </head>
 <body>
@@ -6018,7 +6045,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.361';
+const APP_VERSION='6.99.362';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -15890,7 +15917,7 @@ async function renderOrgStoreForecast(){
   const weekEra=getMenuEraForDate(fromDate);
   const isHerbstWeek=weekEra.key==='herbstwinter2026_27';
 
-  html+=`<div class="card" style="overflow:hidden;"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;">
+  html+=`<div class="ofc-wrap"><div><table class="pack-table ofc-table ${isHerbstWeek?'ofc-herbst':'ofc-sommer'}" style="width:100%;">
     <thead><tr><th style="text-align:left;font-size:10.5px;">Tag</th>${isHerbstWeek?'':'<th style="font-size:10.5px;">Salat</th>'}<th style="font-size:10.5px;">Gericht 1</th><th style="font-size:10.5px;">Gericht 2</th>${isHerbstWeek?'<th style="font-size:10.5px;">Gericht 3</th>':''}<th style="font-size:10.5px;">Reis</th></tr></thead><tbody>`;
 
   window._orgDetailData={};
@@ -15997,7 +16024,7 @@ async function renderOrgStoreForecast(){
       const bCol=isStore?'#F97316':(isOrgSet?'#2B3A67':'var(--border)');
       const bBg=isStore?'#FFF7ED':'#fff';
       const srcLbl=isStore?`<div style="font-size:8px;color:#F97316;font-weight:600;">Filiale</div>`:(isOrgSet?`<div style="font-size:8px;color:#2B3A67;">von dir</div>`:(src==='copied'?`<div style="font-size:8px;color:#94A3B8;">übernommen</div>`:(src==='fallback_lastweek'?`<div style="font-size:8px;color:#0D9488;font-weight:600;">⚠️ automatisch (Vorwoche)</div>`:'')));
-      const dishLabelHtml=`<div onclick="toggleOrgDetail('${detailId}')" data-no-translate style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;">${dish.length>22?dish.slice(0,22)+'…':dish}</div>`;
+      const dishLabelHtml=`<div onclick="toggleOrgDetail('${detailId}')" data-no-translate class="ofc-dish" title="${escAttr(dish)}" style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px;cursor:pointer;text-decoration:underline dotted;"><span class="ofc-short">${dish.length>22?dish.slice(0,22)+'…':dish}</span><span class="ofc-full">${dish}</span></div>`;
 
       // LASAGNE: drei Größenfelder (Groß 18 / Mittel 12 / Klein 8) statt eines einzelnen Feldes —
       // beim Umbau der Operations-Ansicht war das zunächst verlorengegangen.
