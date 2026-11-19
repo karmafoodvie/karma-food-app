@@ -48,10 +48,9 @@ def recolor(css,m,rgb):
         return d
     return re.sub(r'([^{}]+)\{([^{}]*)\}',lambda r:r.group(1)+'{'+decl(r.group(2))+'}',css)
 
-base=expand(rd('apple-calm-auto.css'))+expand(rd('apple-calm.css'))
+import sys; sys.path.insert(0,here); import kfvars
 for name,(m,rgb) in THEMES.items():
-    css=recolor(base,m,rgb)
-    css=css.replace('html.apple','html.apple.theme-'+name)
+    css=kfvars.block('html.apple.theme-'+name,m,rgb)
     extra=rd('apple-theme-%s-extra.css'%name) if os.path.exists(os.path.join(here,'apple-theme-%s-extra.css'%name)) else ''
-    open(os.path.join(here,'apple-theme-%s.css'%name),'w',encoding='utf-8').write('/* GENERIERT von gen_themes.py (Theme %s) */\n'%name+css+extra)
+    open(os.path.join(here,'apple-theme-%s.css'%name),'w',encoding='utf-8').write('/* GENERIERT von gen_themes.py (Theme %s): setzt nur Farb-Variablen */\n'%name+css+extra)
     print(name,len(css))

@@ -60,10 +60,10 @@ def extras(sid,p):
 {P} .section-banner[style*="#F97316" i]{{border-left-color:{p['decor']} !important;background:rgba({rgb(p['decor'])},.08) !important;}}
 {P} .section-banner[style*="#F97316" i] *{{color:{p['text']} !important;}}
 '''
-base=expand(rd('apple-calm-auto.css'))+expand(rd('apple-calm.css'))
-out=['/* GENERIERT von gen_stores.py: Hauptfarbe je Filiale */']
+import sys; sys.path.insert(0,here); import kfvars
+out=['/* GENERIERT von gen_stores.py: Hauptfarbe je Filiale (setzt nur Farb-Variablen) */']
 for sid,p in STORES.items():
-    css=recolor(base,p).replace('html.apple','html.apple.store-%s'%sid)
-    out.append(css+extras(sid,p))
+    neon2=p['onact'] if p['onact']!='#03272B' else p['mid']
+    out.append(kfvars.block('html.apple.store-%s'%sid,hexmap(p),rgbmap(p),act=p['act'],neon2=neon2)+extras(sid,p))
 open(os.path.join(here,'apple-stores.css'),'w',encoding='utf-8').write('\n'.join(out))
 print('Filialen:',list(STORES),'| Größe',sum(map(len,out)))

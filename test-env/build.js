@@ -85,7 +85,9 @@ ${rd('src/fixtures.js')}
 <script>
 ${menuJs}
 </script>`;
-html = must(html, '<head>', '<head>\n' + boot);
+// Zeichensatz muss in den ersten 1024 Bytes stehen (sonst rät der Browser die Kodierung: 'straÃŸe')
+html = html.replace(/<meta charset="UTF-8">\s*/i, '');
+html = must(html, '<head>', '<head>\n<meta charset="UTF-8">\n' + boot);
 
 // 5) Absolute Pfade -> relativ (läuft dann auch unter einem Unterpfad)
 html = html.replace(/(["'`(=])\/images\//g, '$1images/');

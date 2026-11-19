@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Fügt die Apple-Glass-Regeln (apple-glass.css), die Reiter-Quadrate (apple-tabs.css) und das Anpass-Skript für die Reiter in
 public/index.html ein (idempotent):  python3 test-env/design/apply_apple_tabs.py"""
-import os, re
+import os, re, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kfvars
 here = os.path.dirname(__file__)
 root = os.path.abspath(os.path.join(here, '..', '..'))
 p = os.path.join(root, 'public', 'index.html')
@@ -36,7 +38,7 @@ blk += '/* kf-glass:start */\n' + rd('apple-glass.css') + '/* kf-glass:end */\n'
 blk += '/* kf-tabs:start */\n' + rd('apple-tabs.css') + '/* kf-tabs:end */\n'
 blk += '/* kf-fit:start */\n' + rd('apple-fit.css') + '/* kf-fit:end */\n'
 blk += '/* kf-shape:start */\n' + rd('apple-shape.css') + '/* kf-shape:end */\n'
-blk += '/* kf-calm:start */\n' + expand(rd('apple-calm-auto.css')) + expand(rd('apple-calm.css')) + '/* kf-calm:end */\n'
+blk += '/* kf-calm:start */\n' + kfvars.transform(expand(rd('apple-calm-auto.css')) + expand(rd('apple-calm.css'))) + '/* kf-calm:end */\n'
 blk += '/* kf-themes:start */\n' + rd('apple-theme-lav.css') + rd('apple-theme-vio.css') + rd('apple-stores.css') + rd('apple-login-tiles.css') + rd('apple-font-inter.css') + '/* kf-themes:end */\n'
 s = s[:a] + blk + s[b:]
 
