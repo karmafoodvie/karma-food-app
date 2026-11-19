@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Erzeugt apple-stores.css: pro Filiale eine eigene Hauptfarbe (html.store-<id>), gültig im Apple-Design.
-Börse rot, Laurenzerberg grün, Ausstellungsstraße gelb, Stadtplatz orange (= Karma-Standard), Kitchen blau, Organisation Apple-Blau.
+Börse rot, Laurenzerberg grün, Ausstellungsstraße gelb, Stadtplatz orange (= Karma-Standard), Kitchen blau, Organisation Tinte-Petrol mit Neon.
 Basis: apple-calm-auto.css + apple-calm.css; die Orange-Familie wird je Filiale ersetzt, Ink/Grün(Erfolg)/Rot(Fehler)/Gelb(Hinweis) bleiben.
 python3 test-env/design/gen_stores.py"""
 import os, re
@@ -16,7 +16,7 @@ STORES={
  'lb':dict(decor='#43A047',fill='#2E7D32',text='#1B5E20',tint='#E8F5E9',border='#B7DFB9',mid='#66BB6A',light='#C8E6C9',act='#2E7D32',onact='#FFFFFF',ontab='#FFFFFF'),
  '1020':dict(decor='#F5B800',fill='#8F6200',text='#7A5400',tint='#FFF8DB',border='#F2DF8E',mid='#F5C400',light='#FFE680',act='#FFD21F',onact='#03272B',ontab='#03272B'),
  'kitchen':dict(decor='#2F6FE4',fill='#1E56C8',text='#1745A8',tint='#E8F0FD',border='#B9CFF4',mid='#5B8FE8',light='#C9DBF8',act='#1E56C8',onact='#FFFFFF',ontab='#FFFFFF'),
- 'zentrale':dict(decor='#007AFF',fill='#0062CC',text='#0058B8',tint='#E5F1FF',border='#B3D4FF',mid='#4DA3FF',light='#CCE4FF',act='#0062CC',onact='#FFFFFF',ontab='#FFFFFF'),
+ 'zentrale':dict(decor='#0E4A50',fill='#0B3B40',text='#0B3B40',tint='#E4EEEE',border='#B5CDCF',mid='#4F8589',light='#C5DADB',act='#03272B',onact='#E0FF4F',ontab='#E0FF4F'),
 }
 def hexmap(p):
     return {'#E95028':p['decor'],'#C93F12':p['text'],'#FDEEE7':p['tint'],'#F5C7B3':p['border'],'#F08A5F':p['mid'],'#F26A3D':p['mid'],'#F8C9B0':p['light'],
