@@ -64,6 +64,8 @@ s = re.sub(r'<script id="kf-theme">.*?</script>\n', '', s, flags=re.S)
 s = re.sub(r'<script id="kf-tabfit">.*?</script>\n', '', s, flags=re.S)
 i = s.index('<style id="apple-skin">')
 theme_js = '<script id="kf-theme">(function(){try{var m=location.search.match(/[?&]theme=(apple|lav|vio)\\b/);if(m)localStorage.setItem("kf_theme",m[1]);var t=localStorage.getItem("kf_theme");if(t==="lav"||t==="vio")document.documentElement.classList.add("theme-"+t);}catch(e){}})();</script>\n'
-s = s[:i] + theme_js + fit + s[i:]
+s = re.sub(r'<script id="kf-icons">.*?</script>\n', '', s, flags=re.S)
+i = s.index('<style id="apple-skin">')
+s = s[:i] + theme_js + rd('kf-icons.html') + fit + s[i:]
 open(p, 'w', encoding='utf-8').write(s)
 print('Glas-Regeln, Reiter-Quadrate und Anpass-Skript eingefügt')
