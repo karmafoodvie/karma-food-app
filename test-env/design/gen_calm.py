@@ -33,7 +33,7 @@ for h in hexes:
     cnt[f]+=1
     # Hintergrund
     if f=='ink': bg=STRONG['ink']
-    elif f=='neu': bg=LIGHT['neu'] if l>0.8 else '#8E8E93'
+    elif f=='neu': bg=LIGHT['neu'] if l>0.8 else ('#1C1C1E' if l<0.3 else '#8E8E93')
     else: bg=LIGHT[f] if l>0.82 else STRONG[f]
     out.append('BG(%s){background:%s !important;}'%(h,bg))
     # Text
