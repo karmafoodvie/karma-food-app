@@ -32,7 +32,7 @@ fit = '''<script id="kf-tabfit">/* Reiter-Quadrate: Schrift und Symbol so anpass
     set();
     while(over(t)&&g++<30){ if(ic&&iz>20) iz-=1; else if(fs>10.5) fs-=0.5; else if(ic&&iz>14) iz-=1; else if(fs>9.5) fs-=0.5; else break; set(); }
   }
-  function run(){ if(!on()) return; var all=document.querySelectorAll('.kf-tab'); for(var i=0;i<all.length;i++) fit(all[i]); }
+  function run(){ if(!on()) return; var all=document.querySelectorAll('.kf-tab'); for(var i=0;i<all.length;i++) fit(all[i]); var rows=document.querySelectorAll('.kf-tabrow'); for(var j=0;j<rows.length;j++){ var r=rows[j]; if(r.scrollWidth>r.clientWidth+1) r.setAttribute('data-wide','1'); else r.removeAttribute('data-wide'); } }
   var tm; function sched(){ clearTimeout(tm); tm=setTimeout(run,50); }
   document.addEventListener('DOMContentLoaded',function(){
     try{ new MutationObserver(sched).observe(document.body,{childList:true,subtree:true}); }catch(e){}
