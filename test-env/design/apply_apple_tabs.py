@@ -12,9 +12,11 @@ s = open(p, encoding='utf-8').read()
 a = s.index('<style id="apple-skin">'); b = s.index('</style>', a)
 blk = s[a:b]
 blk = re.sub(r'/\* kf-tabs:start \*/.*?/\* kf-tabs:end \*/\n?', '', blk, flags=re.S)
+blk = re.sub(r'/\* kf-fit:start \*/.*?/\* kf-fit:end \*/\n?', '', blk, flags=re.S)
 blk = re.sub(r'/\* kf-glass:start \*/.*?/\* kf-glass:end \*/\n?', '', blk, flags=re.S)
 blk += '/* kf-glass:start */\n' + rd('apple-glass.css') + '/* kf-glass:end */\n'
 blk += '/* kf-tabs:start */\n' + rd('apple-tabs.css') + '/* kf-tabs:end */\n'
+blk += '/* kf-fit:start */\n' + rd('apple-fit.css') + '/* kf-fit:end */\n'
 s = s[:a] + blk + s[b:]
 
 # 2) Anpass-Skript: Schrift und Symbol der Reiter schrumpfen, bis alles ins Quadrat passt (nur im Apple-Design aktiv)
@@ -23,10 +25,10 @@ fit = '''<script id="kf-tabfit">/* Reiter-Quadrate: Schrift und Symbol so anpass
   function on(){ return document.documentElement.classList.contains('apple'); }
   function over(t){ var l=t.querySelector('.kf-lb'); return t.scrollHeight>t.clientHeight+1||t.scrollWidth>t.clientWidth+1||(l&&l.scrollWidth>l.clientWidth+1); }
   function fit(t){
-    var ic=t.querySelector('.kf-ic'), fs=11, iz=ic?(window.innerWidth<=420?23:26):0, g=0;
+    var ic=t.querySelector('.kf-ic'), fs=12.5, iz=ic?(window.innerWidth<=420?24:28):0, g=0;
     function set(){ t.style.setProperty('--kf-fs',fs+'px'); if(ic) t.style.setProperty('--kf-ic',iz+'px'); }
     set();
-    while(over(t)&&g++<30){ if(fs>9.5) fs-=0.5; else if(ic&&iz>16) iz-=1; else if(fs>8) fs-=0.5; else break; set(); }
+    while(over(t)&&g++<30){ if(ic&&iz>20) iz-=1; else if(fs>10.5) fs-=0.5; else if(ic&&iz>14) iz-=1; else if(fs>9.5) fs-=0.5; else break; set(); }
   }
   function run(){ if(!on()) return; var all=document.querySelectorAll('.kf-tab'); for(var i=0;i<all.length;i++) fit(all[i]); }
   var tm; function sched(){ clearTimeout(tm); tm=setTimeout(run,50); }
