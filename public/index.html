@@ -1599,7 +1599,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.306';
+const APP_VERSION='6.99.307';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4417,6 +4417,19 @@ function kfBing(){
   }catch(e){}
 }
 window.kfBing=kfBing;
+// 19.11.26 (Tini): eigener, weicher Dreiklang (aufsteigend) für neue Online-Bestellungen in der Kitchen — klingt anders als das Notruf-Bing
+function kfChime(){
+  try{
+    notrufUnlockAudio(); const ctx=_notrufCtx; if(!ctx) return;
+    [[0,523.25],[0.16,659.25],[0.32,783.99]].forEach(([d,f])=>{
+      const o=ctx.createOscillator(), g=ctx.createGain(); o.type='triangle'; o.frequency.value=f;
+      g.gain.setValueAtTime(0.0001,ctx.currentTime+d); g.gain.exponentialRampToValueAtTime(0.3,ctx.currentTime+d+0.03); g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+d+1.1);
+      o.connect(g); g.connect(ctx.destination); o.start(ctx.currentTime+d); o.stop(ctx.currentTime+d+1.15);
+    });
+    navigator.vibrate?.([80,60,80]);
+  }catch(e){}
+}
+window.kfChime=kfChime;
 let _notrufLoop=null;
 function notrufStartLoop(){
   if(_notrufLoop) return;
@@ -19173,7 +19186,7 @@ async function kdSgPopupCheck(force){
   }
   if(!force){ try{
     const k='kf_sg_bing_'+heute; const known=new Set(JSON.parse(localStorage.getItem(k)||'[]'));
-    if(offen.some(r=>!known.has(Number(r.id)))){ kfBing(); offen.forEach(r=>known.add(Number(r.id))); localStorage.setItem(k,JSON.stringify([...known])); }
+    if(offen.some(r=>!known.has(Number(r.id)))){ kfChime(); offen.forEach(r=>known.add(Number(r.id))); localStorage.setItem(k,JSON.stringify([...known])); }
   }catch(e){} }
   offen.forEach(r=>window._kdSgPopSeen.add(Number(r.id)));
   window._kdSgPop={heute,d,rows,done};
