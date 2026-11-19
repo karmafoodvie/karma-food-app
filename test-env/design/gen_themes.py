@@ -28,6 +28,12 @@ THEMES={
  # Inspiration 2: kräftiges Violett, Navy, Koralle, Aqua
  'vio':palette('#6C3FD6','#5530B5','#EFE9FB','#CDBDF2','#9A74EE','#1E1B4B','#6B6794','#8E8AB5','#F3F0FB','#DCD6F0',
                '#1FA187','#DDF4EE','#AEE3D6','#F0506E','#C73555','#FDE6EC','#F7B8C6','#F5A04A','#9A5A10','#FEF0DC','#F6D2A0','#8B5CF6'),
+ # Radix-Stil: Slate-Grauskala, Indigo-Akzent, feine Rahmen (Radix Colors: slate/indigo/green/red/amber)
+ 'radix':palette('#3E63DD','#3A5BC7','#EDF2FE','#C1D0FF','#8DA4EF','#1C2024','#60646C','#8B8D98','#F9F9FB','#D9D9E0',
+               '#218358','#E6F6EB','#ADDDC0','#CE2C31','#CE2C31','#FEEBEC','#FDBDBE','#FFC53D','#AB6400','#FFF7C2','#F3D673','#3E63DD'),
+ # Stitch-/Material-Stil: getönte Flächen, Violett-Primärfarbe, große Rundungen (Material 3 Grundpalette)
+ 'stitch':palette('#6750A4','#4F378B','#EADDFF','#D0BCFF','#9A82DB','#1D1B20','#49454F','#79747E','#F3EDF7','#CAC4D0',
+               '#146C2E','#C4EED0','#9AD4A8','#B3261E','#8C1D18','#F9DEDC','#F2B8B5','#E8A53A','#7A4E0A','#FFEFC9','#F0D497','#6750A4'),
 }
 
 def expand(c):
