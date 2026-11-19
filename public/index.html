@@ -527,13 +527,23 @@ html.apple .kf-dish-col > div{padding-top:12px;padding-bottom:12px;}
 html.apple .kf-dish-col > div:last-child{margin-top:8px !important;}
 html.apple .kf-third-sub{margin-top:6px !important;}
 html.apple .home-card:has(.kf-third-sub) > div{padding:14px 10px !important;}
-@media (max-width:560px){
-  html.apple .kf-third-sub{font-size:16px !important;}
-  html.apple .home-card:has(.kf-third-sub){flex-wrap:wrap;}
-  html.apple .home-card:has(.kf-third-sub) > div{flex:1 1 100% !important;border-right:none !important;border-bottom:.5px solid var(--border);}
+@media (max-width:560px){html.apple .kf-third-sub{font-size:16px !important;}}
+/* Titel: gleich groß in allen Feldern */
+html.apple #content .kf-dish-title,html.apple #content .kf-third-title{font-size:21px !important;letter-spacing:.02em;margin-top:6px !important;line-height:1.2;}
+/* Symmetrie: Gerichte und Reis/Samosas/Sweets sitzen im selben 3er-Raster, alle Felder gleich breit und gleich hoch */
+html.apple .kf-dishes{display:grid !important;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px !important;align-items:stretch;}
+html.apple .kf-dish-col{min-width:0 !important;max-width:none !important;flex:none !important;display:grid !important;grid-template-rows:subgrid;grid-row:span 2;gap:12px;}
+html.apple .kf-dish-col > div:first-child{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:22px !important;}
+html.apple .kf-dish-col > div:last-child{margin-top:0 !important;display:flex;align-items:center;justify-content:center;min-height:84px;}
+html.apple .home-card:has(.kf-third-sub){display:grid !important;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;background:transparent !important;border:none !important;box-shadow:none !important;overflow:visible !important;padding:0 !important;}
+html.apple .home-card:has(.kf-third-sub) > div{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:48px !important;background:var(--card);border:.5px solid var(--border) !important;border-radius:8px;box-shadow:0 6px 18px rgba(26,26,24,.07);}
+@media (max-width:900px){
+  html.apple .kf-dishes{grid-template-columns:minmax(0,1fr);}
+  html.apple .kf-dish-col{grid-row:auto;grid-template-rows:auto auto;}
+  html.apple .kf-dish-col > div:first-child{min-height:150px;}
+  html.apple .home-card:has(.kf-third-sub){grid-template-columns:minmax(0,1fr);}
+  html.apple .home-card:has(.kf-third-sub) > div{min-height:120px;border-bottom:.5px solid var(--border);}
 }
-html.apple .kf-dish-col > div:first-child > div:has(+ .kf-dish-sub){font-size:21px !important;letter-spacing:.02em;margin-top:6px !important;}
-html.apple .home-card:has(.kf-third-sub) > div > div:first-child{font-size:21px !important;}
 /* kf-fit:end */
 /* kf-shape:start */
 /* GENERIERT von gen_shape.py: eckigere Rundungen (nur Apple-Design) */
@@ -2189,7 +2199,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.326';
+const APP_VERSION='6.99.327';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4788,7 +4798,7 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
     cardsHtml+=`<div class="kf-dish-col" style="flex:1;min-width:110px;max-width:160px;display:flex;flex-direction:column;">
       <div onclick="toggleDishAllergeneCard('${idPrefix}${i}')" style="background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;">
         ${dishVisual}
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
+        <div class="kf-dish-title" style="font-size:11px;font-weight:700;letter-spacing:0.3px;margin-top:3px;">${cat.toUpperCase()}</div>
         <div class="kf-dish-sub" data-no-translate style="font-size:9.5px;color:var(--muted);margin-top:1px;line-height:1.25;">${d.name}</div>
         ${getDishHinweis(d.name)?`<div style="font-size:9.5px;font-weight:700;color:#C2410C;margin-top:3px;line-height:1.25;">🌶️ ${getDishHinweis(d.name)}</div>`:''}
         <div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center;margin-top:4px;">${veganBadgeHtml(d.name, mainCodes, zutatenMerged)}${glutenfreiBadgeHtml(d.name, mainCodes, zutatenMerged)}${scharfBadgeHtml(d.name)}</div>
@@ -4838,15 +4848,15 @@ function renderTodayDishCardsHtml(zutatenOverrideMap, allergenOverrideMap, idPre
   </div>`;
   const thirdsRow=`<div class="home-card" style="display:flex;padding:0;margin-bottom:6px;overflow:hidden;">
     <div onclick="toggleDishAllergeneCard('${idPrefix}reis')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:0.5px solid var(--border);">
-      <div style="font-size:12px;font-weight:600;">Reis 🍚</div>
+      <div class="kf-third-title" style="font-size:12px;font-weight:600;">Reis 🍚</div>
       <div class="kf-third-sub" data-no-translate style="font-size:9px;color:var(--muted);margin-top:1px;">${REIS_DISH_NAME}</div>
     </div>
     <div onclick="toggleDishAllergeneCard('${idPrefix}samosa')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;border-right:0.5px solid var(--border);">
-      <div style="font-size:12px;font-weight:600;">Samosas 🥟</div>
+      <div class="kf-third-title" style="font-size:12px;font-weight:600;">Samosas 🥟</div>
       <div class="kf-third-sub" style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
     <div onclick="toggleDishAllergeneCard('${idPrefix}sweets')" style="flex:1;padding:8px 6px;text-align:center;cursor:pointer;">
-      <div style="font-size:12px;font-weight:600;">Sweets 🍰</div>
+      <div class="kf-third-title" style="font-size:12px;font-weight:600;">Sweets 🍰</div>
       <div class="kf-third-sub" style="font-size:9px;color:var(--muted);margin-top:1px;">Zutaten ansehen</div>
     </div>
   </div>`;
