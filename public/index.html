@@ -29,6 +29,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .login-logo{color:#fff;font-size:30px;font-weight:400;font-family:'Boldonse',sans-serif;letter-spacing:1.5px;}
 .tb-title{font-family:'Boldonse',sans-serif;font-weight:400 !important;letter-spacing:0.5px;}
 .login-sub{color:#9FE1CB;font-size:14px;letter-spacing:0.3px;}
+/* Einstieg ins Crew-Onboarding: bewusst losgelöst von den Filialen (eigener Block, Pillenform, Tinte + Neon) */
+#onb-entry{width:100%;max-width:320px;position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;}
+.onb-sep{width:100%;display:flex;align-items:center;gap:10px;color:#fff;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;}
+.onb-sep::before,.onb-sep::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.45);}
+.onb-btn{display:inline-flex;align-items:center;gap:10px;min-height:48px;padding:6px 20px;border-radius:999px;border:2px solid #D4FF3F;background:#1a1a18;color:#fff;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.3);}
+.onb-btn-t{font-family:'Boldonse',sans-serif;font-size:13px;letter-spacing:.3px;color:#D4FF3F;}
+.onb-btn-s{font-size:12px;color:#E9E6DC;}
+html.apple .onb-sep{color:#5d6b69;}
+html.apple .onb-sep::before,html.apple .onb-sep::after{background:rgba(26,26,24,.2);}
+html.apple #onb-entry{max-width:460px;}
 .login-card{background:#fff;border-radius:18px;padding:1.5rem;width:100%;max-width:320px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,0.35);position:relative;z-index:1;}
 #store-list{display:flex;flex-direction:column;gap:10px;}
 .store-btn{padding:12px 16px;border:2px solid var(--border);border-radius:10px;background:#fff;font-size:14px;color:#1a1a18;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:border-color .15s;}
@@ -288,9 +298,10 @@ html.apple input[type=date],html.apple input[type=time]{padding-left:9px !import
   <div class="login-card" id="store-picker">
     <div style="font-size:13px;color:#666;margin-bottom:4px;">Filiale wählen:</div>
     <div id="store-list"></div>
-    <button type="button" onclick="openOnboarding()" data-no-translate style="margin-top:14px;width:100%;min-height:56px;border-radius:12px;border:2px dashed #1a1a18;background:#D4FF3F;color:#1a1a18;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;text-align:left;">
-      <span><span style="display:block;font-family:'Boldonse',sans-serif;font-size:14.5px;letter-spacing:0.3px;">👋 I'm new here</span><span style="display:block;font-size:12px;margin-top:2px;">Neu im Team? Hier geht's zum Onboarding.</span></span><span aria-hidden="true" style="font-size:20px;">→</span>
-    </button>
+  </div>
+  <div id="onb-entry" data-no-translate>
+    <div class="onb-sep"><span>Neu im Team?</span></div>
+    <button type="button" class="onb-btn" onclick="openOnboarding()"><span aria-hidden="true">👋</span><span class="onb-btn-t">I'm new here</span><span class="onb-btn-s">Onboarding starten</span><span aria-hidden="true">→</span></button>
   </div>
   <div class="login-card" id="pin-form" style="display:none;">
     <div style="font-size:14px;font-weight:500;" id="pin-store-name"></div>
@@ -2049,7 +2060,7 @@ function openOnboarding(){
 }
 function closeOnboarding(){ var w=document.getElementById('kf-onb'); if(w) w.remove(); }
 function pickStore(id, name) {
-  document.getElementById('store-picker').style.display='none';
+  document.getElementById('store-picker').style.display='none';var oe=document.getElementById('onb-entry');if(oe)oe.style.display='none';
   document.getElementById('pin-form').style.display='flex';
   document.getElementById('pin-form').style.flexDirection='column';
   document.getElementById('pin-store-name').textContent=name;
@@ -2061,7 +2072,7 @@ function pickStore(id, name) {
 }
 function showStorePicker(){
   document.getElementById('pin-form').style.display='none';
-  document.getElementById('store-picker').style.display='block';
+  document.getElementById('store-picker').style.display='block';var oe=document.getElementById('onb-entry');if(oe)oe.style.display='';
 }
 async function checkPin(){
   const pin=document.getElementById('pin-input').value;
