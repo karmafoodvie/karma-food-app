@@ -20,6 +20,9 @@
 <script>/* Apple-Design (v6.99.308): standardmäßig AUS. Einschalten: ?design=apple an die Adresse hängen, ausschalten: ?design=off. Glas ohne Unschärfe: localStorage kf_glass='off'. */
 (function(){try{var m=location.search.match(/[?&]design=(apple|off)\b/);if(m)localStorage.setItem('kf_design',m[1]);if(localStorage.getItem('kf_design')==='apple'){var h=document.documentElement;h.classList.add('apple');var lo=(navigator.deviceMemory&&navigator.deviceMemory<=2)||(navigator.hardwareConcurrency&&navigator.hardwareConcurrency<=2);if(lo||localStorage.getItem('kf_glass')==='off')h.classList.add('noglass');var v=document.querySelector('meta[name=viewport]');if(v&&v.content.indexOf('viewport-fit')<0)v.content+=', viewport-fit=cover';}}catch(e){}})();
 </script>
+<script>/* Original-Design mit Glas-Leisten (v6.99.379): Standard AN, solange das Apple-Design aus ist. Ausschalten: ?glass=off (einschalten: ?glass=on). */
+(function(){try{var m=location.search.match(/[?&]glass=(on|off)\b/);if(m)localStorage.setItem('kf_glass',m[1]);var h=document.documentElement;if(h.classList.contains('apple'))return;if(localStorage.getItem('kf_glass')==='off')return;h.classList.add('kfglass');var lo=(navigator.deviceMemory&&navigator.deviceMemory<=2)||(navigator.hardwareConcurrency&&navigator.hardwareConcurrency<=2);if(lo)h.classList.add('kfglass-flat');}catch(e){}})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1687,6 +1690,28 @@ html #orgfc-content .ofc-table tr.ofc-day.kf-open td:first-child{margin-bottom:6
 /* Tippen: kein Warten auf Doppeltipp-Zoom, keine graue Markierung */
 button,[onclick],a,summary,label,input,select{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 #kf-offline{position:fixed;left:12px;right:12px;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:9000;background:#8B0000;color:#fff;font-size:14px;font-weight:600;line-height:1.35;padding:12px 14px;border-radius:8px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.25);}
+/* ===== Original-Design: Glas nur auf Kopfzeile, Reitern und unterer Leiste (html.kfglass). Farben, Schriften, Rundungen bleiben wie im Original. ===== */
+html.kfglass #topbar{position:sticky;top:0;z-index:60;background:linear-gradient(180deg,rgba(15,110,86,.90),rgba(15,110,86,.78));-webkit-backdrop-filter:saturate(170%) blur(18px);backdrop-filter:saturate(170%) blur(18px);border-bottom:1px solid rgba(255,255,255,.20);box-shadow:0 8px 22px rgba(15,110,86,.20),inset 0 1px 0 rgba(255,255,255,.22);}
+html.kfglass #bottomnav{background:rgba(255,255,255,.74);-webkit-backdrop-filter:saturate(170%) blur(18px);backdrop-filter:saturate(170%) blur(18px);border-top:1px solid rgba(255,255,255,.7);box-shadow:0 -8px 22px rgba(26,26,24,.08),inset 0 1px 0 rgba(255,255,255,.9);}
+html.kfglass .kf-tab,html.kfglass .cl-tab{-webkit-backdrop-filter:saturate(160%) blur(12px);backdrop-filter:saturate(160%) blur(12px);box-shadow:0 6px 16px rgba(26,26,24,.07),inset 0 1px 0 rgba(255,255,255,.85);}
+html.kfglass .kf-tab:not(.kf-on),html.kfglass .cl-tab:not(.active){background-color:rgba(255,255,255,.66) !important;}
+html.kfglass.kfglass-flat #topbar{background:var(--green);-webkit-backdrop-filter:none;backdrop-filter:none;}
+html.kfglass.kfglass-flat #bottomnav{background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none;}
+html.kfglass.kfglass-flat .kf-tab,html.kfglass.kfglass-flat .cl-tab{-webkit-backdrop-filter:none;backdrop-filter:none;}
+@media (prefers-reduced-transparency:reduce){html.kfglass #topbar{background:var(--green);-webkit-backdrop-filter:none;backdrop-filter:none;}html.kfglass #bottomnav{background:#fff;-webkit-backdrop-filter:none;backdrop-filter:none;}html.kfglass .kf-tab,html.kfglass .cl-tab{-webkit-backdrop-filter:none;backdrop-filter:none;}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){html.kfglass #topbar{background:var(--green);}html.kfglass #bottomnav{background:#fff;}}
+/* Original-Design kompakt: Kopfzeile einzeilig (Filialname ohne Vorsatz), Wochen-Zusammenfassung als schmale Zeile */
+html:not(.apple) #topbar{padding:8px 12px;gap:8px;}
+html:not(.apple) #topbar > div:first-child{min-width:0;flex:1 1 auto;}
+html:not(.apple) #topbar > div:last-child{flex:none;gap:6px !important;}
+html:not(.apple) #tb-title{font-size:13px;line-height:1.25;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media (max-width:420px){html:not(.apple) #tb-title{font-size:11.5px;}html:not(.apple) #topbar .size-btn,html:not(.apple) #topbar .lang-btn{padding-left:7px;padding-right:7px;}}
+html:not(.apple) #tb-title .tb-pre{display:none;}
+html:not(.apple) #tb-title .tb-org{display:inline;}
+html:not(.apple) #tb-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+html:not(.apple) .kf-story{padding:9px 12px !important;margin:0 0 10px !important;}
+html:not(.apple) .kf-story summary{flex-direction:row;align-items:baseline;gap:8px;flex-wrap:wrap;}
+html:not(.apple) .kf-story-h{font-size:13px;font-weight:500;}
 </style>
 </head>
 <body>
@@ -3163,7 +3188,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.378';
+const APP_VERSION='6.99.379';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];

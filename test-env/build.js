@@ -49,7 +49,7 @@ ${rd('src/fixtures.js')}
   function save(){ clearTimeout(timer); timer=setTimeout(function(){ try{ localStorage.setItem(KEY, JSON.stringify(mem.DATA)); }catch(e){} },300); }
   var mem=KarmaMem.makeMem(META,DATA,save);
   window.__resetTestDb=function(){ try{ localStorage.removeItem(KEY); }catch(e){} location.reload(); };
-  try{ if(!localStorage.getItem('kf_design')) localStorage.setItem('kf_design','${process.env.DEFAULT_DESIGN||'off'}'); }catch(e){}
+  try{ if(localStorage.getItem('kf_design_v')!=='3'){ localStorage.setItem('kf_design','${process.env.DEFAULT_DESIGN||'off'}'); localStorage.setItem('kf_design_v','3'); } }catch(e){}
   var realFetch=window.fetch.bind(window), BASE='${BASE}';
   window.fetch=function(input,init){
     var url=typeof input==='string'?input:(input&&input.url)||'';
@@ -72,7 +72,7 @@ ${rd('src/fixtures.js')}
     function th(label,key){ return '<a href="#" data-t="'+key+'" style="color:inherit;margin:0 4px;'+(curT===key?'text-decoration:underline;font-weight:800;':'font-weight:500;')+'">'+label+'</a>'; }
     function f(label,key){ return '<a href="#" data-f="'+key+'" style="color:inherit;margin:0 4px;'+(curF===key?'text-decoration:underline;font-weight:800;':'font-weight:500;')+'">'+label+'</a>'; }
     function a(label,key){ return '<a href="#" data-d="'+key+'" style="color:inherit;margin:0 4px;'+(cur===key?'text-decoration:underline;font-weight:800;':'font-weight:500;')+'">'+label+'</a>'; }
-    b.innerHTML='ARBEITSUMGEBUNG · lokale Testdaten, keine E-Mails'+${hasDesign ? "' · Design: '+a('Apple','apple')+'|'+a('Alt','off')" : "''"}+' · Schrift: '+f('Inter','inter')+'|'+f('Archivo Black','archivo')+'|'+f('Geist 700','geist')+'|'+f('Boldonse','boldonse')+' · <a href="#" data-r="1" style="color:inherit;margin-left:4px;font-weight:500;">Daten zurücksetzen</a>';
+    b.innerHTML='ARBEITSUMGEBUNG · lokale Testdaten, keine E-Mails'+${hasDesign ? "' · Design: '+a('Original + Glas','off')+'|'+a('Apple','apple')" : "''"}+' · Schrift: '+f('Inter','inter')+'|'+f('Archivo Black','archivo')+'|'+f('Geist 700','geist')+'|'+f('Boldonse','boldonse')+' · <a href="#" data-r="1" style="color:inherit;margin-left:4px;font-weight:500;">Daten zurücksetzen</a>';
     b.addEventListener('click',function(e){ var t=e.target; if(!t||!t.getAttribute) return; e.preventDefault();
       if(t.getAttribute('data-d')){ try{ localStorage.setItem('kf_design',t.getAttribute('data-d')); }catch(x){} location.reload(); }
       else if(t.getAttribute('data-t')){ try{ localStorage.setItem('kf_theme',t.getAttribute('data-t')); }catch(x){} location.reload(); }
