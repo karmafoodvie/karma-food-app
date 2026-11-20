@@ -30,7 +30,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 #onb-entry{width:100%;max-width:340px;position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;}
 .onb-sep{width:100%;display:flex;align-items:center;gap:10px;color:#fff;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;}
 .onb-sep::before,.onb-sep::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.45);}
-.onb-btn{display:flex;width:100%;align-items:center;justify-content:center;gap:12px;min-height:60px;padding:8px 16px;text-align:left;border-radius:999px;border:none;background:#D4FF3F;color:#1a1a18;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.28);}
+.onb-btn{box-sizing:border-box;text-decoration:none;display:flex;width:100%;align-items:center;justify-content:center;gap:12px;min-height:60px;padding:8px 16px;text-align:left;border-radius:999px;border:none;background:#D4FF3F;color:#1a1a18;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.28);}
 .onb-btn-t{font-family:'Boldonse',sans-serif;font-size:11.5px;letter-spacing:0;white-space:nowrap;color:#1a1a18;}
 .onb-btn-tx{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .onb-btn-s{font-size:12px;font-weight:600;color:#3a3a32;}
@@ -170,7 +170,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   </div>
   <div id="onb-entry" data-no-translate>
     <div class="onb-sep"><span>Neu im Team?</span></div>
-    <button type="button" class="onb-btn" onclick="openOnboarding()"><span aria-hidden="true" class="onb-ic">👋</span><span class="onb-btn-tx"><span class="onb-btn-t">New KarmaCrew-Member</span><span class="onb-btn-s">Click here · Onboarding starten</span></span><span aria-hidden="true" class="onb-ar">→</span></button>
+    <a class="onb-btn" href="https://crew.karmafood.at" target="_blank" rel="noopener noreferrer"><span aria-hidden="true" class="onb-ic">👋</span><span class="onb-btn-tx"><span class="onb-btn-t">New KarmaCrew-Member</span><span class="onb-btn-s">Click here · Onboarding starten</span></span><span aria-hidden="true" class="onb-ar">→</span></a>
   </div>
   <div class="login-card" id="pin-form" style="display:none;">
     <div style="font-size:14px;font-weight:500;" id="pin-store-name"></div>
@@ -1638,7 +1638,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.312';
+const APP_VERSION='6.99.313';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -1916,18 +1916,6 @@ async function initLogin() {
     document.getElementById('store-list').innerHTML=`<p style="color:red;font-size:12px;">Fehler: ${e.message}</p>`;
   }
 }
-/* Onboarding für neue Crew-Mitglieder: eigene Seite public/onboarding.html (eigene Datenbank, eigener Freischalt-Code), wird erst beim Antippen geladen. Läuft im Sandbox-Rahmen ohne allow-same-origin: kein Zugriff auf Speicher und Anmeldung der Betriebs-App. */
-function openOnboarding(){
-  if(document.getElementById('kf-onb')) return;
-  var w=document.createElement('div'); w.id='kf-onb';
-  w.style.cssText='position:fixed;inset:0;z-index:99999;background:#1a1a18;display:flex;flex-direction:column;';
-  w.innerHTML='<div style="flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:calc(6px + env(safe-area-inset-top,0px)) 12px 6px;background:#1a1a18;color:#fff;">'
-    +'<span style="font-family:\'Boldonse\',sans-serif;font-size:12px;">KarmaCrew Onboarding</span>'
-    +'<button type="button" onclick="closeOnboarding()" style="min-height:40px;padding:0 14px;border-radius:10px;border:none;background:#D4FF3F;color:#1a1a18;font-weight:700;font-size:13px;cursor:pointer;">✕ Zurück zum Login</button></div>'
-    +'<iframe src="onboarding.html" title="Karma Food Onboarding" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" style="flex:1;width:100%;border:0;background:#fff;"></iframe>';
-  document.body.appendChild(w);
-}
-function closeOnboarding(){ var w=document.getElementById('kf-onb'); if(w) w.remove(); }
 function pickStore(id, name) {
   document.getElementById('store-picker').style.display='none';var oe=document.getElementById('onb-entry');if(oe)oe.style.display='none';
   document.getElementById('pin-form').style.display='flex';
