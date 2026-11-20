@@ -39,7 +39,7 @@ blk += '/* kf-tabs:start */\n' + rd('apple-tabs.css') + '/* kf-tabs:end */\n'
 blk += '/* kf-fit:start */\n' + rd('apple-fit.css') + '/* kf-fit:end */\n'
 blk += '/* kf-shape:start */\n' + rd('apple-shape.css') + '/* kf-shape:end */\n'
 blk += '/* kf-calm:start */\n' + kfvars.transform(expand(rd('apple-calm-auto.css')) + expand(rd('apple-calm.css'))) + '/* kf-calm:end */\n'
-blk += '/* kf-themes:start */\n' + rd('apple-theme-lav.css') + rd('apple-theme-vio.css') + rd('apple-theme-radix.css') + rd('apple-theme-stitch.css') + rd('apple-stores.css') + rd('apple-login-tiles.css') + rd('apple-font-inter.css') + '/* kf-themes:end */\n'
+blk += '/* kf-themes:start */\n' + rd('apple-stores.css') + rd('apple-login-tiles.css') + rd('apple-font-inter.css') + '/* kf-themes:end */\n'
 s = s[:a] + blk + s[b:]
 
 # 2) Anpass-Skript: Schrift und Symbol der Reiter schrumpfen, bis alles ins Quadrat passt (nur im Apple-Design aktiv)
@@ -65,7 +65,7 @@ fit = '''<script id="kf-tabfit">/* Reiter-Quadrate: Schrift und Symbol so anpass
 s = re.sub(r'<script id="kf-theme">.*?</script>\n', '', s, flags=re.S)
 s = re.sub(r'<script id="kf-tabfit">.*?</script>\n', '', s, flags=re.S)
 i = s.index('<style id="apple-skin">')
-theme_js = '<script id="kf-theme">(function(){try{var m=location.search.match(/[?&]theme=(apple|lav|vio|radix|stitch)\\b/);if(m)localStorage.setItem("kf_theme",m[1]);var t=localStorage.getItem("kf_theme");if(t==="lav"||t==="vio"||t==="radix"||t==="stitch")document.documentElement.classList.add("theme-"+t);}catch(e){}})();</script>\n'
+theme_js = ''  # Zusatz-Farbwelten (Lavendel, Violett, Radix, Stitch) entfernt
 s = re.sub(r'<script id="kf-icons">.*?</script>\n', '', s, flags=re.S)
 i = s.index('<style id="apple-skin">')
 s = s[:i] + theme_js + rd('kf-icons.html') + fit + s[i:]

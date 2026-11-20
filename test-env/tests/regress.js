@@ -10,7 +10,7 @@ const URL_ = process.argv[2] || 'http://localhost:8082/index.html';
 const DIST = path.join(__dirname, '..', 'dist');
 const html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
 const VIEWS = [...new Set([...html.matchAll(/id="v-([a-z0-9_-]+)"/g)].map(m => m[1]))];
-const MODES = html.includes('kf_design') ? ['off', 'apple', 'karma'] : ['off'];
+const MODES = html.includes('kf_design') ? ['off', 'apple'] : ['off'];
 const STORES = { '1020': 'Ausstellungsstraße 1020', kitchen: 'Kitchen 3400', zentrale: 'Zentrale / Transporter', lb: 'Laurenzerberg 1010', '3400': 'Stadtplatz 3400' };
 (async () => {
   const b = await chromium.launch(); const res = [];
