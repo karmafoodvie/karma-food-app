@@ -1638,7 +1638,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.314';
+const APP_VERSION='6.99.315';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -14963,8 +14963,16 @@ function schichtendeStart(ids){
   schichtendeOpenStep(0);
 }
 window.schichtendeStart=schichtendeStart;
+function kfFcConfirm(){
+  try{ localStorage.setItem('kf_fc_ok_'+currentStore.id+'_'+new Date().toISOString().split('T')[0],'1'); }catch(e){}
+  showToast('✓ Portionsmengen passen so');
+  if(typeof renderSchichtende==='function' && currentView==='schichtende') renderSchichtende();
+}
+window.kfFcConfirm=kfFcConfirm;
 function schichtendeContinue(){
   const w=schichtendeWizard;
+  // Portionsmengen-Schritt im Durchlauf: "Weiter" ohne Änderung heißt "passt so"
+  if(w && w.ids && w.ids[w.i]==='forecast_menge'){ try{ localStorage.setItem('kf_fc_ok_'+currentStore.id+'_'+new Date().toISOString().split('T')[0],'1'); }catch(e){} }
   schichtendeReturnFlag=false;
   if(w && w.i+1<w.ids.length){ schichtendeOpenStep(w.i+1); return; }
   const wasWizard=!!w;
@@ -16492,7 +16500,9 @@ async function renderSchichtende(){
   const sweetsDone=submittedTabsSchichtende.has('sweets');
   const transporterDone=submittedTabsSchichtende.has('transporter');
   const kcDone=(kcSubToday||[]).length>0;
-  const forecastDone=(forecastTomorrow||[]).length>0;
+  // Portionsmengen sind optional: Antippen = "passt so" (nur auf diesem Gerät, pro Tag). Gespeicherte Mengen zählen weiterhin als erledigt.
+  let forecastOk=false; try{ forecastOk=localStorage.getItem('kf_fc_ok_'+currentStore.id+'_'+today)==='1'; }catch(e){}
+  const forecastDone=(forecastTomorrow||[]).length>0 || forecastOk;
   const realWeekdaySchichtende=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
   const isKCDaySchichtende=realWeekdaySchichtende===2||realWeekdaySchichtende===4; // Shop-Produkte nur Di & Do
 
@@ -16500,7 +16510,7 @@ async function renderSchichtende(){
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
     {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
     {id:'feedback', label:'Food-Feedback', sub:'Wie hat\'s geschmeckt? Kurz eintragen', done:(feedbackToday||[]).length>0, link:'waehrend', group:'kueche'},
-    {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
+    {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Optional: antippen = passt so', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
     {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
     {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
@@ -16515,7 +16525,7 @@ async function renderSchichtende(){
     abschluss: {emoji:'💡', label:'Abschluss-Checkliste (optionale Hilfe)', sub:`${clDoneCount} von ${clTotal} Punkten — kein Pflichtschritt`, link:'check'},
     entsorgung: {emoji:'🗑️', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', link:'disposal'},
     feedback: {emoji:'😋', label:'Food-Feedback', sub:'Wie hat\'s geschmeckt?', link:'waehrend'},
-    forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', link:'order', orderTab:'forecast'},
+    forecast_menge: {emoji:'📅', label:'Portionsmengen für morgen', sub:'Optional: antippen = passt so', link:'order', orderTab:'forecast'},
     beilagen_anpassen: {emoji:'🍳', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen', link:'order', orderTab:'kueche'},
     dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
     reinigung_protokoll: {emoji:'🧽', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', link:null},
@@ -16578,14 +16588,15 @@ async function renderSchichtende(){
         const setFlag='schichtendeReturnFlag=true;';
         const linkFn=m.orderTab?`${setFlag}goToReminder('order','${m.orderTab}')`:m.link?`${setFlag}goTo('${m.link}')`:null;
         const isReinigung=s.id==='reinigung_protokoll';
-        html+=`<div class="card" style="padding:14px;margin-bottom:8px;border:1.5px solid var(--border);${s.id==='uebergabe'?'border-color:#BA7517;':''}">
+        const isFcOpt=s.id==='forecast_menge';
+        html+=`<div class="card"${isFcOpt?' role="button" tabindex="0" onclick="kfFcConfirm()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();kfFcConfirm();}"':''} style="padding:14px;margin-bottom:8px;border:1.5px solid var(--border);${isFcOpt?'cursor:pointer;':''}${s.id==='uebergabe'?'border-color:#BA7517;':''}">
           <div style="display:flex;align-items:center;gap:12px;">
             <span style="font-size:24px;flex-shrink:0;">${m.emoji}</span>
             <div style="flex:1;">
               <div style="font-weight:600;font-size:14px;">${m.label}</div>
               <div style="font-size:12px;color:var(--muted);margin-top:1px;">${m.sub}</div>
             </div>
-            ${linkFn?`<button onclick="${linkFn}" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">→</button>`:''}
+            ${linkFn?`<button onclick="${isFcOpt?'event.stopPropagation();':''}${linkFn}" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">→</button>`:''}
           </div>
           ${s.id==='uebergabe'?`<textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen?" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea><button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>`:''}
           ${isReinigung?(()=>{
