@@ -175,6 +175,35 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="/qrcode.js"></script>
+<script id="kf-a11y">/* Namen für Symbol-Knöpfe und unbeschriftete Felder (Screenreader/Sprachsteuerung). Ändert nichts am Aussehen. */
+(function(){
+  var MAP={'🔔':'Meldungen','🌐':'Sprache','−':'Weniger','-':'Weniger','+':'Mehr','＋':'Hinzufügen','✕':'Entfernen','×':'Schließen','←':'Zurück','→':'Weiter','🔄':'Aktualisieren','i':'Info','?':'Hilfe','Aa':'Textgröße'};
+  function txt(e){return (e.textContent||'').replace(/\s+/g,' ').trim();}
+  function run(){
+    try{
+      var bs=document.querySelectorAll('button:not([aria-label])');
+      for(var i=0;i<bs.length;i++){var b=bs[i],t=txt(b);
+        if(t.replace(/[^A-Za-zÄÖÜäöüß]/g,'').length>=3) continue;
+        var oc=b.getAttribute('onclick')||'';
+        var l=b.title||MAP[t]||(oc.indexOf('doLogout')>=0?'Abmelden':'')||(oc.indexOf('maengel')>=0?'Meldungen':'');
+        if(l) b.setAttribute('aria-label',l);}
+      var fs=document.querySelectorAll('input:not([type=hidden]):not([aria-label]),select:not([aria-label]),textarea:not([aria-label])');
+      for(var j=0;j<fs.length;j++){var f=fs[j];
+        if(f.closest('label')||(f.id&&document.querySelector('label[for="'+f.id+'"]'))) continue;
+        var n='';
+        if(f.dataset&&f.dataset.dish) n='Menge '+f.dataset.dish+(f.dataset.groesse?' ('+f.dataset.groesse+')':'');
+        if(!n){var row=f.closest('.item-row');var nm=row&&row.querySelector('.item-name');if(nm) n='Menge '+txt(nm);}
+        if(!n&&f.placeholder&&f.placeholder.length>1&&f.placeholder!=='–') n=f.placeholder==='hh:mm'?'Uhrzeit (hh:mm)':f.placeholder;
+        if(!n&&f.title) n=f.title;
+        if(!n&&f.tagName==='SELECT') n='Auswahl';
+        if(!n) n='Eingabe';
+        f.setAttribute('aria-label',n.slice(0,120));}
+    }catch(e){}
+  }
+  var tm;function sched(){clearTimeout(tm);tm=setTimeout(run,300);}
+  document.addEventListener('DOMContentLoaded',function(){try{new MutationObserver(sched).observe(document.body,{childList:true,subtree:true});}catch(e){} sched();});
+})();
+</script>
 </head>
 <body>
 
