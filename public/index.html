@@ -7935,26 +7935,20 @@ async function renderForecastOrderTab(el, tabHtml){
   // in der Operations-Mengenplanung.
   const storeWeekEra=getMenuEraForDate(weekDates[1]);
   const storeIsHerbstWeek=storeWeekEra.key==='herbstwinter2026_27';
-  html+=`<div class="section-lbl">🍽️ Gerichte</div>
-  <div id="ft-tab-gerichte">
-  <div class="card" id="forecast-table-wrap"><div style="overflow-x:auto;"><table class="pack-table" style="width:100%;border-collapse:collapse;">
-    <thead>
-      <tr>
-        <th style="text-align:left;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Tag</th>
-        ${storeIsHerbstWeek?'':'<th style="color:#A21CAF;font-size:10px;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Salat</th>'}
-        <th style="font-size:10px;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht 1</th>
-        <th style="font-size:10px;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht 2</th>
-        ${storeIsHerbstWeek?'<th style="font-size:10px;border-bottom:1.5px solid var(--border);border-right:1px solid var(--border);">Gericht 3</th>':''}
-        <th style="font-size:10px;border-bottom:1.5px solid var(--border);">Reis</th>
-      </tr>
-      <tr style="background:var(--surface-1);">
-        <td style="font-size:9px;color:var(--muted);padding:2px 6px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">Behälter</td>
-        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">↑ Vorw.</td>
-        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">↑ Vorw.</td>
-        ${storeIsHerbstWeek?'<td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">↑ Vorw.</td>':''}
-        <td style="font-size:9px;color:var(--muted);padding:2px 3px;text-align:center;border-bottom:1px solid var(--border);">↑ Vorw.</td>
-      </tr>
-    </thead><tbody>`;
+  const LASAGNE_LOCK_TXT='Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet, bei Bedarf direkt bei der Küche melden';
+  // Umbau 19.11.26 (Wunsch: übersichtlicher, besser lesbar): statt einer engen Tabelle mit winzigen, abgeschnittenen
+  // Gerichtsnamen jetzt je Tag eine Karte; je Gericht eine Zeile mit Rolle, vollem Namen und Mengenfeld(ern).
+  // Alle Eingabefelder behalten data-dish/data-date; Speichern/Ändern-Logik arbeitet unverändert über #forecast-table-wrap.
+  function fcRow(slot, name, dateStr, inputHtml){
+    const multi=inputHtml.indexOf('grid-template-columns')>=0;
+    let nameHtml='';
+    if(name){
+      const onc="openStoreDishHistory('"+escAttr(name).replace(/'/g,"\\'")+"','"+dateStr+"')";
+      nameHtml='<button type="button" class="fc-dishname" data-no-translate title="'+escAttr(name)+'" onclick="'+onc+'">'+name+'</button>';
+    }
+    return '<div class="fc-row'+(multi?' fc-row-multi':'')+'"><div class="fc-dish"><span class="fc-slot">'+slot+'</span>'+nameHtml+'</div><div class="fc-qty">'+inputHtml+'</div></div>';
+  }
+  html+='<div class="section-lbl">🍽️ Gerichte</div><div id="ft-tab-gerichte"><div id="forecast-table-wrap" class="fc-days">';
 
   for(let wd=1; wd<=5; wd++){
     const wdStr=WEEKDAY_STR[wd];
@@ -7967,36 +7961,21 @@ async function renderForecastOrderTab(el, tabHtml){
     const reisName=REIS_DISH_NAME;
     const rowLasagne=[g2,g3,g4].some(n=>n && n.includes('Lasagne'));
     if(rowLasagne) anyLasagne=true;
-    const isLastRow=wd===5;
-    const rowBorder=isLastRow?'':'border-bottom:1px solid var(--border);';
-    // Echter Gerichtname direkt bei der jeweiligen Zelle — ändert sich täglich, deshalb nicht mehr
-    // im (fixen) Spaltenkopf, sondern hier pro Tag/Zelle. Fixe Höhe + sauberes Abschneiden mit "…"
-    // bei zu langen Namen (line-clamp), damit garantiert nie in die nächste Zeile überläuft.
-    const cellWrap=(labelHtml, inputHtml)=>`<div style="display:grid;grid-template-rows:34px auto;row-gap:4px;justify-items:center;align-items:end;overflow:hidden;">
-        <div style="display:flex;align-items:flex-end;justify-content:center;overflow:hidden;width:100%;">${labelHtml}</div>
-        <div>${inputHtml}</div>
-      </div>`;
-    const dishLabel=(name)=>name?`<div data-no-translate title="${escAttr(name)}" onclick="openStoreDishHistory('${escAttr(name).replace(/'/g,"\\'")}','${dateStr}')" style="font-size:8px;color:var(--muted);line-height:1.15;max-width:66px;text-align:center;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;">${name}</div>`:'';
-
-    html+=`<tr style="${isToday?`background:${tab.color}0d;`:''}">
-      <td style="padding:6px 6px;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        <div style="font-size:11.5px;font-weight:${isToday?'700':'600'};color:${isToday?tab.color:'inherit'};white-space:nowrap;">${WEEKDAY_NAMES[wd].slice(0,2)} ${dateLabel}${isToday?' 📍':''}</div>
-        ${dayReasonMap[dateStr]?`<div style="font-size:9.5px;color:var(--muted);line-height:1.3;">${dayReasonMap[dateStr]}</div>`:''}
-      </td>
-      ${storeIsHerbstWeek?'':`<td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">${cellWrap(dishLabel(salatName), cellInput(dateStr, salatName))}</td>`}
-      <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g2?cellWrap(dishLabel(g2), cellInput(dateStr, g2, (g2.includes('Lasagne')&&isLasagneLocked(dateStr))?'Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet, bei Bedarf direkt bei der Küche melden':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
-      </td>
-      <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g3?cellWrap(dishLabel(g3), cellInput(dateStr, g3, (g3.includes('Lasagne')&&isLasagneLocked(dateStr))?'Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet, bei Bedarf direkt bei der Küche melden':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
-      </td>
-      ${storeIsHerbstWeek?`<td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}border-right:1px solid var(--border);">
-        ${g4?cellWrap(dishLabel(g4), cellInput(dateStr, g4, (g4.includes('Lasagne')&&isLasagneLocked(dateStr))?'Ab 11 Uhr Vortag gesperrt — Küche hat schon vorbereitet, bei Bedarf direkt bei der Küche melden':null)):cellWrap('','<span style="color:var(--border);">·</span>')}
-      </td>`:''}
-      <td style="padding:4px 3px;text-align:center;vertical-align:top;${rowBorder}">${cellWrap('', reisName?cellInput(dateStr, reisName):'<span style="color:var(--border);">·</span>')}</td>
-    </tr>`;
+    const lockFor=(g)=>(g && g.includes('Lasagne') && isLasagneLocked(dateStr))?LASAGNE_LOCK_TXT:null;
+    let rows='';
+    if(!storeIsHerbstWeek && salatName) rows+=fcRow('Salat', salatName, dateStr, cellInput(dateStr, salatName));
+    if(g2) rows+=fcRow('Gericht 1', g2, dateStr, cellInput(dateStr, g2, lockFor(g2)));
+    if(g3) rows+=fcRow('Gericht 2', g3, dateStr, cellInput(dateStr, g3, lockFor(g3)));
+    if(g4) rows+=fcRow('Gericht 3', g4, dateStr, cellInput(dateStr, g4, lockFor(g4)));
+    if(reisName) rows+=fcRow('Reis', reisName, dateStr, cellInput(dateStr, reisName));
+    const dayName=WEEKDAY_NAMES[wd];
+    let head='<div class="fc-day-h"><span class="fc-day-name">'+dayName+' '+dateLabel+'</span>';
+    if(isToday) head+='<span class="fc-today-pill" style="background:'+tab.color+';">Heute</span>';
+    head+='</div>';
+    if(dayReasonMap[dateStr]) head+='<div class="fc-day-reason">'+dayReasonMap[dateStr]+'</div>';
+    html+='<section class="card fc-day'+(isToday?' fc-today':'')+'"'+(isToday?' style="border-color:'+tab.color+';"':'')+'>'+head+'<div class="fc-rows">'+rows+'</div></section>';
   }
-  html+='</tbody></table></div></div>';
+  html+='</div>';
 
   if(!isHistoric){
     html+=`<button id="forecast-save-btn" class="submit-btn" disabled onclick="saveForecastChanges()" style="background:${tab.color};opacity:0.4;margin-top:4px;">💾 Änderungen speichern</button>`;
