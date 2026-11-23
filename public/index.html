@@ -1833,7 +1833,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.317';
+const APP_VERSION='6.99.318';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -17855,6 +17855,9 @@ async function renderPack(){
     html+='</tbody></table></div>';
   });
 
+  // 24.11.26 (Wunsch Gurl): Beilagen gehören zum Einpacken — deshalb auch hier in der Bestellliste (zusätzlich zu "Beilagen & Essen").
+  try{ const _bt=await renderTransporterBeilagenHtml({compact:true,offset:transporterBestellDateOffset}); if(_bt){ html+=_bt; hasAny=true; } }catch(e){ console.error('Beilagen in Bestellliste',e); }
+
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
   const geldwechselOffen=await api('geldwechsel?status=eq.offen&select=*&order=erstellt_am.asc').catch(()=>[]);
   // Offene Notizen/Aufgaben an den Transporter auch HIER zeigen (28.10.26): der Info-Reiter wird selten geöffnet,
@@ -19044,18 +19047,20 @@ async function saveTransporterTaskInline(){
 }
 window.saveTransporterTaskInline=saveTransporterTaskInline;
 
-async function renderTransporterBeilagenHtml(){
+async function renderTransporterBeilagenHtml(opts){
+  opts=opts||{}; // opts.compact: nur die Beilagen-Tabelle fuer die Bestellliste (Einpacken), opts.offset: Tag relativ zu heute
   // 29.09.26 (Wunsch Tini): früher fix "heute" — Transporter braucht aber auch das Weiterklicken auf
   // andere Tage, um als Gegenkontrolle zu prüfen, ob Küche/Transporter über mehrere Tage hinweg
   // übereinstimmen. Datum kommt jetzt aus transporterBeilagenDateOffset (0=heute, wie überall
   // sonst in dieser App — siehe navBestellDate für dasselbe Muster).
   const stores=await api('stores?select=id,name&order=id');
   const storeList=stores.filter(s=>s.id!=='zentrale'&&s.id!=='kitchen'&&s.id!=='1070');
-  const viewDate=new Date(); viewDate.setDate(viewDate.getDate()+transporterBeilagenDateOffset);
-  const today=viewDate.toISOString().split('T')[0];
+  const _off=(opts.offset!=null)?opts.offset:transporterBeilagenDateOffset;
+  const viewDate=new Date(); viewDate.setDate(viewDate.getDate()+_off);
+  const today=isoLocal(viewDate);
   const todayWd=viewDate.getDay(); // 0=So..6=Sa
   const weekdayNum=todayWd===0?7:todayWd; // 1=Mo..7=So
-  const isBeilagenToday=transporterBeilagenDateOffset===0;
+  const isBeilagenToday=_off===0;
 
   const baseline=await api(`kitchen_supply_baseline?weekday=eq.${weekdayNum}&select=store_id,article_name,unit,base_qty`).catch(()=>[]);
   // Gleiche Logik wie in der Küche-Matrix: Parmesan nur einblenden, wenn laut Menü-Rotation HEUTE
@@ -19085,7 +19090,7 @@ async function renderTransporterBeilagenHtml(){
 
   // Essensmengen (Gerichte) für heute — Transporter macht die Endkontrolle und braucht Gerichte + Beilagen
   // zusammen an einer Stelle, statt zwischen Tabs wechseln zu müssen.
-  const fcToday=await api(`forecast_qty?forecast_date=eq.${today}&select=store_id,dish_name,qty,groesse,eingepackt`).catch(()=>[]);
+  const fcToday=opts.compact?[]:await api(`forecast_qty?forecast_date=eq.${today}&select=store_id,dish_name,qty,groesse,eingepackt`).catch(()=>[]);
   // Nur Gerichte zeigen, die WIRKLICH auf dem heutigen (epochen-bewussten) Menü stehen — sonst
   // bleiben alte Forecast-Zeilen aus einer vergangenen Epoche (z.B. Sommer-Gerichte) sichtbar,
   // obwohl sie längst nicht mehr aktuell sind. Bug gefunden 07.09.26, erster Herbst/Winter-Tag.
@@ -19117,8 +19122,9 @@ async function renderTransporterBeilagenHtml(){
     navHtml+=`<div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11.5px;color:#9A3412;">📋 Ansicht eines anderen Tages — nur zur Kontrolle, "eingepackt" kann hier nicht geändert werden.</div>`;
   }
 
+  if(opts.compact){ navHtml=''; }
   let dishHtml='';
-  if(dishNamesToday.length){
+  if(dishNamesToday.length && !opts.compact){
     dishHtml=`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🍽️ Gerichte</div>
       <div style="overflow-x:auto;margin-bottom:16px;"><table style="width:100%;border-collapse:collapse;">
       <thead><tr style="border-bottom:1.5px solid var(--border);">
@@ -19167,11 +19173,12 @@ async function renderTransporterBeilagenHtml(){
   const articleSetToday=new Set(baseline.map(b=>b.article_name));
   (weekVals||[]).forEach(d=>{ if(d.supply_date===weekDates[weekdayNum<=5?weekdayNum:1]) articleSetToday.add(d.article_name); });
   const allArticles=[...articleSetToday];
+  if(opts.compact && !allArticles.length) return '';
   if(!allArticles.length && !dishNamesToday.length) return navHtml+`<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Keine Gerichte oder Beilagen für ${isBeilagenToday?'heute':'diesen Tag'} hinterlegt.</div>`;
   if(!allArticles.length) return navHtml+dishHtml;
 
   // Tabelle: Beilage | Store1 | Store2 | Store3 | Store4
-  let html=navHtml+dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">🥗 Beilagen</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+  let html=navHtml+dishHtml+`<div class="section-lbl" style="font-size:11px;color:var(--muted);font-weight:500;">${opts.compact?'🥗 Beilagen — zum Einpacken':'🥗 Beilagen'}</div><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
     <thead><tr style="border-bottom:1.5px solid var(--border);">
       <th style="text-align:left;padding:8px 6px;font-size:12px;color:var(--muted);">Beilage</th>
       ${storeList.map(s=>`<th style="padding:8px 4px;font-size:12px;font-weight:600;color:${STORE_COLORS[s.id]||'#888'};text-align:center;" data-no-translate>${s.name.split(' · ')[1]||s.name.split(' ')[0]}</th>`).join('')}
