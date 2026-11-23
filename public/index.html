@@ -421,6 +421,7 @@ button:disabled{cursor:not-allowed;}
         <button onclick="setLang('es')">🇪🇸 Español</button>
         <button onclick="setLang('hi')">🇮🇳 हिन्दी</button>
       </div>
+      <button onclick="kfsOpen()" id="nav-kfs" title="Sicherheit" aria-label="Sicherheit" style="display:none;width:28px;height:28px;border-radius:50%;border:none;background:rgba(255,255,255,0.18);color:#fff;font-size:14px;cursor:pointer;flex-shrink:0;position:relative;align-items:center;justify-content:center;">🔐<span id="kfs-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;padding:0 2px;"></span></button>
       <button onclick="goTo('maengel')" id="nav-notif-bell" style="display:none;width:28px;height:28px;border-radius:50%;border:none;background:rgba(255,255,255,0.18);color:#fff;font-size:15px;cursor:pointer;flex-shrink:0;position:relative;">
         🔔<span id="nav-notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#DC2626;color:#fff;font-size:9px;font-weight:700;min-width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;padding:0 2px;"></span>
       </button>
@@ -1851,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.324';
+const APP_VERSION='6.99.325';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2110,6 +2111,7 @@ async function hasTodayEntry(table, dateCol, storeId=currentStore?.id){
 
 // ---- LOGIN ----
 async function initLogin() {
+  if(!(await kfsGate())) return;
   try {
     const stores = (await api('stores?select=id,name,image_url&order=id')).filter(s=>s.id!=='1070');
     // Feste Reihenfolge am Login-Screen (nicht alphabetisch nach ID): Börse, Laurenzerberg,
@@ -2163,11 +2165,26 @@ async function checkPin(){
   const id=document.getElementById('pin-input').dataset.storeId;
   const name=document.getElementById('pin-input').dataset.storeName;
   if(id==='1070'){ document.getElementById('pin-error').textContent='Diese Filiale ist geschlossen.'; document.getElementById('pin-error').style.display='block'; return; }
+  const btn=document.querySelector('#pin-form .login-btn'); if(btn) btn.disabled=true;
+  const pe=document.getElementById('pin-error');
   try {
-    const s=await api('rpc/check_store_pin',{method:'POST',body:JSON.stringify({p_store_id:id,p_pin:pin})});
-    if(s?.length) { localStorage.setItem('kf_store',JSON.stringify({id,name})); loginAs({id,name}); }
-    else document.getElementById('pin-error').style.display='block';
-  } catch { document.getElementById('pin-error').style.display='block'; }
+    const r=await kfsLogin(id,pin);
+    if(r.legacy){
+      const s=await api('rpc/check_store_pin',{method:'POST',body:JSON.stringify({p_store_id:id,p_pin:pin})});
+      if(s?.length) { localStorage.setItem('kf_store',JSON.stringify({id,name})); loginAs({id,name}); }
+      else { pe.textContent='Falscher PIN'; pe.style.display='block'; }
+    }else if(r.status==='ok'){
+      if(r.sitzung) kfsAdmSet(r.sitzung);
+      localStorage.setItem('kf_store',JSON.stringify({id,name})); loginAs({id,name});
+    }else if(r.status==='gesperrt'){
+      kfsShowGate({status:'gesperrt_zeit',gesperrt_sekunden:r.sekunden||300});
+    }else if(r.status==='falsch'){
+      pe.textContent='Falscher PIN'+(r.versuche_uebrig?' — noch '+r.versuche_uebrig+' Versuch'+(r.versuche_uebrig===1?'':'e'):''); pe.style.display='block';
+    }else if(/^geraet_/.test(r.status||'')){
+      location.reload();
+    }else{ pe.textContent='Verbindung prüfen'; pe.style.display='block'; }
+  } catch { pe.textContent='Verbindung prüfen'; pe.style.display='block'; }
+  finally{ if(btn) btn.disabled=false; }
 }
 window.addEventListener('popstate',(e)=>{
   if(!currentStore) return; // not logged in, let browser handle it
@@ -2499,6 +2516,7 @@ async function loginAs(store){
     document.getElementById('nav-org-feedback').style.display='flex';
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
+    try{ kfsOrgWatch(); }catch(e){}
   } else if(store.id==='kitchen'){
     // Kitchen 3400 = "Organisation Kitchen": kein normaler Store-Alltag (Bestellen/Forecast/
     // Checkliste/Entsorgung/Kontrolle) — nur die Übersicht für Team/Küche/Transporter/Shop Produkte.
@@ -2596,7 +2614,7 @@ function doLogout(){
     document.addEventListener('keydown',onKey);
     ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
     document.getElementById('kf-logout-no').onclick=close;
-    document.getElementById('kf-logout-yes').onclick=function(){ try{localStorage.removeItem('kf_store');}catch(e){} location.reload(); };
+    document.getElementById('kf-logout-yes').onclick=function(){ try{localStorage.removeItem('kf_store');sessionStorage.removeItem('kf_adm');}catch(e){} location.reload(); };
     document.getElementById('kf-logout-no').focus();
   }catch(e){ try{localStorage.removeItem('kf_store');}catch(x){} location.reload(); }
 }
@@ -23343,6 +23361,209 @@ document.addEventListener('click',function(ev){
   if(now-last<700){ ev.stopImmediatePropagation(); ev.preventDefault(); return; }
   b.dataset.kfLast=String(now);
 },true);
+
+// ==== GERÄTE-SICHERHEIT (Gerät freischalten · Sperre nach Fehlversuchen · Fernfreigabe durch Organisation) ====
+// Wer nur den Link hat, sieht nur "Gerät freischalten" — keine Filialen, keine PIN-Abfrage.
+// Freigeschaltete Geräte loggen sich weiter wie bisher mit der PIN ein. 3 Fehlversuche = 5 Minuten Sperre.
+// Solange die SQL-Datei (supabase_geraete_sicherheit.sql) noch nicht eingespielt ist, bleibt alles wie vorher.
+const KFS={ tok:null, on:true, poll:null, tick:null, adm:null, panelTimer:null, lastReq:-1 };
+function kfsToken(){
+  if(KFS.tok) return KFS.tok;
+  let t=null; try{ t=localStorage.getItem('kf_dev'); }catch(e){}
+  if(!t||t.length<32){
+    const a=new Uint8Array(24); (window.crypto||window.msCrypto).getRandomValues(a);
+    t=Array.from(a,b=>b.toString(16).padStart(2,'0')).join('');
+    try{ localStorage.setItem('kf_dev',t); }catch(e){}
+  }
+  KFS.tok=t; return t;
+}
+function kfsRpc(fn,body){ return api('rpc/'+fn,{method:'POST',body:JSON.stringify(body||{})}); }
+function kfsMissing(e){ return /PGRST202|PGRST205|Could not find the function|schema cache/i.test(String(e&&e.message||e)); }
+function kfsDevName(ua){
+  ua=String(ua||''); const os=/iPad/.test(ua)?'iPad':/iPhone/.test(ua)?'iPhone':/Android/.test(ua)?'Android':/Windows/.test(ua)?'Windows':/Mac OS X/.test(ua)?'Mac':/Linux/.test(ua)?'Linux':'Gerät';
+  const br=/Edg\//.test(ua)?'Edge':/Chrome\//.test(ua)?'Chrome':/Safari\//.test(ua)?'Safari':/Firefox\//.test(ua)?'Firefox':'';
+  return os+(br?' · '+br:'');
+}
+function kfsEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function kfsFmtSek(s){ s=Math.max(0,Math.round(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function kfsAgo(ts){ if(!ts) return '–'; const m=Math.round((Date.now()-new Date(ts).getTime())/60000); if(m<1) return 'gerade eben'; if(m<60) return 'vor '+m+' Min.'; const h=Math.round(m/60); if(h<48) return 'vor '+h+' Std.'; return 'vor '+Math.round(h/24)+' Tagen'; }
+function kfsClearTimers(){ clearInterval(KFS.poll); clearInterval(KFS.tick); KFS.poll=KFS.tick=null; }
+
+// Prüft beim Start das Gerät. true = weiter wie gewohnt (Filialen + PIN), false = Sperrbildschirm wird gezeigt.
+async function kfsGate(){
+  let st;
+  try{
+    const r=await kfsRpc('geraet_anfordern',{p_token:kfsToken(),p_ua:(navigator.userAgent||'').slice(0,200)});
+    st=r&&r[0];
+  }catch(e){
+    if(kfsMissing(e)){ KFS.on=false; return true; }   // SQL noch nicht eingespielt → alles wie bisher
+    kfsShowGate({status:'fehler'}); return false;
+  }
+  if(!st){ KFS.on=false; return true; }
+  if(st.status==='freigegeben'){ kfsHideGate(); return true; }
+  if(st.status==='wartet' && st.uebergang){ KFS.grace=st; kfsHideGate(); kfsGraceHint(st); return true; }
+  kfsShowGate(st); return false;
+}
+function kfsGraceHint(st){
+  try{
+    if(document.getElementById('kfs-grace')) return;
+    const d=document.createElement('div'); d.id='kfs-grace';
+    d.style.cssText='background:rgba(255,255,255,.92);color:#1a1a18;border-radius:12px;padding:10px 14px;font-size:13px;max-width:320px;width:100%;text-align:center;z-index:1;position:relative;';
+    d.innerHTML='🔐 Dieses Gerät ist noch nicht freigeschaltet. Bitte der Organisation den Code <b style="letter-spacing:2px;">'+kfsEsc(st.anfrage_code)+'</b> durchgeben — sonst geht es bald nicht mehr.';
+    const ls=document.getElementById('login-screen'); ls.insertBefore(d,document.getElementById('store-picker'));
+  }catch(e){}
+}
+function kfsHideGate(){ kfsClearTimers(); const g=document.getElementById('kfs-gate'); if(g) g.remove(); ['store-picker','onb-entry'].forEach(id=>{const e=document.getElementById(id); if(e) e.style.display='';}); }
+function kfsShowGate(st){
+  kfsClearTimers();
+  ['store-picker','onb-entry','pin-form'].forEach(id=>{const e=document.getElementById(id); if(e) e.style.display='none';});
+  let g=document.getElementById('kfs-gate');
+  if(!g){ g=document.createElement('div'); g.id='kfs-gate'; g.className='login-card'; document.getElementById('login-screen').appendChild(g); }
+  const s=st.status, sek=st.gesperrt_sekunden||0;
+  let h='<div style="font-size:17px;font-weight:700;text-align:center;">🔐 Gerät freischalten</div>';
+  if(s==='wartet'){
+    h+='<div style="font-size:13px;color:#555;text-align:center;">Dieses Gerät ist noch nicht freigeschaltet. Gib diesen Code der Organisation durch — sie schaltet dich frei, auch aus der Ferne:</div>'
+      +'<div style="font-size:34px;font-weight:800;letter-spacing:8px;text-align:center;margin:4px 0;" data-no-translate>'+kfsEsc(st.anfrage_code)+'</div>'
+      +'<div style="font-size:12px;color:#777;text-align:center;">Diese Seite aktualisiert sich selbst, sobald du freigeschaltet bist.</div>'
+      +'<div style="border-top:1px solid #eee;margin-top:6px;padding-top:10px;font-size:12px;color:#555;">Oder Freischalt-Code von der Organisation:</div>'
+      +'<input class="pin-input" id="kfs-code" maxlength="12" autocomplete="off" autocapitalize="characters" placeholder="CODE" style="letter-spacing:3px;text-transform:uppercase;" aria-label="Freischalt-Code">'
+      +'<button class="login-btn" onclick="kfsCode()">Freischalten</button>'
+      +'<div id="kfs-msg" style="color:#A32D2D;font-size:12px;text-align:center;min-height:14px;"></div>'
+      +'<button class="back-btn" id="kfs-urgent" onclick="kfsUrgent()">🚨 Dringend — bitte schnell freigeben</button>';
+  }else if(s==='gesperrt_zeit'){
+    h+='<div style="font-size:13px;color:#A32D2D;text-align:center;font-weight:600;">Zu viele falsche Eingaben.</div>'
+      +'<div style="font-size:13px;color:#555;text-align:center;">Dieses Gerät ist kurz gesperrt. Die Organisation wurde informiert.</div>'
+      +'<div id="kfs-count" style="font-size:38px;font-weight:800;text-align:center;" data-no-translate>'+kfsFmtSek(sek)+'</div>'
+      +'<button class="back-btn" id="kfs-urgent" onclick="kfsUrgent()">🚨 Dringend — bitte sofort freigeben</button>'
+      +'<div id="kfs-msg" style="color:#555;font-size:12px;text-align:center;min-height:14px;"></div>';
+  }else if(s==='gesperrt'){
+    h+='<div style="font-size:13px;color:#A32D2D;text-align:center;font-weight:600;">Dieses Gerät wurde gesperrt.</div>'
+      +'<div style="font-size:13px;color:#555;text-align:center;">Bitte bei der Organisation melden. Gerätecode: <b data-no-translate>'+kfsEsc(st.anfrage_code)+'</b></div>'
+      +'<button class="back-btn" id="kfs-urgent" onclick="kfsUrgent()">🚨 Dringend — bitte schnell freigeben</button><div id="kfs-msg" style="font-size:12px;text-align:center;min-height:14px;"></div>';
+  }else if(s==='abgelehnt'){
+    h+='<div style="font-size:13px;color:#A32D2D;text-align:center;">Diese Anfrage wurde abgelehnt. Bei Fragen bitte die Organisation kontaktieren.</div>';
+  }else{
+    h+='<div style="font-size:13px;color:#A32D2D;text-align:center;">Verbindung nicht möglich. Bitte Internet prüfen.</div><button class="login-btn" onclick="location.reload()">Nochmal versuchen</button>';
+  }
+  g.innerHTML=h;
+  if(s==='gesperrt_zeit'){
+    let rest=sek; KFS.tick=setInterval(()=>{ rest--; const c=document.getElementById('kfs-count'); if(c) c.textContent=kfsFmtSek(rest); if(rest<=0){ kfsClearTimers(); location.reload(); } },1000);
+  }
+  if(s==='wartet'||s==='gesperrt_zeit'||s==='gesperrt'){
+    KFS.poll=setInterval(async()=>{
+      try{ const r=await kfsRpc('geraet_status',{p_token:kfsToken()}); const x=r&&r[0];
+        if(x&&(x.status==='freigegeben'||(x.status==='wartet'&&x.uebergang))){ kfsClearTimers(); location.reload(); }
+      }catch(e){}
+    },4000);
+  }
+}
+async function kfsUrgent(){
+  const b=document.getElementById('kfs-urgent'), m=document.getElementById('kfs-msg');
+  try{ const r=await kfsRpc('dringend_freigabe',{p_token:kfsToken()}); if(b){ b.disabled=true; b.textContent='✅ Dringend-Meldung ist bei der Organisation'; } if(m){ m.style.color='#0F6E56'; m.textContent='Bitte kurz warten oder die Organisation anrufen.'; } }
+  catch(e){ if(m){ m.style.color='#A32D2D'; m.textContent='Konnte nicht senden. Bitte anrufen.'; } }
+}
+async function kfsCode(){
+  const i=document.getElementById('kfs-code'), m=document.getElementById('kfs-msg'); if(!i) return;
+  try{
+    const r=await kfsRpc('geraet_code_einloesen',{p_token:kfsToken(),p_code:i.value});
+    if(r==='ok'){ location.reload(); return; }
+    m.textContent=r==='gesperrt'?'Zu viele Versuche. Kurz gesperrt.':r==='code_ungueltig'?'Code stimmt nicht oder ist abgelaufen.':'Das hat nicht geklappt.';
+    if(r==='gesperrt') setTimeout(()=>location.reload(),1500);
+  }catch(e){ m.textContent='Verbindung prüfen und nochmal probieren.'; }
+}
+
+// ---- PIN-Prüfung: neue Funktion mit Gerät + Sperre; alte nur, solange die SQL noch fehlt ----
+async function kfsLogin(id,pin){
+  if(!KFS.on) return {legacy:true};
+  try{
+    const r=await kfsRpc('kf_login',{p_store_id:id,p_pin:pin,p_token:kfsToken()});
+    return (r&&r[0])||{status:'fehler'};
+  }catch(e){ if(kfsMissing(e)){ KFS.on=false; return {legacy:true}; } return {status:'fehler'}; }
+}
+
+// ---- Organisation: Sicherheit (Anfragen, Dringend, Sperren, Geräte, Fehlversuche, Codes) ----
+function kfsAdmSess(){ if(KFS.adm) return KFS.adm; try{ KFS.adm=sessionStorage.getItem('kf_adm'); }catch(e){} return KFS.adm; }
+function kfsAdmSet(s){ KFS.adm=s||null; try{ if(s) sessionStorage.setItem('kf_adm',s); else sessionStorage.removeItem('kf_adm'); }catch(e){} }
+async function kfsOverview(){
+  const s=kfsAdmSess(); if(!s) return null;
+  try{ return await kfsRpc('sicherheit_uebersicht',{p_sitzung:s}); }
+  catch(e){ if(/42501|nicht_berechtigt/i.test(String(e.message))) kfsAdmSet(null); return null; }
+}
+function kfsBadge(n){ const b=document.getElementById('kfs-badge'); if(!b) return; b.textContent=n>9?'9+':n; b.style.display=n>0?'flex':'none'; }
+async function kfsOrgWatch(){
+  if(!KFS.on||currentStore?.id!=='zentrale') return;
+  const btn=document.getElementById('nav-kfs'); if(btn) btn.style.display='flex';
+  const run=async()=>{
+    const o=await kfsOverview(); if(!o) return;
+    const n=(o.anfragen||[]).length+(o.gesperrt||[]).length+(+o.neu||0);
+    kfsBadge(n);
+    const urgent=(o.anfragen||[]).concat(o.gesperrt||[]).filter(x=>x.dringend).length;
+    const sig=(o.anfragen||[]).length+'/'+urgent+'/'+(+o.neu||0);
+    if(KFS.lastReq!==-1 && sig!==KFS.lastReq && (n>0)){ kfsToast(urgent?'🚨 Dringende Freigabe-Anfrage!':'🔐 Neue Sicherheits-Meldung'); }
+    KFS.lastReq=sig;
+    if(document.getElementById('kfs-panel')) kfsRender(o);
+  };
+  clearInterval(KFS.panelTimer); KFS.panelTimer=setInterval(run,30000); run();
+}
+function kfsToast(t){
+  const d=document.createElement('div'); d.setAttribute('role','alert');
+  d.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:100000;background:#1a1a18;color:#D4FF3F;padding:12px 18px;border-radius:12px;font-weight:700;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.4);cursor:pointer;';
+  d.textContent=t; d.onclick=()=>{ d.remove(); kfsOpen(); }; document.body.appendChild(d); setTimeout(()=>{ try{d.remove();}catch(e){} },9000);
+  try{ if(navigator.vibrate) navigator.vibrate(200); }catch(e){}
+}
+async function kfsOpen(){
+  if(document.getElementById('kfs-panel')) return;
+  const p=document.createElement('div'); p.id='kfs-panel';
+  p.style.cssText='position:fixed;inset:0;z-index:99998;background:#F5F5F3;overflow:auto;-webkit-overflow-scrolling:touch;';
+  p.innerHTML='<div style="max-width:720px;margin:0 auto;padding:14px 14px 80px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;"><div style="font-size:20px;font-weight:800;">🔐 Sicherheit</div><button onclick="kfsClose()" style="min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #ccc;background:#fff;font-weight:600;">Schließen</button></div><div id="kfs-body">Lädt…</div></div>';
+  document.body.appendChild(p);
+  if(!kfsAdmSess()){ kfsAskPin(); return; }
+  const o=await kfsOverview(); if(!o){ kfsAskPin(); return; } kfsRender(o);
+}
+function kfsClose(){ const p=document.getElementById('kfs-panel'); if(p) p.remove(); }
+function kfsAskPin(){
+  const b=document.getElementById('kfs-body'); if(!b) return;
+  b.innerHTML='<div style="background:#fff;border-radius:14px;padding:16px;max-width:320px;"><div style="font-size:13px;color:#555;margin-bottom:8px;">Zur Sicherheit bitte die PIN der Organisation eingeben:</div><input id="kfs-apin" class="pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off"><button class="login-btn" style="margin-top:8px" onclick="kfsAdminLogin()">Öffnen</button><div id="kfs-amsg" style="color:#A32D2D;font-size:12px;margin-top:6px;"></div></div>';
+  setTimeout(()=>{ const i=document.getElementById('kfs-apin'); if(i) i.focus(); },50);
+}
+async function kfsAdminLogin(){
+  const i=document.getElementById('kfs-apin'), m=document.getElementById('kfs-amsg');
+  const r=await kfsLogin('zentrale',i.value);
+  if(r.status==='ok'&&r.sitzung){ kfsAdmSet(r.sitzung); const o=await kfsOverview(); if(o) kfsRender(o); }
+  else m.textContent=r.status==='gesperrt'?'Gesperrt für '+kfsFmtSek(r.sekunden)+' Min.':'PIN stimmt nicht.';
+}
+async function kfsAct(fn,id,extra){
+  try{ await kfsRpc(fn,Object.assign({p_sitzung:kfsAdmSess(),p_id:id},extra||{})); }catch(e){ alert('Hat nicht geklappt: '+(e.message||e)); }
+  const o=await kfsOverview(); if(o){ kfsRender(o); kfsBadge((o.anfragen||[]).length+(o.gesperrt||[]).length+(+o.neu||0)); }
+}
+function kfsFreigeben(id){ const n=prompt('Wie soll das Gerät heißen? (z. B. "Tablet Börse")',''); if(n===null) return; kfsAct('geraet_freigeben',id,{p_bezeichnung:n}); }
+function kfsUmbenennen(id,alt){ const n=prompt('Neuer Name:',alt||''); if(n===null) return; kfsAct('geraet_umbenennen',id,{p_bezeichnung:n}); }
+function kfsEntfernen(id){ if(confirm('Gerät entfernen? Es muss danach neu freigeschaltet werden.')) kfsAct('geraet_entfernen',id); }
+function kfsSperren(id){ if(confirm('Gerät dauerhaft sperren?')) kfsAct('geraet_sperren',id); }
+async function kfsNeuerCode(){
+  try{ const r=await kfsRpc('code_erzeugen',{p_sitzung:kfsAdmSess()}); const c=r&&r[0]; if(c){ alert('Freischalt-Code: '+c.code+'\n\nEinmal verwendbar, gültig 24 Stunden. Gib ihn nur der Person, die das Gerät einrichtet.'); } }catch(e){ alert('Hat nicht geklappt.'); }
+  const o=await kfsOverview(); if(o) kfsRender(o);
+}
+async function kfsQuittieren(){ try{ await kfsRpc('fehlversuche_quittieren',{p_sitzung:kfsAdmSess()}); }catch(e){} const o=await kfsOverview(); if(o){ kfsRender(o); kfsBadge((o.anfragen||[]).length+(o.gesperrt||[]).length+(+o.neu||0)); } }
+function kfsRender(o){
+  const b=document.getElementById('kfs-body'); if(!b) return;
+  const card='background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);';
+  const btn=(c,t,f)=>'<button onclick="'+f+'" style="min-height:44px;padding:0 14px;border-radius:10px;border:none;background:'+c+';color:#fff;font-weight:700;font-size:14px;margin:4px 6px 0 0;">'+t+'</button>';
+  const row=(inner)=>'<div style="'+card+'">'+inner+'</div>';
+  let h='';
+  const an=o.anfragen||[], ge=o.gesperrt||[];
+  h+='<div style="font-weight:800;margin:6px 0;">Anfragen ('+an.length+')</div>';
+  h+=an.length?an.map(a=>row('<div>'+(a.dringend?'<span style="color:#B3261E;font-weight:800;">🚨 DRINGEND · </span>':'')+'Code <b style="font-size:22px;letter-spacing:4px;" data-no-translate>'+kfsEsc(a.code)+'</b></div><div style="font-size:12px;color:#666;">'+kfsEsc(kfsDevName(a.user_agent))+' · '+kfsAgo(a.erstellt_am)+'</div>'+btn('#0F6E56','Freigeben',"kfsFreigeben('"+a.id+"')")+btn('#777','Ablehnen',"kfsAct('geraet_ablehnen','"+a.id+"')"))).join(''):row('<span style="color:#666;">Keine offenen Anfragen.</span>');
+  h+='<div style="font-weight:800;margin:14px 0 6px;">Gesperrt ('+ge.length+')</div>';
+  h+=ge.length?ge.map(a=>{ const zeit=a.gesperrt_bis&&new Date(a.gesperrt_bis)>new Date(o.jetzt); return row('<div>'+(a.dringend?'<span style="color:#B3261E;font-weight:800;">🚨 DRINGEND · </span>':'')+'<b>'+kfsEsc(a.bezeichnung||kfsDevName(a.user_agent))+'</b> <span data-no-translate>('+kfsEsc(a.code)+')</span></div><div style="font-size:12px;color:#666;">'+(zeit?'Zeitsperre bis '+new Date(a.gesperrt_bis).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'}):'Dauerhaft gesperrt')+(a.letzte_filiale?' · zuletzt '+kfsEsc(a.letzte_filiale):'')+'</div>'+btn('#0F6E56','Sofort freigeben',"kfsAct('geraet_freigeben','"+a.id+"')")+(zeit?btn('#2B3A67','Nur Sperre aufheben',"kfsAct('sperre_aufheben','"+a.id+"')"):'')); }).join(''):row('<span style="color:#666;">Nichts gesperrt.</span>');
+  h+='<div style="font-weight:800;margin:14px 0 6px;">Freischalt-Code</div>'+row('<div style="font-size:13px;color:#555;">Für ein neues Gerät: Code erzeugen und der Person durchgeben (einmal verwendbar, 24 Std.).</div>'+btn('#2B3A67','Neuen Code erzeugen','kfsNeuerCode()')+((o.codes||[]).length?'<div style="font-size:12px;color:#666;margin-top:6px;">Offen: '+o.codes.map(c=>'<b data-no-translate>'+kfsEsc(c.code)+'</b>').join(', ')+'</div>':''));
+  const gs=o.geraete||[];
+  h+='<div style="font-weight:800;margin:14px 0 6px;">Freigeschaltete Geräte ('+gs.length+')</div>';
+  h+=gs.length?gs.map(a=>row('<div><b>'+kfsEsc(a.bezeichnung||kfsDevName(a.user_agent))+'</b> <span data-no-translate style="color:#888;">('+kfsEsc(a.code)+')</span></div><div style="font-size:12px;color:#666;">'+kfsEsc(kfsDevName(a.user_agent))+' · zuletzt '+kfsAgo(a.zuletzt)+(a.letzte_filiale?' · '+kfsEsc(a.letzte_filiale):'')+' · gültig bis '+(a.gueltig_bis?new Date(a.gueltig_bis).toLocaleDateString('de-AT'):'–')+'</div>'+btn('#777','Umbenennen',"kfsUmbenennen('"+a.id+"','"+kfsEsc(a.bezeichnung||'').replace(/'/g,'')+"')")+btn('#B3261E','Sperren',"kfsSperren('"+a.id+"')")+btn('#555','Entfernen',"kfsEntfernen('"+a.id+"')"))).join(''):row('<span style="color:#666;">Noch keine Geräte freigeschaltet.</span>');
+  const v=o.versuche||[];
+  h+='<div style="font-weight:800;margin:14px 0 6px;">Fehlversuche (7 Tage)'+(+o.neu?' · <span style="color:#B3261E;">'+o.neu+' neu</span>':'')+'</div>'+row(v.length?v.map(x=>'<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #eee;"><b>'+kfsAgo(x.ts)+'</b> · '+kfsEsc(x.grund==='sperre_ausgeloest'?'🔒 Sperre ausgelöst':x.grund==='pin_falsch'?'falsche PIN':x.grund==='code_falsch'?'falscher Code':x.grund)+(x.store_id?' · '+kfsEsc(x.store_id):'')+' · '+kfsEsc(x.bezeichnung||x.code||'unbekanntes Gerät')+(x.ip?' · <span data-no-translate>'+kfsEsc(x.ip)+'</span>':'')+'</div>').join('')+btn('#555','Als gelesen markieren',"kfsQuittieren()"):'<span style="color:#666;">Keine Fehlversuche.</span>');
+  b.innerHTML=h;
+}
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
