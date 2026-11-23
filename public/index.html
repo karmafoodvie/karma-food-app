@@ -1833,7 +1833,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.317';
+const APP_VERSION='6.99.319';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8702,8 +8702,12 @@ function snParse(text){
   }
   return out;
 }
+// 24.11.26 (Wunsch Gurl): "2x schoko coco für morgen" wurde nicht erkannt — Füllwörter (für, morgen, bitte …) zählten als
+// Namensteil, und "schoko/kokos" passte nicht zu "Choco Coco Cake". Jetzt: Füllwörter ignorieren, gängige Schreibweisen angleichen.
+const SN_SYN={schoko:'choco',schokolade:'choco',chocolate:'choco',choc:'choco',kokos:'coco',kokosnuss:'coco',cocos:'coco'};
+const SN_STOP=new Set(['cake','cakes','raw','rawcake','rawcakes','kuchen','stk','stueck','stuck','mal','fur','fuer','morgen','heute','uebermorgen','bitte','pls','please','danke','noch','auch','extra','mehr','dazu','zusaetzlich','zusatzlich','nachtraeglich','nachtraglich','jeweils','jede','jeden','von','dem','den','der','die','das','ein','eine','einen','und','kommende','naechste','nachste','woche','sorte','pro','nur','gerne','bestellen']);
 function snMatch(name,items){
-  const q=snNorm(name).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=3 && !['cake','raw','kuchen','stk','stueck','mal'].includes(w));
+  const q=snNorm(name).replace(/[^a-z0-9 ]/g,' ').split(/\s+/).map(w=>SN_SYN[w]||w).filter(w=>w.length>=3 && !SN_STOP.has(w));
   if(!q.length) return null;
   const hits=items.filter(a=>{ const nm=snNorm(a.name); return q.every(w=>nm.split(/[^a-z0-9]+/).some(x=>x.startsWith(w)) || nm.includes(w)); });
   return hits.length===1 ? hits[0] : null;
