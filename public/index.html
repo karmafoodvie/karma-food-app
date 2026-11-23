@@ -198,10 +198,24 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
         if(!n&&f.tagName==='SELECT') n='Auswahl';
         if(!n) n='Eingabe';
         f.setAttribute('aria-label',n.slice(0,120));}
+      // Klickbare Flächen, die keine echten Knöpfe sind: per Tastatur erreichbar machen
+      var cs=document.querySelectorAll('[onclick]:not(button):not(a):not(input):not(select):not(textarea):not(summary):not([tabindex])');
+      for(var k=0;k<cs.length;k++){var c=cs[k];c.setAttribute('tabindex','0');c.setAttribute('data-kf-key','1');if(c.nodeName!=='TD'&&c.nodeName!=='TR'&&c.nodeName!=='TH'&&!c.getAttribute('role'))c.setAttribute('role','button');}
+      // Seitenstruktur für Screenreader
+      var tb=document.getElementById('topbar');if(tb&&!tb.getAttribute('role'))tb.setAttribute('role','banner');
+      var ct=document.getElementById('content');if(ct&&!ct.getAttribute('role'))ct.setAttribute('role','main');
+      var bn=document.getElementById('bottomnav');if(bn&&!bn.getAttribute('aria-label'))bn.setAttribute('aria-label','Hauptnavigation');
+      var tt=document.getElementById('tb-title');if(tt&&!tt.getAttribute('role')){tt.setAttribute('role','heading');tt.setAttribute('aria-level','1');}
+      var hs=document.querySelectorAll('.section-lbl:not([role]),.fc-day-name:not([role])');
+      for(var h=0;h<hs.length;h++){hs[h].setAttribute('role','heading');hs[h].setAttribute('aria-level',hs[h].classList.contains('fc-day-name')?'3':'2');}
+      var nb=document.querySelectorAll('.nav-btn');
+      for(var q=0;q<nb.length;q++){if(nb[q].classList.contains('active'))nb[q].setAttribute('aria-current','page');else nb[q].removeAttribute('aria-current');}
+      var ths=document.querySelectorAll('th:not([scope])');for(var w=0;w<ths.length;w++)ths[w].setAttribute('scope','col');
     }catch(e){}
   }
   var tm;function sched(){clearTimeout(tm);tm=setTimeout(run,300);}
-  document.addEventListener('DOMContentLoaded',function(){try{new MutationObserver(sched).observe(document.body,{childList:true,subtree:true});}catch(e){} sched();});
+  document.addEventListener('keydown',function(e){if(e.key!=='Enter'&&e.key!==' ')return;var t=e.target;if(t&&t.getAttribute&&t.getAttribute('data-kf-key')==='1'){e.preventDefault();t.click();}});
+  document.addEventListener('DOMContentLoaded',function(){try{new MutationObserver(sched).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});}catch(e){} sched();});
 })();
 </script>
 </head>
@@ -221,7 +235,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <div class="login-card" id="pin-form" style="display:none;">
     <div style="font-size:14px;font-weight:500;" id="pin-store-name"></div>
     <div style="font-size:12px;color:#666;">PIN eingeben:</div>
-    <input class="pin-input" type="password" inputmode="numeric" maxlength="4" id="pin-input" placeholder="••••">
+    <input class="pin-input" type="password" inputmode="numeric" maxlength="4" id="pin-input" placeholder="••••" aria-label="PIN" autocomplete="off" enterkeyhint="go">
     <button class="login-btn" onclick="checkPin()">Einloggen</button>
     <button class="back-btn" onclick="showStorePicker()">← Zurück</button>
     <div id="pin-error" style="color:#A32D2D;font-size:12px;text-align:center;display:none;">Falscher PIN</div>
@@ -905,7 +919,7 @@ async function saveOnboardingDay(editId){
 window.saveOnboardingDay=saveOnboardingDay;
 
 async function deleteOnboardingDay(id){
-  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  if(!await kfConfirm('Diesen Eintrag wirklich löschen?')) return;
   try{
     await api(`onboarding_program?id=eq.${id}`,{method:'DELETE'});
     renderOnboarding();
@@ -1006,7 +1020,7 @@ async function saveRabattCode(id){
 window.saveRabattCode=saveRabattCode;
 
 async function deleteRabattCode(id){
-  if(!confirm('Diesen Code wirklich löschen?')) return;
+  if(!await kfConfirm('Diesen Code wirklich löschen?')) return;
   try{
     await api(`rabatt_codes?id=eq.${id}`,{method:'DELETE'});
     showToast('✔ Gelöscht');
@@ -1649,7 +1663,7 @@ async function saveGuideEntry(id){
 }
 
 async function deleteGuideEntry(id){
-  if(!confirm('Diesen Eintrag löschen?')) return;
+  if(!await kfConfirm('Diesen Eintrag löschen?')) return;
   try{
     await api(`guide_eintraege?id=eq.${id}`,{method:'DELETE'});
     showToast('Gelöscht');
@@ -1877,6 +1891,7 @@ async function translateEl(el) {
   }
 }
 async function setLang(l) {
+  try{ document.documentElement.lang=(l==='en'?'en':'de'); }catch(e){}
   lang = l;
   localStorage.setItem('kf_lang', l);
   document.getElementById('lang-menu').style.display = 'none';
@@ -2208,7 +2223,7 @@ window.setKfDishNote=setKfDishNote;
 
 async function submitKfFeedback(){
   const rated=Object.entries(_kfMultiDraft).filter(([,v])=>v.v!=null);
-  if(!rated.length){ alert('Bitte mindestens ein Gericht bewerten 🙂'); return; }
+  if(!rated.length){ kfAlert('Bitte mindestens ein Gericht bewerten 🙂'); return; }
   const storeId=document.getElementById('kf-store')?.value||null;
   const kommentarAllgemein=document.getElementById('kf-kommentar')?.value?.trim()||null;
   const rows=rated.map(([dishName,v])=>({
@@ -2234,7 +2249,7 @@ async function submitKfFeedback(){
       <div style="font-size:13px;color:#666;margin-top:6px;">${rated.length} Gericht${rated.length>1?'e':''} bewertet — hilft uns wirklich weiter.</div>
       <button onclick="renderKfForm()" style="margin-top:18px;padding:11px 18px;border:1.5px solid #eee;border-radius:10px;background:#fff;color:#666;font-size:13px;cursor:pointer;">Noch eine Bewertung abgeben</button>
     </div>`;
-  }catch(e){ console.error(e); alert('Fehler beim Speichern — bitte nochmal versuchen.'); }
+  }catch(e){ console.error(e); kfAlert('Fehler beim Speichern — bitte nochmal versuchen.'); }
 }
 window.submitKfFeedback=submitKfFeedback;
 
@@ -2372,7 +2387,58 @@ async function loginAs(store){
     }
   }
 }
-function doLogout(){ if(confirm('Abmelden?')){ localStorage.removeItem('kf_store'); location.reload(); } }
+
+// Eigene Dialoge statt confirm()/alert() (19.11.26): Browser-Dialoge werden in eingebetteten Ansichten und teils am Handy unterdrückt,
+// dann passierte beim Bestätigen nichts. kfConfirm liefert ein Promise<boolean>, kfAlert zeigt einen Hinweis.
+function kfDialog(msg, opts){
+  opts=opts||{};
+  return new Promise(function(resolve){
+    var en=(typeof lang!=='undefined'&&lang==='en');
+    var prev=document.activeElement;
+    var ov=document.createElement('div'); ov.className='kf-dlg'; ov.setAttribute('role',opts.alert?'alertdialog':'dialog'); ov.setAttribute('aria-modal','true'); ov.setAttribute('aria-label',en?'Confirmation':'Rückfrage');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(3,39,43,.45);display:flex;align-items:center;justify-content:center;padding:20px;';
+    var body=escHtml(String(msg==null?'':msg)).replace(/\n/g,'<br>');
+    ov.innerHTML='<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:22px 20px 18px;box-shadow:0 24px 60px rgba(3,39,43,.35);text-align:center;font-family:inherit;">'
+      +'<div style="font-size:16px;line-height:1.45;color:#03272B;margin-bottom:18px;overflow-wrap:anywhere;">'+body+'</div>'
+      +'<div style="display:flex;gap:10px;">'
+      +(opts.alert?'':'<button type="button" data-k="no" style="flex:1;min-height:48px;border-radius:8px;border:1px solid #D3CEC5;background:#fff;color:#03272B;font-size:16px;font-weight:600;cursor:pointer;">'+(en?'Cancel':'Abbrechen')+'</button>')
+      +'<button type="button" data-k="yes" style="flex:1;min-height:48px;border-radius:8px;border:none;background:#03272B;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">OK</button>'
+      +'</div></div>';
+    function done(v){ document.removeEventListener('keydown',onKey,true); try{ov.remove();}catch(e){} try{prev&&prev.focus&&prev.focus();}catch(e){} resolve(v); }
+    function onKey(e){ if(e.key==='Escape'){ e.preventDefault(); done(opts.alert?true:false); } }
+    document.addEventListener('keydown',onKey,true);
+    ov.addEventListener('click',function(e){ var k=e.target&&e.target.getAttribute&&e.target.getAttribute('data-k'); if(k==='yes') done(true); else if(k==='no'||e.target===ov) done(opts.alert?true:false); });
+    document.body.appendChild(ov);
+    try{ ov.querySelector('[data-k="yes"]').focus(); }catch(e){}
+  });
+}
+function kfConfirm(msg){ return kfDialog(msg,{}); }
+function kfAlert(msg){ return kfDialog(msg,{alert:true}); }
+window.kfConfirm=kfConfirm; window.kfAlert=kfAlert;
+function doLogout(){
+  // Eigener Dialog statt confirm(): in geschützten Rahmen (z. B. eingebettete Vorschau) und auf manchen Handys wird confirm() unterdrückt, dann passierte beim Abmelden nichts.
+  try{
+    if(document.getElementById('kf-logout-dlg')) return;
+    var en=(typeof lang!=='undefined'&&lang==='en');
+    var ov=document.createElement('div'); ov.id='kf-logout-dlg'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(3,39,43,.45);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML='<div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:22px 20px 18px;box-shadow:0 24px 60px rgba(3,39,43,.35);text-align:center;font-family:inherit;">'
+      +'<div style="font-size:18px;font-weight:700;color:#03272B;margin-bottom:6px;">'+(en?'Log out?':'Abmelden?')+'</div>'
+      +'<div style="font-size:14px;color:#566F73;margin-bottom:18px;">'+(en?'You can log in again with your PIN.':'Du kannst dich danach wieder mit deiner PIN anmelden.')+'</div>'
+      +'<div style="display:flex;gap:10px;">'
+      +'<button type="button" id="kf-logout-no" style="flex:1;min-height:48px;border-radius:8px;border:1px solid #D3CEC5;background:#fff;color:#03272B;font-size:16px;font-weight:600;cursor:pointer;">'+(en?'Cancel':'Abbrechen')+'</button>'
+      +'<button type="button" id="kf-logout-yes" style="flex:1;min-height:48px;border-radius:8px;border:none;background:#B3261E;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">'+(en?'Log out':'Abmelden')+'</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    function close(){ try{ov.remove();}catch(e){} document.removeEventListener('keydown',onKey); }
+    function onKey(e){ if(e.key==='Escape') close(); }
+    document.addEventListener('keydown',onKey);
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+    document.getElementById('kf-logout-no').onclick=close;
+    document.getElementById('kf-logout-yes').onclick=function(){ try{localStorage.removeItem('kf_store');}catch(e){} location.reload(); };
+    document.getElementById('kf-logout-no').focus();
+  }catch(e){ try{localStorage.removeItem('kf_store');}catch(x){} location.reload(); }
+}
 
 async function loadNotifBadge(){
   if(currentStore?.id!=='zentrale') return;
@@ -6707,7 +6773,7 @@ function ftNachFeiertagHtml(D,H,mitButton){
   if(vd.length){
     const srcDishes=ftVortagDishes(H);
     if(isOrg&&mitButton){
-      h+=`<div style="margin-top:6px;"><button onclick="if(confirm('${ftFmt(D)} läuft das Menü von ${ftFmt(H)}?'))ftTauschSetzen('${D}','${H}')" style="border:none;background:#B45309;color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;">🔁 ${ftFmt(D)} → Menü von ${ftFmt(H)} laufen lassen</button>${srcDishes.length?`<div style="font-size:10.5px;margin-top:3px;color:#B91C1C;">Achtung: auch das Menü von ${ftFmt(H)} enthält ${srcDishes.map(escAttr).join(', ')} — anderen Tag wählen (Organisation → Menü-Kontrolle).</div>`:''}</div>`;
+      h+=`<div style="margin-top:6px;"><button onclick="kfConfirm('${ftFmt(D)} läuft das Menü von ${ftFmt(H)}?').then(function(ok){if(ok)ftTauschSetzen('${D}','${H}')})" style="border:none;background:#B45309;color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;">🔁 ${ftFmt(D)} → Menü von ${ftFmt(H)} laufen lassen</button>${srcDishes.length?`<div style="font-size:10.5px;margin-top:3px;color:#B91C1C;">Achtung: auch das Menü von ${ftFmt(H)} enthält ${srcDishes.map(escAttr).join(', ')} — anderen Tag wählen (Organisation → Menü-Kontrolle).</div>`:''}</div>`;
     } else h+=`<div style="font-size:10.5px;margin-top:3px;">Organisation stellt das Menü um (Menü-Kontrolle → Menü-Tausch).</div>`;
   }
   return h+'</div>';
@@ -6738,7 +6804,7 @@ function ftListeHtml(){
   const T=ftToday(); const isOrg=currentStore?.id==='zentrale';
   const rows=ftUpcoming(T,6).map(H=>{
     const N=ftNextWorkday(H); const dayAfter=ftDayAfter(N);
-    return `<div style="padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><b>${ftFmt(H)}</b> · ${ftLabel(H)}${dayAfter?`<div style="font-size:11.5px;color:var(--sub);margin-top:2px;">Danach ${ftFmt(N)}: Vortags-Produktion nicht möglich.${ftVortagDishes(N).length?` Menü enthält <b style="color:#B91C1C;">${ftVortagDishes(N).map(escAttr).join(', ')}</b>.`:' Menü ohne Vortags-Gericht.'}${MENU_TAUSCH[N]?` <span style="color:#166534;font-weight:700;">✅ getauscht (Menü von ${ftFmt(MENU_TAUSCH[N])})</span>`:(isOrg&&ftVortagDishes(N).length?` <button onclick="if(confirm('${ftFmt(N)} läuft das Menü von ${ftFmt(H)}?'))ftTauschSetzen('${N}','${H}')" style="border:1px solid #B45309;background:#fff;color:#B45309;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;">🔁 Menü von ${ftFmt(H)} nehmen</button>`:'')}</div>`:''}</div>`;
+    return `<div style="padding:7px 0;border-bottom:0.5px solid var(--border);font-size:12.5px;"><b>${ftFmt(H)}</b> · ${ftLabel(H)}${dayAfter?`<div style="font-size:11.5px;color:var(--sub);margin-top:2px;">Danach ${ftFmt(N)}: Vortags-Produktion nicht möglich.${ftVortagDishes(N).length?` Menü enthält <b style="color:#B91C1C;">${ftVortagDishes(N).map(escAttr).join(', ')}</b>.`:' Menü ohne Vortags-Gericht.'}${MENU_TAUSCH[N]?` <span style="color:#166534;font-weight:700;">✅ getauscht (Menü von ${ftFmt(MENU_TAUSCH[N])})</span>`:(isOrg&&ftVortagDishes(N).length?` <button onclick="kfConfirm('${ftFmt(N)} läuft das Menü von ${ftFmt(H)}?').then(function(ok){if(ok)ftTauschSetzen('${N}','${H}')})" style="border:1px solid #B45309;background:#fff;color:#B45309;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;">🔁 Menü von ${ftFmt(H)} nehmen</button>`:'')}</div>`:''}</div>`;
   }).join('');
   return `<div class="section-lbl">🎉 Gesetzliche Feiertage (Österreich)</div><div class="card" style="padding:10px 12px;margin-bottom:14px;">
     <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Automatisch berechnet, immer geschlossen. Am Feiertag und am Tag davor erscheint ein Hinweis auf der Startseite.</div>${rows}</div>`;
@@ -8979,7 +9045,7 @@ window.renderEpochenCheck=renderEpochenCheck;
 async function cleanupStaleFc(){
   const ids=window._epochenCheckData?.staleFcIds||[];
   if(!ids.length) return;
-  if(!confirm(`${ids.length} Forecast-Karteileichen wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return;
+  if(!await kfConfirm(`${ids.length} Forecast-Karteileichen wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return;
   try{
     await api(`forecast_qty?id=in.(${ids.join(',')})`,{method:'DELETE'});
     showToast('✔ Karteileichen gelöscht');
@@ -8991,7 +9057,7 @@ window.cleanupStaleFc=cleanupStaleFc;
 async function cleanupCollisions(){
   const ids=window._epochenCheckData?.collisionIds||[];
   if(!ids.length) return;
-  if(!confirm(`Bei ${ids.length} Rezepten den Zeitstempel entfernen? Die Rezepte selbst bleiben erhalten.`)) return;
+  if(!await kfConfirm(`Bei ${ids.length} Rezepten den Zeitstempel entfernen? Die Rezepte selbst bleiben erhalten.`)) return;
   try{
     await api(`allergene_rezepturen?id=in.(${ids.join(',')})`,{method:'PATCH',body:JSON.stringify({zkey:null})});
     showToast('✔ Zeitstempel entfernt');
@@ -9104,7 +9170,7 @@ async function gfUpload(i,input){
 }
 async function gfSetStatus(i,status){
   const d=(window._gfList||[])[i]; if(!d) return;
-  if(status==='freigegeben' && !confirm(`„${d.name}"\nFoto jetzt für die Küche sichtbar machen?`)) return;
+  if(status==='freigegeben' && !await kfConfirm(`„${d.name}"\nFoto jetzt für die Küche sichtbar machen?`)) return;
   try{
     await api(`gericht_fotos?dish_name=eq.${encodeURIComponent(d.name)}`,{method:'PATCH',body:JSON.stringify({status,freigegeben_am:status==='freigegeben'?new Date().toISOString():null})});
     showToast(status==='freigegeben'?'✔ Für die Küche freigegeben':'✔ Zurück im Test — Küche sieht es nicht mehr');
@@ -9118,7 +9184,7 @@ async function gfSaveHinweis(i){
 }
 async function gfRemove(i){
   const d=(window._gfList||[])[i]; if(!d) return;
-  if(!confirm(`Foto zu „${d.name}" entfernen?`)) return;
+  if(!await kfConfirm(`Foto zu „${d.name}" entfernen?`)) return;
   try{ await api(`gericht_fotos?dish_name=eq.${encodeURIComponent(d.name)}`,{method:'DELETE'}); showToast('Foto entfernt'); renderGerichtFotos(); }
   catch(e){ console.error(e); showToast('Fehler beim Entfernen',true); }
 }
@@ -9456,7 +9522,7 @@ async function skKontrolleFreigeben(id){
   const f=d.hinweis||'name';
   if(f==='neu'){
     let p; try{ p=JSON.parse(d.sheet_name); }catch(e){ showToast('Daten nicht lesbar',true); return; }
-    if(!confirm(`Neues Schrankerl-Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag}\n„${p.name}"\nzusätzlich anlegen? Bestehende Menüs bleiben unverändert.`)) return;
+    if(!await kfConfirm(`Neues Schrankerl-Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag}\n„${p.name}"\nzusätzlich anlegen? Bestehende Menüs bleiben unverändert.`)) return;
     try{
       const ex=await api(`schrankerl_menu?woche=eq.${d.woche}&slot=eq.${encodeURIComponent(d.tag)}&select=id`);
       if(ex&&ex.length){ showToast('Dieses Menü gibt es schon — nichts überschrieben',true); return; }
@@ -9471,7 +9537,7 @@ async function skKontrolleFreigeben(id){
   if(f==='allergene'){ const t=String(val||'').trim(); val=(t===''||t==='-')?[]:t.split(/[,;\/\s]+/).filter(Boolean).map(x=>x.toUpperCase()); }
   const col=f==='allergene'?'allergene_codes':f;
   if(!['name','spezial','zutaten','allergene_codes'].includes(col)){ showToast('Unbekanntes Feld',true); return; }
-  if(!confirm(`Schrankerl Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag}\n${SK_FELD_LBL[f]||f} aus dem Sheet übernehmen?`)) return;
+  if(!await kfConfirm(`Schrankerl Menü ${d.woche} · ${SK_SLOT_LBL[d.tag]||d.tag}\n${SK_FELD_LBL[f]||f} aus dem Sheet übernehmen?`)) return;
   try{
     await api(`schrankerl_menu?woche=eq.${d.woche}&slot=eq.${encodeURIComponent(d.tag)}`,{method:'PATCH',body:JSON.stringify({[col]:val})});
     await api(`menu_sheet_diffs?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'freigegeben',entschieden_am:new Date().toISOString(),entschieden_von:currentStore?.name||'Organisation'})});
@@ -9496,7 +9562,7 @@ async function menuKontrolleFreigeben(id){
   const todayStr=todayISO();
   const dates=mkOccurrenceDates(d.woche,d.tag,todayStr,120);
   if(!dates.length){ showToast('Kein Termin für diese Menü-Woche gefunden',true); return; }
-  if(!confirm(`„${d.app_name}"\n→ „${d.sheet_name}"\n\nFür ${MK_TAGE[d.tag]} (Woche ${d.woche}) übernehmen? Gilt ab ${mkDateLabel(dates[0])} und stellt Forecast/Entsorgung/Feedback der betroffenen Tage mit um.`)) return;
+  if(!await kfConfirm(`„${d.app_name}"\n→ „${d.sheet_name}"\n\nFür ${MK_TAGE[d.tag]} (Woche ${d.woche}) übernehmen? Gilt ab ${mkDateLabel(dates[0])} und stellt Forecast/Entsorgung/Feedback der betroffenen Tage mit um.`)) return;
   const enc=encodeURIComponent, inList=dates.join(',');
   try{
     // 1) Freigabe als Override speichern — wird beim Login über die Menüdaten gelegt
@@ -10184,7 +10250,7 @@ async function saveZutatenMaster(id){
 window.saveZutatenMaster=saveZutatenMaster;
 
 async function deleteZutatenMaster(id){
-  if(!confirm('Diese Zutat wirklich aus der Datenbank löschen?')) return;
+  if(!await kfConfirm('Diese Zutat wirklich aus der Datenbank löschen?')) return;
   try{
     await api(`zutaten_master?id=eq.${id}`,{method:'DELETE'});
     showToast('✓ Gelöscht');
@@ -10248,20 +10314,20 @@ function skEditOpen(id){
 }
 async function skEditSave(id){
   const v=k=>(document.getElementById('sk-'+k+'-'+id)||{}).value||'';
-  const name=v('n').trim(); if(!name){ alert('Name fehlt'); return; }
+  const name=v('n').trim(); if(!name){ kfAlert('Name fehlt'); return; }
   const body={name, spezial:v('s').trim()||null, grammatur:v('g').trim()||null,
     allergene_codes:v('a').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean),
     zutaten:v('z').trim()||null};
   try{ await api(`schrankerl_menu?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(body)}); }
-  catch(e){ alert('Speichern fehlgeschlagen'); return; }
+  catch(e){ kfAlert('Speichern fehlgeschlagen'); return; }
   if(typeof showToast==='function') showToast('Gespeichert ✓');
   renderKitchen();
 }
 async function skNeuesMenue(){
   const n=(window._skN||4)+1;
-  if(!confirm('Menü '+n+' mit 3 leeren Gerichten anlegen? Danach läuft die Rotation über '+n+' Menüs.')) return;
+  if(!await kfConfirm('Menü '+n+' mit 3 leeren Gerichten anlegen? Danach läuft die Rotation über '+n+' Menüs.')) return;
   const rows=['curry','salat','dessert'].map(slot=>({woche:n,slot,name:'Neues '+slot.charAt(0).toUpperCase()+slot.slice(1),allergene_codes:[]}));
-  try{ await api('schrankerl_menu',{method:'POST',body:JSON.stringify(rows)}); }catch(e){ alert('Anlegen fehlgeschlagen'); return; }
+  try{ await api('schrankerl_menu',{method:'POST',body:JSON.stringify(rows)}); }catch(e){ kfAlert('Anlegen fehlgeschlagen'); return; }
   window._skN=n; location.reload();
 }
 async function renderSchrankerlTab(){
@@ -10769,7 +10835,7 @@ async function tgSendAsana(){
   if(!allRows.length){ showToast('Keine Artikel in der Liste',true); return; }
   const nBest=allRows.filter(r=>r.dataset.bestellen==='1').length;
   const test=document.getElementById('tg-asana-test')?.checked===true;
-  if(!test && !confirm(`Komplette Wochenbestellung (${allRows.length} Artikel, davon ${nBest} 🛒 zu bestellen) jetzt als Aufgabe an Simone schicken?`)) return;
+  if(!test && !await kfConfirm(`Komplette Wochenbestellung (${allRows.length} Artikel, davon ${nBest} 🛒 zu bestellen) jetzt als Aufgabe an Simone schicken?`)) return;
   const artikel=allRows.map(r=>({
     name:(r.children[0].dataset.name||r.children[0].textContent).trim(),
     kategorie:(r.closest('.tg-kat')?.dataset.kat||r.closest('.tg-kat')?.querySelector('summary span')?.textContent||'Sonstiges').trim(),
@@ -10833,7 +10899,7 @@ function tgArtikelMenu(id){
     <select id="tg-menu-kat" style="width:100%;padding:9px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px;">${allKats.map(k=>`<option value="${escAttr(k)}"${k.toLowerCase()===cur?' selected':''}>${k}</option>`).join('')}</select>
     <button onclick="tgArtikelKatSpeichern(${id})" style="width:100%;padding:10px;border:none;border-radius:10px;background:#1a1a18;color:#D4FF3F;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;">Verschieben</button>
     <div style="display:flex;gap:8px;">
-      <button onclick="if(confirm('„'+${JSON.stringify(name).replace(/"/g,'&quot;')}+'“ aus der Liste entfernen?')){document.getElementById('tg-menu-ov')?.remove();deleteTgArtikel(${id});}" style="flex:1;padding:9px;border:1.5px solid #DC2626;border-radius:10px;background:#fff;color:#DC2626;font-size:12.5px;font-weight:700;cursor:pointer;">Entfernen</button>
+      <button onclick="kfConfirm('„'+${JSON.stringify(name).replace(/"/g,'&quot;')}+'“ aus der Liste entfernen?').then(function(ok){if(ok){document.getElementById('tg-menu-ov')?.remove();deleteTgArtikel(${id});}})" style="flex:1;padding:9px;border:1.5px solid #DC2626;border-radius:10px;background:#fff;color:#DC2626;font-size:12.5px;font-weight:700;cursor:pointer;">Entfernen</button>
       <button onclick="document.getElementById('tg-menu-ov')?.remove()" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:10px;background:#fff;color:var(--sub);font-size:12.5px;font-weight:700;cursor:pointer;">Abbrechen</button>
     </div></div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
@@ -10948,7 +11014,7 @@ window.addRawAsNewMaster=addRawAsNewMaster;
 // Entfernt einen rohen Zutaten-Text überall, wo er (fehlerhaft) vorkommt — z.B. für versehentlich
 // verklebte oder kaputte Einträge, die nirgends hingehören.
 async function removeRawEverywhere(raw){
-  if(!confirm(`"${raw}" wirklich aus ALLEN Gerichten entfernen? Das kann nicht rückgängig gemacht werden.`)) return;
+  if(!await kfConfirm(`"${raw}" wirklich aus ALLEN Gerichten entfernen? Das kann nicht rückgängig gemacht werden.`)) return;
   await replaceRawEverywhere(raw, null);
   showToast(`✓ "${raw}" überall entfernt`);
   renderZutatenMergeTool();
@@ -12971,7 +13037,7 @@ async function toggleTransporterTaskDone(id, done){
 window.toggleTransporterTaskDone=toggleTransporterTaskDone;
 
 async function deleteTransporterTask(id){
-  if(!confirm('Diese Aufgabe wirklich löschen?')) return;
+  if(!await kfConfirm('Diese Aufgabe wirklich löschen?')) return;
   try{
     await api(`transporter_tasks?id=eq.${id}`,{method:'DELETE'});
     loadTransporterTasksList();
@@ -13092,7 +13158,7 @@ async function loadMesseTermineList(){
 }
 
 async function deleteMesseTermin(id){
-  if(!confirm('Diesen Messe-Termin wirklich löschen?')) return;
+  if(!await kfConfirm('Diesen Messe-Termin wirklich löschen?')) return;
   try{
     await api(`messe_termine?id=eq.${id}`,{method:'DELETE'});
     loadMesseTermineList();
@@ -13408,10 +13474,10 @@ async function saveAllergenEntry(){
   const zutaten=document.getElementById('all-zutaten').value.trim();
   const verantwortlich=document.getElementById('all-verantwortlich').value.trim();
   const codes=Array.from(document.querySelectorAll('.all-check-input:checked')).map(c=>c.value);
-  if(!gericht){ alert('Bitte ein Gericht eingeben.'); return; }
+  if(!gericht){ kfAlert('Bitte ein Gericht eingeben.'); return; }
   try{
     await api('allergene_rezepturen',{method:'POST',body:JSON.stringify([{gericht,zutaten,allergene_codes:codes,verantwortlich,aktualisiert_am:new Date().toISOString()}])});
-  }catch(e){ console.error(e); alert('Fehler beim Speichern.'); return; }
+  }catch(e){ console.error(e); kfAlert('Fehler beim Speichern.'); return; }
   document.getElementById('all-gericht').value='';
   document.getElementById('all-zutaten').value='';
   document.getElementById('all-verantwortlich').value='';
@@ -13420,7 +13486,7 @@ async function saveAllergenEntry(){
 }
 
 async function deleteAllergenEntry(id){
-  if(!confirm('Wirklich löschen?')) return;
+  if(!await kfConfirm('Wirklich löschen?')) return;
   try{ await api(`allergene_rezepturen?id=eq.${id}`,{method:'DELETE'}); }catch(e){ console.error(e); return; }
   refreshAllergeneListAdmin();
 }
@@ -13712,10 +13778,10 @@ async function saveSchulungThema(){
   const titel=document.getElementById('sch-titel').value.trim();
   const erklaerung=document.getElementById('sch-erklaerung').value.trim();
   const intervall=parseInt(document.getElementById('sch-intervall').value)||12;
-  if(!titel){ alert('Bitte ein Thema eingeben.'); return; }
+  if(!titel){ kfAlert('Bitte ein Thema eingeben.'); return; }
   try{
     await api('schulungsthemen',{method:'POST',body:JSON.stringify([{titel,erklaerung,intervall_monate:intervall}])});
-  }catch(e){ console.error(e); alert('Fehler beim Speichern.'); return; }
+  }catch(e){ console.error(e); kfAlert('Fehler beim Speichern.'); return; }
   document.getElementById('sch-titel').value='';
   document.getElementById('sch-erklaerung').value='';
   document.getElementById('sch-intervall').value='12';
@@ -13724,7 +13790,7 @@ async function saveSchulungThema(){
 }
 
 async function deleteSchulungThema(id){
-  if(!confirm('Thema wirklich löschen? Bereits eingetragene Schulungen bleiben als Verlauf erhalten.')) return;
+  if(!await kfConfirm('Thema wirklich löschen? Bereits eingetragene Schulungen bleiben als Verlauf erhalten.')) return;
   try{ await api(`schulungsthemen?id=eq.${id}`,{method:'DELETE'}); }catch(e){ console.error(e); return; }
   refreshSchulungThemenAdmin();
   fillSchulungDropdowns();
@@ -13787,7 +13853,7 @@ async function toggleMitarbeiterAusgeschieden(id, currentlyAusgeschieden){
 window.toggleMitarbeiterAusgeschieden=toggleMitarbeiterAusgeschieden;
 
 async function deleteMitarbeiter(id){
-  if(!confirm('Diese Person komplett aus der Liste löschen? (Für "nicht mehr tätig" reicht der Button daneben — hier wird der Eintrag unwiderruflich entfernt.)')) return;
+  if(!await kfConfirm('Diese Person komplett aus der Liste löschen? (Für "nicht mehr tätig" reicht der Button daneben — hier wird der Eintrag unwiderruflich entfernt.)')) return;
   try{
     await api(`mitarbeitende?id=eq.${id}`,{method:'DELETE'});
     await refreshMitarbeitendeListe();
@@ -14140,7 +14206,7 @@ async function checkAndNotifyOverdueHygiene(byName, ausgeschiedenMap){
 }
 
 async function deleteHygieneEntry(id){
-  if(!confirm('Eintrag wirklich löschen?')) return;
+  if(!await kfConfirm('Eintrag wirklich löschen?')) return;
   try{ await api(`hygiene_schulungen?id=eq.${id}`,{method:'DELETE'}); }catch(e){console.error(e);return;}
   renderHygieneSchulung();
 }
@@ -14164,10 +14230,10 @@ async function saveSchulungEntry(){
   // ausgeschiedene tauchen dort gar nicht erst auf), zu einem Text zusammengefügt für die DB-Spalte.
   const teilnehmer=[...document.querySelectorAll('.sch-teilnehmer-cb:checked')].map(cb=>cb.value).join(', ');
   const unterschrieben=document.getElementById('sch-unterschrieben-box')?.dataset.value==='1';
-  if(!thema_id||!store_id||!datum){ alert('Bitte Thema, Filiale und Datum ausfüllen.'); return; }
+  if(!thema_id||!store_id||!datum){ kfAlert('Bitte Thema, Filiale und Datum ausfüllen.'); return; }
   try{
     await api('schulungen',{method:'POST',body:JSON.stringify([{thema_id:parseInt(thema_id),store_id,datum,durchgefuehrt_von,teilnehmer,unterschrieben}])});
-  }catch(e){ console.error(e); alert('Fehler beim Speichern.'); return; }
+  }catch(e){ console.error(e); kfAlert('Fehler beim Speichern.'); return; }
   document.getElementById('sch-durchgefuehrt').value='';
   document.querySelectorAll('.sch-teilnehmer-cb:checked').forEach(cb=>cb.checked=false);
   const box=document.getElementById('sch-unterschrieben-box');
@@ -14200,7 +14266,7 @@ async function refreshSchulungHistorie(){
 }
 
 async function deleteSchulungEntry(id){
-  if(!confirm('Eintrag wirklich löschen?')) return;
+  if(!await kfConfirm('Eintrag wirklich löschen?')) return;
   try{ await api(`schulungen?id=eq.${id}`,{method:'DELETE'}); }catch(e){ console.error(e); return; }
   refreshSchulungHistorie();
 }
@@ -14459,7 +14525,7 @@ async function dpAddPerson(){
 }
 async function dpDelPerson(id){
   const p=dpPerson(id); if(!p) return;
-  if(!confirm(`${p.name} aus dem Team-Pool entfernen? (bestehende Pläne bleiben erhalten)`)) return;
+  if(!await kfConfirm(`${p.name} aus dem Team-Pool entfernen? (bestehende Pläne bleiben erhalten)`)) return;
   try{ await api(`dienstplan_personen?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({aktiv:false})}); if(dpSel===id) dpSel=null; renderDienstplan(); }
   catch(e){ showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
 }
@@ -14467,7 +14533,7 @@ async function dpCopyPrev(){
   const prev=dpAddDays(dpWeek,-7);
   const rows=await api(`dienstplan_eintraege?woche=eq.${prev}&select=tag,spalte,person_id`);
   if(!rows||!rows.length){ showToast('Vorwoche ist leer'); return; }
-  if(dpEintraege.length && !confirm('Diese Woche wird mit der Vorwoche überschrieben. Fortfahren?')) return;
+  if(dpEintraege.length && !await kfConfirm('Diese Woche wird mit der Vorwoche überschrieben. Fortfahren?')) return;
   try{
     await api(`dienstplan_eintraege?woche=eq.${dpWeek}`,{method:'DELETE'});
     await api('dienstplan_eintraege',{method:'POST',body:JSON.stringify(rows.map(r=>({woche:dpWeek,tag:r.tag,spalte:r.spalte,person_id:r.person_id})))});
@@ -14476,7 +14542,7 @@ async function dpCopyPrev(){
 }
 async function dpClearWeek(){
   if(!dpEintraege.length) return;
-  if(!confirm('Alle Einträge dieser Woche löschen?')) return;
+  if(!await kfConfirm('Alle Einträge dieser Woche löschen?')) return;
   try{ await api(`dienstplan_eintraege?woche=eq.${dpWeek}`,{method:'DELETE'}); renderDienstplan(); }
   catch(e){ showToast('Fehler: '+(e?.message||'').slice(0,80),true); }
 }
@@ -14846,7 +14912,7 @@ async function tdToggle(id,checked){
 }
 async function tdDel(id){
   const it=tdItems.find(x=>x.id===id); if(!it) return;
-  if(!confirm('„'+it.text+'“ löschen?')) return;
+  if(!await kfConfirm('„'+it.text+'“ löschen?')) return;
   tdItems=tdItems.filter(x=>x.id!==id); tdRenderBody();
   try{ await api(`org_todos?id=eq.${id}`,{method:'DELETE'}); }catch(e){ showToast('Fehler beim Löschen',true); tdLoad(); }
 }
@@ -14948,7 +15014,7 @@ async function bdayAdd(){
   }catch(e){ showToast('Fehler beim Speichern: '+(e?.message||e),true); }
 }
 async function bdayDel(id){
-  if(!confirm('Geburtstag löschen?')) return;
+  if(!await kfConfirm('Geburtstag löschen?')) return;
   try{ await api(`geburtstage?id=eq.${id}`,{method:'DELETE'}); renderGeburtstage(); }catch(e){ showToast('Fehler beim Löschen',true); }
 }
 Object.assign(window,{renderGeburtstage,bdayAdd,bdayDel,bdayHide,bdayLoad});
@@ -15020,11 +15086,11 @@ function schichtendeBack(){
   schichtendeWizard=null; schichtendeReturnFlag=false; goTo('schichtende');
 }
 window.schichtendeBack=schichtendeBack;
-function schichtendeNextClick(){
+async function schichtendeNextClick(){
   // Ungespeicherte Forecast-Änderungen nicht stillschweigend verwerfen
   if(currentView==='order' && activeOrderTab==='forecast'){
     const dirty=[...document.querySelectorAll('#forecast-table-wrap input[data-dish]')].some(i=>i.value!==i.dataset.original);
-    if(dirty && !confirm('Du hast Änderungen noch nicht gespeichert. Trotzdem weiter?')) return;
+    if(dirty && !(await kfConfirm('Du hast Änderungen noch nicht gespeichert. Trotzdem weiter?'))) return;
   }
   schichtendeContinue();
 }
@@ -16016,7 +16082,7 @@ async function sendMangelMeldung(){
     const dupes=await api(`maengel?store_id=eq.${targetStoreId}&betreff=eq.${encodeURIComponent(betreff)}&gemeldet_am=gte.${twoMinAgo}&select=id`).catch(()=>[]);
     if(dupes?.length){
       hideSubmitOverlay();
-      const weiter=confirm('Diese Meldung ("'+betreff+'") wurde für diese Filiale gerade erst gemeldet (innerhalb der letzten 2 Minuten). Trotzdem nochmal senden?');
+      const weiter=await kfConfirm('Diese Meldung ("'+betreff+'") wurde für diese Filiale gerade erst gemeldet (innerhalb der letzten 2 Minuten). Trotzdem nochmal senden?');
       if(!weiter){ if(btn){ btn.disabled=false; } return; }
     }
   }catch(e){ console.error(e); }
@@ -16776,7 +16842,7 @@ window.toggleOrderEingepackt=toggleOrderEingepackt;
 // Geldwechsel-Anfragen und Sonderbestellungen mit auf, damit Transporter nicht noch extra jede einzeln
 // antippen muss.
 async function markAllPackedAndReset(orderDateStr){
-  if(!confirm('Wirklich ALLES für diesen Tag als eingepackt markieren und Geldwechsel/Sonderbestellungen erledigen? Das kann nicht rückgängig gemacht werden.')) return;
+  if(!await kfConfirm('Wirklich ALLES für diesen Tag als eingepackt markieren und Geldwechsel/Sonderbestellungen erledigen? Das kann nicht rückgängig gemacht werden.')) return;
   try{
     await api(`orders?order_date=eq.${orderDateStr}&quantity=gt.0`,{method:'PATCH',body:JSON.stringify({eingepackt:true})});
     await api(`geldwechsel?status=eq.offen`,{method:'PATCH',body:JSON.stringify({status:'erledigt',erledigt_am:new Date().toISOString()})}).catch(()=>{});
@@ -17219,7 +17285,7 @@ async function grSaveItem(id,inp){
   catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
 }
 async function grDeleteItem(id){
-  if(!confirm('Diesen Punkt aus der Checkliste löschen?')) return;
+  if(!await kfConfirm('Diesen Punkt aus der Checkliste löschen?')) return;
   try{ await api(`grundreinigung_items?id=eq.${id}`,{method:'DELETE'}); showToast('Gelöscht'); await grReload(); }
   catch(e){ console.error(e); showToast('Fehler beim Löschen',true); }
 }
@@ -21043,7 +21109,7 @@ async function addStadtgemeindeZahlung(){
 window.addStadtgemeindeZahlung=addStadtgemeindeZahlung;
 
 async function deleteStadtgemeindeZahlung(id){
-  if(!confirm('Diesen Eintrag wirklich löschen?')) return;
+  if(!await kfConfirm('Diesen Eintrag wirklich löschen?')) return;
   try{
     await api(`stadtgemeinde_zahlungen?id=eq.${id}`,{method:'DELETE'});
     sgRefresh();
@@ -21289,12 +21355,12 @@ async function sgAdresse(id,alt){
 window.sgAdresse=sgAdresse;
 function sgRefreshAfter(){ if(typeof sgRefresh==='function') sgRefresh(); }
 async function sgLoeschen(id){
-  if(!confirm('Diese Anmeldung ENDGÜLTIG löschen? (Nicht rückgängig zu machen)')) return;
+  if(!await kfConfirm('Diese Anmeldung ENDGÜLTIG löschen? (Nicht rückgängig zu machen)')) return;
   try{ await sgCall('',{action:'loeschen',id}); showToast('✓ Gelöscht'); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); }
 }
 window.sgLoeschen=sgLoeschen;
 async function sgStorno(id,storno){
-  if(storno && !confirm('Diese Anmeldung stornieren?')) return;
+  if(storno && !await kfConfirm('Diese Anmeldung stornieren?')) return;
   try{ await sgCall('',{action:storno?'storno':'wiederherstellen',id}); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); }
 }
 function sgCopyLink(tok){
@@ -21313,7 +21379,7 @@ async function sgStelleNeu(){
 }
 async function sgStelleAktiv(id,aktiv){ try{ await sgCall('',{action:'stelle_aktiv',id,aktiv}); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); } }
 async function sgTokenNeu(id){
-  if(!confirm('Neuen Link erzeugen? Der alte Link funktioniert dann nicht mehr.')) return;
+  if(!await kfConfirm('Neuen Link erzeugen? Der alte Link funktioniert dann nicht mehr.')) return;
   try{ await sgCall('',{action:'stelle_token_neu',id}); sgRefreshAfter(); }catch(e){ showToast('Fehler: '+e.message,true); }
 }
 async function sgSaveConfig(){
@@ -21909,7 +21975,7 @@ async function flSave(id){
   try{ if(id) await api(`feuerloescher?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(body)}); else await api('feuerloescher',{method:'POST',body:JSON.stringify({...body,sort:(_flRows.length+1)})});
     flClose(); showToast('✓ Gespeichert'); renderFeuerloescher(); }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); }
 }
-async function flDelete(id){ if(!confirm('Standort wirklich entfernen?')) return; try{ await api(`feuerloescher?id=eq.${id}`,{method:'DELETE'}); flClose(); renderFeuerloescher(); }catch(e){ console.error(e); showToast('Fehler',true); } }
+async function flDelete(id){ if(!await kfConfirm('Standort wirklich entfernen?')) return; try{ await api(`feuerloescher?id=eq.${id}`,{method:'DELETE'}); flClose(); renderFeuerloescher(); }catch(e){ console.error(e); showToast('Fehler',true); } }
 function flMarkAllDone(){
   const today=todayISO();
   flModal(`<div style="font-size:16px;font-weight:800;">✓ Prüfung durchgeführt</div><div style="font-size:12px;color:var(--sub);margin:6px 0;">Setzt bei allen Standorten das Prüfdatum. Defekte bleiben markiert, bis du sie einzeln änderst.</div>
@@ -22085,7 +22151,7 @@ async function saveCatering(id){
   }catch(e){ console.error(e); showToast('Fehler beim Speichern',true); if(b){b.disabled=false;b.textContent='Speichern ✓';} }
 }
 async function cancelCatering(id){
-  if(!confirm('Catering wirklich absagen/entfernen?')) return;
+  if(!await kfConfirm('Catering wirklich absagen/entfernen?')) return;
   try{ await api(`caterings?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({status:'abgesagt',updated_at:new Date().toISOString()})}); closeCateringForm(); showToast('Entfernt'); await renderCatering(); }
   catch(e){ console.error(e); showToast('Fehler',true); }
 }
@@ -22227,11 +22293,11 @@ async function skRepRead(inp){
 }
 async function skRepSave(){
   const r=window._skRep; if(!r||!r.von) return;
-  if(r.warnungen.length && !confirm('Es gibt Warnungen (siehe oben). Trotzdem speichern?')) return;
+  if(r.warnungen.length && !await kfConfirm('Es gibt Warnungen (siehe oben). Trotzdem speichern?')) return;
   try{
     const ex=await api(`schrankerl_reports?zeitraum_von=eq.${r.von}&select=id`);
     if(ex&&ex.length){
-      if(!confirm('Für diesen Monat gibt es schon einen Report. Ersetzen?')) return;
+      if(!await kfConfirm('Für diesen Monat gibt es schon einen Report. Ersetzen?')) return;
       for(const e of ex) await api(`schrankerl_dish_stats?report_id=eq.${e.id}`,{method:'DELETE'});
       await api(`schrankerl_kommentare?datum=gte.${r.von}&datum=lte.${r.bis}`,{method:'DELETE'});
       await api(`schrankerl_reports?zeitraum_von=eq.${r.von}`,{method:'DELETE'});
@@ -22950,7 +23016,7 @@ function debounceFieldSave(el, fn, ms=600){
 }
 window.debounceFieldSave=debounceFieldSave;
 
-function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?6000:2500);}
+function showToast(msg,isError=false){const t=document.getElementById('toast');t.setAttribute('role',isError?'alert':'status');t.setAttribute('aria-live',isError?'assertive':'polite');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?6000:2500);}
 window.addEventListener('online',()=>{});
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
