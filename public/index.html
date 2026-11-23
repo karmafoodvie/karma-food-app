@@ -2,6 +2,23 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<script>
+/* v6.99.312 Grundlagen: lokales Datum (Wien statt UTC), Text-Absicherung, Speicher-Ausfall, Meldung bei Speicherfehlern */
+(function(){
+  function isoLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  window.isoLocal=isoLocal; window.todayISO=function(){ return isoLocal(new Date()); };
+  window.escHtml=function(v){ return v==null?'':String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  try{ var t='__kf_t'; localStorage.setItem(t,t); localStorage.removeItem(t); }catch(e){
+    var mem={}; var fake={getItem:function(k){return Object.prototype.hasOwnProperty.call(mem,k)?mem[k]:null;},setItem:function(k,v){mem[k]=String(v);},removeItem:function(k){delete mem[k];},clear:function(){mem={};},key:function(i){return Object.keys(mem)[i]||null;},get length(){return Object.keys(mem).length;}};
+    try{ Object.defineProperty(window,'localStorage',{value:fake,configurable:true}); }catch(e2){}
+  }
+  var last=0;
+  window.addEventListener('unhandledrejection',function(ev){ try{ var e=ev&&ev.reason; if(!e||!e.apiMethod||e.apiMethod==='GET') return; var n=Date.now(); if(n-last<4000) return; last=n; if(typeof showToast==='function') showToast('⚠️ Speichern hat nicht geklappt. Bitte Verbindung prüfen und nochmal versuchen.',true); }catch(_){} });
+})();
+</script>
+<script>/* Apple-Design (v6.99.308): standardmäßig AUS. Einschalten: ?design=apple an die Adresse hängen, ausschalten: ?design=off. Glas ohne Unschärfe: localStorage kf_glass='off'. */
+(function(){try{var m=location.search.match(/[?&]design=(apple|off)\b/);if(m)localStorage.setItem('kf_design',m[1]);if(localStorage.getItem('kf_design')==='apple'){var h=document.documentElement;h.classList.add('apple');var lo=(navigator.deviceMemory&&navigator.deviceMemory<=2)||(navigator.hardwareConcurrency&&navigator.hardwareConcurrency<=2);if(lo||localStorage.getItem('kf_glass')==='off')h.classList.add('noglass');var v=document.querySelector('meta[name=viewport]');if(v&&v.content.indexOf('viewport-fit')<0)v.content+=', viewport-fit=cover';}}catch(e){}})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -384,7 +401,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 // das Problem, dass zwei Personen an unterschiedlichen Tagen zuletzt frisch geladen haben und
 // deshalb unterschiedliche Menüs sahen (21.08.26 gefunden). Cache-Buster mit heutigem Datum
 // erzwingt mindestens 1x täglich eine echte Neuabfrage, ohne bei jedem Laden neu zu holen.
-document.write('<script src="/menu_data.js?d=' + new Date().toISOString().split('T')[0] + '"><\/script>');
+document.write('<script src="/menu_data.js?d=' + todayISO() + '"><\/script>');
 </script>
 <script>
 const SUPABASE_URL = 'https://fkliyqjxnttzyuzogrng.supabase.co';
@@ -700,13 +717,13 @@ async function renderOnboarding(){
     dayEntries.forEach(e=>{
       html+=`<div style="padding:10px 12px;border-top:0.5px solid var(--border);">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <div style="font-weight:500;font-size:13px;">${e.titel}</div>
+          <div style="font-weight:500;font-size:13px;">${escHtml(e.titel)}</div>
           ${isOrg?`<div style="display:flex;gap:6px;flex-shrink:0;">
             <button onclick="editOnboardingDay(${e.id},${e.day_number},'${e.titel.replace(/'/g,"\\'")}',\`${(e.inhalt||'').replace(/`/g,'\\`')}\`)" style="font-size:11px;color:var(--green);background:var(--green-light);border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">✏️</button>
             <button onclick="deleteOnboardingDay(${e.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
           </div>`:''}
         </div>
-        ${e.inhalt?`<div style="font-size:12.5px;color:var(--sub);margin-top:4px;white-space:pre-wrap;">${e.inhalt}</div>`:''}
+        ${e.inhalt?`<div style="font-size:12.5px;color:var(--sub);margin-top:4px;white-space:pre-wrap;">${escHtml(e.inhalt)}</div>`:''}
       </div>`;
     });
     html+='</div>';
@@ -1500,7 +1517,7 @@ async function renderGuide(){
         html+=`<div class="card" style="padding:10px 12px;margin-bottom:6px;">
           <div style="display:flex;align-items:center;gap:6px;justify-content:space-between;">
             <div>
-              <div style="font-weight:500;font-size:13px;">${e.titel}</div>
+              <div style="font-weight:500;font-size:13px;">${escHtml(e.titel)}</div>
               ${e.store_id?`<span style="font-size:10px;background:#E6F1FB;color:#185FA5;padding:1px 6px;border-radius:20px;">nur ${e.store_id}</span>`:`<span style="font-size:10px;background:var(--green-light);color:var(--green);padding:1px 6px;border-radius:20px;">alle Stores</span>`}
             </div>
             <div style="display:flex;gap:6px;">
@@ -1508,7 +1525,7 @@ async function renderGuide(){
               <button onclick="deleteGuideEntry(${e.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;">🗑</button>
             </div>
           </div>
-          ${e.inhalt?`<div style="font-size:12px;color:var(--sub);margin-top:5px;white-space:pre-wrap;">${e.inhalt}</div>`:''}
+          ${e.inhalt?`<div style="font-size:12px;color:var(--sub);margin-top:5px;white-space:pre-wrap;">${escHtml(e.inhalt)}</div>`:''}
         </div>`;
       });
       if(!katEntries.length) html+=`<div style="font-size:12px;color:var(--border);padding:4px 0 8px;">Noch keine Einträge in dieser Kategorie.</div>`;
@@ -1520,7 +1537,7 @@ async function renderGuide(){
     if(storeEntries.length){
       html+=`<div style="background:#E6F1FB;border:0.5px solid #B5D4F4;border-radius:10px;padding:8px 12px;margin-bottom:10px;">
         <div style="font-size:10px;font-weight:700;color:#185FA5;margin-bottom:4px;">📍 NUR FÜR DIESEN STORE</div>
-        ${storeEntries.map(e=>`<details style="border-bottom:0.5px solid #B5D4F4;"><summary style="padding:8px 0;cursor:pointer;font-size:13px;font-weight:500;">${e.titel}</summary><div style="padding:6px 0 10px;font-size:12px;color:var(--sub);white-space:pre-wrap;">${e.inhalt||''}</div></details>`).join('')}
+        ${storeEntries.map(e=>`<details style="border-bottom:0.5px solid #B5D4F4;"><summary style="padding:8px 0;cursor:pointer;font-size:13px;font-weight:500;">${escHtml(e.titel)}</summary><div style="padding:6px 0 10px;font-size:12px;color:var(--sub);white-space:pre-wrap;">${e.inhalt||''}</div></details>`).join('')}
       </div>`;
     }
     GUIDE_KATEGORIEN.forEach(kat=>{
@@ -1528,7 +1545,7 @@ async function renderGuide(){
       if(!katEntries.length) return;
       html+=`<div style="border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden;">
         <div style="background:#F5F5F3;padding:8px 12px;font-size:12px;font-weight:700;color:var(--sub);">${kat.emoji} ${kat.label}</div>
-        ${katEntries.map(e=>`<details style="border-top:0.5px solid var(--border);"><summary style="padding:10px 12px;cursor:pointer;font-size:13px;font-weight:500;list-style:none;display:flex;justify-content:space-between;align-items:center;">${e.titel}<span style="color:var(--muted);">›</span></summary><div style="padding:8px 12px 12px;font-size:12px;color:var(--sub);white-space:pre-wrap;">${e.inhalt||'(kein Inhalt)'}</div></details>`).join('')}
+        ${katEntries.map(e=>`<details style="border-top:0.5px solid var(--border);"><summary style="padding:10px 12px;cursor:pointer;font-size:13px;font-weight:500;list-style:none;display:flex;justify-content:space-between;align-items:center;">${escHtml(e.titel)}<span style="color:var(--muted);">›</span></summary><div style="padding:8px 12px 12px;font-size:12px;color:var(--sub);white-space:pre-wrap;">${e.inhalt||'(kein Inhalt)'}</div></details>`).join('')}
       </div>`;
     });
     if(!(entries||[]).length) html+=`<div style="text-align:center;padding:2rem;color:var(--muted);">Noch keine Guide-Einträge vorhanden.</div>`;
@@ -1619,14 +1636,14 @@ function renderKontrolleView(){
       <div style="display:flex;align-items:center;gap:10px;padding:14px;${p.target?'cursor:pointer;':''}" ${p.target?`onclick="goTo('${p.target}')"`:''}>
         <span style="font-size:22px;">${p.icon}</span>
         <div style="flex:1;">
-          <div style="font-weight:500;">${p.titel}</div>
+          <div style="font-weight:500;">${escHtml(p.titel)}</div>
           <div style="font-size:12px;color:var(--muted);">${p.oneliner}</div>
         </div>
         ${p.target?'<span style="color:var(--green);font-size:20px;">→</span>':(p.badgeText?`<span style="font-size:11px;color:var(--muted);">${p.badgeText}</span>`:'<span class="badge badge-pend">bald</span>')}
       </div>
       <details style="padding:0 14px 12px;">
         <summary style="font-size:12px;color:var(--green);cursor:pointer;">ℹ️ Was bedeutet das?</summary>
-        <div style="font-size:12px;color:var(--sub);margin-top:6px;">${p.text}</div>
+        <div style="font-size:12px;color:var(--sub);margin-top:6px;">${escHtml(p.text)}</div>
       </details>
     </div>`;
   });
@@ -1839,7 +1856,7 @@ async function setLang(l) {
 }
 
 // ---- API ----
-async function api(path, opts={}) {
+async function _apiCore(path, opts={}) {
   // WICHTIG: ...opts muss VOR headers/mode gespreadet werden — sonst überschreibt ein via opts.headers
   // übergebener eigener Header (z.B. für Upsert) den kompletten Header-Objekt inkl. apikey/Authorization,
   // statt nur damit zusammengeführt zu werden ("No API key found in request").
@@ -1854,6 +1871,11 @@ async function api(path, opts={}) {
   if (!res.ok) throw new Error(await res.text());
   const t = await res.text();
   return t ? JSON.parse(t) : null;
+}
+// Hülle: kennzeichnet Fehler mit der Methode, damit fehlgeschlagenes Speichern nicht still bleibt (siehe Grundlagen-Skript oben)
+async function api(path, opts={}) {
+  try{ return await _apiCore(path, opts); }
+  catch(e){ if(e&&typeof e==='object'){ try{ e.apiMethod=((opts&&opts.method)||'GET').toUpperCase(); }catch(_){} } throw e; }
 }
 
 // Holt ALLE Zeilen über die projektweite Supabase "Max Rows"-Grenze hinweg (Standard 1000, wird
@@ -1876,7 +1898,7 @@ async function apiAllPages(basePath, pageSize=1000, maxPages=30){
 // Gemeinsamer Helfer für das wiederkehrende Muster "gibt es für heute schon einen Eintrag in Tabelle X?"
 // (Wareneingang, Entsorgung, Wochensalat, Kühlung, Übergabe-Notiz etc. folgen alle demselben Schema)
 async function hasTodayEntry(table, dateCol, storeId=currentStore?.id){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const rows=await api(`${table}?store_id=eq.${storeId}&${dateCol}=eq.${today}&select=id&limit=1`).catch(()=>[]);
   return (rows||[]).length>0;
 }
@@ -1913,7 +1935,7 @@ async function initLogin() {
       else { loginAs(parsed); }
     }
   } catch(e) {
-    document.getElementById('store-list').innerHTML=`<p style="color:red;font-size:12px;">Fehler: ${e.message}</p>`;
+    document.getElementById('store-list').innerHTML=`<p style="color:red;font-size:12px;">Fehler: ${escHtml(e.message)}</p>`;
   }
 }
 function pickStore(id, name) {
@@ -1984,9 +2006,9 @@ let _lastDataRefresh=Date.now();
 // nichts, solange die App nicht wirklich neu geladen wurde. Jetzt: ist das Datum seit dem Laden ein
 // anderes, lädt die App beim Zurückkehren (und stündlich als Netz) selbst neu. Login (kf_store) und
 // letzte Ansicht (kf_view) liegen im localStorage, man landet also wieder dort, wo man war.
-const _appLoadDay=new Date().toISOString().split('T')[0];
+const _appLoadDay=todayISO();
 function reloadIfDayChanged(){
-  if(new Date().toISOString().split('T')[0]!==_appLoadDay){ location.reload(); return true; }
+  if(todayISO()!==_appLoadDay){ location.reload(); return true; }
   return false;
 }
 setInterval(reloadIfDayChanged, 60*60*1000);
@@ -2059,7 +2081,7 @@ async function renderKfForm(){
   const wrap=document.getElementById('kf-form-wrap');
   const stores=await api('stores?select=id,name&order=name').catch(()=>[]);
   const storeList=(stores||[]).filter(s=>!['zentrale','1070'].includes(s.id));
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const minDate=new Date(Date.now()-30*86400000).toISOString().split('T')[0]; // 30 Tage zurück reicht
   _kfMultiDraft={};
 
@@ -2341,7 +2363,7 @@ window.loadNotifBadge=loadNotifBadge;
 
 // ---- DATA ----
 async function loadAll(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   loadSkMenuCount();
   articles=await api('articles?select=*&order=sort_order');
   await autoReactivateExpiredArticles();
@@ -2481,7 +2503,7 @@ const MENU_ERAS = [
   } },
 ];
 function getMenuEraForDate(dateStr){
-  const ds = dateStr || new Date().toISOString().split('T')[0];
+  const ds = dateStr || todayISO();
   for(let i=MENU_ERAS.length-1;i>=0;i--){
     const era=MENU_ERAS[i];
     if(ds>=era.von && (!era.bis || ds<=era.bis)) return era;
@@ -2512,7 +2534,7 @@ async function applyMenuOverrides(){
   });
 }
 function getCurrentMenuWoche(){
-  return getMenuWocheForDate(new Date().toISOString().split('T')[0]);
+  return getMenuWocheForDate(todayISO());
 }
 let CURRENT_MENU_WOCHE = getCurrentMenuWoche();
 // Reis ist immer als Beilage bei Curry/Dal/Special dabei, hat keinen eigenen wechselnden Namen —
@@ -2561,7 +2583,7 @@ const MENU_TAUSCH_HINWEIS='<span style="font-size:9.5px;font-weight:700;color:#B
 // Liefert Epoche, Woche, Wochentag und Daten-Schlüssel ("w4_mo"), aus dem das Menü eines Tages gelesen
 // wird. Ohne Ausnahme identisch zum bisherigen Verhalten. dateStr leer = heute (nur wenn wdStr zu heute passt).
 function menuSlot(dateStr, wdStr){
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   const todayWd=WEEKDAY_MENU_KEY[new Date().getDay()];
   const useDate = dateStr || ((!wdStr || wdStr===todayWd) ? todayStr : null);
   const q = useDate ? MENU_TAUSCH[useDate] : null;
@@ -3879,7 +3901,7 @@ function tabBarHtml(tabs, activeKey, onclickFn, color='var(--green)'){
 const DISH_IMAGES = {};
 
 async function computeAndSaveScore(storeId){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     const [wek,rein,kuehl,disposal,forecast] = await Promise.all([
       api(`wareneingang?store_id=eq.${storeId}&datum=eq.${today}&select=id`).catch(()=>[]),
@@ -3915,7 +3937,7 @@ async function computeAndSaveScore(storeId){
 }
 
 async function loadGamificationWidget(storeId){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const monday=new Date(); monday.setDate(monday.getDate()-((monday.getDay()+6)%7));
   const mondayStr=monday.toISOString().split('T')[0];
   try{
@@ -4086,7 +4108,7 @@ async function messeErfahrungHtml(){
           <div style="font-size:9px;font-weight:600;margin-top:2px;">${r.umsatz?`${eur(r.umsatz)} statt ${eur(r.ueblich)}`:''}</div>
         </div>
       </div>
-      ${r.notiz?`<div style="font-size:11px;color:var(--sub);margin-top:6px;line-height:1.45;">${r.notiz}</div>`:''}
+      ${r.notiz?`<div style="font-size:11px;color:var(--sub);margin-top:6px;line-height:1.45;">${escHtml(r.notiz)}</div>`:''}
     </div>`;
   }).join('');
   return h;
@@ -4094,7 +4116,7 @@ async function messeErfahrungHtml(){
 async function renderMessenStore(el){
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🎪','Messe-Termine','Termine bei uns nebenan. Vor der Messe: kurz einschätzen, ob relevant. Nach der Messe: kurz sagen, wie der Zulauf war.','#F97316');
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   const [termine, relevanzen, bewertungen] = await Promise.all([
     api('messe_termine?store_id=eq.1020&select=*&order=start_date.asc').catch(()=>[]),
     api('messe_relevanz?store_id=eq.1020&select=messe_termin_id,einschaetzung').catch(()=>[]),
@@ -4341,7 +4363,7 @@ window.setEssenNotrufMenge=setEssenNotrufMenge;
 function showEssenNotrufConfirm(){
   const wrap=document.getElementById('essen-notruf-confirm');
   if(!wrap) return;
-  const todayDate=new Date().toISOString().split('T')[0];
+  const todayDate=todayISO();
   const todayWdStr=WEEKDAY_STR[new Date().getDay()];
   const dishNames=[...((todayWdStr&&typeof getMenuDishNamesForDay==='function')?getMenuDishNamesForDay(todayWdStr,todayDate):[]), REIS_DISH_NAME].filter(Boolean);
   const dishChips=dishNames.map(name=>{
@@ -4691,7 +4713,7 @@ async function altZahlenOpen(){
       <button onclick="altZahlenConfirm()" style="width:100%;padding:15px;border:none;border-radius:14px;background:#16A34A;color:#fff;font-size:17px;font-weight:800;cursor:pointer;">${azt('btn')}</button>
     </div>`);
   altZahlenUpdate();
-  const heute=new Date().toISOString().split('T')[0];
+  const heute=todayISO();
   api(`alt_zahlungen?store_id=eq.${currentStore.id}&erstellt_am=gte.${heute}T00:00:00&status=eq.bestaetigt&select=betrag`).then(rows=>{
     const sum=(rows||[]).reduce((a,r)=>a+Number(r.betrag||0),0), el=document.getElementById('az-stat');
     if(el) el.innerHTML=azt('today',(rows||[]).length,altZahlenEuro(sum));
@@ -4944,7 +4966,7 @@ async function renderHome(){
   let isKCDay=false;
   let transporterDone=false, kcDone=false, sweetsDone=false;
   if(currentStore?.id!=='zentrale'){
-    const todayDate=new Date().toISOString().split('T')[0];
+    const todayDate=todayISO();
     const dayIdx=(new Date().getDay()+6)%7; // Mon=0 ... Sun=6
     const isWeekday=dayIdx<5;
     const realWeekday=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
@@ -5056,7 +5078,7 @@ async function renderHome(){
     // Kompakte, kleine Reminder-Liste statt großer bunter Kästen — wird direkt unter "Let's start the shift" eingeblendet
     if(reminders.length){
       remindersHtml=`<div style="margin:2px 0 8px;">${reminders.map(r=>`
-        <div onclick="goToReminder('${r.tab}'${r.orderTab?`,'${r.orderTab}'`:''})" style="font-size:11.5px;color:#DC2626;padding:2px 0;cursor:pointer;text-decoration:underline;">${r.icon} ${r.text}</div>`).join('')}</div>`;
+        <div onclick="goToReminder('${r.tab}'${r.orderTab?`,'${r.orderTab}'`:''})" style="font-size:11.5px;color:#DC2626;padding:2px 0;cursor:pointer;text-decoration:underline;">${r.icon} ${escHtml(r.text)}</div>`).join('')}</div>`;
     }else{
       remindersHtml='';
     }
@@ -5094,7 +5116,7 @@ async function renderHome(){
 
     // Gamifizierte Nachfrage, sobald eine Messe vorbei ist: "Wie war der Zulauf?" — Emoji-Skala,
     // ein Tap genügt (kein Formular), damit's wirklich niemand als lästig empfindet.
-    const _todayStrMs=new Date().toISOString().split('T')[0];
+    const _todayStrMs=todayISO();
     const _pastTermine=await api(`messe_termine?store_id=eq.1020&end_date=lt.${_todayStrMs}&select=id,name,start_date,end_date&order=end_date.desc`).catch(()=>[]);
     if(_pastTermine?.length){
       const _bewertet=await api(`messe_bewertungen?store_id=eq.1020&select=messe_termin_id`).catch(()=>[]);
@@ -5190,7 +5212,7 @@ async function renderHome(){
     <!-- PHASE 2: WÄHREND DER SCHICHT -->
     <div class="section-lbl" style="margin-top:4px;margin-bottom:4px;">☕ Während der Schicht</div>
     ${(()=>{
-      const _todayStrHome=new Date().toISOString().split('T')[0];
+      const _todayStrHome=todayISO();
       const _laufendeWocheHome=getMenuWocheForDate(_todayStrHome);
       const _WC={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
       const _wc=_WC[_laufendeWocheHome]||'var(--green)';
@@ -5280,7 +5302,7 @@ async function renderHome(){
       <span id="org-shop-picker-arrow" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#fff;font-size:16px;pointer-events:none;">→</span>
     </div>
     <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:-2px 0 8px;"></div>
-    ${new Date().toISOString().split('T')[0]==='2026-09-21' && new Date().getHours()>=13?`
+    ${todayISO()==='2026-09-21' && new Date().getHours()>=13?`
     <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:14px;padding:14px 16px;margin-bottom:14px;">
       <div style="font-size:14px;font-weight:800;color:#78350F;">🗓️ Erinnerung: Feiertags-Logik</div>
       <div style="font-size:12.5px;color:#78350F;margin-top:3px;">Heute Nachmittag gemeinsam Schritt für Schritt erarbeiten, wie Feiertage/Ferien die Mengen-Schätzung beeinflussen sollen — mit deinem Input, nicht automatisch geraten.</div>
@@ -5468,7 +5490,7 @@ function verfuegbarLabel(a){
 // Wird von toggleArticleVerfuegbar & toggleArticleVerfuegbarPack gemeinsam genutzt.
 function showVerfuegbarModal(id, onSaved){
   closeVerfModal();
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   const overlay=document.createElement('div');
   overlay.id='verf-modal-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -5526,7 +5548,7 @@ window.saveVerfModal=saveVerfModal;
 
 // Artikel automatisch wieder auf "lieferbar" setzen, wenn das gewählte Bis-Datum verstrichen ist.
 async function autoReactivateExpiredArticles(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const expired=articles.filter(a=>a.verfuegbar===false && a.verfuegbar_bis && a.verfuegbar_bis<today);
   if(!expired.length) return;
   try{
@@ -5909,7 +5931,7 @@ async function renderKCOrderTab(el, tabHtml){
     <div style="font-size:10px;color:var(--muted);">IST-Bestand zählen und eintragen — Bestellung wird automatisch berechnet</div></div>
   </div>`;
 
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const kcItems=articles.filter(a=>a.category==='Webshop-Produkte');
   const istData=await api(`kc_stock?store_id=eq.${currentStore.id}&select=article_id,ist_bestand,updated_date`).catch(()=>[]);
   const istMap={};
@@ -5955,7 +5977,7 @@ async function renderKCOrderTab(el, tabHtml){
   translateEl(el);
 }
 async function submitKCNote(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const note=document.getElementById('special-note-kc')?.value?.trim()||'';
   try{
     await api(`kc_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}`,{method:'DELETE'});
@@ -5983,7 +6005,7 @@ function istInPlace(el,v){
   }catch(e){ return false; }
 }
 async function updateIstBestandStore(articleId, value, el){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`kc_stock?store_id=eq.${currentStore.id}&article_id=eq.${articleId}`,{method:'DELETE'});
@@ -6094,7 +6116,7 @@ async function markBeilagenReviewed(){
   const btn=document.getElementById('beilagen-review-btn');
   if(btn){ btn.disabled=true; btn.textContent='Speichert…'; }
   try{
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     await api('beilagen_reviewed',{method:'POST',headers:{'Prefer':'resolution=ignore-duplicates'},body:JSON.stringify([{store_id:currentStore.id,review_date:today}])});
     showToast('✓ Vermerkt — nichts anzupassen');
     if(btn){ btn.textContent='✓ Erledigt für heute'; btn.style.opacity='0.7'; }
@@ -6146,7 +6168,7 @@ async function renderKuecheOrderTab(el, tabHtml){
   (weekVals||[]).forEach(d=>{if(!valMap[d.supply_date])valMap[d.supply_date]={};valMap[d.supply_date][d.article_name]=d;});
 
   const daysWithItems=[1,2,3,4,5].filter(wd=>baseline.some(b=>b.weekday===wd));
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const todayRest=await api(`wochensalat_restbestand?store_id=eq.${currentStore.id}&report_date=eq.${today}&select=rest_qty,needed_qty`).catch(()=>[]);
   const restRec=(todayRest||[])[0]||{};
   // Wochensalat-Meldung ist eine tägliche Aufgabe unabhängig von den sonstigen Beilagen — die
@@ -6861,7 +6883,7 @@ function getSalatNameForDate(dateStr){
 }
 
 function getMenuWocheForDate(dateStr){
-  if(!dateStr) dateStr = new Date().toISOString().split('T')[0];
+  if(!dateStr) dateStr = todayISO();
   const era = getMenuEraForDate(dateStr);
   const start = new Date(era.wocheStart); start.setHours(0,0,0,0);
   const d = new Date(dateStr+'T00:00:00'); d.setHours(0,0,0,0);
@@ -7494,7 +7516,7 @@ async function openStoreDishHistory(dish, dateStr){
 
   const cat=mapDishNameToCategory(dish);
   const histFrom=dateMinusDays(dateStr, 12*7);
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   const histTo=dateMinusDays(todayStr<dateStr?todayStr:dateStr, 1);
   const [fcRows, dispRows, weatherHistMap]=await Promise.all([
     api(`forecast_qty?store_id=eq.${currentStore.id}&forecast_date=gte.${histFrom}&forecast_date=lte.${dateStr}&select=forecast_date,dish_name,qty,groesse`).catch(()=>[]),
@@ -7595,7 +7617,7 @@ async function renderForecastOrderTab(el, tabHtml){
   let html=tabHtml;
   const todayWeekday=new Date().getDay();
   const weekDates=getWeekdayDates(forecastWeekOffset);
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   const isHistoric=weekDates[5] < todayStr; // ganze Woche liegt in der Vergangenheit -> nur zur Nachverfolgung, nicht mehr editierbar
   const kwNum=getIsoWeekNumber(weekDates[1]);
   const kwLabel=`${new Date(weekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}–${new Date(weekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}`;
@@ -7979,7 +8001,7 @@ async function renderForecastOrderTab(el, tabHtml){
   // Freitags-Hinweis auf die Samosa-Bestellung — die läuft ja separat, wird aber leicht vergessen,
   // wenn man nur im Forecast unterwegs ist (16.09.26, Wunsch Tini).
   if(new Date().getDay()===5){
-    html+=`<div onclick="activeOrderTab='samosas';_samosaWeekOffset=1;_samosaAutoDay=new Date().toISOString().split('T')[0];renderOrder();" style="background:#FFF4E5;border:1.5px solid #F59E0B;border-radius:12px;padding:12px 14px;margin-top:14px;cursor:pointer;">
+    html+=`<div onclick="activeOrderTab='samosas';_samosaWeekOffset=1;_samosaAutoDay=todayISO();renderOrder();" style="background:#FFF4E5;border:1.5px solid #F59E0B;border-radius:12px;padding:12px 14px;margin-top:14px;cursor:pointer;">
       <div style="font-size:13px;font-weight:700;color:#78350F;">🥟 Nicht vergessen: Samosa-Bestellung für nächste Woche</div>
       <div style="font-size:11px;color:#78350F;margin-top:3px;text-decoration:underline;">Jetzt eintragen →</div>
     </div>`;
@@ -8215,7 +8237,7 @@ function addLasagneSize(cellKey, sizeKey){
 window.addLasagneSize=addLasagneSize;
 
 async function submitWochensalat(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const rest=parseFloat(String(document.getElementById('wsalat-rest').value).replace(',','.'));
   const needed=parseFloat(String(document.getElementById('wsalat-needed').value).replace(',','.'));
   try{
@@ -8304,7 +8326,7 @@ async function showOrderHistory(tabKey){
     const ntDay={}; (nts||[]).forEach(r=>{ (ntDay[r.order_date]=ntDay[r.order_date]||[]).push(r); });
     const days=[]; const d=new Date();
     for(let i=0;i<=14;i++){ const x=new Date(); x.setDate(d.getDate()-i); if([0,6].includes(x.getDay())) continue; days.push(x); }
-    const todayStr=new Date().toISOString().split('T')[0];
+    const todayStr=todayISO();
     const SNS={ja:'✅ eingearbeitet',nein:'❌ nicht mehr möglich',offen:'⏳ noch offen'};
     const body=days.map(x=>{
       const ds=x.toISOString().split('T')[0];
@@ -8332,7 +8354,7 @@ window.showOrderHistory=showOrderHistory;
 const SN_STATUS={offen:['⏳','noch nicht gesehen','#92400E'],ja:['✅','eingearbeitet','#166534'],nein:['❌','nicht mehr möglich','#B91C1C']};
 async function loadSweetsNachtraegeStore(){
   const box=document.getElementById('sn-list'); if(!box||!currentStore) return;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const rows=await api(`sweets_nachtraege?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=*&order=created_at.asc`).catch(()=>[]);
   box.innerHTML=(rows||[]).map(r=>{ const st=SN_STATUS[r.status]||SN_STATUS.offen;
     return `<div style="font-size:12px;color:#78350F;border-top:1px solid #FDE68A;padding:6px 0;"><div>${linkifyText(r.text)}</div><div style="font-size:11px;font-weight:700;color:${st[2]};margin-top:2px;">${st[0]} ${st[1]}</div></div>`; }).join('');
@@ -8342,7 +8364,7 @@ async function sendSweetsNachtrag(){
   if(!t){ showToast('Bitte den Nachtrag eintragen',true); return; }
   const btn=document.getElementById('sn-btn'); if(btn) btn.disabled=true;
   try{
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     await api('sweets_nachtraege',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,text:t}])});
     inp.value=''; showToast('✓ Nachtrag gesendet — nicht sicher, ob er noch klappt');
     await loadSweetsNachtraegeStore();
@@ -8414,7 +8436,7 @@ function sweetsErledigtStyle(btn,done){
 async function sweetsErledigtRefresh(){
   const btn=document.getElementById('sw-done-btn'); if(!btn||!currentStore) return;
   try{
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     const r=await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.sweets&select=id&limit=1`);
     if(r&&r.length) sweetsErledigtStyle(btn,true);
   }catch(e){ console.error(e); }
@@ -8423,7 +8445,7 @@ async function sweetsMarkErledigt(){
   const btn=document.getElementById('sw-done-btn'); if(!btn||!currentStore) return;
   btn.disabled=true; btn.textContent='Wird gespeichert…';
   try{
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     const r=await api(`order_submissions?store_id=eq.${currentStore.id}&order_date=eq.${today}&tab=eq.sweets&select=id&limit=1`);
     if(!(r&&r.length)){
       await api('order_submissions',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,order_date:today,tab:'sweets'}])});
@@ -8444,7 +8466,7 @@ function sweetsOrderLocked(){
 }
 async function submitOrder(){
   if(sweetsOrderLocked()){ showToast('🔒 Sweets-Bestellung ist seit 14:00 Uhr fix — bitte unten einen Nachtrag senden',true); return; }
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const tab=ORDER_TABS[activeOrderTab];
   const tabArticleIds=new Set(articles.filter(a=>tab.cats.includes(a.category)).map(a=>a.id));
   // Sicherheitsnetz gegen die "20 bestellt, 0 angekommen"-Fälle (z.B. Stadtplatz/Mango Lassi,
@@ -8635,7 +8657,7 @@ function renderClBody(){
   translateEl(el);
 }
 async function toggleCl(templateId){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   if(clDone[templateId]){
     await api(`checklist_done?store_id=eq.${currentStore.id}&template_id=eq.${templateId}&done_date=eq.${today}`,{method:'DELETE'});
     delete clDone[templateId];
@@ -8799,7 +8821,7 @@ const FREITAG_CHECKLISTE_ITEMS=[
 
 async function renderFreitagCheckliste(){
   const el=document.getElementById('v-freitagCheckliste');
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
   let html=backToHomeHtml();
   html+=`<div style="background:linear-gradient(135deg,#D4FF3F,#B8E62E);border-radius:14px;padding:16px;margin-bottom:16px;">
@@ -8830,7 +8852,7 @@ async function renderFreitagCheckliste(){
 window.renderFreitagCheckliste=renderFreitagCheckliste;
 
 async function toggleFreitagItem(key){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const existing=await api(`freitag_checkliste?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]);
   const items=existing?.[0]?.items||{};
   items[key]=!items[key];
@@ -8856,14 +8878,14 @@ async function renderEpochenCheck(){
   html+=`<div style="font-size:11px;color:#7C2D12;background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:8px 10px;margin-bottom:14px;">🎨 <strong>Nicht vergessen:</strong> Die App ist die Quelle der Wahrheit — nach jeder Menü-Änderung hier auch das Canva-Menü-PDF gegenchecken und von Hand nachziehen (kein Auto-Sync). Am einfachsten: Claude bitten, den Canva-Link gegen die App zu prüfen.</div>`;
 
   const today=new Date();
-  const todayStr=today.toISOString().split('T')[0];
+  const todayStr=isoLocal(today);
   const fromDate=dateMinusDays(todayStr, 14);
-  const toDate=(()=>{ const d=new Date(today); d.setDate(d.getDate()+60); return d.toISOString().split('T')[0]; })();
+  const toDate=(()=>{ const d=new Date(today); d.setDate(d.getDate()+60); return isoLocal(d); })();
 
   // 1) Gültige Gerichtsnamen pro Tag im geprüften Zeitraum sammeln (aktueller Menüplan, epochen-bewusst)
   const validByDate={};
   for(let d=new Date(fromDate+'T00:00:00'); d<=new Date(toDate+'T00:00:00'); d.setDate(d.getDate()+1)){
-    const ds=d.toISOString().split('T')[0];
+    const ds=isoLocal(d);
     const wd=WEEKDAY_STR[d.getDay()];
     if(!wd) continue; // Wochenende
     const names=getMenuDishNamesForDay(wd, ds);
@@ -8908,7 +8930,7 @@ async function renderEpochenCheck(){
     let checkDate=null;
     for(let i=0;i<28;i++){
       const d=new Date(today); d.setDate(d.getDate()+i);
-      const ds=d.toISOString().split('T')[0];
+      const ds=isoLocal(d);
       if(WEEKDAY_STR[d.getDay()]===m[2] && getMenuWocheForDate(ds)===targetWoche){ checkDate=ds; break; }
     }
     if(!checkDate) return false;
@@ -9140,7 +9162,7 @@ Object.assign(window,{mtAdd,mtDelete});
 async function renderMenuKontrolle(){
   const el=document.getElementById('v-menuKontrolle');
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   let html=backToHomeHtml();
   html+=pageHeaderHtml('📋','Menü-Kontrolle','Leading Sheet gegen die App prüfen & freigeben','#C2410C');
 
@@ -9452,7 +9474,7 @@ window.menuKontrolleEntscheiden=menuKontrolleEntscheiden;
 async function menuKontrolleFreigeben(id){
   const d=(window._mkDiffs||{})[id];
   if(!d || !d.app_name || !d.sheet_name) return;
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   const dates=mkOccurrenceDates(d.woche,d.tag,todayStr,120);
   if(!dates.length){ showToast('Kein Termin für diese Menü-Woche gefunden',true); return; }
   if(!confirm(`„${d.app_name}"\n→ „${d.sheet_name}"\n\nFür ${MK_TAGE[d.tag]} (Woche ${d.woche}) übernehmen? Gilt ab ${mkDateLabel(dates[0])} und stellt Forecast/Entsorgung/Feedback der betroffenen Tage mit um.`)) return;
@@ -9663,7 +9685,7 @@ function kzRoutineHtml(){
     const items=ORG_ROUTINE.filter(r=>r.f===f); const left=items.filter(r=>!kzIsDone(r));
     h+=`<details ${(f==='d'||left.length)?'open':''} style="margin-bottom:8px;"><summary style="font-size:11.5px;font-weight:700;color:var(--sub);cursor:pointer;padding:4px 2px;">${lbl} <span style="font-weight:500;color:var(--muted);">· ${left.length?left.length+' offen':'alles erledigt ✓'}</span></summary><div class="card" style="padding:2px 12px;">`;
     items.forEach(r=>{ const au=_kzAuto[r.k]; const autoDone=!!(au&&au.done); const dn=kzIsDone(r);
-      const badge=au?(autoDone?`<span style="font-size:10px;color:#166534;background:#DCFCE7;border-radius:6px;padding:1px 6px;margin-left:6px;white-space:nowrap;">⚡ automatisch</span>`:(au.note?`<span style="font-size:10px;color:#9A3412;background:#FFEDD5;border-radius:6px;padding:1px 6px;margin-left:6px;white-space:nowrap;">${au.note}</span>`:'')):'';
+      const badge=au?(autoDone?`<span style="font-size:10px;color:#166534;background:#DCFCE7;border-radius:6px;padding:1px 6px;margin-left:6px;white-space:nowrap;">⚡ automatisch</span>`:(au.note?`<span style="font-size:10px;color:#9A3412;background:#FFEDD5;border-radius:6px;padding:1px 6px;margin-left:6px;white-space:nowrap;">${escHtml(au.note)}</span>`:'')):'';
       h+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
         <input type="checkbox" ${dn?'checked':''} ${autoDone?'disabled':''} onchange="kzToggle('${r.k}','${f}',this.checked,this)" style="width:24px;height:24px;accent-color:#16A34A;flex-shrink:0;">
         <span style="flex:1;font-size:13px;${dn?'text-decoration:line-through;color:var(--muted);':''}">${r.t}${badge}</span>
@@ -9674,7 +9696,7 @@ function kzRoutineHtml(){
 }
 function kzRefreshRoutine(){ const b=document.getElementById('kz-routine'); if(b){ b.innerHTML=kzRoutineHtml(); translateEl(b); } }
 async function kzOpenItemsHtml(){
-  const today=new Date().toISOString().split('T')[0]; const in7=new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+  const today=todayISO(); const in7=new Date(Date.now()+7*86400000).toISOString().split('T')[0];
   const [maengel,notst,appfb,oldfb,cats,fl,zmOff,bcReplies]=await Promise.all([
     api('maengel?status=neq.behoben&select=id,status').catch(()=>[]),
     api('notstand_meldungen?status=eq.offen&select=id').catch(()=>[]),
@@ -10168,7 +10190,7 @@ window._skN=window._skN||4;
 async function loadSkMenuCount(){ try{ const r=await api('schrankerl_menu?select=woche'); const m=Math.max(0,...(r||[]).map(x=>x.woche||0)); if(m>=1) window._skN=m; }catch(e){} }
 function getSchrankerlWoche(dateStr){
   const ref=new Date('2026-10-05T00:00:00');
-  const d=new Date((dateStr||new Date().toISOString().split('T')[0])+'T00:00:00');
+  const d=new Date((dateStr||todayISO())+'T00:00:00');
   const day=d.getDay(); // 0=So,1=Mo,...
   const mondayOffset=(day===0?-6:1-day);
   d.setDate(d.getDate()+mondayOffset);
@@ -10439,7 +10461,7 @@ async function loadSchrankerlKommentare(boxId, gericht){
   box.dataset.loaded='1';
   if(!matching.length){ box.innerHTML='<div style="font-size:11px;color:var(--muted);">Keine Kommentare vorhanden.</div>'; return; }
   box.innerHTML=matching.map(k=>`<div style="font-size:11px;color:${k.sentiment==='kritik'?'#991B1B':'#166534'};margin-bottom:5px;">
-    ${k.sentiment==='kritik'?'👎':'👍'} „${k.kommentar}"${k.grund?` <span style="color:var(--muted);">(${k.grund})</span>`:''}
+    ${k.sentiment==='kritik'?'👎':'👍'} „${escHtml(k.kommentar)}"${k.grund?` <span style="color:var(--muted);">(${k.grund})</span>`:''}
   </div>`).join('');
 }
 window.loadSchrankerlKommentare=loadSchrankerlKommentare;
@@ -10939,7 +10961,7 @@ window.renderOrg=renderOrg;
 async function loadOrgDashboard(){
   const wrap=document.getElementById('org-dashboard-widget');
   if(!wrap) return;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const tomorrow=new Date(); tomorrow.setDate(tomorrow.getDate()+1);
   const tomorrowStr=tomorrow.toISOString().split('T')[0];
   try{
@@ -12200,7 +12222,7 @@ async function renderOrgForecast(){
     // Daten belegt). Wird im Reis-Vorschlag berücksichtigt.
     biryaniDayFlag.value=allDishes.some(d=>mapDishNameToCategory(d)==='Biryani');
     const {reason}=getDayModifiers(dateStr, 'lb', refWeather, calendarEvents, zeroSettings);
-    const isToday=new Date().toISOString().split('T')[0]===dateStr;
+    const isToday=todayISO()===dateStr;
 
     html+=`<div class="section-lbl" style="${isToday?'color:#2B3A67;font-weight:700;':''}">${dateLabel}${isToday?' — heute':''}</div>`;
     // AUTOMATISCHE WARNUNG pro Tag: Welche Gerichte waren beim letzten Mal an mehreren Standorten
@@ -12408,7 +12430,7 @@ async function renderOrgForecast(){
   } catch(err) {
     console.error('renderOrgForecast error:', err);
     const c=document.getElementById('orgfc-content');
-    if(c) c.innerHTML=`<div style="padding:1rem;color:#DC2626;">Fehler beim Laden: ${err.message}</div>`;
+    if(c) c.innerHTML=`<div style="padding:1rem;color:#DC2626;">Fehler beim Laden: ${escHtml(err.message)}</div>`;
   }
 }
 
@@ -12725,7 +12747,7 @@ async function renderBroadcast(){
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#5B21B6;cursor:pointer;"><input type="checkbox" id="bc-kn-on" onchange="document.getElementById('bc-kn-date-wrap').style.display=this.checked?'block':'none'"> 🍽️ Zusätzlich als Tageshinweis in der Küche anzeigen (wie Catering)</label>
       <div id="bc-kn-date-wrap" style="display:none;margin-top:8px;">
         <div style="font-size:11.5px;color:var(--sub);margin-bottom:4px;">Für welchen Tag? Erscheint im Küchen-Tab „Morgen“ am Vortag. Erste Zeile der Nachricht = Titel, weitere Zeilen = Zusatzinfo.</div>
-        <input type="date" id="bc-kn-date" min="${new Date().toISOString().split('T')[0]}" style="width:100%;padding:10px;border:1px solid #DDD6FE;border-radius:8px;box-sizing:border-box;">
+        <input type="date" id="bc-kn-date" min="${todayISO()}" style="width:100%;padding:10px;border:1px solid #DDD6FE;border-radius:8px;box-sizing:border-box;">
       </div>
     </div>
     <div style="font-weight:500;margin-bottom:6px;">Foto (optional)</div>
@@ -12739,7 +12761,7 @@ async function renderBroadcast(){
     <input type="text" id="bc-name" placeholder="Tini / Ines" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
     <div style="font-weight:500;margin-bottom:6px;">Sichtbarkeit</div>
     <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Poppt in jedem Fall beim nächsten Öffnen einmal auf. Zusätzlich als Hinweis auf der Startseite anzeigen bis:</div>
-    <input type="date" id="bc-until" min="${new Date().toISOString().split('T')[0]}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;box-sizing:border-box;">
+    <input type="date" id="bc-until" min="${todayISO()}" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;box-sizing:border-box;">
     <div style="font-size:10.5px;color:var(--muted);margin-bottom:12px;">Leer lassen = nur einmaliges Popup, kein dauerhafter Hinweis. Gilt bei Transporter als Anzeigedauer im Info-Tab.</div>
     <button class="submit-btn" onclick="sendBroadcast()">📢 Senden — poppt beim nächsten Öffnen auf</button>
   </div>
@@ -12851,7 +12873,7 @@ async function renderTransporterTasks(){
   const el=document.getElementById('v-transporterTasks');
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🚚','Aufgaben für Transporter','Mit einem Datum verknüpfen — erscheint direkt beim Transporter im Info-Tab.','#F97316');
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=(stores||[]).filter(s=>s.id!=='zentrale'&&s.id!=='1070'&&s.id!=='kitchen');
   html+=`<div class="card" style="padding:14px;">
@@ -12896,7 +12918,7 @@ async function loadTransporterTasksList(){
   if(!wrap) return;
   const tasks=await api('transporter_tasks?select=*&order=task_date.asc').catch(()=>[]);
   if(!tasks?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Aufgaben eingetragen.</div>'; return; }
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   wrap.innerHTML=tasks.map(t=>{
     const isPast=t.task_date<todayStr && !t.done;
     const dateLabel=new Date(t.task_date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'});
@@ -12908,7 +12930,7 @@ async function loadTransporterTasksList(){
           <button onclick="deleteTransporterTask(${t.id})" style="font-size:11px;color:#DC2626;background:#FEE2E2;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;">🗑</button>
         </div>
       </div>
-      <div style="font-size:13px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${t.text}</div>
+      <div style="font-size:13px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${escHtml(t.text)}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
         <span style="font-size:10.5px;color:var(--muted);">von ${t.created_by||'Organisation'}</span>
         <div class="cl-item" onclick="toggleTransporterTaskDone(${t.id},${!t.done})" style="padding:0;">
@@ -12947,7 +12969,7 @@ async function renderMessen(){
   }
   let html=backToHomeHtml();
   html+=pageHeaderHtml('🎪','Messe-Termine','Termine bei der Ausstellungsstraße mit erhöhtem Laufkundschafts-Aufkommen. Ein kleiner Hinweis erscheint automatisch bei Ausstellungsstraße & Küche — bereits am Vortag (bzw. am Freitag, falls der Termin einen Montag betrifft).','#F97316');
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   html+=`<div class="card" style="padding:14px;">
     <div style="font-weight:500;margin-bottom:8px;">Name der Veranstaltung</div>
     <input type="text" id="ms-name" placeholder="z.B. G20 - YEA 2026 Vienna Summit" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:12px;box-sizing:border-box;">
@@ -13024,7 +13046,7 @@ async function loadMesseTermineList(){
   (relevanzen||[]).forEach(r=>{ relevanzMap[r.messe_termin_id]=r.einschaetzung; });
   const RATING_LABEL={1:'😴 Kaum spürbar',2:'😃 Spürbar mehr',3:'🔥 Extrem viel mehr'};
   if(!termine?.length){ wrap.innerHTML='<div class="card" style="padding:14px;text-align:center;color:var(--muted);font-size:13px;">Noch keine Messe-Termine eingetragen.</div>'; return; }
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   wrap.innerHTML=termine.map(t=>{
     const isPast=t.end_date<todayStr;
     const startLabel=new Date(t.start_date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -13076,7 +13098,7 @@ async function checkForBroadcasts(){
 async function loadActiveBroadcastBanner(){
   const wrap=document.getElementById('broadcast-banner-widget');
   if(!wrap || !currentStore || currentStore.id==='zentrale') return;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     const active=await api(`org_broadcasts?or=(target_store_id.is.null,target_store_id.eq.${currentStore.id})&show_until=gte.${today}&order=created_at.desc&select=id,message,show_until,photo_url`).catch(()=>[]);
     // 07.10.26 (Wunsch Tini): zu viele Hinweise — erledigte kann die Filiale wegklicken ("✓ Erledigt") oder
@@ -13111,7 +13133,7 @@ async function loadActiveBroadcastBanner(){
 async function loadLieferTracking(){
   const wrap=document.getElementById('lieferung-track-widget');
   if(!wrap || !currentStore || currentStore.id==='zentrale') return;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     const rows=await api(`lieferung_tracking?datum=eq.${today}&aktiv=eq.true&stores=cs.{${currentStore.id}}&order=created_at.desc&select=*`).catch(()=>[]);
     const vis=(rows||[]).filter(r=>{ try{ return !localStorage.getItem('lt_hide_'+r.id); }catch(e){ return true; } });
@@ -13128,7 +13150,7 @@ async function ltSave(){
   if(!/^https?:\/\//i.test(link)){ showToast('Link muss mit https:// beginnen',true); return; }
   if(!stores.length){ showToast('Bitte mindestens einen Store ankreuzen',true); return; }
   try{
-    await api('lieferung_tracking',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify([{datum:new Date().toISOString().split('T')[0],stores,link,ankunft:document.getElementById('lt-ank')?.value||null,hinweis:(document.getElementById('lt-hint')?.value||'').trim()||null,created_by:currentStore?.name||'Organisation'}])});
+    await api('lieferung_tracking',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify([{datum:todayISO(),stores,link,ankunft:document.getElementById('lt-ank')?.value||null,hinweis:(document.getElementById('lt-hint')?.value||'').trim()||null,created_by:currentStore?.name||'Organisation'}])});
     showToast('✓ Tracking-Link ist bei den Stores sichtbar');
     document.getElementById('lt-link').value=''; document.querySelectorAll('.lt-store').forEach(c=>c.checked=false);
     ltList();
@@ -13136,7 +13158,7 @@ async function ltSave(){
 }
 async function ltList(){
   const el=document.getElementById('lt-list'); if(!el) return;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const rows=await api(`lieferung_tracking?datum=eq.${today}&aktiv=eq.true&order=created_at.desc&select=*`).catch(()=>[]);
   el.innerHTML=(rows||[]).map(r=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid var(--border);"><div style="flex:1;">✅ ${escAttr((r.stores||[]).join(', '))}${r.ankunft?' · '+escAttr(r.ankunft):''}</div><button onclick="ltEnd(${r.id})" style="border:1px solid var(--border);background:#fff;border-radius:7px;padding:5px 9px;font-size:11.5px;cursor:pointer;">Beenden</button></div>`).join('');
 }
@@ -13570,7 +13592,7 @@ async function buildSchulungMatrixHtml(){
   });
   let html=`<div class="card"><div style="overflow-x:auto;"><table class="pack-table"><thead><tr><th style="text-align:left;">Thema</th>${storeList.map(s=>`<th data-no-translate>${s.name}</th>`).join('')}</tr></thead><tbody>`;
   themen.forEach(t=>{
-    html+=`<tr><td>${t.titel}</td>`;
+    html+=`<tr><td>${escHtml(t.titel)}</td>`;
     storeList.forEach(s=>{
       const d=latest[t.id+'|'+s.id];
       let cell;
@@ -13634,7 +13656,7 @@ async function renderSchulung(){
       </div>
       <div id="schulungHistorieAdmin"></div>
     `;
-    document.getElementById('sch-datum').value=new Date().toISOString().split('T')[0];
+    document.getElementById('sch-datum').value=todayISO();
     translateEl(el);
     await refreshMitarbeitendeStoreDropdown();
     await refreshMitarbeitendeListe();
@@ -13658,7 +13680,7 @@ async function refreshSchulungThemenAdmin(){
   wrap.innerHTML=(themen||[]).map(t=>`
     <div class="card" style="padding:12px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <strong>${t.titel}</strong>
+        <strong>${escHtml(t.titel)}</strong>
         <span style="font-size:11px;color:var(--muted);">alle ${t.intervall_monate} Monate</span>
       </div>
       ${t.erklaerung?`<div style="font-size:12px;color:var(--sub);margin-top:6px;">${t.erklaerung}</div>`:''}
@@ -13737,7 +13759,7 @@ async function toggleMitarbeiterAusgeschieden(id, currentlyAusgeschieden){
   try{
     const patch=currentlyAusgeschieden
       ? {ausgeschieden:false, ausgeschieden_am:null}
-      : {ausgeschieden:true, ausgeschieden_am:new Date().toISOString().split('T')[0]};
+      : {ausgeschieden:true, ausgeschieden_am:todayISO()};
     await api(`mitarbeitende?id=eq.${id}`,{method:'PATCH',body:JSON.stringify(patch)});
     showToast(currentlyAusgeschieden?'↩️ Wieder aktiv':'🚪 Als ausgeschieden markiert');
     await refreshMitarbeitendeListe();
@@ -13776,7 +13798,7 @@ async function fillStatusDropdowns(){
   ]);
   const themaSel=document.getElementById('status-thema-select');
   const storeSel=document.getElementById('status-store-select');
-  if(themaSel) themaSel.innerHTML=(themen||[]).length?themen.map(t=>`<option value="${t.id}">${t.titel}</option>`).join(''):'<option value="">— erst ein Thema anlegen —</option>';
+  if(themaSel) themaSel.innerHTML=(themen||[]).length?themen.map(t=>`<option value="${t.id}">${escHtml(t.titel)}</option>`).join(''):'<option value="">— erst ein Thema anlegen —</option>';
   if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
 
@@ -13817,7 +13839,7 @@ async function fillSchulungDropdowns(){
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const themaSel=document.getElementById('sch-thema-select');
   const storeSel=document.getElementById('sch-store-select');
-  if(themaSel) themaSel.innerHTML=(themen||[]).length?(themen.map(t=>`<option value="${t.id}">${t.titel}</option>`).join('')):'<option value="">— erst ein Thema anlegen —</option>';
+  if(themaSel) themaSel.innerHTML=(themen||[]).length?(themen.map(t=>`<option value="${t.id}">${escHtml(t.titel)}</option>`).join('')):'<option value="">— erst ein Thema anlegen —</option>';
   if(storeSel) storeSel.innerHTML=(stores||[]).filter(s=>s.id!=='zentrale' && s.id!=='1070').map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
 
@@ -13888,7 +13910,7 @@ async function renderHygieneSchulung(){
 
   el.innerHTML=html;
   translateEl(el);
-  document.getElementById('hs-datum').value=new Date().toISOString().split('T')[0];
+  document.getElementById('hs-datum').value=todayISO();
   if(!isOrg) await loadLatestHygienePerson();
   await loadHygieneOrgList(storeList, isOrg?null:currentStore.id);
 }
@@ -14060,7 +14082,7 @@ async function toggleHygieneAusgeschieden(name, currentlyAusgeschieden){
     }
     if(hsOrgData?.ausgeschiedenMap){
       if(currentlyAusgeschieden) delete hsOrgData.ausgeschiedenMap[name];
-      else hsOrgData.ausgeschiedenMap[name]=new Date().toISOString().split('T')[0];
+      else hsOrgData.ausgeschiedenMap[name]=todayISO();
     }
     renderHsFilteredTable();
   }catch(e){console.error(e);showToast('Fehler: '+(e?.message||String(e)).slice(0,120),true);}
@@ -14090,7 +14112,7 @@ async function checkAndNotifyOverdueHygiene(byName, ausgeschiedenMap){
       title: 'Hygiene-Schulung fällig',
       to_email: 'tini@karmafood.at'
     });
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     for(const n of toNotify){
       await api(`hygiene_notifications?name=eq.${encodeURIComponent(n)}`,{method:'DELETE'});
       await api('hygiene_notifications',{method:'POST',body:JSON.stringify([{name:n, notified_at:today}])});
@@ -14184,7 +14206,7 @@ async function loadSchulungStatusStore(){
     return `
       <div class="card" style="padding:12px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;">
-          <strong>${t.titel}</strong>
+          <strong>${escHtml(t.titel)}</strong>
           ${pillHtml}
         </div>
         ${last?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">zuletzt: ${new Date(last.datum).toLocaleDateString('de-AT')}${last.unterschrieben?' · ✍️ unterschrieben':''}</div>`:''}
@@ -15034,7 +15056,7 @@ async function renderDailyCheck(){
     renderDcTabContent();
     return;
   }
-  const todayKey=new Date().toISOString().split('T')[0];
+  const todayKey=todayISO();
   const dienstplanKey=`dienstplan_ok_${todayKey}_${currentStore.id}`;
   // Robuster als nur localStorage (das geht z.B. bei einem Update/anderen Gerät verloren, wodurch
   // der Hinweis fälschlich später am Tag nochmal auftaucht, sogar bei "Schicht abschließen") —
@@ -15059,7 +15081,7 @@ async function renderDailyCheck(){
     translateEl(el);
     return;
   }
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const [wekRows,reinRows,kuehlRows,wekPrevRows,kuehlPrevRows,dlFcRows,dlSupRows,woltRows]=await Promise.all([
     api(`wareneingang?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
     api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*`).catch(()=>[]),
@@ -15362,7 +15384,7 @@ async function dlApplyDiffs(rows,today){
 }
 
 async function saveDailyCheckAll(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const dl=dlCollect();
   if(dl.open){ showToast('Bitte Lieferung bestätigen: '+dl.open+' (oder „Alles stimmt“)'); document.getElementById('dl-card')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
   const tempRows=[...document.querySelectorAll('[id^="wek-temp-row-"]')].filter(r=>r.style.display!=='none');
@@ -15439,7 +15461,7 @@ async function renderWaehrend(){
   const _zRaw=await api('allergene_rezepturen?select=gericht,zutaten,zkey').catch(()=>[]);
   const _zMapW={}; (_zRaw||[]).forEach(r=>{ if(r.zutaten){ _zMapW[r.gericht]=r.zutaten; _zMapW[normGerichtName(r.gericht)]=r.zutaten; if(r.zkey) _zMapW[r.zkey]=r.zutaten; } });
   const _zutatW=d=>{ const k=zutatenKeyHeute(d.slot); return (k&&_zMapW[k])||_zMapW[d.name]||_zMapW[normGerichtName(d.name)]||d.zutaten||''; };
-  const _todayStrWaehrend=new Date().toISOString().split('T')[0];
+  const _todayStrWaehrend=todayISO();
   const _laufendeWoche=getMenuWocheForDate(_todayStrWaehrend);
   const _WOCHE_COLORS={1:'#EAB308', 2:'#3B82F6', 3:'#22C55E', 4:'#EF4444'};
   const _wCol=_WOCHE_COLORS[_laufendeWoche]||'var(--green)';
@@ -15595,7 +15617,7 @@ function checkWareneingangTemp(){
 }
 
 async function toggleReinigungField(field, itemEl){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const cur=(await api(`reinigungsprotokoll?store_id=eq.${currentStore.id}&datum=eq.${today}&select=reinigung_erledigt,desinfektion_erledigt`).catch(()=>[]))[0]||{};
   const updated={reinigung_erledigt:!!cur.reinigung_erledigt, desinfektion_erledigt:!!cur.desinfektion_erledigt};
   updated[field]=!updated[field];
@@ -15615,7 +15637,7 @@ async function saveKuehleinrichtungen(){
   const klein=parseFloat(String(document.getElementById('kuehl-klein').value).replace(',','.'));
   const gross=parseFloat(String(document.getElementById('kuehl-gross').value).replace(',','.'));
   if(isNaN(klein)||isNaN(gross)){ showToast('Bitte beide Temperaturen eingeben'); return; }
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     await api(`kuehleinrichtungen?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
     await api('kuehleinrichtungen',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,temp_klein:klein,temp_gross:gross,mitarbeiter:currentStore.name}])});
@@ -15846,7 +15868,7 @@ async function loadSpecialOrderAntwortBox(){
   const box=document.getElementById('special-antwort-box');
   if(!box || !currentStore) return;
   try{
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     const rows=await api(`special_orders?store_id=eq.${currentStore.id}&order_date=eq.${today}&select=antwort&limit=1`).catch(()=>[]);
     const antwort=rows?.[0]?.antwort;
     if(antwort) box.innerHTML=`<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px;color:#1E40AF;">↩️ Antwort vom Transporter: „${antwort}"</div>`;
@@ -15888,7 +15910,7 @@ window.toggleTransporterNoteForm=toggleTransporterNoteForm;
 async function sendTransporterNote(){
   const text=document.getElementById('tn-text').value.trim();
   if(!text){ showToast('Bitte Notiz eingeben'); return; }
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   try{
     await api('transporter_tasks',{method:'POST',body:JSON.stringify([{task_date:todayStr,text,created_by:currentStore.name}])});
     showToast('✓ An Transporter gesendet');
@@ -16116,7 +16138,7 @@ async function openMangelDetail(id){
           </div>
           <span class="badge ${statusClass[status]||'badge-warn'}">${statusLabel[status]||status}</span>
         </div>
-        <div style="font-size:13.5px;color:var(--sub);margin-top:10px;line-height:1.4;">${m.beschreibung}</div>
+        <div style="font-size:13.5px;color:var(--sub);margin-top:10px;line-height:1.4;">${escHtml(m.beschreibung)}</div>
         ${m.foto_url?`<a href="${m.foto_url}" target="_blank" rel="noopener"><img src="${m.foto_url}" style="max-width:100%;max-height:220px;border-radius:10px;margin-top:10px;display:block;object-fit:cover;"></a>`:''}
         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
           ${isOrg && status!=='behoben'?`
@@ -16143,7 +16165,7 @@ async function openMangelDetail(id){
       <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:18px;margin-bottom:8px;">Verlauf</div>
       <div style="display:flex;flex-direction:column;gap:10px;max-height:220px;overflow-y:auto;padding-right:2px;">
         ${verlauf.map(v=>`<div style="border-left:2px solid ${v.t==='status'?'#0369A1':(v.t==='erstellt'?'var(--green)':'var(--border)')};padding-left:10px;">
-          <div style="font-size:12.5px;">${v.text}</div>
+          <div style="font-size:12.5px;">${escHtml(v.text)}</div>
           <div style="font-size:10.5px;color:var(--muted);margin-top:1px;">${v.autor||''} · ${new Date(v.zeit).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
         </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Noch kein Verlauf.</div>'}
       </div>
@@ -16246,7 +16268,7 @@ async function renderEssenFeedback(){
   html+=`<div style="font-size:12px;color:var(--sub);background:#FDF2F8;border:0.5px solid #FBCFE850;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;">Euer Feedback ist uns wichtig — probiert gerne alles, soweit es für euch möglich ist (vegan etc.) 💛<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #FBCFE8;">📱 Fragen/Ideen zur <b>App</b>? <a href="#" onclick="showAppFeedbackModal();return false;" style="color:#2563EB;font-weight:600;">Feedback an Tini</a></div></div>`;
 
   const todayMenu=(getTodayMenu()||[]).filter(d=>d.name && !d.name.startsWith('ÖL') && !d.name.startsWith('ZUTATEN'));
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const existing=await api(`essen_feedback?store_id=eq.${currentStore.id}&datum=eq.${today}&select=*&order=submitted_at.asc`).catch(()=>[]);
 
   if(!todayMenu.length){
@@ -16301,7 +16323,7 @@ function renderFeedbackExistingList(existing, todayMenu){
       </div>
       <div style="margin-top:4px;">${rows}</div>
       ${e.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${escAttr(e.kommentar)}"</div>`:''}
-      ${e.feedback_frei?`<div style="font-size:12px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;">💬 ${e.feedback_frei}</div>`:''}
+      ${e.feedback_frei?`<div style="font-size:12px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;">💬 ${escHtml(e.feedback_frei)}</div>`:''}
     </div>`;
   }).join('');
   translateEl(wrap); // 25.08.26: wird nach dem Haupt-Render eingefügt, braucht daher eigenen Aufruf
@@ -16433,7 +16455,7 @@ window.setFeedbackImprove=setFeedbackImprove;
 async function submitKuecheFeedback(){
   // 02.10.26 (Wunsch Tini): Name nicht mehr Pflicht — soll möglichst niedrigschwellig sein,
   // Feedback bleibt anonym (Anzeige zeigt ohnehin schon "Anonym" wenn kein Name da ist).
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name:null,ratings:_feedbackDraft}])});
     showToast('✓ Danke für dein Feedback!');
@@ -16447,7 +16469,7 @@ async function submitFeedback(){
   // 02.10.26 (Wunsch Tini): Name nicht mehr Pflicht, "App-Feedback"-Freitext (feedback_frei) raus —
   // bleibt anonym, nur noch Bewertung + optionaler Kommentar zum Essen.
   const kommentar=document.getElementById('feedback-kommentar')?.value?.trim()||null;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     await api('essen_feedback',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,name:null,ratings:_feedbackDraft,kommentar}])});
     showToast('✓ Danke für dein Feedback!');
@@ -16464,7 +16486,7 @@ window.submitFeedback=submitFeedback;
 
 async function renderSchichtende(){
   const el=document.getElementById('v-schichtende');
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
 
   // Alle Daten parallel laden
@@ -16685,7 +16707,7 @@ async function renderSchichtende(){
 async function saveUebergabeNotiz(){
   const notiz=document.getElementById('uebergabe-text')?.value?.trim();
   if(!notiz){ showToast('Bitte Notiz eingeben'); return; }
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     await api(`schicht_uebergabe?store_id=eq.${currentStore.id}&datum=eq.${today}`,{method:'DELETE'});
     await api('schicht_uebergabe',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,datum:today,notiz}])});
@@ -16833,7 +16855,7 @@ function istHeuteDienstag(){ return new Date().getDay()===2; }
 
 async function renderInventurBlock(storeList){
   const isOrg = currentStore?.id==='zentrale';
-  const heute = new Date().toISOString().split('T')[0];
+  const heute = todayISO();
   // Letzte Inventur je Filiale — für den Banner-Text und um zu wissen, ob diese Woche schon gezählt wurde
   const subs = await api('inventur_submissions?select=store_id,submitted_date&order=submitted_date.desc').catch(()=>[]);
   const letzteJeFiliale = {};
@@ -16858,7 +16880,7 @@ async function renderInventurBlock(storeList){
 }
 
 async function updateIstBestandFuerFiliale(storeId, articleId, value){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
@@ -16871,7 +16893,7 @@ async function updateIstBestandFuerFiliale(storeId, articleId, value){
 window.updateIstBestandFuerFiliale=updateIstBestandFuerFiliale;
 
 async function submitInventur(storeId){
-  const heute=new Date().toISOString().split('T')[0];
+  const heute=todayISO();
   try{
     await api('inventur_submissions',{method:'POST',body:JSON.stringify([{store_id:storeId, submitted_date:heute, submitted_by:(currentStore?.name||currentStore?.id||'Transporter')}])});
     showToast('✓ Inventur für '+storeId+' gespeichert');
@@ -17115,7 +17137,7 @@ function grRenderForm(scroll){
   if(!wrap) return;
   grundreinigungChecked=new Set();
   const storeId=_grStoreId;
-  const heute=new Date().toISOString().split('T')[0];
+  const heute=todayISO();
   const prevDatum=document.getElementById('gr-datum')?.value, prevVon=document.getElementById('gr-von')?.value;
   let totalItems=0;
   Object.values(_grActive).forEach(list=>totalItems+=list.length);
@@ -17234,7 +17256,7 @@ function toggleGrundreinigungItem(key, el){
 window.toggleGrundreinigungItem=toggleGrundreinigungItem;
 
 function grundreinigungNachtragen(storeId){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   document.getElementById('gr-nachtrag')?.remove();
   const ov=document.createElement('div'); ov.id='gr-nachtrag';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -17377,7 +17399,7 @@ async function renderPack(){
     return;
   }
 
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const [openTasksRaw, transporterBcRaw]=await Promise.all([
     api(`transporter_tasks?done=eq.false&select=id`).catch(()=>[]),
     api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[]),
@@ -17435,7 +17457,7 @@ async function renderPack(){
   // "Samstag" (den niemand je aufruft) statt korrekt unter "Montag", wo Transporter tatsächlich schaut.
   const orderEntryDate=new Date(bestellViewDate); orderEntryDate.setDate(orderEntryDate.getDate()-1);
   while([0,6].includes(orderEntryDate.getDay())){ orderEntryDate.setDate(orderEntryDate.getDate()-1); }
-  const bestellDateStr=orderEntryDate.toISOString().split('T')[0];
+  const bestellDateStr=isoLocal(orderEntryDate);
   const isBestellToday=transporterBestellDateOffset===0;
   const bestellDateLabel=bestellViewDate.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'});
   html+=`<div class="card" style="padding:8px 10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -17456,7 +17478,7 @@ async function renderPack(){
   // Offene Sonderbestellungen bleiben sichtbar, bis „erledigt" geklickt wird — auch von den letzten 7 Tagen (30.10.26, Wunsch Tini);
   // vorher verschwanden unbeantwortete Sonderbestellungen am Folgetag aus der Liste.
   const _specFrom=new Date(bestellDateStr+'T00:00:00'); _specFrom.setDate(_specFrom.getDate()-7);
-  const specRaw=await api(`special_orders?order_date=gte.${_specFrom.toISOString().split('T')[0]}&order_date=lte.${bestellDateStr}&select=id,store_id,note,antwort,an_simone_gemeldet,order_date&order=order_date.desc,id.desc`).catch(()=>[]);
+  const specRaw=await api(`special_orders?order_date=gte.${isoLocal(_specFrom)}&order_date=lte.${bestellDateStr}&select=id,store_id,note,antwort,an_simone_gemeldet,order_date&order=order_date.desc,id.desc`).catch(()=>[]);
   const allOrd={};
   allOrdRaw.forEach(o=>{if(!allOrd[o.article_id])allOrd[o.article_id]={};allOrd[o.article_id][o.store_id]=o;});
   const activeColor='#F97316';
@@ -17523,7 +17545,7 @@ async function renderPack(){
   // Stadtplatz' Wechselgeld-Notiz blieb dort unbemerkt liegen.
   const _ttOffen=await api('transporter_tasks?done=eq.false&select=*&order=task_date.asc').catch(()=>[]);
   if((_ttOffen||[]).length){
-    const _tdy=new Date().toISOString().split('T')[0];
+    const _tdy=todayISO();
     html+=`<div class="section-lbl">📝 Notizen von den Stores — offen</div><div class="card">`;
     _ttOffen.forEach(t=>{
       const late=t.task_date<_tdy;
@@ -17531,7 +17553,7 @@ async function renderPack(){
       html+=`<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);">
         <div style="flex:1;">
           <div style="font-size:11px;font-weight:700;color:${late?'#DC2626':'#F97316'};">${dl}${late?' · überfällig':''}${t.filiale?' · 📍 '+t.filiale:''}</div>
-          <div style="font-size:13px;margin-top:2px;">${t.text}</div>
+          <div style="font-size:13px;margin-top:2px;">${escHtml(t.text)}</div>
           <div style="font-size:10.5px;color:var(--muted);margin-top:2px;" data-no-translate>von ${t.created_by||'Organisation'}</div>
         </div>
         <button onclick="toggleTransporterTaskDone(${t.id},true)" style="background:#fff;color:var(--sub);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;">Erledigt</button>
@@ -17565,7 +17587,7 @@ async function renderPack(){
           <span style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></span>
           <div style="flex:1;">
             <div style="font-size:12px;font-weight:500;" data-no-translate>${store?.name||s.store_id}${s.order_date&&s.order_date!==bestellDateStr?` <span style="font-size:10.5px;font-weight:700;color:#DC2626;">· vom ${new Date(s.order_date+'T00:00:00').toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})} · noch offen</span>`:''}</div>
-            <div style="font-size:13px;color:var(--sub);">${s.note}</div>
+            <div style="font-size:13px;color:var(--sub);">${escHtml(s.note)}</div>
             ${s.antwort?`<div style="font-size:11.5px;color:var(--green);margin-top:4px;">↩️ Deine Antwort: „${s.antwort}"${s.an_simone_gemeldet?' · 📤 Simone benachrichtigt':''}</div>`:''}
           </div>
           <button onclick="toggleSpecialOrderReply(${s.id})" style="background:#EFF6FF;color:#1E40AF;border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;">${s.antwort?'✏️':'💬'}</button>
@@ -17637,7 +17659,7 @@ async function toggleKcPacked(articleId, storeId, soll){
     console.error('toggleKcPacked: ungültige Parameter', {articleId, storeId, soll});
     return;
   }
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     const delRes=await api(`kc_stock?store_id=eq.${storeId}&article_id=eq.${articleId}`,{method:'DELETE'});
     const postRes=await api('kc_stock',{method:'POST',body:JSON.stringify([{store_id:storeId,article_id:articleId,ist_bestand:soll,updated_date:today}])});
@@ -17653,7 +17675,7 @@ window.toggleKcPacked=toggleKcPacked;
 
 async function renderKCOverview(el, tabHtml, storeList){
   let html=tabHtml;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const kcItems=articles.filter(a=>a.category==='Webshop-Produkte');
   const allIst=await api(`kc_stock?select=store_id,article_id,ist_bestand,updated_date`).catch(()=>[]);
   const istMap={};
@@ -17746,7 +17768,7 @@ async function kcAllesErledigt(){
   const btn=document.querySelector('button[onclick="kcAllesErledigt()"]');
   if(btn){ btn.disabled=true; btn.textContent='Wird gesendet…'; }
   try{
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
 
     // Welche Filialen hatten offene Meldungen (noch nicht eingepackt)? — für die Nachricht an Transporter
     const [stores, pendingSubs] = await Promise.all([
@@ -17787,7 +17809,7 @@ async function kcAllesErledigt(){
 window.kcAllesErledigt=kcAllesErledigt;
 
 async function kcPickupDone(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   try{
     await api('kc_pickup_ready?date=eq.'+today,{method:'DELETE'});
     showToast('✓ Abholung bestätigt');
@@ -17816,7 +17838,7 @@ async function toggleArticleVerfuegbarPack(id, current){
 // ---- MSG (Bestellstatus + Nachricht) ----
 async function renderMsg(){
   const stores=await api('stores?select=id,name&order=id');
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const allOrdRaw=await api(`orders?order_date=eq.${today}&select=store_id,article_id,quantity`);
   const specRaw=await api(`special_orders?order_date=eq.${today}&select=store_id,note`).catch(()=>[]);
   const el=document.getElementById('v-msg');
@@ -17830,7 +17852,7 @@ async function renderMsg(){
       <span style="width:12px;height:12px;border-radius:50%;background:${col};flex-shrink:0;"></span>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:500;" data-no-translate>${s.name}</div>
-        ${spec?`<div style="font-size:11px;color:#854F0B;margin-top:2px;">📝 ${spec.note}</div>`:''}
+        ${spec?`<div style="font-size:11px;color:#854F0B;margin-top:2px;">📝 ${escHtml(spec.note)}</div>`:''}
       </div>
       <span class="badge ${total>0?'badge-ok':'badge-warn'}">${total>0?`${total} Artikel`:'ausstehend'}</span>
     </div>`;
@@ -17850,7 +17872,7 @@ emailjs.init('8gD6YlYH0PVsMf7w-');
 async function sendTransportNote(){
   const note=document.getElementById('transport-note')?.value?.trim();
   if(!note){showToast('Nichts eingetragen');return;}
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const now=new Date().toLocaleString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   try{
     // Save to DB
@@ -17936,7 +17958,7 @@ async function renderDisposalOverviewHtml(){
   const SLOT_ORDER=['gericht1','gericht2','gericht3','reis'];
   let html=weekTabsHtml+legendHtml;
   const DAY_NAMES={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag',5:'Freitag'};
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
 
   for(let wd=1; wd<=5; wd++){
     const dateStr=weekDates[wd];
@@ -17989,9 +18011,9 @@ let _disposalDate=null; // Modul-weiter Zustand: welcher Tag wird gerade in Ents
 
 async function renderDisposal(dateStr){
   const el=document.getElementById('v-disposal');
-  const today=dateStr || new Date().toISOString().split('T')[0];
+  const today=dateStr || todayISO();
   _disposalDate=today; // von updateLeftover/updateSoldOutTime/updateDisposalNote verwendet
-  const todayReal=new Date().toISOString().split('T')[0];
+  const todayReal=todayISO();
   const isToday=today===todayReal;
   const dObj=new Date(today+'T00:00:00');
   const dayIdx=(dObj.getDay()+6)%7; // Mon=0..Sun=6
@@ -18181,7 +18203,7 @@ function quickReportSoldOut(slot, dishName){
 window.quickReportSoldOut=quickReportSoldOut;
 
 async function updateSoldOutTime(slot, dishName, value){
-  const today=_disposalDate || new Date().toISOString().split('T')[0];
+  const today=_disposalDate || todayISO();
   const v=value===''?null:value+':00';
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=leftover_qty,note`).catch(()=>[]);
@@ -18198,7 +18220,7 @@ async function updateSoldOutTime(slot, dishName, value){
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateLeftover(slot, dishName, value){
-  const today=_disposalDate || new Date().toISOString().split('T')[0];
+  const today=_disposalDate || todayISO();
   const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time,note`).catch(()=>[]);
@@ -18209,11 +18231,11 @@ async function updateLeftover(slot, dishName, value){
       await api('disposal',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,disposal_date:today,slot,dish_name:dishName,sold_out_time:soldOut,leftover_qty:v,note}])});
     }
     showToast('✓ Gespeichert');
-    if(today===new Date().toISOString().split('T')[0]) computeAndSaveScore(currentStore.id).catch(()=>{});
+    if(today===todayISO()) computeAndSaveScore(currentStore.id).catch(()=>{});
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 async function updateDisposalNote(slot, dishName, value){
-  const today=_disposalDate || new Date().toISOString().split('T')[0];
+  const today=_disposalDate || todayISO();
   const note=value.trim()===''?null:value.trim();
   try{
     const existing=await api(`disposal?store_id=eq.${currentStore.id}&disposal_date=eq.${today}&slot=eq.${slot}&select=sold_out_time,leftover_qty`).catch(()=>[]);
@@ -18237,7 +18259,7 @@ function koeStep(d){
 }
 async function saveKundenOhneEssen(){
   const inp=document.getElementById('koe-anzahl'); if(!inp) return;
-  const day=_disposalDate || new Date().toISOString().split('T')[0];
+  const day=_disposalDate || todayISO();
   const raw=String(inp.value).trim();
   try{
     if(raw===''){
@@ -18255,7 +18277,7 @@ async function saveKundenOhneEssen(){
 window.koeStep=koeStep; window.saveKundenOhneEssen=saveKundenOhneEssen;
 
 async function saveSamosaEntsorgung(){
-  const day=_disposalDate || new Date().toISOString().split('T')[0];
+  const day=_disposalDate || todayISO();
   const t=(document.getElementById('sam-time')?.value||'').trim();
   const r=String(document.getElementById('sam-rest')?.value??'').trim();
   const note=(document.getElementById('sam-note')?.value||'').trim()||null;
@@ -18325,7 +18347,7 @@ async function renderStoreSamosaTab(el, tabHtml){
   // Freitags (einziger Bestelltag) direkt auf "Nächste Woche" öffnen — sonst landen die Stores auf der
   // gesperrten laufenden Woche und merken nicht, dass sie die kommende Woche selbst eintragen können.
   // Ist die kommende Woche schon an den Produzenten geschickt (gesperrt), direkt auf die Woche danach springen.
-  { const _td=new Date().toISOString().split('T')[0];
+  { const _td=todayISO();
     if(new Date().getDay()===5 && _samosaAutoDay!==_td){
       _samosaAutoDay=_td; _samosaWeekOffset=1;
       const _lk=await api('samosa_lock?select=locked_until_monday&order=locked_until_monday.desc&limit=1').catch(()=>[]);
@@ -18589,7 +18611,7 @@ window.scheduleSamosaSave=scheduleSamosaSave;
 // Info-Tab für Transporter (Transporter): zeigt Aufgaben, die Tini/Ines in Organisation eingetragen haben,
 // datumsverknüpft — heutige/überfällige zuerst, dann kommende. Direkt abhakbar, kein Umweg über Organisation.
 async function renderTransporterInfoTabHtml(){
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
   const [tasks, broadcastsRaw, stores]=await Promise.all([
     api('transporter_tasks?select=*&order=task_date.asc').catch(()=>[]),
     api(`org_broadcasts?target_store_id=eq.transporter&order=created_at.desc&limit=20`).catch(()=>[]),
@@ -18655,7 +18677,7 @@ async function renderTransporterInfoTabHtml(){
         <span style="font-size:12px;font-weight:700;color:${badgeColor};">${dateLabel}${isPast&&!t.done?' · überfällig':(isToday?' · heute':'')}</span>
         ${t.filiale?`<span data-no-translate style="font-size:10px;font-weight:600;color:#0369A1;background:#F0F9FF;border-radius:20px;padding:2px 8px;white-space:nowrap;">📍 ${t.filiale}</span>`:''}
       </div>
-      <div style="font-size:14px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${t.text}</div>
+      <div style="font-size:14px;color:#1a1a18;margin-top:4px;text-decoration:${t.done?'line-through':'none'};">${escHtml(t.text)}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
         <span style="font-size:10.5px;color:var(--muted);">von ${t.created_by||'Organisation'}</span>
         <div class="cl-item" onclick="toggleTransporterTaskDone(${t.id},${!t.done})" style="padding:0;">
@@ -18978,7 +19000,7 @@ async function renderKitchenDaily(){
   el.innerHTML='<div style="padding:1rem;text-align:center;color:var(--muted);">Wird geladen…</div>';
 
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
-  const todayDate=new Date().toISOString().split('T')[0];
+  const todayDate=todayISO();
   const wd=new Date().getDay();
   const wdStr=WEEKDAY_STR[wd]||'mo';
   const _msK=menuSlot(todayDate, wdStr);
@@ -19476,7 +19498,7 @@ async function renderKitchenDailyHtml(){
   // Daily Business: Store-Ansicht für Kitchen 3400 Kassenbereich
   // Zeigt: heutigen Tag mit Gerichten + Allergenen (wie Store-Startseite "Während der Schicht")
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
-  const todayDate=new Date().toISOString().split('T')[0];
+  const todayDate=todayISO();
   const wd=new Date().getDay();
   const wdStr=WEEKDAY_STR[wd]||'mo';
   const dishNames=getMenuDishNamesForDay(wdStr, todayDate);
@@ -19582,7 +19604,7 @@ function kmInfoBoxHtml(items){
 }
 
 async function renderKitchenMonitoringHtml(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const rows=await api(`kitchen_monitoring?datum=eq.${today}&select=*&limit=1`).catch(()=>[]);
   const rec=rows?.[0]||null;
 
@@ -19680,7 +19702,7 @@ function setKmWcFrei(input){ _kmDraft.wc=input.value.trim()||null; }
 window.setKmWcFrei=setKmWcFrei;
 
 async function submitKitchenMonitoring(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const existing=await api(`kitchen_monitoring?datum=eq.${today}&select=lager_kontrolliert,reinigung_gemacht,wc_gereinigt_von`).catch(()=>[]);
   const prev=existing?.[0]||{};
   const wcFrei=document.getElementById('km-wc-frei')?.value?.trim();
@@ -20100,7 +20122,7 @@ async function renderKitchen(){
             if(!rec){html+='<td style="color:var(--border);">·</td>';return;}
             const time=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
             const qty=rec.leftover_qty??'';
-            html+=`<td style="font-size:11px;line-height:1.5;">${qty!==''?`<div style="font-weight:600;">${qty}</div>`:''}${time?`<div style="color:var(--muted);">${time}</div>`:''}${rec.note?`<div style="color:#9333EA;font-size:9.5px;">📝 ${rec.note}</div>`:''}${qty===''&&!time&&!rec.note?'·':''}</td>`;
+            html+=`<td style="font-size:11px;line-height:1.5;">${qty!==''?`<div style="font-weight:600;">${qty}</div>`:''}${time?`<div style="color:var(--muted);">${time}</div>`:''}${rec.note?`<div style="color:#9333EA;font-size:9.5px;">📝 ${escHtml(rec.note)}</div>`:''}${qty===''&&!time&&!rec.note?'·':''}</td>`;
           });
           html+='</tr>';
         });
@@ -20166,7 +20188,7 @@ function gfbKundenAll(){
   return _kaP;
 }
 async function getDishFeedbackSummary(dishName, refDateStr){
-  const heute=refDateStr || new Date().toISOString().split('T')[0];
+  const heute=refDateStr || todayISO();
   const [teamRows, kundenRows] = await Promise.all([
     api(`essen_feedback?datum=lte.${heute}&select=datum,ratings&order=datum.desc&limit=400`).catch(()=>[]),
     gfbKundenAll().then(a=>(a||[]).filter(r=>(r.dish_name===dishName||(r.quelle==='homepage'&&gfbNameMatch(r.dish_name,dishName))) && String(r.submitted_at||'')<=heute+'T23:59:59'))
@@ -20331,7 +20353,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
   const tomorrowWd = (['so','mo','di','mi','do','fr','sa'])[tomorrow.getDay()];
   const DAY_NAME = {mo:'Montag',di:'Dienstag',mi:'Mittwoch',do:'Donnerstag',fr:'Freitag',sa:'Samstag',so:'Sonntag'};
   // For day navigation
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayISO();
   const isToday = tomorrowStr===todayStr;
 
   const stores = await api('stores?select=id,name&order=id').catch(()=>[]);
@@ -21046,7 +21068,7 @@ const NACHSCHUB_EMAIL=''; // z.B. 'bestellung@karmafood.at'
 // Kitchen bestellt Shop Produkte bei Ines — identisch zum Store-Ablauf (submitKCNote), nur fix
 // mit store_id='kitchen'.
 async function submitKitchenKC(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const note=document.getElementById('special-note-kc-kitchen')?.value?.trim()||'';
   const kcArticleIds=new Set((articles||[]).filter(a=>KC_CATS.includes(a.category)).map(a=>a.id));
   try{
@@ -21286,7 +21308,7 @@ async function stadtgemeindeBodyHtml(){
   const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
   let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Bestellte Portionen und Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag oben (manuell), dann die Anmeldungen per Link, darunter die Übersicht nach Monat.</div>`;
   // Neuer Eintrag (manuell — aktuell trägt Kassa die Menge/Zahlung selbst ein)
-  const heute=new Date().toISOString().split('T')[0];
+  const heute=todayISO();
   html+=`<div class="card" style="padding:14px;margin-bottom:14px;">
     <div style="font-size:12px;font-weight:700;margin-bottom:8px;">➕ Neuer Eintrag</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -21654,7 +21676,7 @@ async function renderWochenFeedback(){
   html+=`<div class="section-lbl">📌 Erkenntnisse dieser Woche</div>`;
   if(erkenntnis){
     html+=`<div class="card" style="padding:14px;margin-bottom:8px;background:#FDF2F8;border-color:#FBCFE8;">
-      <div style="font-size:12.5px;color:#831843;white-space:pre-wrap;line-height:1.6;">${erkenntnis.text}</div>
+      <div style="font-size:12.5px;color:#831843;white-space:pre-wrap;line-height:1.6;">${escHtml(erkenntnis.text)}</div>
       <div style="font-size:10px;color:#BE185D;margin-top:8px;">${erkenntnis.erstellt_von||''} · ${new Date(erkenntnis.erstellt_am).toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
     </div>`;
   } else if(!isOrg){
@@ -21730,7 +21752,7 @@ async function renderWochenFeedback(){
       <div class="check-box" onclick="markFeedbackBearbeitet(${k.feedbackId},this)" style="flex-shrink:0;margin-top:2px;cursor:pointer;"></div>
       <div>
         <div style="font-size:12.5px;font-weight:600;" data-no-translate>${k.dish}</div>
-        <div style="font-size:12px;color:var(--sub);margin-top:2px;">„${k.note}"</div>
+        <div style="font-size:12px;color:var(--sub);margin-top:2px;">„${escHtml(k.note)}"</div>
         <div style="font-size:10px;color:var(--muted);margin-top:3px;">${new Date(k.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})}</div>
       </div>
     </div>`;
@@ -21786,7 +21808,7 @@ window.markFeedbackBearbeitet=markFeedbackBearbeitet;
 
 // ==== FEUERLÖSCHER-KONTROLLE (06.10.26) — jährlich, mit Reminder ====
 let _flRows=[];
-function flAddYear(d){ const x=new Date(d+'T00:00:00'); x.setFullYear(x.getFullYear()+1); return x.toISOString().split('T')[0]; }
+function flAddYear(d){ const x=new Date(d+'T00:00:00'); x.setFullYear(x.getFullYear()+1); return isoLocal(x); }
 function flFmt(d){ return d?new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit',year:'numeric'}):'–'; }
 const FL_RUHE_BIS='2027-01-01';
 function flStatus(rows){
@@ -21794,7 +21816,7 @@ function flStatus(rows){
   const dates=rows.map(r=>r.letzte_pruefung).filter(Boolean).sort();
   const noDate=rows.some(r=>!r.letzte_pruefung);
   const due=dates.length?flAddYear(dates[0]):null;
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const days=due?Math.round((new Date(due+'T00:00:00')-new Date(today+'T00:00:00'))/86400000):-1;
   const defekte=rows.filter(r=>r.defekt).length;
   let level=(noDate||days<0)?'red':(days<=60?'orange':'green');
@@ -21832,7 +21854,7 @@ async function renderFeuerloescher(){
   html+=`<div class="section-lbl">STANDORTE</div>`;
   _flRows.forEach(r=>{
     const due=r.letzte_pruefung?flAddYear(r.letzte_pruefung):null;
-    const over=!due||due<new Date().toISOString().split('T')[0];
+    const over=!due||due<todayISO();
     html+=`<div class="card" onclick="flEdit(${r.id})" style="padding:11px 13px;margin-bottom:8px;cursor:pointer;${r.defekt?'border-color:#FCA5A5;':''}">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;"><strong style="font-size:13.5px;">${escAttr(r.standort)} <span style="font-weight:500;color:var(--muted);">${r.anzahl}×</span></strong>
       <span style="font-size:10.5px;font-weight:700;color:${r.defekt?'#B91C1C':over?'#B45309':'#16A34A'};">${r.defekt?'🔴 defekt':over?'⏰ fällig':'✓ ok'}</span></div>
@@ -21865,7 +21887,7 @@ async function flSave(id){
 }
 async function flDelete(id){ if(!confirm('Standort wirklich entfernen?')) return; try{ await api(`feuerloescher?id=eq.${id}`,{method:'DELETE'}); flClose(); renderFeuerloescher(); }catch(e){ console.error(e); showToast('Fehler',true); } }
 function flMarkAllDone(){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   flModal(`<div style="font-size:16px;font-weight:800;">✓ Prüfung durchgeführt</div><div style="font-size:12px;color:var(--sub);margin:6px 0;">Setzt bei allen Standorten das Prüfdatum. Defekte bleiben markiert, bis du sie einzeln änderst.</div>
     <label style="font-size:11.5px;color:var(--muted);display:block;margin:8px 0 3px;">Datum der Prüfung</label><input id="fl-alldate" type="date" value="${today}" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box;">
     <div style="display:flex;gap:8px;margin-top:14px;"><button onclick="flClose()" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-1);cursor:pointer;">Abbrechen</button><button onclick="flSaveAll()" style="flex:2;padding:11px;border:none;border-radius:10px;background:#16A34A;color:#fff;font-weight:700;cursor:pointer;">Speichern</button></div>`);
@@ -21895,7 +21917,7 @@ function cateringDateLabel(d){ return new Date(d+'T00:00:00').toLocaleDateString
 function cateringCanEdit(){ return currentStore?.id==='zentrale'||currentStore?.id==='kitchen'; }
 async function renderCatering(){
   const el=document.getElementById('v-catering');
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const rows=await api(`caterings?status=eq.aktiv&datum=gte.${today}&select=*&order=datum.asc`).catch(()=>[]);
   _cateringList=rows||[];
   let html=backToHomeHtml();
@@ -21957,7 +21979,7 @@ function cateringText(c){
   const L=[`📋 CATERING ${c.kunde}`,`📅 ${cateringDateLabel(c.datum)}`];
   if(c.ort) L.push(`📍 ${c.ort}`); if(c.ankunft) L.push(`🕐 Ankunft Location ${c.ankunft}`);
   if(c.kontakt) L.push(`☎️ Kontakt vor Ort: ${c.kontakt}`); if(c.personen) L.push(`👥 ${c.personen} PAX`);
-  if(c.hinweis) L.push('',`⚠️ ${c.hinweis}`);
+  if(c.hinweis) L.push('',`⚠️ ${escHtml(c.hinweis)}`);
   if(!((c.menue||[])[0]&&/^##/.test(c.menue[0]))) L.push('','LUNCH');
   (c.menue||[]).forEach(m=>{ if(/^##/.test(m)) L.push('','🍽️ '+m.replace(/^##\s*/,'').toUpperCase()); else L.push('• '+m); }); if((c.extras||[]).length) L.push((c.extras||[]).join(', '));
   if((c.packliste||[]).length){ L.push('','PACKLISTE'); c.packliste.forEach(p=>L.push((p.done?'☑ ':'☐ ')+p.t)); }
@@ -22096,7 +22118,7 @@ async function cateringImportPdf(inp){
     const lines=await pdfToLines(await f.arrayBuffer());
     const r=parseCateringLines(lines);
     if(!r.kunde && !r.menue.length) throw new Error('nichts erkannt');
-    if(!r.datum) r.datum=new Date().toISOString().split('T')[0]; // Datum fehlt im PDF → heute vorbelegt, bitte prüfen
+    if(!r.datum) r.datum=todayISO(); // Datum fehlt im PDF → heute vorbelegt, bitte prüfen
     showCateringForm(null,r);
   }catch(e){ console.error(e); showToast('PDF konnte nicht gelesen werden — bitte „Neues Catering“ nutzen',true); }
 }
@@ -22288,7 +22310,7 @@ async function renderTeamFeedback(){
     el.innerHTML=html; translateEl(el); return;
   }
 
-  const todayStr=new Date().toISOString().split('T')[0];
+  const todayStr=todayISO();
 
   // Alles nach GERICHT bündeln — heutige Bewertung + Verlauf (bisheriger Schnitt) + zugehörige
   // Kommentare direkt beieinander, statt einer separaten losen Kommentar-Wand oben drüber
@@ -22351,7 +22373,7 @@ async function renderTeamFeedback(){
     const tagList=Object.entries(d.tags).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,c])=>{const t=KF_TAGS.find(z=>z.k===k);return `<span class="badge" style="background:${t?.neg?'#FEE2E2':'#DCFCE7'};color:${t?.neg?'#B91C1C':'#166534'};margin:0 4px 3px 0;">${t?t.label:k} ${c}×</span>`;}).join('');
     const stores=Object.entries(d.byStore).map(([sid,v])=>[sid,avgOf(v),v.length]).sort((a,b)=>a[1]-b[1]).map(([sid,a,c])=>`<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;margin:0 4px 3px 0;background:${a<3?'#FEE2E2':a<4?'#FFEDD5':'#DCFCE7'};color:${colorFor(a)};font-weight:600;">${(storeNameMap[sid]||sid).replace(/\s*\d{4}$/,'')} ${a.toFixed(1)}</span>`).join('');
     const pct=avg!=null?Math.max(4,Math.min(100,avg/5*100)):0;
-    const comm=d.comments.length?`<details style="margin-top:6px;"><summary style="font-size:10.5px;color:var(--muted);cursor:pointer;">💬 ${d.comments.length} Kommentar${d.comments.length>1?'e':''}</summary>`+d.comments.slice(0,8).map(c=>`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">„${c.text}"<span style="font-size:9.5px;color:var(--muted);"> — ${c.store?(storeNameMap[c.store]||c.store):'ohne Filiale'}${c.date?' · '+new Date(c.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</span></div>`).join('')+`</details>`:'';
+    const comm=d.comments.length?`<details style="margin-top:6px;"><summary style="font-size:10.5px;color:var(--muted);cursor:pointer;">💬 ${d.comments.length} Kommentar${d.comments.length>1?'e':''}</summary>`+d.comments.slice(0,8).map(c=>`<div style="font-size:11.5px;color:var(--sub);margin-top:4px;">„${escHtml(c.text)}"<span style="font-size:9.5px;color:var(--muted);"> — ${c.store?(storeNameMap[c.store]||c.store):'ohne Filiale'}${c.date?' · '+new Date(c.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</span></div>`).join('')+`</details>`:'';
     return `<div class="card" style="padding:11px 13px;margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <div style="flex:1;font-size:12.5px;font-weight:600;line-height:1.3;">${name}</div>
@@ -22419,7 +22441,7 @@ async function renderTeamFeedback(){
     html+=`<div class="section-lbl" style="margin-top:16px;">💬 Weitere Kommentare zum Essen</div>`;
     freieAllgemein.forEach(f=>{
       html+=`<div class="card" style="padding:12px 14px;margin-bottom:8px;background:#FAF5FF;border-color:#DDD6FE;">
-        <div style="font-size:12.5px;color:#4C1D95;white-space:pre-wrap;">${f.text}</div>
+        <div style="font-size:12.5px;color:#4C1D95;white-space:pre-wrap;">${escHtml(f.text)}</div>
         <div style="font-size:9.5px;color:var(--muted);margin-top:5px;">${f.store?(storeNameMap[f.store]||f.store):'ohne Filiale'}${f.date?' · '+new Date(f.date+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'}):''}</div>
       </div>`;
     });
@@ -22443,7 +22465,7 @@ async function renderTeamFeedback(){
       <div style="font-size:10px;color:var(--muted);text-align:right;">${storeNameMap[r.store_id]||r.store_id||'ohne Filiale'} · ${new Date(r.submitted_at).toLocaleString('de-AT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
       <div style="margin-top:4px;">${ratingRows}</div>
       ${r.kommentar?`<div style="font-size:12px;color:var(--sub);margin-top:6px;font-style:italic;">„${escAttr(r.kommentar)}"</div>`:''}
-      ${(r.feedback_frei && isFoodFreeText(r.feedback_frei))?`<div style="font-size:11.5px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;">💬 ${r.feedback_frei}</div>`:''}
+      ${(r.feedback_frei && isFoodFreeText(r.feedback_frei))?`<div style="font-size:11.5px;color:#6D28D9;background:#FAF5FF;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;">💬 ${escHtml(r.feedback_frei)}</div>`:''}
     </div>`;
   });
   // Link-Einträge (ein Gericht pro Zeile, anonym)
@@ -22823,7 +22845,7 @@ async function renderKCLager(){
     html+=`</div>`;
 
     const kcItems=articles.filter(a=>a.category==='Webshop-Produkte');
-    const today=new Date().toISOString().split('T')[0];
+    const today=todayISO();
     const istData=await api(`kc_stock?store_id=eq.${kcLagerStoreId}&select=article_id,ist_bestand,updated_date`).catch(()=>[]);
     const istMap={};
     (istData||[]).forEach(d=>istMap[d.article_id]=d);
@@ -22856,7 +22878,7 @@ async function renderKCLager(){
 function switchKCTab(t){kcTab=t;renderKCLager();}
 function switchKCStore(id){kcLagerStoreId=id;renderKCLager();}
 async function updateIstBestand(articleId, value, el){
-  const today=new Date().toISOString().split('T')[0];
+  const today=todayISO();
   const v=value===''?null:parseFloat(String(value).replace(',','.'));
   try{
     await api(`kc_stock?store_id=eq.${kcLagerStoreId}&article_id=eq.${articleId}`,{method:'DELETE'});
