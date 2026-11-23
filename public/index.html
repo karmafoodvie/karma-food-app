@@ -1833,7 +1833,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.320';
+const APP_VERSION='6.99.322';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -17112,7 +17112,8 @@ function showNachschubModal(articleId){
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:340px;width:100%;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2);">
     <div style="font-size:15px;font-weight:700;margin-bottom:4px;">${PRODUKTION_IDS.includes(articleId)?'🏭 Aus — Nachproduktion nötig?':'🛒 Fast aus — nachbestellen?'}</div>
-    <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">${a.name}</div>
+    <div style="font-size:13px;color:var(--sub);margin-bottom:10px;">${a.name}</div>
+    ${PRODUKTION_IDS.includes(articleId)?'':`<div style="font-size:11.5px;color:var(--muted);margin-bottom:12px;">Kommt in die Sammelbestellung an Simone: ${new Date().getHours()<15?'heute um 15:00 Uhr':'morgen um 15:00 Uhr (heute ist 15:00 schon vorbei)'}. Je früher gemeldet, desto früher bestellt.</div>`}
     ${schon?`<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px 10px;font-size:11.5px;color:#92400E;margin-bottom:12px;">Bereits gemeldet${schon.restmenge!=null?` (noch ca. ${formatQty(schon.restmenge)} ${einheit})`:''} — erneutes Melden aktualisiert die Menge.</div>`:''}
     <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Noch ca. <span style="color:var(--sub);">(optional)</span></label>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
@@ -23010,9 +23011,10 @@ async function renderSweets(){
     return;
   }
 
-  if(currentStore?.id==='zentrale' || currentStore?.id==='kitchen'){
-    const isOrgHere=currentStore?.id==='zentrale';
-    html+=`<div class="section-lbl" style="margin-top:10px;">${isOrgHere?'🚫 Verfügbarkeit':'🛒 Nachbestellen'}</div>
+  // Nachbestellen (🛒) steht jetzt direkt in der Sweets-Tabelle unten, wie in der Bestellliste — keine zweite Liste mehr (24.11.26, Wunsch Gurl).
+  if(currentStore?.id==='zentrale'){
+    const isOrgHere=true;
+    html+=`<div class="section-lbl" style="margin-top:10px;">🚫 Verfügbarkeit</div>
     <div class="card" style="padding:4px 0;">
       ${sweetsItems.map(a=>{
         const verf=a.verfuegbar!==false;
@@ -23023,13 +23025,12 @@ async function renderSweets(){
             <span style="font-size:13px;" data-no-translate>${a.name}</span>
           </div>
           <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-            <button onclick="showNachschubModal(${a.id})" title="Nachbestellen" style="background:${schonGemeldet?'#FEF3C7':'var(--surface-1)'};color:${schonGemeldet?'#92400E':'var(--sub)'};border:none;border-radius:8px;padding:7px 9px;font-size:13px;cursor:pointer;">${schonGemeldet?'🛒 ✓':'🛒'}</button>
             ${isOrgHere?`<button onclick="toggleArticleVerfuegbar(${a.id},${verf})" style="background:${verf?'var(--green-light)':'#FEE2E2'};color:${verf?'var(--green)':'#DC2626'};border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">${verf?'✅ Lieferbar':'❌ Nicht lieferbar'}</button>`:''}
           </div>
         </div>`;
       }).join('')}
     </div>
-    <div style="font-size:10.5px;color:var(--muted);padding:6px 2px 2px;">${isOrgHere?'"Nicht lieferbar" markiert = Stores können diesen Artikel nicht mehr bestellen · ':''}🛒 = direkt nachbestellen, landet gesammelt bei Simone in Asana</div>`;
+    <div style="font-size:10.5px;color:var(--muted);padding:6px 2px 2px;">"Nicht lieferbar" markiert = Stores können diesen Artikel nicht mehr bestellen</div>`;
     if(isOrgHere){
       // Archiv (22.09.26, Wunsch Tini): komplett eingestellte Sweets landen hier statt gelöscht zu
       // werden — Rezept/Zutaten/Allergene bleiben erhalten, falls das Produkt mal zurückkommt.
@@ -23093,7 +23094,7 @@ async function renderSweets(){
   sweetsItems.forEach(a=>{
     const eingeschraenkt=restrictedArticles.has(a.id);
     if(eingeschraenkt) hatEingeschraenkte=true;
-    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;">${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span>${eingeschraenkt?' 🔒':''}</div></td>`;
+    html+=`<tr><td style="font-size:12px;"><div style="display:flex;align-items:center;gap:6px;"><button onclick="showNachschubModal(${a.id})" title="${nachschubOffen[a.id]?'Für Nachbestellung vermerkt — tippen zum Ändern':'Fast aus? Nachbestellen'}" aria-label="Nachbestellen: ${escAttr(a.name)}" style="font-size:13px;padding:2px;border:none;background:transparent;cursor:pointer;line-height:1;flex-shrink:0;${nachschubOffen[a.id]?'':'opacity:0.4;'}">🛒</button>${a.image_url?`<img loading="lazy" decoding="async" src="${a.image_url}" alt="" onerror="this.remove()" style="width:24px;height:24px;border-radius:5px;object-fit:cover;flex-shrink:0;">`:''}<span>${a.name}</span>${eingeschraenkt?' 🔒':''}${nachschubOffen[a.id]?' <span style="font-size:10px;color:#92400E;font-weight:600;">vermerkt ✓</span>':''}</div></td>`;
     storeList.forEach(s=>{
       const v=(allOrd[a.id]||{})[s.id]||0;
       const hasOrder=sweetsItems.some(x=>(allOrd[x.id]||{})[s.id]>0);
@@ -23116,6 +23117,7 @@ async function renderSweets(){
     html+=`</tr>`;
   });
   html+='</tbody></table></div></div>';
+  html+=`<div style="font-size:10.5px;color:var(--muted);padding:6px 2px 0;">🛒 = fast aus? Antippen und nachbestellen: landet in der täglichen Sammelbestellung an Simone (15:00 Uhr), nicht als eigene Nachricht.</div>`;
   if(hatEingeschraenkte){
     html+=`<div style="font-size:10.5px;color:#DC2626;padding:6px 2px 2px;">🔒 = für diese Filiale noch nicht freigegeben (z.B. Raw Cakes schmelzen ohne passende Kühlung). ⚠️ = wurde trotzdem bestellt — bitte NICHT ausliefern, erst bei Organisation nachfragen.</div>`;
   }
