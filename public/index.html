@@ -18070,33 +18070,38 @@ async function renderDisposal(dateStr){
     <button onclick="${nextDisabled?'':`renderDisposal('${nextDate}')`}" ${nextDisabled?'disabled':''} style="flex:1;padding:8px;border:1px solid var(--border);border-radius:9px;background:${nextDisabled?'#F5F5F3':'#fff'};font-size:12.5px;font-weight:600;color:${nextDisabled?'var(--muted)':'var(--sub)'};cursor:${nextDisabled?'default':'pointer'};">Nächster →</button>
   </div>`;
 
-  html+=`<div class="card"><table class="pack-table" style="width:100%;"><thead><tr>
-    <th style="text-align:left;">Gericht</th><th>Ausverkauft</th><th>Rest (Port.)</th>
-  </tr></thead><tbody>`;
+  // Umbau 19.11.26 (Wunsch: harmonischer, besser lesbar): je Gericht eine Karte statt enger Tabellenzeile —
+  // oben Bild + Name, darunter drei beschriftete Felder (Ausverkauft um · Rest · Notiz), gleicher Aufbau wie die Samosa-Karte.
+  // Handler (commitSoldOutTimeText, updateSoldOutTime, clearSoldOutTime, updateLeftover, updateDisposalNote) unverändert.
+  html+='<div class="dsp-list">';
   daySlots.forEach(s=>{
     const dishName=s.name;
     const rec=dispMap[s.k];
     const isDone=rec?.leftover_qty!=null; // Restmenge wurde eingetragen -> Zeile gilt als erledigt
     const soldOut=rec?.sold_out_time ? rec.sold_out_time.slice(0,5) : '';
     const dishNameSafe=escForInlineHandler(dishName);
-    html+=`<tr style="${isDone?'background:#F0FDF4;':''}">
-      <td data-no-translate style="font-size:12px;"><div style="display:flex;align-items:center;gap:7px;">${dishImgHtml(dishName,38)}<div>${isDone?'<span style="color:var(--green);margin-right:2px;">✓</span>':''}<span style="font-weight:600;">${dishName}</span><div style="font-size:10px;color:var(--muted);">${s.l}</div></div></div></td>
-      <td>
-        <div style="display:flex;align-items:center;gap:4px;">
-          <input type="text" inputmode="numeric" value="${soldOut}" placeholder="hh:mm" maxlength="5"
-            oninput="formatTimeTextInput(this)"
-            onchange="commitSoldOutTimeText('${s.k}','${dishNameSafe}',this)"
-            style="width:56px;padding:5px;border:1.5px solid ${soldOut?'#DC2626':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;background:${soldOut?'#FEF2F2':'#fff'};color:${soldOut?'#991B1B':'#1a1a18'};">
-          ${soldOut?`<button onclick="clearSoldOutTime('${s.k}','${dishNameSafe}')" title="Zeit löschen" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px;">✕</button>`:`<button onclick="updateSoldOutTime('${s.k}','${dishNameSafe}',(()=>{const n=new Date();return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');})())" title="Jetzt eintragen" style="font-size:10px;color:var(--green);background:var(--green-light);border:none;border-radius:5px;padding:3px 6px;cursor:pointer;white-space:nowrap;">jetzt</button>`}
-        </div>
-      </td>
-      <td>
-        <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" oninput="debounceFieldSave(this,()=>updateLeftover('${s.k}','${dishNameSafe}',this.value))" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" style="width:60px;padding:5px;border:1.5px solid ${isDone?'var(--green)':'var(--border)'};border-radius:6px;font-size:12px;text-align:center;">
-        <input type="text" value="${rec?.note?escAttr(rec.note):''}" oninput="debounceFieldSave(this,()=>updateDisposalNote('${s.k}','${dishNameSafe}',this.value))" onchange="updateDisposalNote('${s.k}','${dishNameSafe}',this.value)" placeholder="Notiz…" style="display:block;width:80px;margin-top:4px;padding:4px;border:1px solid var(--border);border-radius:5px;font-size:10px;color:var(--sub);">
-      </td>
-    </tr>`;
+    html+=`<div class="card dsp-card${isDone?' dsp-done':''}">
+      <div class="dsp-head" data-no-translate>${dishImgHtml(dishName,44)}<div class="dsp-titles"><div class="dsp-slot">${s.l}${isDone?' <span class="dsp-ok">✓ eingetragen</span>':''}</div><div class="dsp-name">${dishName}</div></div></div>
+      <div class="dsp-fields">
+        <label class="dsp-f"><span class="dsp-lbl">Ausverkauft um</span>
+          <span class="dsp-time">
+            <input type="text" inputmode="numeric" value="${soldOut}" placeholder="hh:mm" maxlength="5"
+              oninput="formatTimeTextInput(this)"
+              onchange="commitSoldOutTimeText('${s.k}','${dishNameSafe}',this)"
+              class="${soldOut?'dsp-sold':''}">
+            ${soldOut?`<button type="button" class="dsp-btn" onclick="clearSoldOutTime('${s.k}','${dishNameSafe}')" title="Zeit löschen">✕</button>`:`<button type="button" class="dsp-btn dsp-now" onclick="updateSoldOutTime('${s.k}','${dishNameSafe}',(()=>{const n=new Date();return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');})())" title="Jetzt eintragen">jetzt</button>`}
+          </span>
+        </label>
+        <label class="dsp-f"><span class="dsp-lbl">Rest (Portionen)</span>
+          <input type="number" min="0" step="1" value="${rec?.leftover_qty??''}" oninput="debounceFieldSave(this,()=>updateLeftover('${s.k}','${dishNameSafe}',this.value))" onchange="updateLeftover('${s.k}','${dishNameSafe}',this.value)" placeholder="0" class="dsp-rest">
+        </label>
+        <label class="dsp-f dsp-f-note"><span class="dsp-lbl">Notiz</span>
+          <input type="text" value="${rec?.note?escAttr(rec.note):''}" oninput="debounceFieldSave(this,()=>updateDisposalNote('${s.k}','${dishNameSafe}',this.value))" onchange="updateDisposalNote('${s.k}','${dishNameSafe}',this.value)" placeholder="optional">
+        </label>
+      </div>
+    </div>`;
   });
-  html+='</tbody></table></div>';
+  html+='</div>';
   {
     const soT=samHeute?.sold_out_time?String(samHeute.sold_out_time).slice(0,5):'';
     const verf=(samBestellt!=null?Number(samBestellt):0)+(samRestVortag!=null?Number(samRestVortag):0);
