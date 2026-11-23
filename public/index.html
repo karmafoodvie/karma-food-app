@@ -172,6 +172,125 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 
 @media (min-width:700px){ .kf-dishes{gap:8px !important;} .kf-dish-col{max-width:none !important;} .kf-dish-col > div:first-child{padding:12px 10px !important;} }
 </style>
+<style id="kf-responsive">
+.fc-days{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:12px;}
+@media (min-width:900px){.fc-days{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.fc-day{padding:14px 16px;margin:0 !important;}
+.fc-day-h{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+.fc-day-name{font-size:18px;font-weight:700;}
+.fc-today-pill{color:#fff;font-size:12px;font-weight:700;padding:3px 10px;border-radius:6px;}
+.fc-day-reason{font-size:14px;color:var(--muted);margin-bottom:6px;line-height:1.35;}
+.fc-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--border);}
+.fc-row:first-child{border-top:none;}
+.fc-dish{min-width:0;display:flex;flex-direction:column;gap:2px;}
+.fc-slot{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.fc-dishname{font:inherit;font-size:16px;font-weight:600;line-height:1.3;text-align:left;background:none;border:none;padding:0;color:inherit;cursor:pointer;overflow-wrap:anywhere;text-decoration:underline dotted;text-underline-offset:3px;}
+.fc-qty{flex:none;}
+.fc-qty input{width:76px !important;height:48px;font-size:18px !important;text-align:center;border-radius:8px !important;padding:0 !important;}
+.fc-qty [style*="font-size:8px"],.fc-qty [style*="font-size:10px"]{font-size:13px !important;}
+.fc-row-multi{flex-direction:column;align-items:stretch;}
+.fc-row-multi .fc-qty{width:100%;}
+.fc-row-multi .fc-qty div[style*="grid-template-columns"]{grid-template-columns:minmax(0,1fr) 84px !important;gap:8px 12px !important;}
+.fc-row-multi .fc-qty input{width:84px !important;}
+.dsp-list{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
+@media (min-width:900px){.dsp-list{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.dsp-card{padding:14px 16px;margin:0 !important;}
+.dsp-card.dsp-done{border-color:var(--green);}
+.dsp-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.dsp-titles{min-width:0;}
+.dsp-slot{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.dsp-ok{color:#0B6A5D;text-transform:none;letter-spacing:0;margin-left:6px;}
+.dsp-name{font-size:16px;font-weight:600;line-height:1.3;overflow-wrap:anywhere;}
+.dsp-fields{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:12px;align-items:end;}
+.dsp-f{display:flex;flex-direction:column;gap:4px;min-width:0;}
+.dsp-lbl{font-size:12px;color:var(--muted);font-weight:600;}
+.dsp-time{display:flex;align-items:center;gap:6px;}
+.dsp-fields input{height:48px;box-sizing:border-box;border:1.5px solid var(--border);border-radius:8px;font-size:16px;padding:0 10px;background:#fff;}
+.dsp-time input{width:84px;text-align:center;}
+.dsp-time input.dsp-sold{border-color:#DC2626;background:#FEF2F2;color:#991B1B;}
+.dsp-rest{width:84px;text-align:center;}
+.dsp-f-note input{width:100%;}
+.dsp-btn{height:48px;min-width:48px;padding:0 10px;border-radius:8px;border:1.5px solid var(--border);background:#fff;font-size:14px;font-weight:600;cursor:pointer;color:var(--sub);}
+.dsp-btn.dsp-now{border-color:var(--green);color:var(--green);background:var(--green-light);}
+@media (max-width:560px){.dsp-fields{grid-template-columns:auto minmax(0,1fr);}.dsp-f-note{grid-column:1 / -1;}.dsp-rest{width:100%;}}
+#sam-time,#sam-rest,#sam-note{height:48px !important;box-sizing:border-box;font-size:16px !important;border-radius:8px !important;}
+#sam-time,#sam-rest{width:84px !important;}
+/* Operations — Mengen: je Tag eine Karte, je Gericht eine Zeile (Umbau 19.11.26; Zellen und Speicher-Logik unverändert, nur Darstellung) */
+/* Handy: Tageskarten als Aufklapper, nur der heutige Tag ist offen */
+@media(max-width:640px){
+.fc-day-h,#orgfc-content .ofc-table td:first-child{cursor:pointer;position:relative;padding-right:40px !important;}
+.fc-day-h::after,#orgfc-content .ofc-table td:first-child::after{content:"";position:absolute;right:16px;top:50%;width:9px;height:9px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:translateY(-70%) rotate(45deg);transition:transform .15s;}
+.fc-day.kf-open .fc-day-h::after,#orgfc-content .ofc-table tr.kf-open td:first-child::after{transform:translateY(-30%) rotate(225deg);}
+.fc-day:not(.kf-open) .fc-rows,.fc-day:not(.kf-open) .fc-day-reason{display:none;}
+.fc-day:not(.kf-open) .fc-day-h{margin-bottom:0;}
+#orgfc-content .ofc-table tr.ofc-day:not(.kf-open) td:not(:first-child){display:none !important;}
+#orgfc-content .ofc-table tr.ofc-day:not(.kf-open) td:first-child{padding-bottom:0 !important;margin-bottom:0 !important;}
+.fc-days,#orgfc-content .ofc-table tbody{gap:8px;}
+.fc-day,#orgfc-content .ofc-table tr{padding:10px 12px !important;}
+html .fc-days .fc-day:not(.kf-open),html #orgfc-content .ofc-table tr.ofc-day:not(.kf-open){padding:0 !important;border:none !important;background:none !important;box-shadow:none !important;}
+html .fc-days .fc-day .fc-day-h,html #orgfc-content .ofc-table tr.ofc-day td:first-child{padding-top:9px !important;padding-bottom:9px !important;margin-bottom:0;}
+html .fc-days .fc-day.kf-open .fc-day-h{margin-bottom:6px;}
+html #orgfc-content .ofc-table tr.ofc-day.kf-open td:first-child{margin-bottom:6px !important;}
+.fc-row,#orgfc-content .ofc-table td{padding-top:8px !important;padding-bottom:8px !important;}
+}
+.ofc-short{display:none;}
+.ofc-wrap{margin-bottom:12px;}
+#orgfc-content .ofc-table,#orgfc-content .ofc-table tbody{display:block;width:100%;border:none;background:none;}
+#orgfc-content .ofc-table thead{display:none;}
+#orgfc-content .ofc-table tbody{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;}
+@media (min-width:900px){#orgfc-content .ofc-table tbody{grid-template-columns:repeat(2,minmax(0,1fr));}}
+#orgfc-content .ofc-table tr{display:block;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;padding:14px 16px;box-shadow:0 6px 18px rgba(3,39,43,.06);}
+#orgfc-content .ofc-table td{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 14px;padding:12px 0 !important;border:none !important;border-top:1px solid var(--border) !important;text-align:left !important;min-width:0 !important;background:none !important;}
+#orgfc-content .ofc-table td:first-child{display:block;border-top:none !important;padding:0 0 10px !important;font-size:18px !important;font-weight:700 !important;}
+#orgfc-content .ofc-table td:first-child div{font-size:14px !important;margin-top:4px !important;white-space:normal !important;}
+#orgfc-content .ofc-table td:not(:first-child)::before{grid-column:1 / -1;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+#orgfc-content .ofc-herbst td:nth-child(2)::before{content:"Gericht 1";}
+#orgfc-content .ofc-herbst td:nth-child(3)::before{content:"Gericht 2";}
+#orgfc-content .ofc-herbst td:nth-child(4)::before{content:"Gericht 3";}
+#orgfc-content .ofc-herbst td:nth-child(5)::before{content:"Reis";}
+#orgfc-content .ofc-sommer td:nth-child(2)::before{content:"Salat";}
+#orgfc-content .ofc-sommer td:nth-child(3)::before{content:"Gericht 1";}
+#orgfc-content .ofc-sommer td:nth-child(4)::before{content:"Gericht 2";}
+#orgfc-content .ofc-sommer td:nth-child(5)::before{content:"Reis";}
+#orgfc-content .ofc-table .ofc-dish{grid-column:1;font-size:16px !important;font-weight:600;line-height:1.3 !important;color:inherit !important;margin:0 !important;overflow-wrap:anywhere;text-underline-offset:3px;}
+#orgfc-content .ofc-table td > input{grid-column:2;width:84px !important;height:48px;font-size:18px !important;padding:0 !important;border-radius:8px !important;box-sizing:border-box;}
+#orgfc-content .ofc-table td > div[style*="grid-template-columns"]{grid-column:1 / -1;grid-template-columns:minmax(0,1fr) 84px !important;gap:8px 14px !important;margin-top:4px;}
+#orgfc-content .ofc-table td > div[style*="grid-template-columns"] span{font-size:14px !important;}
+#orgfc-content .ofc-table td > div[style*="grid-template-columns"] input{width:84px !important;height:48px;font-size:18px !important;padding:0 !important;border-radius:8px !important;box-sizing:border-box;}
+#orgfc-content .ofc-table td > div:not(.ofc-dish):not([style*="grid-template-columns"]){grid-column:1 / -1;font-size:13px !important;line-height:1.35 !important;}
+#orgfc-content div[style*="color:var(--border)"]{color:var(--muted) !important;}
+/* Tag + Datum als farbiger Kopf (Hauptfarbe der Filiale, weiße Schrift) in allen Tageskarten */
+.fc-day-h{background:var(--green);color:#fff;padding:10px 14px;border-radius:8px;margin-bottom:10px;}
+.fc-day-h .fc-day-name{color:#fff;}
+.fc-day-h .fc-today-pill{background:#fff !important;color:#03272B !important;}
+#orgfc-content .ofc-table td:first-child{background:var(--green) !important;color:#fff !important;padding:10px 14px !important;border-radius:8px;margin-bottom:4px;}
+#orgfc-content .ofc-table td:first-child div,#orgfc-content .ofc-table td:first-child div *{color:rgba(255,255,255,.95) !important;}
+#orgfc-content .ofc-table td:nth-child(2){border-top:none !important;}
+/* Tippen: kein Warten auf Doppeltipp-Zoom, keine graue Markierung */
+button,[onclick],a,summary,label,input,select{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+#kf-offline{position:fixed;left:12px;right:12px;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:9000;background:#8B0000;color:#fff;font-size:14px;font-weight:600;line-height:1.35;padding:12px 14px;border-radius:8px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.25);}
+
+/* ===== Anpassbar an den Bildschirm ===== */
+/* Handy bleibt schmal; Tablets und Computer nutzen die Breite (Karten stehen dann zweispaltig) */
+@media (min-width:700px){ body{max-width:860px;} #bottomnav{max-width:860px;} #content{padding:16px 20px 90px;} }
+@media (min-width:1100px){ body{max-width:1160px;} #bottomnav{max-width:1160px;} }
+/* Handy: Kopfzeile schlanker (Titel kleiner, weniger Abstand), damit mehr Inhalt auf den Bildschirm passt */
+@media (max-width:480px){ #topbar{padding:8px 12px;gap:8px;} .tb-title{font-size:12px;line-height:1.25;letter-spacing:0;} .tb-sub{font-size:11px;margin-top:0;} #topbar > div:last-child{gap:6px !important;} }
+/* Berührbildschirme: Tippflächen mindestens 44 px (außer Tabellenzellen und Reiter mit eigenen Maßen) */
+@media (pointer:coarse){
+#content button:not(td button):not(th button):not(.kf-tab):not(.qty-btn):not(.dsp-btn){min-height:44px;}
+#content select{min-height:44px;}
+#content .ofc-dish,#content .fc-dishname{min-height:44px;display:flex;align-items:center;}
+#content input[type=checkbox],#content input[type=radio]{width:26px;height:26px;accent-color:var(--green);}
+#content [onclick][style*="underline"],#content a,#content td button,#content th button{position:relative;}
+#content [onclick][style*="underline"]::after,#content a::after,#content td button::after,#content th button::after{content:"";position:absolute;inset:-12px -6px;}
+}
+/* Sichtbarer Fokus für Tastaturbedienung, Zeiger auf Klickbarem */
+:focus-visible{outline:3px solid var(--green);outline-offset:2px;border-radius:6px;}
+button:not(:disabled),[onclick],summary,label[for]{cursor:pointer;}
+button:disabled{cursor:not-allowed;}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation-duration:.01ms !important;animation-iteration-count:1 !important;scroll-behavior:auto !important;}}
+</style>
 <script src="/qrcode.js" defer></script>
 <script id="kf-a11y">/* Namen für Symbol-Knöpfe und unbeschriftete Felder (Screenreader/Sprachsteuerung). Ändert nichts am Aussehen. */
 (function(){
@@ -1696,7 +1815,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.314';
+const APP_VERSION='6.99.316';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -8096,7 +8215,7 @@ async function renderForecastOrderTab(el, tabHtml){
     if(isToday) head+='<span class="fc-today-pill" style="background:'+tab.color+';">Heute</span>';
     head+='</div>';
     if(dayReasonMap[dateStr]) head+='<div class="fc-day-reason">'+dayReasonMap[dateStr]+'</div>';
-    html+='<section class="card fc-day'+(isToday?' fc-today':'')+'"'+(isToday?' style="border-color:'+tab.color+';"':'')+'>'+head+'<div class="fc-rows">'+rows+'</div></section>';
+    html+='<section class="card fc-day'+(isToday?' fc-today':'')+(kfDayOpen('fc|'+dateStr,isToday)?' kf-open':'')+'" data-day="fc|'+dateStr+'"'+(isToday?' style="border-color:'+tab.color+';"':'')+'>'+head+'<div class="fc-rows">'+rows+'</div></section>';
   }
   html+='</div>';
 
@@ -11647,7 +11766,7 @@ async function renderOrgStoreForecast(){
     const calMod=getDayModifiers(dateStr, orgPlanStore, {}, orgCalEvents||[], orgFcSettings);
     const dayClosed=!!calMod.closed;
     const calBadge=calMod.calText?`<div title="${escAttr(calMod.calBasis||'')}" style="font-size:9.5px;color:${dayClosed?'#B91C1C':'#B45309'};font-weight:600;line-height:1.25;margin-top:3px;">${calMod.calText}${calMod.calBasis?`<div style="font-size:8.5px;color:var(--muted);font-weight:400;">Basis ${escAttr(calMod.calBasis.split(': ').pop())} %</div>`:''}</div>`:'';
-    html+=`<tr style="${isToday?'background:#EFF6FF;':''}">
+    html+=`<tr class="ofc-day${kfDayOpen('ofc|'+dateStr,isToday)?' kf-open':''}" data-day="ofc|${dateStr}" style="${isToday?'background:#EFF6FF;':''}">
       <td style="text-align:left;font-size:11.5px;font-weight:600;padding:6px;">${dl}${isToday?' 📍':''}${dwBadge}${calBadge}</td>`;
     cols.forEach((dish,ci)=>{
       if(!dish){ html+='<td style="color:var(--border);">·</td>'; return; }
@@ -23046,6 +23165,16 @@ window.debounceFieldSave=debounceFieldSave;
 
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.setAttribute('role',isError?'alert':'status');t.setAttribute('aria-live',isError?'assertive':'polite');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?6000:2500);}
 // Offline-Hinweis (19.11.26): ohne Netz wird nichts gespeichert — das muss sichtbar sein.
+/* Tageskarten (Forecast, Operations-Mengen): auf dem Handy auf- und zuklappbar; "Heute" ist offen. Felder bleiben im Dokument, Speichern unveraendert. */
+window._kfOpenDays=window._kfOpenDays||{};
+function kfDayOpen(key,isToday){ var v=window._kfOpenDays[key]; return v==null?!!isToday:!!v; }
+document.addEventListener('click',function(e){
+  var t=e.target; if(!t||!t.closest) return;
+  if(t.closest('input,select,textarea,button,a')) return;
+  var h=t.closest('.fc-day-h, #orgfc-content .ofc-table td:first-child'); if(!h) return;
+  var box=h.closest('[data-day]'); if(!box) return;
+  var on=!box.classList.contains('kf-open'); box.classList.toggle('kf-open',on); window._kfOpenDays[box.getAttribute('data-day')]=on;
+});
 function kfNetBar(){
   let b=document.getElementById('kf-offline');
   if(navigator.onLine){ if(b){ b.remove(); showToast('Wieder verbunden'); } return; }
