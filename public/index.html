@@ -1852,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.323';
+const APP_VERSION='6.99.325';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -21672,6 +21672,26 @@ async function sgSaveConfig(){
 window.sgStorno=sgStorno; window.sgCopyLink=sgCopyLink; window.sgUebernehmen=sgUebernehmen; window.sgSaveConfig=sgSaveConfig;
 window.sgStelleNeu=sgStelleNeu; window.sgStelleAktiv=sgStelleAktiv; window.sgTokenNeu=sgTokenNeu;
 
+// Bestellt (aus den Anmeldungen über den Link) je Liefertag seit Start der Online-Anmeldung. Vergangene Tage sind final und
+// werden nur einmal geladen; heute/kommende Tage jedes Mal neu. Stornierte zählen nicht. Alle Bestellstellen zusammen.
+const SG_START='2026-10-19'; const _sgHistCache={};
+async function sgHistLaden(){
+  const heute=todayISO(), ende=new Date(Date.now()+14*86400000).toISOString().slice(0,10), tage=[];
+  for(let d=new Date(SG_START+'T12:00:00Z'); d.toISOString().slice(0,10)<=ende; d=new Date(d.getTime()+86400000)){
+    const wd=d.getUTCDay(); if(wd!==0&&wd!==6) tage.push(d.toISOString().slice(0,10));
+  }
+  const offen=tage.filter(d=>d>=heute||!(d in _sgHistCache));
+  let i=0;
+  await Promise.all(Array.from({length:6},async()=>{
+    while(i<offen.length){ const d=offen[i++];
+      try{ const r=await sgCall('?action=list&datum='+d); const l=sgAktiv((r.bestellungen||[]).filter(x=>x.stelle_id));
+        _sgHistCache[d]={portionen:sgPortionen(l),summe:Math.round(l.reduce((s,x)=>s+Number(x.summe),0)*100)/100}; }catch(e){ /* Tag überspringen */ }
+    }
+  }));
+  const out={}; tage.forEach(d=>{ const c=_sgHistCache[d]; if(c&&c.portionen>0) out[d]=c; });
+  return out;
+}
+
 async function stadtgemeindeBodyHtml(){
   const rows=await api('stadtgemeinde_zahlungen?select=*&order=datum.desc').catch(()=>[]);
   let html=`<div style="font-size:11px;color:var(--muted);margin:10px 2px 12px;">Bestellte Portionen und Zahlungen der Stadtgemeinde — ersetzt die Google-Tabelle. Neuer Eintrag oben (manuell), dann die Anmeldungen per Link, darunter die Übersicht nach Monat.</div>`;
@@ -21701,36 +21721,51 @@ async function stadtgemeindeBodyHtml(){
   </div>`;
   html+=await sgBestellHtml();
 
-  // Nach Monat gruppieren, wie im Sheet — neuester Monat zuerst
+  // Nach Monat gruppieren, wie im Sheet — neuester Monat zuerst.
+  // "Bestellt" kommt automatisch aus den Anmeldungen über den Link (ohne Stornierte), "bezahlt" bleibt der manuelle Eintrag.
+  const app=await sgHistLaden();
   const byMonat={};
-  (rows||[]).forEach(r=>{
-    const m=r.datum.slice(0,7); // YYYY-MM
-    if(!byMonat[m]) byMonat[m]=[];
-    byMonat[m].push(r);
-  });
+  (rows||[]).forEach(r=>{ const m=r.datum.slice(0,7); (byMonat[m]=byMonat[m]||[]).push(r); });
+  Object.keys(app).forEach(d=>{ const m=d.slice(0,7); if(!byMonat[m]) byMonat[m]=[]; });
   const monate=Object.keys(byMonat).sort().reverse();
   if(!monate.length){
     html+=`<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Noch keine Einträge.</div>`;
   }
+  const eur=n=>'€'+Number(n||0).toFixed(2);
   monate.forEach(m=>{
-    const einträge=byMonat[m].sort((a,b)=>b.datum.localeCompare(a.datum));
+    const einträge=byMonat[m].slice();
     const monatLabel=new Date(m+'-01').toLocaleDateString('de-AT',{month:'long',year:'numeric'});
-    const monatSumme=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
+    const bezahlt=einträge.reduce((s,r)=>s+(r.sodexo_pluxee||0)+(r.cash||0),0);
+    const appTage=Object.keys(app).filter(d=>d.slice(0,7)===m);
+    const bestellt=appTage.reduce((s,d)=>s+app[d].summe,0);
+    const appPort=appTage.reduce((s,d)=>s+app[d].portionen,0);
     const monatPort=einträge.reduce((s,r)=>s+(r.portionen||0),0);
-    html+=`<details class="card" style="margin-top:10px;"><summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;font-size:13px;font-weight:700;"><span>${monatLabel}</span><span style="color:#059669;">Σ €${monatSumme.toFixed(2)}${monatPort?` · ${monatPort} Port.`:''}</span></summary><div style="overflow-x:auto;padding:0 6px 8px;"><table class="pack-table" style="width:100%;"><thead><tr>
-      <th style="text-align:left;">Datum</th><th>Portionen</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Total</th><th></th>
+    const offen=Math.round((bestellt-bezahlt)*100)/100;
+    const kopf=bestellt>0
+      ? `<span style="color:#1a1a18;">bestellt ${eur(bestellt)}</span> <span style="color:#059669;">· bezahlt ${eur(bezahlt)}</span>${offen>0.004?` <span style="color:#B3261E;">· offen ${eur(offen)}</span>`:''}`
+      : `<span style="color:#059669;">Σ ${eur(bezahlt)}${monatPort?` · ${monatPort} Port.`:''}</span>`;
+    // Tage: alle Tage mit App-Bestellung oder Zahlung, neuester zuerst
+    const tage=Array.from(new Set(einträge.map(r=>r.datum).concat(appTage))).sort().reverse();
+    html+=`<details class="card" style="margin-top:10px;"><summary style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;font-size:13px;font-weight:700;flex-wrap:wrap;"><span>${monatLabel}${appPort?` <span style="font-weight:400;color:var(--muted);">· ${appPort} Port. bestellt</span>`:''}</span><span style="text-align:right;">${kopf}</span></summary><div style="overflow-x:auto;padding:0 6px 8px;"><table class="pack-table" style="width:100%;"><thead><tr>
+      <th style="text-align:left;">Datum</th><th>Bestellt (App)</th><th>Portionen (manuell)</th><th>Sodexo/Pluxee</th><th>Cash</th><th>Bezahlt</th><th></th>
     </tr></thead><tbody>`;
-    einträge.forEach(r=>{
-      const total=(r.sodexo_pluxee||0)+(r.cash||0);
-      const dl=new Date(r.datum+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
-      html+=`<tr>
-        <td style="font-size:12px;">${dl}</td>
-        <td style="text-align:center;font-size:12px;font-weight:600;">${r.portionen??'–'}</td>
-        <td style="text-align:center;font-size:12px;">€${(r.sodexo_pluxee||0).toFixed(2)}</td>
-        <td style="text-align:center;font-size:12px;">€${(r.cash||0).toFixed(2)}</td>
-        <td style="text-align:center;font-size:12px;font-weight:700;color:#059669;">€${total.toFixed(2)}</td>
-        <td style="text-align:center;"><button onclick="deleteStadtgemeindeZahlung(${r.id})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:13px;">🗑</button></td>
-      </tr>`;
+    tage.forEach(d=>{
+      const dl=new Date(d+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
+      const zr=einträge.filter(r=>r.datum===d), a=app[d];
+      const aTxt=a?`<b>${a.portionen}×</b> · ${eur(a.summe)}`:'–';
+      const zeilen=zr.length?zr:[null];
+      zeilen.forEach((r,i)=>{
+        const total=r?(r.sodexo_pluxee||0)+(r.cash||0):0;
+        html+=`<tr>
+          <td style="font-size:12px;">${i===0?dl:''}</td>
+          <td style="text-align:center;font-size:12px;">${i===0?aTxt:''}</td>
+          <td style="text-align:center;font-size:12px;">${r?(r.portionen??'–'):'–'}</td>
+          <td style="text-align:center;font-size:12px;">${r?eur(r.sodexo_pluxee):'–'}</td>
+          <td style="text-align:center;font-size:12px;">${r?eur(r.cash):'–'}</td>
+          <td style="text-align:center;font-size:12px;font-weight:700;color:${r?'#059669':'#B3261E'};">${r?eur(total):'offen'}</td>
+          <td style="text-align:center;">${r?`<button onclick="deleteStadtgemeindeZahlung(${r.id})" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:13px;">🗑</button>`:''}</td>
+        </tr>`;
+      });
     });
     html+='</tbody></table></div></details>';
   });
