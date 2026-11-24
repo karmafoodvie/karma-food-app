@@ -1852,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.331';
+const APP_VERSION='6.99.332';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -23612,8 +23612,8 @@ async function kfsNeuerCode(){
 async function kfsQuittieren(){ try{ await kfsRpc('fehlversuche_quittieren',{p_sitzung:kfsAdmSess()}); }catch(e){} const o=await kfsOverview(); if(o){ kfsRender(o); kfsBadge((o.anfragen||[]).length+(o.gesperrt||[]).length+(+o.neu||0)); } }
 async function kfsLinuxAblehnen(){
   const o=KFS.lastO; if(!o) return;
-  const ids=(o.anfragen||[]).filter(a=>/Linux/.test(a.user_agent||'')&&!/Android/.test(a.user_agent||'')).map(a=>a.id);
-  if(!ids.length||!confirm(ids.length+' Linux-Anfragen ablehnen?')) return;
+  const ids=(o.anfragen||[]).filter(a=>/HeadlessChrome/.test(a.user_agent||'')).map(a=>a.id);
+  if(!ids.length||!confirm(ids.length+' Anfragen von Programmen (Headless-Browser) ablehnen?')) return;
   for(const id of ids){ try{ await kfsRpc('geraet_ablehnen',{p_sitzung:kfsAdmSess(),p_id:id}); }catch(e){} }
   const n=await kfsOverview(); if(n){ kfsRender(n); kfsBadge((n.anfragen||[]).length+(n.gesperrt||[]).length+(+n.neu||0)); }
 }
@@ -23626,13 +23626,13 @@ function kfsRender(o){
   const an=o.anfragen||[], ge=o.gesperrt||[];
   KFS.lastO=o;
   const q=(KFS.suche||'').trim().toLowerCase();
-  const istBot=a=>/Linux/.test(a.user_agent||'')&&!/Android/.test(a.user_agent||'');
+  const istBot=a=>/HeadlessChrome/.test(a.user_agent||'');
   const anSicht=an.filter(a=>!q||[a.code,kfsWer(a),kfsDevName(a.user_agent),a.ip].join(' ').toLowerCase().includes(q));
   const maxZ=(q||KFS.alle)?999:8, anZeigen=anSicht.slice(0,maxZ);
   const botN=an.filter(istBot).length;
   h+='<div style="font-weight:800;margin:6px 0;">Anfragen ('+an.length+')</div>'
     +'<input id="kfs-suche" type="search" placeholder="Suchen: Code, Name, Standort, Gerät, IP" value="'+kfsEsc(KFS.suche||'')+'" oninput="KFS.suche=this.value;kfsRender(KFS.lastO)" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #D4D4CF;border-radius:10px;font-size:15px;font-family:inherit;margin-bottom:8px;">'
-    +(botN?'<button onclick="kfsLinuxAblehnen()" style="width:100%;min-height:44px;margin-bottom:8px;border:1.5px solid #B3261E;border-radius:10px;background:#fff;color:#B3261E;font-weight:700;font-size:13px;font-family:inherit;">🤖 '+botN+' Linux-Anfragen ablehnen (vermutlich Programme, keine Filialen)</button>':'');
+    +(botN?'<button onclick="kfsLinuxAblehnen()" style="width:100%;min-height:44px;margin-bottom:8px;border:1.5px solid #B3261E;border-radius:10px;background:#fff;color:#B3261E;font-weight:700;font-size:13px;font-family:inherit;">🤖 '+botN+' Anfragen von Programmen ablehnen (Headless-Browser, keine Geräte)</button>':'');
   const kBtn=(c,t,f)=>'<button onclick="'+f+'" style="min-height:40px;padding:0 12px;border-radius:9px;border:none;background:'+c+';color:#fff;font-weight:700;font-size:13px;font-family:inherit;">'+t+'</button>';
   h+=anZeigen.length?'<div style="background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:10px;">'+anZeigen.map(a=>'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;">'
       +'<div style="min-width:0;"><div style="font-size:14px;">'+(a.dringend?'<span style="color:#B3261E;font-weight:800;">🚨 </span>':'')+'<b>'+kfsEsc(kfsWer(a))+'</b> · <b style="letter-spacing:2px;" data-no-translate>'+kfsEsc(a.code)+'</b></div>'
