@@ -1852,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.328';
+const APP_VERSION='6.99.329';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5700,7 +5700,7 @@ async function renderHome(){
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
   if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
-  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); }
+  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); amzKitchenCard(); }
   else { loadActiveBroadcastBanner(); loadLieferTracking(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
 }
@@ -17915,6 +17915,7 @@ async function renderPack(){
 
   // 24.11.26 (Wunsch Gurl): Beilagen gehören zum Einpacken — deshalb auch hier in der Bestellliste (zusätzlich zu "Beilagen & Essen").
   try{ const _bt=await renderTransporterBeilagenHtml({compact:true,offset:transporterBestellDateOffset}); if(_bt){ html+=_bt; hasAny=true; } }catch(e){ console.error('Beilagen in Bestellliste',e); }
+  try{ const _ah=await amzListeHtml(); if(_ah){ html+=_ah; hasAny=true; } }catch(e){ console.error('Amazon in Bestellliste',e); }
 
   const specs=(specRaw||[]).filter(s=>s.store_id!=='zentrale' && s.store_id!=='1070');
   const geldwechselOffen=await api('geldwechsel?status=eq.offen&select=*&order=erstellt_am.asc').catch(()=>[]);
@@ -23682,6 +23683,66 @@ async function amzSave(id){
   }catch(e){ showToast('Fehler beim Speichern',true); }
 }
 Object.assign(window,{amzOpen,amzClose,amzStep,amzNotiz,amzSave});
+
+// ---- Amazon: Status in der Transporter-Bestellliste + "Angekommen" durch die Küche ----
+// Zugeteilte Lieferungen (ziele) bleiben sichtbar, bis alles eingepackt/eingeordnet ist. Solange das Paket nicht da ist
+// (status versendet/unterwegs), steht die Zeile ausgegraut mit Hinweis. Die Küche tippt "Angekommen", dann ist sie normal und abhakbar.
+async function amzZugeteilt(){
+  try{ return (await api('amazon_lieferungen?erledigt_am=is.null&ziele=neq.%5B%5D&select=*&order=erstellt_am.asc'))||[]; }
+  catch(e){ return []; }
+}
+const AMZ_STATUS={versendet:'🚚 unterwegs',unterwegs:'🚚 kommt heute',zugestellt:'✅ da'};
+async function amzListeHtml(){
+  const L=await amzZugeteilt(); const rows=[];
+  L.forEach(it=>(it.ziele||[]).forEach((z,i)=>{ if(['kitchen','kc'].includes(z.ziel)) return; rows.push({it,z,i}); }));
+  if(!rows.length) return '';
+  let h='<div class="section-lbl" style="font-size:11px;color:#F59E0B;font-weight:700;">📦 Amazon — für die Standorte</div><div class="card">';
+  rows.forEach(({it,z,i})=>{
+    const da=it.status==='zugestellt', fertig=!!z.eingepackt;
+    const col=STORE_COLORS[z.ziel]||'#888';
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);'+(da?'':'opacity:.5;')+'">'
+      +'<span style="width:10px;height:10px;border-radius:50%;background:'+col+';flex-shrink:0;"></span>'
+      +'<div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:600;" data-no-translate>'+amzEsc(z.name)+' · '+z.menge+'× '+amzEsc(it.artikel)+'</div>'
+      +(z.notiz?'<div style="font-size:11.5px;color:#92400E;">📝 '+amzEsc(z.notiz)+'</div>':'')
+      +'<div style="font-size:11px;color:var(--muted);">'+(AMZ_STATUS[it.status]||it.status)+(!da&&it.erwartet?' · '+amzEsc(it.erwartet):'')+(da?'':' — noch nicht da, nicht einpacken')+'</div></div>'
+      +(da?'<button onclick="amzPack('+it.id+','+i+')" style="min-height:44px;padding:0 14px;border-radius:10px;border:1.5px solid '+(fertig?'#3B6D11':'#F97316')+';background:'+(fertig?'#EAF3DE':'#fff')+';color:'+(fertig?'#3B6D11':'#C2410C')+';font-weight:700;font-size:13px;">'+(fertig?'✓ eingepackt':'Einpacken')+'</button>':'<span style="font-size:11px;color:var(--muted);white-space:nowrap;">wartet</span>')
+      +'</div>';
+  });
+  return h+'</div>';
+}
+async function amzPack(id,i){
+  try{
+    const r=await api('amazon_lieferungen?id=eq.'+id+'&select=ziele'); const ziele=(r&&r[0]&&r[0].ziele)||[]; if(!ziele[i]) return;
+    ziele[i].eingepackt=!ziele[i].eingepackt;
+    const alle=ziele.every(z=>z.eingepackt);
+    await api('amazon_lieferungen?id=eq.'+id,{method:'PATCH',body:JSON.stringify({ziele,erledigt_am:alle?new Date().toISOString():null})});
+    if(typeof renderPack==='function') renderPack();
+  }catch(e){ showToast('Fehler beim Speichern',true); }
+}
+async function amzKitchenCard(){
+  try{
+    const host=document.getElementById('lieferung-track-widget'); if(!host||currentStore?.id!=='kitchen') return;
+    const L=await amzZugeteilt(); document.getElementById('amz-kitchen-card')?.remove(); if(!L.length) return;
+    let h='<div id="amz-kitchen-card" style="background:#FFFBEB;border:1.5px solid #F59E0B;border-radius:14px;padding:12px 14px;margin-bottom:10px;"><div style="font-weight:800;font-size:15px;margin-bottom:6px;">📦 Amazon</div>';
+    L.forEach(it=>{
+      const da=it.status==='zugestellt';
+      const wohin=(it.ziele||[]).map(z=>amzEsc(z.name)+' '+z.menge+'×'+(z.notiz?' ('+amzEsc(z.notiz)+')':'')).join(' · ');
+      const eigene=(it.ziele||[]).map((z,i)=>({z,i})).filter(x=>['kitchen','kc'].includes(x.z.ziel));
+      h+='<div style="padding:8px 0;border-top:1px solid #FDE68A;"><div style="font-size:13.5px;font-weight:700;">'+it.menge+'× '+amzEsc(it.artikel)+'</div><div style="font-size:12px;color:#555;">→ '+wohin+'</div>'
+        +'<div style="font-size:12px;margin-top:2px;">'+(AMZ_STATUS[it.status]||it.status)+(!da&&it.erwartet?' · '+amzEsc(it.erwartet):'')+'</div>'
+        +(!da?'<button onclick="amzAngekommen('+it.id+')" style="width:100%;min-height:48px;margin-top:6px;border:0;border-radius:12px;background:#0F6E56;color:#fff;font-weight:700;font-size:14px;font-family:inherit;">✅ Angekommen</button>'
+          :eigene.map(({z,i})=>'<button onclick="amzPackK('+it.id+','+i+')" style="width:100%;min-height:44px;margin-top:6px;border-radius:10px;border:1.5px solid '+(z.eingepackt?'#3B6D11':'#F59E0B')+';background:'+(z.eingepackt?'#EAF3DE':'#fff')+';font-weight:700;font-size:13px;font-family:inherit;">'+(z.eingepackt?'✓ eingeordnet: ':'Einordnen: ')+amzEsc(z.name)+(z.notiz?' – '+amzEsc(z.notiz):'')+'</button>').join(''))
+        +'</div>';
+    });
+    host.insertAdjacentHTML('afterend',h+'</div>');
+  }catch(e){ console.error(e); }
+}
+async function amzAngekommen(id){
+  try{ await api('amazon_lieferungen?id=eq.'+id,{method:'PATCH',body:JSON.stringify({status:'zugestellt'})}); showToast('✓ Angekommen — ab jetzt einpackbar'); amzKitchenCard(); }
+  catch(e){ showToast('Fehler beim Speichern',true); }
+}
+async function amzPackK(id,i){ await amzPack(id,i); amzKitchenCard(); }
+Object.assign(window,{amzPack,amzAngekommen,amzPackK,amzKitchenCard});
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
