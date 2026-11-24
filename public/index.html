@@ -543,6 +543,9 @@ button:disabled{cursor:not-allowed;}
     <button class="nav-btn" onclick="goTo('management')" id="nav-org-management" style="display:none;">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span id="navlabel-management">Zentrale</span>
     </button>
+    <button class="nav-btn" onclick="goTo('menuKontrolle')" id="nav-org-menu" style="display:none;position:relative;">
+      <svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9"/></svg>Menü<span id="nav-menu-badge" style="display:none;position:absolute;top:4px;right:10px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;align-items:center;justify-content:center;padding:0 3px;"></span>
+    </button>
     <button class="nav-btn" onclick="goTo('orgForecast')" id="nav-org-mengen" style="display:none;">
       <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Mengen
     </button>
@@ -1855,7 +1858,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.336';
+const APP_VERSION='6.99.337';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2514,8 +2517,8 @@ async function loginAs(store){
     document.getElementById('nav-org-sweets').style.display='none';
     document.getElementById('nav-org-kc').style.display='none';
     // Org-Leiste nach Nutzung (seit 26.11.): Überblick, Küche, Transporter, Mengen, Schäden, Mehr
-    [['nav-org-ueberblick',1],['nav-org-kueche',2],['nav-org-transporter',3],['nav-org-mengen',4],['nav-org-schaeden',5],['nav-org-mehr',6]].forEach(([id,o])=>{ const e=document.getElementById(id); e.style.display='flex'; e.style.order=String(o); });
-    ['nav-org-msg','nav-org-management','nav-org-feedback'].forEach(id=>{ document.getElementById(id).style.display='none'; });
+    [['nav-org-ueberblick',1],['nav-org-kueche',2],['nav-org-transporter',3],['nav-org-mengen',4],['nav-org-schaeden',5],['nav-org-management',6],['nav-org-menu',7],['nav-org-mehr',8]].forEach(([id,o])=>{ const e=document.getElementById(id); e.style.display='flex'; e.style.order=String(o); });
+    ['nav-org-msg','nav-org-feedback'].forEach(id=>{ document.getElementById(id).style.display='none'; });
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
     try{ amzOrgWatch(); }catch(e){}
@@ -2710,6 +2713,7 @@ function goTo(v, noPush=false){
     else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
     else if(v==='teamFeedback') navId='nav-org-feedback';
   }
+  if(document.body.classList.contains('kf-rail')){ if(v==='management') navId='nav-org-management'; else if(v==='menuKontrolle') navId='nav-org-menu'; }
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
   const subs={gerichtFotos:'Soll-Fotos Gerichte',kochkurse:'Kochkurse',produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos',geburtstage:'Geburtstage'};
@@ -9333,10 +9337,12 @@ function mkDateLabel(ds){ const [y,m,d]=ds.split('-'); return `${d}.${m}.`; }
 
 async function loadMenuKontrolleBadge(){
   const el=document.getElementById('menu-kontrolle-badge');
-  if(!el) return;
+  const nb=document.getElementById('nav-menu-badge');
+  if(!el && !nb) return;
   try{
     const open=await api('menu_sheet_diffs?status=eq.offen&select=id');
-    el.innerHTML=(open||[]).length?`<span class="badge badge-warn" style="margin-left:4px;">${open.length} offen</span>`:'';
+    if(el) el.innerHTML=(open||[]).length?`<span class="badge badge-warn" style="margin-left:4px;">${open.length} offen</span>`:'';
+    if(nb){ nb.textContent=(open||[]).length>9?'9+':String((open||[]).length); nb.style.display=(open||[]).length?'flex':'none'; }
   }catch(e){ /* Tabelle fehlt oder offline — Kachel bleibt einfach ohne Zähler */ }
 }
 window.loadMenuKontrolleBadge=loadMenuKontrolleBadge;
@@ -23848,9 +23854,11 @@ Object.assign(window,{kfBrauchtInit,kfBrauchtRender,kfBrauchtLaden});
    +'body.kf-rail #bottomnav{left:0;top:0;bottom:0;transform:none;width:96px;max-width:none !important;zoom:1 !important;flex-direction:column;justify-content:flex-start;padding:14px 8px;gap:6px;border-top:0;border-right:1px solid var(--border);overflow-y:auto;z-index:50}'
    +'body.kf-rail #bottomnav .nav-btn{flex:none;padding:12px 4px;gap:5px;font-size:12px;font-weight:600;line-height:1.15;border-radius:14px}'
    +'body.kf-rail #bottomnav .nav-btn svg{width:26px;height:26px}'
-   +'body.kf-rail #content{padding-bottom:24px !important}}';
+   +'body.kf-rail #content{padding-bottom:24px !important}}'
+   +'#nav-org-management,#nav-org-menu{display:none !important}'
+   +'@media (min-width:1100px){body.kf-rail #nav-org-management,body.kf-rail #nav-org-menu{display:flex !important}}';
   document.head.appendChild(st); })();
-function kfRailApply(){ try{ document.body.classList.toggle('kf-rail', !!currentStore && currentStore.id==='zentrale' && window.innerWidth>=1100); }catch(e){} }
+function kfRailApply(){ try{ const on=!!currentStore && currentStore.id==='zentrale' && window.innerWidth>=1100; document.body.classList.toggle('kf-rail', on); if(on) loadMenuKontrolleBadge(); }catch(e){} }
 window.addEventListener('resize',()=>{ clearTimeout(window._kfRailT); window._kfRailT=setTimeout(kfRailApply,150); });
 Object.assign(window,{kfRailApply});
 
