@@ -1852,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.325';
+const APP_VERSION='6.99.326';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5227,6 +5227,20 @@ window.notstandArtikelChanged=notstandArtikelChanged; window.showNotstandModal=s
 // Alle 20 Sekunden prüfen — bewusst häufig, weil's im Ernstfall wirklich schnell gehen muss.
 setInterval(checkEssenNotruf, 10000);
 
+// 24.11.26 (Wunsch Tini): Schichtverlauf als schmale Leiste über dem Start-Button, im bestehenden Look.
+// Reine Anzeige aus vorhandenen Daten (Check-up, Abschluss-Punkte), keine neuen Eingaben für das Team.
+function kfShiftStepperHtml(s1,s2,s3){
+  const step=(n,label,st,go)=>{
+    const done=st==='done', now=st==='now';
+    const dot=done?`<span style="width:22px;height:22px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800;line-height:1;">✓</span>`
+      :now?`<span style="width:22px;height:22px;border-radius:50%;background:#D4FF3F;border:2px solid #1a1a18;box-sizing:border-box;"></span>`
+      :`<span style="width:22px;height:22px;border-radius:50%;border:2px solid #C9C9C2;box-sizing:border-box;"></span>`;
+    return `<div ${go?`onclick="goTo('${go}')"`:''} style="display:flex;flex-direction:column;align-items:center;gap:3px;${go?'cursor:pointer;':''}">${dot}<span style="font-size:10.5px;font-weight:${now?800:600};color:${st==='todo'?'var(--muted)':'#1a1a18'};">${label}</span></div>`;
+  };
+  const line=(on)=>`<span style="flex:1;height:2px;background:${on?'var(--green)':'#E2E2DC'};margin:10px 6px 0;"></span>`;
+  return `<div class="kf-stepper" style="display:flex;align-items:flex-start;padding:8px 14px 6px;margin:0 0 6px;background:#fff;border:1px solid var(--border);border-radius:12px;">${step(1,'Check-up',s1,'dailycheck')}${line(s1==='done')}${step(2,'Schicht',s2,'')}${line(s2==='done')}${step(3,'Abschluss',s3,'schichtende')}</div>`;
+}
+window.kfShiftStepperHtml=kfShiftStepperHtml;
 async function renderHome(){
   const today=new Date().toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long'});
   const allItems=Object.values(templates).flat();
@@ -5476,6 +5490,7 @@ async function renderHome(){
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles)?`
 
     ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
+    ${(()=>{ const sp1=!!(dcStatus.wek&&dcStatus.kuehl&&dcStatus.wolt); const sp3=!!(sp1 && feedbackDoneHome && sweetsDone && transporterDone && disposalDone && dcStatus.reinCount===2 && (!isKCDay||kcDone)); return kfShiftStepperHtml(sp1?'done':'now', sp3?'done':(sp1?'now':'todo'), sp3?'done':'todo'); })()}
     <!-- START BUTTON -->
     <div class="kf-start" onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
