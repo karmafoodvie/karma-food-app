@@ -135,6 +135,10 @@ declare g geraete; gb timestamptz;
 begin
   select grace_bis into gb from sicherheit_einstellungen se where se.id = 1;
   if p_token is null or length(p_token) < 32 then raise exception 'token_ungueltig'; end if;
+  -- Automatische Browser ohne Bildschirm (z. B. Vorschau nach jedem Deployment) bekommen keinen Eintrag in der Liste
+  if coalesce(p_ua,'') ilike '%HeadlessChrome%' or coalesce(kf_ua(),'') ilike '%HeadlessChrome%' then
+    return query select 'wartet'::text, '----'::text, 0, null::timestamptz, false; return;
+  end if;
   select * into g from geraete where token_hash = kf_hash(p_token);
   if not found then
     insert into geraete (token_hash, anfrage_code, user_agent)
