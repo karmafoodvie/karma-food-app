@@ -1862,7 +1862,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.340';
+const APP_VERSION='6.99.342';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -23916,7 +23916,8 @@ function kfRepRange(per){
     return {von:wd[1],bis:wd[5],prevVon:pv[1],prevBis:pv[5],label:'KW '+getIsoWeekNumber(wd[1])+' · letzte Woche',werktage:5}; }
   const monatsName=d=>d.toLocaleDateString('de-AT',{month:'long',year:'numeric'});
   let a,b,pa,pb,label;
-  if(per==='monat'){ a=new Date(heute.getFullYear(),heute.getMonth(),1); b=heute; pa=new Date(heute.getFullYear(),heute.getMonth()-1,1); pb=new Date(heute.getFullYear(),heute.getMonth(),0); label=monatsName(a)+' bis heute'; }
+  if(per==='jahr'){ a=new Date(heute.getFullYear(),0,1); b=heute; pa=new Date(heute.getFullYear()-1,0,1); pb=new Date(heute.getFullYear()-1,11,31); label='Gesamt '+heute.getFullYear()+' · 1. Jänner bis heute'; }
+  else if(per==='monat'){ a=new Date(heute.getFullYear(),heute.getMonth(),1); b=heute; pa=new Date(heute.getFullYear(),heute.getMonth()-1,1); pb=new Date(heute.getFullYear(),heute.getMonth(),0); label=monatsName(a)+' bis heute'; }
   else { a=new Date(heute.getFullYear(),heute.getMonth()-1,1); b=new Date(heute.getFullYear(),heute.getMonth(),0); pa=new Date(heute.getFullYear(),heute.getMonth()-2,1); pb=new Date(heute.getFullYear(),heute.getMonth()-1,0); label=monatsName(a); }
   let n=0; for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)){ const w=d.getDay(); if(w>=1&&w<=5) n++; }
   return {von:iso(a),bis:iso(b),prevVon:iso(pa),prevBis:iso(pb),label,werktage:n};
@@ -23945,7 +23946,7 @@ function kfRepAvg(a){ return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; }
 
 // ---- Tab Mengen (Ausverkauft-Regel + Rest)
 async function kfRepMengen(R){
-  const disp=await api(`disposal?disposal_date=gte.${R.von}&disposal_date=lte.${R.bis}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time&limit=6000`).catch(()=>null);
+  const disp=await apiAllPages(`disposal?disposal_date=gte.${R.von}&disposal_date=lte.${R.bis}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time&order=disposal_date.asc,id.asc`);
   if(disp===null) return '<div class="kr-c">Die Daten konnten nicht geladen werden.</div>';
   const ST=['3400','lb','1020','boerse'];
   const sName=id=>({lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstr.','3400':'Stadtplatz'}[id]||id);
@@ -23985,7 +23986,7 @@ async function kfRepMengen(R){
 async function kfRepCrew(R){
   const von8=(()=>{ const d=new Date(); d.setDate(d.getDate()-8*7); return isoLocal(d); })();
   const von=R.prevVon<von8?R.prevVon:von8;
-  const fb=await api(`essen_feedback?datum=gte.${von}&select=store_id,datum,ratings&limit=8000`).catch(()=>null);
+  const fb=await apiAllPages(`essen_feedback?datum=gte.${von}&select=store_id,datum,ratings&order=datum.asc,id.asc`);
   if(fb===null) return '<div class="kr-c">Die Daten konnten nicht geladen werden.</div>';
   const items=[]; // {datum,store,dish,v}
   fb.forEach(f=>{ const r=f.ratings||{}; Object.keys(r).forEach(g=>{ const v=typeof r[g]==='object'&&r[g]?Number(r[g].v):Number(r[g]); if(v>=1&&v<=5) items.push({datum:f.datum,store:f.store_id,dish:g,v}); }); });
@@ -24014,7 +24015,7 @@ async function kfRepCrew(R){
 async function kfRepGaeste(R){
   const von8=(()=>{ const d=new Date(); d.setDate(d.getDate()-8*7); return isoLocal(d); })();
   const von=R.prevVon<von8?R.prevVon:von8;
-  const g=await api(`gaeste_feedback?menu_date=gte.${von}&select=menu_date,dish_name,location,rating,comment,quick_tags&limit=5000`).catch(()=>null);
+  const g=await apiAllPages(`gaeste_feedback?menu_date=gte.${von}&select=menu_date,dish_name,location,rating,comment,quick_tags&order=menu_date.asc,id.asc`);
   if(g===null) return '<div class="kr-c">Die Daten konnten nicht geladen werden.</div>';
   const items=g.filter(x=>x.rating>=1&&x.rating<=5);
   const inR=(x,a,b)=>x.menu_date>=a&&x.menu_date<=b;
@@ -24041,7 +24042,7 @@ async function kfRepGaeste(R){
 async function renderOrgReport(){
   const el=document.getElementById('v-orgReport'); if(!el) return;
   const tabs=tabBarHtml([{key:'mengen',label:'📦 Mengen'},{key:'crew',label:'👩‍🍳 Crew'},{key:'gaeste',label:'😋 Gäste'}],ORGR.tab,'orgReportTab','#0F6E56');
-  const per=[['woche','Letzte Woche'],['monat','Dieser Monat'],['vormonat','Letzter Monat']].map(([k,t])=>'<button type="button" onclick="orgReportPer(\''+k+'\')" style="flex:1;min-height:44px;border-radius:10px;border:'+(ORGR.per===k?'2px solid #0F6E56':'1.5px solid var(--border)')+';background:'+(ORGR.per===k?'#E1F5EE':'#fff')+';color:#1a1a18;font-weight:'+(ORGR.per===k?'700':'500')+';font-size:13px;font-family:inherit;cursor:pointer;">'+t+'</button>').join('');
+  const per=[['woche','Letzte Woche'],['monat','Dieser Monat'],['vormonat','Letzter Monat'],['jahr','Jahr '+new Date().getFullYear()]].map(([k,t])=>'<button type="button" onclick="orgReportPer(\''+k+'\')" style="flex:1;min-height:44px;border-radius:10px;border:'+(ORGR.per===k?'2px solid #0F6E56':'1.5px solid var(--border)')+';background:'+(ORGR.per===k?'#E1F5EE':'#fff')+';color:#1a1a18;font-weight:'+(ORGR.per===k?'700':'500')+';font-size:13px;font-family:inherit;cursor:pointer;">'+t+'</button>').join('');
   const R=kfRepRange(ORGR.per);
   el.innerHTML=backToHomeHtml()+pageHeaderHtml('📊','Report',R.label,'#0F6E56')+tabs+'<div style="display:flex;gap:6px;margin:-4px 0 10px;">'+per+'</div><div id="orgr-body"><div style="padding:30px;text-align:center;color:var(--muted);">Wird geladen…</div></div>';
   const tab=ORGR.tab;
