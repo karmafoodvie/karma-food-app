@@ -453,6 +453,7 @@ button:disabled{cursor:not-allowed;}
     <div id="v-wochenFeedback" class="view"></div>
     <div id="v-forecastAmpel" class="view"></div>
     <div id="v-nutzungsstatistik" class="view"></div>
+    <div id="v-orgReport" class="view"></div>
     <div id="v-allergene" class="view"></div>
     <div id="v-schulung" class="view"></div>
     <div id="v-dailycheck" class="view"></div>
@@ -545,6 +546,9 @@ button:disabled{cursor:not-allowed;}
     </button>
     <button class="nav-btn" onclick="goTo('menuKontrolle')" id="nav-org-menu" style="display:none;position:relative;">
       <svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9"/></svg>Menü<span id="nav-menu-badge" style="display:none;position:absolute;top:4px;right:10px;background:#DC2626;color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;align-items:center;justify-content:center;padding:0 3px;"></span>
+    </button>
+    <button class="nav-btn" onclick="goTo('orgReport')" id="nav-orgReport" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg>Report
     </button>
     <button class="nav-btn" onclick="goTo('orgForecast')" id="nav-org-mengen" style="display:none;">
       <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Mengen
@@ -1858,7 +1862,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.339';
+const APP_VERSION='6.99.340';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2517,7 +2521,7 @@ async function loginAs(store){
     document.getElementById('nav-org-sweets').style.display='none';
     document.getElementById('nav-org-kc').style.display='none';
     // Org-Leiste nach Nutzung (seit 26.11.): Überblick, Küche, Transporter, Mengen, Schäden, Mehr
-    [['nav-org-ueberblick',1],['nav-org-kueche',2],['nav-org-transporter',3],['nav-org-mengen',4],['nav-org-schaeden',5],['nav-org-management',6],['nav-org-menu',7],['nav-org-mehr',8]].forEach(([id,o])=>{ const e=document.getElementById(id); e.style.display='flex'; e.style.order=String(o); });
+    [['nav-org-ueberblick',1],['nav-org-kueche',2],['nav-org-transporter',3],['nav-org-mengen',4],['nav-org-schaeden',5],['nav-orgReport',6],['nav-org-management',7],['nav-org-menu',8],['nav-org-mehr',9]].forEach(([id,o])=>{ const e=document.getElementById(id); e.style.display='flex'; e.style.order=String(o); });
     ['nav-org-msg','nav-org-feedback'].forEach(id=>{ document.getElementById(id).style.display='none'; });
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
@@ -2553,7 +2557,7 @@ async function loginAs(store){
     kdNachprodGlobal(); kdSgGlobal(); if(!window._kdSgGlobalTimer) window._kdSgGlobalTimer=setInterval(()=>{ kdSgGlobal(); kdNachprodGlobal(); },60000);
     const savedView=localStorage.getItem('kf_view')||'home';
     // Only restore views that make sense for this role
-    const orgViews=['management','maengel','grundreinigung','kuechenlager','catering','feuerloescher'];
+    const orgViews=['management','maengel','grundreinigung','kuechenlager','catering','feuerloescher','orgReport'];
     const kitchenExtraViews=['kitchenDaily','pack','sweets','kitchen','allergene','schulung','dailycheck','verfuegbarkeit','hygieneSchulung','orgForecast','guide','forecastReview','schichtende','waehrend','order','kuechenlager','grundreinigung','catering'];
     const storeViews=['home','order','check','disposal','dailycheck','allergene','maengel','schichtende','messen'];
     const allowedViews = store.id==='zentrale' ? [...orgViews,'home'] : (store.id==='kitchen' ? [...kitchenExtraViews,'home'] : storeViews);
@@ -2714,9 +2718,10 @@ function goTo(v, noPush=false){
     else if(v==='teamFeedback') navId='nav-org-feedback';
   }
   if(document.body.classList.contains('kf-rail')){ if(v==='management') navId='nav-org-management'; else if(v==='menuKontrolle') navId='nav-org-menu'; }
+  else if(currentStore?.id==='zentrale' && v==='orgReport') navId='nav-org-mehr';
   const nb=document.getElementById(navId);
   if(nb) nb.classList.add('active');
-  const subs={gerichtFotos:'Soll-Fotos Gerichte',kochkurse:'Kochkurse',produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos',geburtstage:'Geburtstage'};
+  const subs={orgReport:'Report',gerichtFotos:'Soll-Fotos Gerichte',kochkurse:'Kochkurse',produkte:'Produkte',feuerloescher:'Feuerlöscher',catering:'Catering',home:'Startseite',kitchenDaily:'Daily Business',kuechenlager:'Küchenlager',grundreinigung:'Grundreinigung',order:'Bestellung aufgeben',check:'Checklisten',pack:'Packliste',org:'Organisation',karmaverse:'Karmaverse',management:'Management',msg:'Nachricht',sweets:'Sweets',kitchen:'Küche',disposal:'Entsorgung',allergene:'Zutaten & Allergene',schulung:'Schulungen',dailycheck:'Daily Check-up',maengel:'Schaden melden',verfuegbarkeit:'Verfügbarkeit verwalten',schichtende:'Schicht abschließen',waehrend:'Während der Schicht',kontrolle:'Marktamtkontrolle',guide:'Store Guide',forecastReview:'Prognose-Rückblick',healthcheck:'System-Check',zutatenDB:'Zutaten-Datenbank',oeffnungHilfe:'Öffnungshilfe (optional)',reinigungHilfe:'Reinigungshilfe (optional)',hygieneSchulung:'Hygiene-Schulung',orgForecast:'Operations — Mengen',broadcast:'Nachricht an Stores',hilfe:'Hilfe & Ansprechpartner',rabattcodes:'Rabattcodes',onboarding:'Onboarding',transporterTasks:'Aufgaben für Transporter',messen:'Messe-Termine',umsatz:'Umsatz',fcTrial:'Forecast-Testphase',menuKontrolle:'Menü-Kontrolle',dienstplan:'Dienstplan',todos:'To-dos',geburtstage:'Geburtstage'};
   const subEl=document.getElementById('tb-sub');
   subEl.textContent=subs[v]||'';
   if(v==='home') subEl.setAttribute('data-no-translate',''); else subEl.removeAttribute('data-no-translate');
@@ -2725,7 +2730,7 @@ function goTo(v, noPush=false){
   // (await api(...)), bevor sie den Bildschirm füllen. Ohne das hier fühlt sich ein Tap "tot" an,
   // weil bis zum fertigen Laden entweder die alte oder eine leere Seite stehen bleibt.
   if(targetEl) targetEl.innerHTML='<div style="padding:60px 20px;text-align:center;color:var(--muted);font-size:13px;">Lädt…</div>';
-  const renders={geburtstage:renderGeburtstage,gerichtFotos:renderGerichtFotos,kochkurse:renderKochkurse,produkte:renderProdukte,karmaverse:renderKarmaverse,home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,todos:renderTodos,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
+  const renders={geburtstage:renderGeburtstage,gerichtFotos:renderGerichtFotos,kochkurse:renderKochkurse,produkte:renderProdukte,karmaverse:renderKarmaverse,home:renderHome,kitchenDaily:renderKitchenDaily,kuechenlager:renderKuechenlager,grundreinigung:renderGrundreinigung,stadtgemeinde:renderStadtgemeinde,essenFeedback:renderEssenFeedback,kundenfeedback:renderKundenfeedback,teamFeedback:renderTeamFeedback,feuerloescher:renderFeuerloescher,catering:renderCatering,teamRating:renderTeamRating,order:renderOrder,check:renderCheck,pack:renderPack,org:renderOrg,management:renderManagement,hygieneauswertung:renderHygieneAuswertung,zutatenkontrolle:renderZutatenKontrolle,freitagCheckliste:renderFreitagCheckliste,epochenCheck:renderEpochenCheck,menuKontrolle:renderMenuKontrolle,wochenFeedback:renderWochenFeedback,forecastAmpel:renderForecastAmpel,nutzungsstatistik:renderNutzungsstatistik,orgReport:renderOrgReport,msg:renderMsg,sweets:renderSweets,kitchen:renderKitchen,disposal:renderDisposal,allergene:renderAllergene,schulung:renderSchulung,dailycheck:renderDailyCheck,maengel:renderMaengel,verfuegbarkeit:renderVerfuegbarkeit,schichtende:renderSchichtende,waehrend:renderWaehrend,kontrolle:renderKontrolleView,guide:renderGuide,forecastReview:renderForecastReview,healthcheck:renderHealthCheck,zutatenDB:renderZutatenDB,oeffnungHilfe:renderOeffnungHelp,reinigungHilfe:renderReinigungHelp,hygieneSchulung:renderHygieneSchulung,orgForecast:renderOrgForecast,broadcast:renderBroadcast,hilfe:renderHilfe,rabattcodes:renderRabattcodes,onboarding:renderOnboarding,transporterTasks:renderTransporterTasks,messen:renderMessen,dienstplan:renderDienstplan,todos:renderTodos,umsatz:renderUmsatz,fcTrial:renderForecastTrial};
   // Sicherheitsnetz: bricht eine Render-Funktion mit einem Fehler ab (z.B. eine fehlgeschlagene
   // Abfrage), blieb die Seite bisher STUMM bei "Lädt…" hängen (Fall Stadtplatz, 13.08.26). Jetzt
   // wird der Fehler sichtbar gemacht, mit Knopf zum erneuten Versuch.
@@ -5593,7 +5598,7 @@ async function renderHome(){
     `:''}
     ${currentStore?.id==='zentrale'?`
     <div id="kf-braucht"></div>
-    <div id="kf-report"></div>
+    <div onclick="goTo('orgReport')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 0 12px;cursor:pointer;"><span style="font-size:20px;">📊</span><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Report</div><div style="font-size:11px;color:var(--muted);">Mengen, Crew- und Gäste-Bewertung · Woche und Monat</div></div><span style="color:var(--muted);">→</span></div>
     ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
     <div class="kf-org-cols"><div class="kf-org-l">
     <div id="zm-org-host"></div>
@@ -5657,7 +5662,7 @@ async function renderHome(){
   if(currentStore?.id!=='zentrale'&&currentStore?.id!=='kitchen') el.innerHTML+=soLaeuftsHtml(false);
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
-  if(currentStore?.id==='zentrale'){ kfBrauchtInit(); kfOrgReport(); loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
+  if(currentStore?.id==='zentrale'){ kfBrauchtInit(); loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); amzKitchenCard(); }
   else { loadActiveBroadcastBanner(); loadLieferTracking(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
@@ -23811,7 +23816,7 @@ async function kfDfbSend(sterne,wahl){
 Object.assign(window,{kfWideApply,kfWideToggle,kfDfbShow,kfDfbSend});
 
 // ==== Organisation: "Mehr"-Fenster (seltener genutzte Bereiche) ====
-const KF_MEHR=[['management','Operations · Tini','⚙️'],['broadcast','Nachricht an Standorte','✉️'],['teamFeedback','Team-Feedback','⭐'],['menuKontrolle','Menü-Kontrolle','📋'],['zutatenkontrolle','Zutaten-Kontrolle','🥕'],['hygieneauswertung','Hygiene-Auswertung','🧼'],['hygieneSchulung','Hygiene-Schulung','🎓'],['feuerloescher','Feuerlöscher','🧯'],['epochenCheck','Epochen-Check','🗓️'],['forecastAmpel','Forecast-Kontrolle','🚦'],['gerichtFotos','Soll-Fotos Gerichte','📸'],['nutzungsstatistik','Nutzungsstatistik','📊'],['sweets','Sweets','🍰'],['geburtstage','Geburtstage','🎂']];
+const KF_MEHR=[['orgReport','Report (Mengen, Crew, Gäste)','📊'],['management','Operations · Tini','⚙️'],['broadcast','Nachricht an Standorte','✉️'],['teamFeedback','Team-Feedback','⭐'],['menuKontrolle','Menü-Kontrolle','📋'],['zutatenkontrolle','Zutaten-Kontrolle','🥕'],['hygieneauswertung','Hygiene-Auswertung','🧼'],['hygieneSchulung','Hygiene-Schulung','🎓'],['feuerloescher','Feuerlöscher','🧯'],['epochenCheck','Epochen-Check','🗓️'],['forecastAmpel','Forecast-Kontrolle','🚦'],['gerichtFotos','Soll-Fotos Gerichte','📸'],['nutzungsstatistik','Nutzungsstatistik','📊'],['sweets','Sweets','🍰'],['geburtstage','Geburtstage','🎂']];
 function kfMehrOpen(){
   if(document.getElementById('kf-mehr')) return;
   const m=document.createElement('div'); m.id='kf-mehr'; m.setAttribute('role','dialog'); m.setAttribute('aria-label','Mehr');
@@ -23876,8 +23881,8 @@ Object.assign(window,{kfBrauchtInit,kfBrauchtRender,kfBrauchtLaden});
    +'body.kf-rail #bottomnav .nav-btn{flex:none;padding:12px 4px;gap:5px;font-size:12px;font-weight:600;line-height:1.15;border-radius:14px}'
    +'body.kf-rail #bottomnav .nav-btn svg{width:26px;height:26px}'
    +'body.kf-rail #content{padding-bottom:24px !important}}'
-   +'#nav-org-management,#nav-org-menu{display:none !important}'
-   +'@media (min-width:1100px){body.kf-rail #nav-org-management,body.kf-rail #nav-org-menu{display:flex !important}}';
+   +'#nav-org-management,#nav-org-menu,#nav-orgReport{display:none !important}'
+   +'@media (min-width:1100px){body.kf-rail #nav-org-management,body.kf-rail #nav-org-menu,body.kf-rail #nav-orgReport{display:flex !important}}';
   document.head.appendChild(st); })();
 function kfRailApply(){ try{ const on=!!currentStore && currentStore.id==='zentrale' && window.innerWidth>=1100; document.body.classList.toggle('kf-rail', on); if(on) loadMenuKontrolleBadge(); }catch(e){} }
 window.addEventListener('resize',()=>{ clearTimeout(window._kfRailT); window._kfRailT=setTimeout(kfRailApply,150); });
@@ -23902,52 +23907,152 @@ Object.assign(window,{kfRailApply});
    +'.kr-td{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:10px 12px;background:#fff;border:1.5px solid #E5E5E2;font-size:13px}'
    +'@media (min-width:1100px){.kr-kp{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.kr-ch{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}';
   document.head.appendChild(st); })();
-async function kfOrgReport(){
-  const host=document.getElementById('kf-report'); if(!host||!currentStore||currentStore.id!=='zentrale') return;
-  try{
-    const wd=getWeekdayDates(-1), von=wd[1], bis=wd[5], kw=getIsoWeekNumber(von);
-    const disp=await api(`disposal?disposal_date=gte.${von}&disposal_date=lte.${bis}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time&limit=3000`).catch(()=>null);
-    if(disp===null){ host.innerHTML=''; return; }
-    const ST=['3400','lb','1020','boerse'];
-    const sName=id=>({lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstr.','3400':'Stadtplatz'}[id]||id);
-    const rows=disp.filter(r=>ST.includes(r.store_id));
-    const per={}; ST.forEach(id=>per[id]={frueh:0,spaet:0,rest:0,tage:new Set(),n:0,dishes:{}});
-    rows.forEach(r=>{ const p=per[r.store_id]; p.n++; if(r.leftover_qty!=null||r.sold_out_time) p.tage.add(r.disposal_date); p.rest+=Number(r.leftover_qty)||0;
-      if(r.sold_out_time){ if(kfZuFrueh(r.store_id,r.sold_out_time)){ p.frueh++; const k=r.dish_name; (p.dishes[k]=p.dishes[k]||{tage:new Set(),zeit:'99:99'}).tage.add(r.disposal_date); const z=String(r.sold_out_time).slice(0,5); if(z<p.dishes[k].zeit) p.dishes[k].zeit=z; } else p.spaet++; } });
-    const sum=k=>ST.reduce((a,id)=>a+per[id][k],0);
-    const fruehGes=sum('frueh'), spaetGes=sum('spaet'), restGes=Math.round(sum('rest'));
-    const ftF=new Set(rows.filter(r=>kfZuFrueh(r.store_id,r.sold_out_time)).map(r=>r.store_id+'|'+r.disposal_date)).size;
-    const tageEin=ST.reduce((a,id)=>a+per[id].tage.size,0), tageSoll=ST.length*5;
-    const maxRest=Math.max(1,...ST.map(id=>per[id].rest)), maxAus=Math.max(1,...ST.map(id=>per[id].frueh+per[id].spaet));
-    const restTop=ST.slice().sort((a,b)=>per[b].rest-per[a].rest)[0];
-    // Handlungszeilen
-    const todo=[];
-    ST.forEach(id=>{ const p=per[id]; const dau=Object.entries(p.dishes).filter(([k,v])=>v.tage.size>=2).sort((a,b)=>b[1].tage.size-a[1].tage.size)[0];
-      if(p.frueh>=3 || dau){ todo.push({sev:0,farbe:'#B3261E',pfeil:'M12 19V5M5 12l7-7 7 7',titel:sName(id)+': Mengen erhöhen',sub:p.frueh+' Gerichte zu früh weg'+(dau?', '+dau[0]+' an '+dau[1].tage.size+' Tagen ab '+dau[1].zeit+' Uhr':'')}); }
-      else if(p.n && p.rest/p.n>=8){ todo.push({sev:1,farbe:'#C2410C',pfeil:'M12 5v14M5 12l7 7 7-7',titel:sName(id)+': weniger einplanen',sub:Math.round(p.rest)+' Portionen Rest'+(p.frueh?'':', nichts zu früh weg')}); }
-      else if(p.n){ todo.push({sev:2,farbe:'#0F6E56',pfeil:'M5 13l4 4L19 7',titel:sName(id)+': passt',sub:(p.spaet?p.spaet+' kurz vor Schluss ausverkauft, ':'')+Math.round(p.rest)+' Portionen Rest'}); } });
-    todo.sort((a,b)=>a.sev-b.sev);
-    const bar=(w,bg,txt)=>w>0?'<span class="kr-s" style="width:'+Math.max(w,6)+'%;background:'+bg+'">'+txt+'</span>':'';
-    const aus=ST.map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.frueh/maxAus*100,'#B3261E','✕ '+p.frueh)+bar(p.spaet/maxAus*100,'#0F6E56','✓ '+p.spaet)+((p.frueh+p.spaet)===0?'<span style="font-size:12px;color:#666;align-self:center;">nichts ausverkauft</span>':'')+'</div></div>'; }).join('');
-    const rst=ST.slice().sort((a,b)=>per[b].rest-per[a].rest).map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.rest/maxRest*100,'#C2410C',String(Math.round(p.rest)))+'</div></div>'; }).join('');
-    const tds=todo.map(t=>'<div class="kr-td" style="border-color:'+t.farbe+'"><svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;color:'+t.farbe+';fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;" aria-hidden="true"><path d="'+t.pfeil+'"/></svg><span><b>'+t.titel+'</b><br><span style="color:#555">'+t.sub+'</span></span></div>').join('');
-    const open=(()=>{ try{ return localStorage.getItem('kf_report_zu')!=='1'; }catch(e){ return true; } })();
-    host.innerHTML='<details id="kf-report-d" class="card" style="padding:10px 14px;" '+(open?'open':'')+'><summary style="font-size:13px;font-weight:700;cursor:pointer;min-height:36px;display:flex;align-items:center;">📊 Wochenreport KW '+kw+' · letzte Woche, alle Standorte</summary>'
-      +(rows.length?(
-      '<div class="kr-kp">'
-      +'<div class="kr-k" style="border:1.5px solid '+(fruehGes?'#B3261E':'#E5E5E2')+'"><div class="kr-kl">ZU FRÜH AUSVERKAUFT</div><div class="kr-kz" style="color:#B3261E">'+fruehGes+'</div><div class="kr-ks"><b>'+ftF+' von '+tageSoll+'</b> Filial-Tagen · mehr als 30 Min. vor Schluss</div></div>'
-      +'<div class="kr-k" style="border:1.5px solid #0F6E56"><div class="kr-kl">KURZ VOR SCHLUSS WEG</div><div class="kr-kz" style="color:#0F6E56">'+spaetGes+'</div><div class="kr-ks">✓ gut geplant, genau gewollt</div></div>'
-      +'<div class="kr-k" style="border:1.5px solid #C2410C"><div class="kr-kl">REST IN DER WOCHE</div><div class="kr-kz" style="color:#C2410C">'+restGes+'</div><div class="kr-ks">Portionen'+(restGes?' · am meisten '+sName(restTop)+' ('+Math.round(per[restTop].rest)+')':'')+'</div></div>'
-      +'<div class="kr-k"><div class="kr-kl">DATEN VOLLSTÄNDIG</div><div class="kr-kz">'+tageEin+'/'+tageSoll+'</div><div class="kr-ks">Filial-Tage mit Entsorgung eingetragen</div></div></div>'
-      +'<div class="kr-ch"><div class="kr-c"><div class="kr-ct">AUSVERKAUFT NACH STANDORT (Gerichte)</div><div style="display:flex;gap:14px;font-size:12px;margin-bottom:4px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#B3261E;margin-right:5px;"></span>✕ zu früh</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#0F6E56;margin-right:5px;"></span>✓ kurz vor Schluss</span></div>'+aus+'</div>'
-      +'<div class="kr-c"><div class="kr-ct">REST NACH STANDORT (Portionen)</div>'+rst+'</div></div>'
-      +'<div class="kr-ct" style="margin:12px 0 0;">WAS DU TUN SOLLTEST</div><div class="kr-t">'+tds+'</div>'
-      ):'<div style="font-size:13px;color:#666;padding:8px 2px;">Für letzte Woche gibt es noch keine Einträge zur Entsorgung.</div>')
-      +'</details>';
-    const dd=document.getElementById('kf-report-d'); if(dd) dd.addEventListener('toggle',()=>{ try{ localStorage.setItem('kf_report_zu',dd.open?'0':'1'); }catch(e){} });
-  }catch(e){ console.error('Wochenreport',e); }
+// ==== Organisation: Report-Seite (Mengen · Crew-Bewertung · Gäste-Bewertung; Woche / Monat) ====
+const ORGR={tab:'mengen',per:'woche'};
+function kfRepRange(per){
+  const heute=new Date();
+  const iso=d=>isoLocal(d);
+  if(per==='woche'){ const wd=getWeekdayDates(-1); const pv=getWeekdayDates(-2);
+    return {von:wd[1],bis:wd[5],prevVon:pv[1],prevBis:pv[5],label:'KW '+getIsoWeekNumber(wd[1])+' · letzte Woche',werktage:5}; }
+  const monatsName=d=>d.toLocaleDateString('de-AT',{month:'long',year:'numeric'});
+  let a,b,pa,pb,label;
+  if(per==='monat'){ a=new Date(heute.getFullYear(),heute.getMonth(),1); b=heute; pa=new Date(heute.getFullYear(),heute.getMonth()-1,1); pb=new Date(heute.getFullYear(),heute.getMonth(),0); label=monatsName(a)+' bis heute'; }
+  else { a=new Date(heute.getFullYear(),heute.getMonth()-1,1); b=new Date(heute.getFullYear(),heute.getMonth(),0); pa=new Date(heute.getFullYear(),heute.getMonth()-2,1); pb=new Date(heute.getFullYear(),heute.getMonth()-1,0); label=monatsName(a); }
+  let n=0; for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)){ const w=d.getDay(); if(w>=1&&w<=5) n++; }
+  return {von:iso(a),bis:iso(b),prevVon:iso(pa),prevBis:iso(pb),label,werktage:n};
 }
-window.kfOrgReport=kfOrgReport;
+function kfRepNum(v){ return v==null?'–':(Math.round(v*10)/10).toString().replace('.',','); }
+function kfRepTrend(cur,prev,einheit){
+  if(cur==null||prev==null) return '<span style="color:#666">kein Vergleich möglich</span>';
+  const d=cur-prev;
+  if(Math.abs(d)<0.1) return '<span style="color:#444;font-weight:700">→ unverändert zur Vorperiode ('+kfRepNum(prev)+')</span>';
+  return d>0?'<span style="color:#0F6E56;font-weight:700">↑ besser: +'+kfRepNum(d)+' zur Vorperiode ('+kfRepNum(prev)+')</span>':'<span style="color:#B3261E;font-weight:700">↓ schlechter: '+kfRepNum(d)+' zur Vorperiode ('+kfRepNum(prev)+')</span>';
+}
+function kfRepWeekKey(ds){ const d=new Date(ds+'T12:00:00'); d.setDate(d.getDate()-((d.getDay()+6)%7)); return isoLocal(d); }
+function kfRepSaeulen(reihe,titel){ // reihe: [{label,wert,n}] Skala 0..5, letzte Säule hervorgehoben
+  if(!reihe.length) return '';
+  const cols=reihe.map((r,i)=>{ const h=r.wert==null?0:Math.max(4,r.wert/5*100); const last=i===reihe.length-1;
+    return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;height:150px;">'
+      +'<span style="font-size:12px;font-weight:700;color:'+(last?'#0F6E56':'#444')+'">'+kfRepNum(r.wert)+'</span>'
+      +'<div style="width:100%;max-width:44px;height:'+h+'%;background:'+(last?'#0F6E56':'#9FCFBF')+';border-radius:6px 6px 0 0;"></div></div>'; }).join('');
+  const lab=reihe.map(r=>'<div style="flex:1;min-width:0;text-align:center;font-size:11px;color:#555;line-height:1.2;">'+r.label+'<br><span style="color:#888">n='+r.n+'</span></div>').join('');
+  return '<div class="kr-c" style="margin-top:10px;"><div class="kr-ct">'+titel+' (Skala 1 bis 5)</div><div style="display:flex;gap:6px;align-items:flex-end;border-bottom:1.5px solid #D4D4CF;padding-bottom:2px;">'+cols+'</div><div style="display:flex;gap:6px;margin-top:4px;">'+lab+'</div></div>';
+}
+function kfRepBalken(zeilen,max,farbe){ // zeilen: [{name,wert,n}]
+  return zeilen.map(z=>'<div class="kr-r" style="grid-template-columns:150px minmax(0,1fr)"><b style="font-size:13px;line-height:1.2">'+escAttr(z.name)+'</b><div class="kr-b"><span class="kr-s" style="width:'+Math.max(8,z.wert/max*100)+'%;background:'+farbe+'">'+kfRepNum(z.wert)+' <span style="font-weight:400;margin-left:6px;opacity:.9">n='+z.n+'</span></span></div></div>').join('');
+}
+function kfRepAvg(a){ return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; }
+
+// ---- Tab Mengen (Ausverkauft-Regel + Rest)
+async function kfRepMengen(R){
+  const disp=await api(`disposal?disposal_date=gte.${R.von}&disposal_date=lte.${R.bis}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time&limit=6000`).catch(()=>null);
+  if(disp===null) return '<div class="kr-c">Die Daten konnten nicht geladen werden.</div>';
+  const ST=['3400','lb','1020','boerse'];
+  const sName=id=>({lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstr.','3400':'Stadtplatz'}[id]||id);
+  const rows=disp.filter(r=>ST.includes(r.store_id));
+  if(!rows.length) return '<div class="kr-c" style="color:#666">Für diesen Zeitraum gibt es keine Einträge zur Entsorgung.</div>';
+  const per={}; ST.forEach(id=>per[id]={frueh:0,spaet:0,rest:0,tage:new Set(),n:0,dishes:{}});
+  rows.forEach(r=>{ const p=per[r.store_id]; p.n++; if(r.leftover_qty!=null||r.sold_out_time) p.tage.add(r.disposal_date); p.rest+=Number(r.leftover_qty)||0;
+    if(r.sold_out_time){ if(kfZuFrueh(r.store_id,r.sold_out_time)){ p.frueh++; const k=r.dish_name; (p.dishes[k]=p.dishes[k]||{tage:new Set(),zeit:'99:99'}).tage.add(r.disposal_date); const z=String(r.sold_out_time).slice(0,5); if(z<p.dishes[k].zeit) p.dishes[k].zeit=z; } else p.spaet++; } });
+  const sum=k=>ST.reduce((a,id)=>a+per[id][k],0);
+  const fruehGes=sum('frueh'), spaetGes=sum('spaet'), restGes=Math.round(sum('rest'));
+  const ftF=new Set(rows.filter(r=>kfZuFrueh(r.store_id,r.sold_out_time)).map(r=>r.store_id+'|'+r.disposal_date)).size;
+  const tageEin=ST.reduce((a,id)=>a+per[id].tage.size,0), tageSoll=ST.length*R.werktage;
+  const maxRest=Math.max(1,...ST.map(id=>per[id].rest)), maxAus=Math.max(1,...ST.map(id=>per[id].frueh+per[id].spaet));
+  const restTop=ST.slice().sort((a,b)=>per[b].rest-per[a].rest)[0];
+  const tage=(R.werktage>5)?1:1; // Schwellen gelten je Zeitraum: "dauerhaft" = Gericht an mind. 2 Tagen
+  const todo=[]; const fruehSchwelle=R.werktage>5?Math.round(R.werktage*0.6):3;
+  ST.forEach(id=>{ const p=per[id]; const dau=Object.entries(p.dishes).filter(([k,v])=>v.tage.size>=2).sort((a,b)=>b[1].tage.size-a[1].tage.size)[0];
+    if(p.frueh>=fruehSchwelle || dau){ todo.push({sev:0,farbe:'#B3261E',pfeil:'M12 19V5M5 12l7-7 7 7',titel:sName(id)+': Mengen erhöhen',sub:p.frueh+' Gerichte zu früh weg'+(dau?', '+dau[0]+' an '+dau[1].tage.size+' Tagen ab '+dau[1].zeit+' Uhr':'')}); }
+    else if(p.n && p.rest/p.n>=8){ todo.push({sev:1,farbe:'#C2410C',pfeil:'M12 5v14M5 12l7 7 7-7',titel:sName(id)+': weniger einplanen',sub:Math.round(p.rest)+' Portionen Rest'+(p.frueh?'':', nichts zu früh weg')}); }
+    else if(p.n){ todo.push({sev:2,farbe:'#0F6E56',pfeil:'M5 13l4 4L19 7',titel:sName(id)+': passt',sub:(p.spaet?p.spaet+' kurz vor Schluss ausverkauft, ':'')+Math.round(p.rest)+' Portionen Rest'}); } });
+  todo.sort((a,b)=>a.sev-b.sev);
+  const bar=(w,bg,txt)=>w>0?'<span class="kr-s" style="width:'+Math.max(w,6)+'%;background:'+bg+'">'+txt+'</span>':'';
+  const aus=ST.map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.frueh/maxAus*100,'#B3261E','✕ '+p.frueh)+bar(p.spaet/maxAus*100,'#0F6E56','✓ '+p.spaet)+((p.frueh+p.spaet)===0?'<span style="font-size:12px;color:#666;align-self:center;">nichts ausverkauft</span>':'')+'</div></div>'; }).join('');
+  const rst=ST.slice().sort((a,b)=>per[b].rest-per[a].rest).map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.rest/maxRest*100,'#C2410C',String(Math.round(p.rest)))+'</div></div>'; }).join('');
+  const tds=todo.map(t=>'<div class="kr-td" style="border-color:'+t.farbe+'"><svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;color:'+t.farbe+';fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;" aria-hidden="true"><path d="'+t.pfeil+'"/></svg><span><b>'+t.titel+'</b><br><span style="color:#555">'+t.sub+'</span></span></div>').join('');
+  return '<div class="kr-kp">'
+    +'<div class="kr-k" style="border:1.5px solid '+(fruehGes?'#B3261E':'#E5E5E2')+'"><div class="kr-kl">ZU FRÜH AUSVERKAUFT</div><div class="kr-kz" style="color:#B3261E">'+fruehGes+'</div><div class="kr-ks"><b>'+ftF+' von '+tageSoll+'</b> Filial-Tagen · mehr als 30 Min. vor Schluss</div></div>'
+    +'<div class="kr-k" style="border:1.5px solid #0F6E56"><div class="kr-kl">KURZ VOR SCHLUSS WEG</div><div class="kr-kz" style="color:#0F6E56">'+spaetGes+'</div><div class="kr-ks">✓ gut geplant, genau gewollt</div></div>'
+    +'<div class="kr-k" style="border:1.5px solid #C2410C"><div class="kr-kl">REST</div><div class="kr-kz" style="color:#C2410C">'+restGes+'</div><div class="kr-ks">Portionen'+(restGes?' · am meisten '+sName(restTop)+' ('+Math.round(per[restTop].rest)+')':'')+'</div></div>'
+    +'<div class="kr-k"><div class="kr-kl">DATEN VOLLSTÄNDIG</div><div class="kr-kz">'+tageEin+'/'+tageSoll+'</div><div class="kr-ks">Filial-Tage mit Entsorgung eingetragen</div></div></div>'
+    +'<div class="kr-ch"><div class="kr-c"><div class="kr-ct">AUSVERKAUFT NACH STANDORT (Gerichte)</div><div style="display:flex;gap:14px;font-size:12px;margin-bottom:4px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#B3261E;margin-right:5px;"></span>✕ zu früh</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#0F6E56;margin-right:5px;"></span>✓ kurz vor Schluss</span></div>'+aus+'</div>'
+    +'<div class="kr-c"><div class="kr-ct">REST NACH STANDORT (Portionen)</div>'+rst+'</div></div>'
+    +'<div class="kr-ct" style="margin:12px 0 0;">WAS DU TUN SOLLTEST</div><div class="kr-t">'+tds+'</div>';
+}
+
+// ---- Tab Crew-Bewertung (Team-Feedback zum Essen)
+async function kfRepCrew(R){
+  const von8=(()=>{ const d=new Date(); d.setDate(d.getDate()-8*7); return isoLocal(d); })();
+  const von=R.prevVon<von8?R.prevVon:von8;
+  const fb=await api(`essen_feedback?datum=gte.${von}&select=store_id,datum,ratings&limit=8000`).catch(()=>null);
+  if(fb===null) return '<div class="kr-c">Die Daten konnten nicht geladen werden.</div>';
+  const items=[]; // {datum,store,dish,v}
+  fb.forEach(f=>{ const r=f.ratings||{}; Object.keys(r).forEach(g=>{ const v=typeof r[g]==='object'&&r[g]?Number(r[g].v):Number(r[g]); if(v>=1&&v<=5) items.push({datum:f.datum,store:f.store_id,dish:g,v}); }); });
+  const inR=(x,a,b)=>x.datum>=a&&x.datum<=b;
+  const cur=items.filter(x=>inR(x,R.von,R.bis)), prev=items.filter(x=>inR(x,R.prevVon,R.prevBis));
+  if(!cur.length) return '<div class="kr-c" style="color:#666">Für diesen Zeitraum gibt es keine Crew-Bewertungen.</div>';
+  const avgC=kfRepAvg(cur.map(x=>x.v)), avgP=kfRepAvg(prev.map(x=>x.v));
+  const sName=id=>({lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstraße','3400':'Stadtplatz',kitchen:'Kitchen'}[id]||id);
+  const byStore={}; cur.forEach(x=>(byStore[x.store]=byStore[x.store]||[]).push(x.v));
+  const stores=Object.entries(byStore).map(([id,a])=>({name:sName(id),wert:kfRepAvg(a),n:a.length})).sort((a,b)=>b.wert-a.wert);
+  const byDish={}; cur.forEach(x=>(byDish[x.dish]=byDish[x.dish]||[]).push(x.v));
+  const dishes=Object.entries(byDish).filter(([k,a])=>a.length>=3).map(([k,a])=>({name:k,wert:kfRepAvg(a),n:a.length})).sort((a,b)=>b.wert-a.wert);
+  const top=dishes.slice(0,3), flop=dishes.slice(-3).reverse().filter(d=>!top.includes(d));
+  const wk={}; items.forEach(x=>{ const k=kfRepWeekKey(x.datum); (wk[k]=wk[k]||[]).push(x.v); });
+  const reihe=Object.keys(wk).sort().slice(-8).map(k=>({label:'KW '+getIsoWeekNumber(k),wert:kfRepAvg(wk[k]),n:wk[k].length}));
+  return '<div class="kr-kp"><div class="kr-k" style="border:1.5px solid #0F6E56"><div class="kr-kl">Ø BEWERTUNG CREW</div><div class="kr-kz" style="color:#0F6E56">'+kfRepNum(avgC)+'<span style="font-size:14px;color:#666"> / 5</span></div><div class="kr-ks">'+kfRepTrend(avgC,avgP)+'</div></div>'
+    +'<div class="kr-k"><div class="kr-kl">BEWERTUNGEN</div><div class="kr-kz">'+cur.length+'</div><div class="kr-ks">'+(prev.length?'Vorperiode: '+prev.length:'')+'</div></div>'
+    +'<div class="kr-k"><div class="kr-kl">BESTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+(top[0]?escAttr(top[0].name)+'<br>Ø '+kfRepNum(top[0].wert)+' (n='+top[0].n+')':'–')+'</div></div>'
+    +'<div class="kr-k"><div class="kr-kl">SCHWÄCHSTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+(dishes.length>1?escAttr(dishes[dishes.length-1].name)+'<br>Ø '+kfRepNum(dishes[dishes.length-1].wert)+' (n='+dishes[dishes.length-1].n+')':'–')+'</div></div></div>'
+    +kfRepSaeulen(reihe,'ENTWICKLUNG PRO WOCHE · Ø Crew-Bewertung')
+    +'<div class="kr-ch" style="margin-top:10px;"><div class="kr-c"><div class="kr-ct">NACH STANDORT (Ø)</div>'+kfRepBalken(stores,5,'#0F6E56')+'</div>'
+    +'<div class="kr-c"><div class="kr-ct">GERICHTE (mind. 3 Bewertungen)</div>'+(top.length?'<div style="font-size:12px;font-weight:700;color:#0F6E56;margin:2px 0">✓ am besten</div>'+kfRepBalken(top,5,'#0F6E56'):'')+(flop.length?'<div style="font-size:12px;font-weight:700;color:#B3261E;margin:8px 0 2px">✕ am schwächsten</div>'+kfRepBalken(flop,5,'#B3261E'):'')+'</div></div>';
+}
+
+// ---- Tab Gäste-Bewertung
+async function kfRepGaeste(R){
+  const von8=(()=>{ const d=new Date(); d.setDate(d.getDate()-8*7); return isoLocal(d); })();
+  const von=R.prevVon<von8?R.prevVon:von8;
+  const g=await api(`gaeste_feedback?menu_date=gte.${von}&select=menu_date,dish_name,location,rating,comment,quick_tags&limit=5000`).catch(()=>null);
+  if(g===null) return '<div class="kr-c">Die Daten konnten nicht geladen werden.</div>';
+  const items=g.filter(x=>x.rating>=1&&x.rating<=5);
+  const inR=(x,a,b)=>x.menu_date>=a&&x.menu_date<=b;
+  const cur=items.filter(x=>inR(x,R.von,R.bis)), prev=items.filter(x=>inR(x,R.prevVon,R.prevBis));
+  const wk={}; items.forEach(x=>{ const k=kfRepWeekKey(x.menu_date); (wk[k]=wk[k]||[]).push(x.rating); });
+  const reihe=Object.keys(wk).sort().slice(-8).map(k=>({label:'KW '+getIsoWeekNumber(k),wert:kfRepAvg(wk[k]),n:wk[k].length}));
+  if(!cur.length) return '<div class="kr-c" style="color:#666">Für diesen Zeitraum gibt es keine Gäste-Bewertungen.</div>'+kfRepSaeulen(reihe,'ENTWICKLUNG PRO WOCHE · Ø Gäste-Bewertung');
+  const avgC=kfRepAvg(cur.map(x=>x.rating)), avgP=kfRepAvg(prev.map(x=>x.rating));
+  const byLoc={}; cur.forEach(x=>{ const k=x.location||'unbekannt'; (byLoc[k]=byLoc[k]||[]).push(x.rating); });
+  const locs=Object.entries(byLoc).map(([k,a])=>({name:k,wert:kfRepAvg(a),n:a.length})).sort((a,b)=>b.wert-a.wert);
+  const byDish={}; cur.forEach(x=>(byDish[x.dish_name]=byDish[x.dish_name]||[]).push(x.rating));
+  const dishes=Object.entries(byDish).map(([k,a])=>({name:k,wert:kfRepAvg(a),n:a.length})).sort((a,b)=>b.wert-a.wert||b.n-a.n);
+  const kommentare=cur.filter(x=>x.comment&&String(x.comment).trim()).slice(-3).reverse();
+  const wenig=cur.length<10;
+  return '<div class="kr-kp"><div class="kr-k" style="border:1.5px solid #0F6E56"><div class="kr-kl">Ø BEWERTUNG GÄSTE</div><div class="kr-kz" style="color:#0F6E56">'+kfRepNum(avgC)+'<span style="font-size:14px;color:#666"> / 5</span></div><div class="kr-ks">'+kfRepTrend(avgC,avgP)+'</div></div>'
+    +'<div class="kr-k"><div class="kr-kl">BEWERTUNGEN</div><div class="kr-kz">'+cur.length+'</div><div class="kr-ks">'+(wenig?'⚠ noch wenige, Zahlen mit Vorsicht lesen':(prev.length?'Vorperiode: '+prev.length:''))+'</div></div>'
+    +'<div class="kr-k"><div class="kr-kl">BESTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+escAttr(dishes[0].name)+'<br>Ø '+kfRepNum(dishes[0].wert)+' (n='+dishes[0].n+')</div></div>'
+    +'<div class="kr-k"><div class="kr-kl">SCHWÄCHSTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+(dishes.length>1?escAttr(dishes[dishes.length-1].name)+'<br>Ø '+kfRepNum(dishes[dishes.length-1].wert)+' (n='+dishes[dishes.length-1].n+')':'–')+'</div></div></div>'
+    +kfRepSaeulen(reihe,'ENTWICKLUNG PRO WOCHE · Ø Gäste-Bewertung')
+    +'<div class="kr-ch" style="margin-top:10px;"><div class="kr-c"><div class="kr-ct">NACH STANDORT (Ø)</div>'+kfRepBalken(locs,5,'#0F6E56')+'</div>'
+    +'<div class="kr-c"><div class="kr-ct">GÄSTE-KOMMENTARE (zuletzt)</div>'+(kommentare.length?kommentare.map(k=>'<div style="font-size:13px;padding:6px 0;border-bottom:1px solid #eee;"><b>'+'★'.repeat(k.rating)+'</b> '+escAttr(k.dish_name||'')+'<br><span style="color:#555">„'+escAttr(String(k.comment).slice(0,160))+'“</span></div>').join(''):'<span style="color:#666;font-size:13px">Keine Kommentare in diesem Zeitraum.</span>')+'</div></div>';
+}
+
+async function renderOrgReport(){
+  const el=document.getElementById('v-orgReport'); if(!el) return;
+  const tabs=tabBarHtml([{key:'mengen',label:'📦 Mengen'},{key:'crew',label:'👩‍🍳 Crew'},{key:'gaeste',label:'😋 Gäste'}],ORGR.tab,'orgReportTab','#0F6E56');
+  const per=[['woche','Letzte Woche'],['monat','Dieser Monat'],['vormonat','Letzter Monat']].map(([k,t])=>'<button type="button" onclick="orgReportPer(\''+k+'\')" style="flex:1;min-height:44px;border-radius:10px;border:'+(ORGR.per===k?'2px solid #0F6E56':'1.5px solid var(--border)')+';background:'+(ORGR.per===k?'#E1F5EE':'#fff')+';color:#1a1a18;font-weight:'+(ORGR.per===k?'700':'500')+';font-size:13px;font-family:inherit;cursor:pointer;">'+t+'</button>').join('');
+  const R=kfRepRange(ORGR.per);
+  el.innerHTML=backToHomeHtml()+pageHeaderHtml('📊','Report',R.label,'#0F6E56')+tabs+'<div style="display:flex;gap:6px;margin:-4px 0 10px;">'+per+'</div><div id="orgr-body"><div style="padding:30px;text-align:center;color:var(--muted);">Wird geladen…</div></div>';
+  const tab=ORGR.tab;
+  let html='';
+  try{ html= tab==='crew'?await kfRepCrew(R): tab==='gaeste'?await kfRepGaeste(R): await kfRepMengen(R); }catch(e){ console.error('Report',e); html='<div class="kr-c">Der Report konnte nicht erstellt werden.</div>'; }
+  const body=document.getElementById('orgr-body'); if(body && ORGR.tab===tab) body.innerHTML=html;
+}
+function orgReportTab(t){ ORGR.tab=t; renderOrgReport(); }
+function orgReportPer(p){ ORGR.per=p; renderOrgReport(); }
+Object.assign(window,{renderOrgReport,orgReportTab,orgReportPer});
+
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
