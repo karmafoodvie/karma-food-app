@@ -44,7 +44,10 @@ create table if not exists public.geraete (
   gesperrt_bis     timestamptz,
   dringend_am      timestamptz,
   zuletzt_gesehen  timestamptz,
-  letzte_filiale   text
+  letzte_filiale   text,
+  standort         text,   -- Selbstauskunft: Filiale (Auswahl am Sperrbildschirm)
+  person           text,   -- Selbstauskunft: Vorname
+  ip               text
 );
 
 create table if not exists public.geraete_codes (
@@ -144,10 +147,21 @@ begin
            anfrage_code = upper(substr(replace(gen_random_uuid()::text,'-',''),1,4))
      where id = g.id returning * into g;
   end if;
-  update geraete set zuletzt_gesehen = now() where id = g.id;
+  update geraete set zuletzt_gesehen = now(), ip = coalesce(kf_ip(), ip) where id = g.id;
   return query select kf_status_text(g), g.anfrage_code,
     greatest(0, ceil(extract(epoch from (coalesce(g.gesperrt_bis, now()) - now()))))::int, g.gueltig_bis,
     (g.status = 'wartet' and now() < gb);
+end $$;
+
+-- Angaben des Geräts (Selbstauskunft): wo steht es, wer nutzt es
+create or replace function public.geraet_angaben(p_token text, p_standort text, p_name text)
+returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  update geraete set standort = left(nullif(trim(p_standort),''),30), person = left(nullif(trim(p_name),''),40),
+         ip = coalesce(kf_ip(), ip)
+   where token_hash = kf_hash(p_token);
+  return case when found then 'ok' else 'geraet_unbekannt' end;
 end $$;
 
 create or replace function public.geraet_status(p_token text)
@@ -298,13 +312,13 @@ begin
   perform kf_admin(p_sitzung);
   select json_build_object(
     'anfragen', coalesce((select json_agg(x order by x.dringend desc nulls last, x.erstellt_am) from (
-        select id, anfrage_code as code, user_agent, erstellt_am, dringend_am as dringend from geraete where status = 'wartet') x), '[]'::json),
+        select id, anfrage_code as code, user_agent, erstellt_am, dringend_am as dringend, standort, person, letzte_filiale, ip from geraete where status = 'wartet') x), '[]'::json),
     'gesperrt', coalesce((select json_agg(x order by x.dringend desc nulls last) from (
-        select id, bezeichnung, anfrage_code as code, user_agent, letzte_filiale, dringend_am as dringend, gesperrt_bis, status
+        select id, bezeichnung, anfrage_code as code, user_agent, letzte_filiale, dringend_am as dringend, gesperrt_bis, status, standort, person, ip
         from geraete where status = 'gesperrt' or (gesperrt_bis is not null and gesperrt_bis > now())) x), '[]'::json),
     'geraete', coalesce((select json_agg(x order by x.zuletzt desc nulls last) from (
         select id, bezeichnung, anfrage_code as code, user_agent, freigegeben_am, freigegeben_von, gueltig_bis,
-               zuletzt_gesehen as zuletzt, letzte_filiale, status
+               zuletzt_gesehen as zuletzt, letzte_filiale, status, standort, person, ip
         from geraete where status = 'freigegeben' limit 200) x), '[]'::json),
     'versuche', coalesce((select json_agg(x order by x.ts desc) from (
         select v.ts, v.store_id, v.grund, v.ip, v.user_agent, v.quittiert, g.anfrage_code as code, g.bezeichnung
@@ -409,13 +423,15 @@ end $$;
 revoke all on function public.kf_hash(text), public.kf_header(text), public.kf_ip(), public.kf_ua(),
                        public.kf_status_text(public.geraete), public.kf_admin(text) from public, anon, authenticated;
 grant execute on function
-  public.geraet_anfordern(text,text), public.geraet_status(text), public.geraet_code_einloesen(text,text),
+  public.geraet_anfordern(text,text), public.geraet_angaben(text,text,text), public.geraet_status(text), public.geraet_code_einloesen(text,text),
   public.dringend_freigabe(text), public.kf_login(text,text,text), public.check_store_pin(text,text),
   public.sicherheit_uebersicht(text), public.geraet_freigeben(text,uuid,text), public.sperre_aufheben(text,uuid),
   public.geraet_ablehnen(text,uuid), public.geraet_sperren(text,uuid), public.geraet_entfernen(text,uuid),
   public.geraet_umbenennen(text,uuid,text), public.code_erzeugen(text), public.fehlversuche_quittieren(text)
 to anon, authenticated;
 
+-- Nachtrag 24.11. (bei bereits eingespielter Version einzeln ausführen):
+--   alter table public.geraete add column if not exists standort text, add column if not exists person text, add column if not exists ip text;
 commit;
 
 -- ============================================================================
@@ -440,7 +456,7 @@ commit;
 --   create or replace function public.check_store_pin(p_store_id text, p_pin text)
 --     returns table(id text, name text) language sql security definer set search_path to 'public'
 --     as $f$ select s.id, s.name from public.stores s where s.id = p_store_id and s.pin = p_pin; $f$;
---   drop function if exists public.kf_login(text,text,text), public.geraet_anfordern(text,text), public.geraet_status(text),
+--   drop function if exists public.kf_login(text,text,text), public.geraet_anfordern(text,text), public.geraet_angaben(text,text,text), public.geraet_status(text),
 --     public.geraet_code_einloesen(text,text), public.dringend_freigabe(text), public.sicherheit_uebersicht(text),
 --     public.geraet_freigeben(text,uuid,text), public.sperre_aufheben(text,uuid), public.geraet_ablehnen(text,uuid),
 --     public.geraet_sperren(text,uuid), public.geraet_entfernen(text,uuid), public.geraet_umbenennen(text,uuid,text),
