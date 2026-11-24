@@ -561,6 +561,9 @@ button:disabled{cursor:not-allowed;}
     <button class="nav-btn" onclick="goTo('teamFeedback')" id="nav-org-feedback" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/></svg>Feedback
     </button>
+    <button class="nav-btn" onclick="kfMehrOpen()" id="nav-org-mehr" style="display:none;">
+      <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>Mehr
+    </button>
 
   </nav>
 </div>
@@ -1852,7 +1855,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.332';
+const APP_VERSION='6.99.333';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2487,6 +2490,8 @@ window.backToOrg=backToOrg;
 async function loginAs(store){
   currentStore=store;
   document.getElementById('login-screen').style.display='none';
+  // Organisations-Leiste (Küche, Transporter, Mehr) nur für die Organisation; sonst Reihenfolge und Sichtbarkeit zurücksetzen
+  try{ document.querySelectorAll('.nav-btn').forEach(b=>{ b.style.order=''; }); if(store.id!=='zentrale'){ document.getElementById('nav-org-mehr').style.display='none'; if(store.id!=='kitchen'){ document.getElementById('nav-org-kueche').style.display='none'; document.getElementById('nav-org-transporter').style.display='none'; } } }catch(e){}
   document.getElementById('app').style.display='flex';
   try{ kfsAppBanner(); }catch(e){}
   try{ kfWideApply(); kfDfbCheck(); }catch(e){}
@@ -2506,16 +2511,10 @@ async function loginAs(store){
     document.getElementById('nav-home').style.display='none';
     // Alte Org-Tabs ausblenden
     document.getElementById('nav-org-sweets').style.display='none';
-    document.getElementById('nav-org-kueche').style.display='none';
-    document.getElementById('nav-org-transporter').style.display='none';
     document.getElementById('nav-org-kc').style.display='none';
-    // Neue 5 Org-Tabs einblenden
-    document.getElementById('nav-org-ueberblick').style.display='flex';
-    document.getElementById('nav-org-msg').style.display='flex';
-    document.getElementById('nav-org-mengen').style.display='flex';
-    document.getElementById('nav-org-management').style.display='flex';
-    document.getElementById('nav-org-schaeden').style.display='flex';
-    document.getElementById('nav-org-feedback').style.display='flex';
+    // Org-Leiste nach Nutzung (seit 26.11.): Überblick, Küche, Transporter, Mengen, Schäden, Mehr
+    [['nav-org-ueberblick',1],['nav-org-kueche',2],['nav-org-transporter',3],['nav-org-mengen',4],['nav-org-schaeden',5],['nav-org-mehr',6]].forEach(([id,o])=>{ const e=document.getElementById(id); e.style.display='flex'; e.style.order=String(o); });
+    ['nav-org-msg','nav-org-management','nav-org-feedback'].forEach(id=>{ document.getElementById(id).style.display='none'; });
     document.getElementById('nav-notif-bell').style.display='flex';
     loadNotifBadge();
     try{ amzOrgWatch(); }catch(e){}
@@ -2688,17 +2687,17 @@ function goTo(v, noPush=false){
   if(currentStore?.id==='zentrale'){
     // Neue 5-Tab Org-Nav
     if(v==='home') navId='nav-org-ueberblick';
-    else if(v==='broadcast' || v==='msg') navId='nav-org-msg';
+    else if(v==='broadcast' || v==='msg') navId='nav-org-mehr';
     else if(v==='orgForecast' || v==='forecastReview') navId='nav-org-mengen';
     else if(v==='maengel') navId='nav-org-schaeden';
-    else if(v==='teamFeedback') navId='nav-org-feedback';
+    else if(v==='teamFeedback') navId='nav-org-mehr';
     // Alte Tabs (Sweets, Küche etc.) behalten ihre IDs
     else if(v==='kitchenDaily') navId='nav-kitchen-daily';
     else if(v==='sweets') navId='nav-org-sweets';
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
-    else if(v==='pack' && activePackTab==='kc') navId='nav-org-kc';
-    else if(v==='management' || v==='hygieneSchulung' || v==='schulung' || v==='feuerloescher' || v==='kundenfeedback' || v==='teamRating' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan' || v==='todos' || v==='geburtstage') navId='nav-org-management';
+    else if(v==='pack' && activePackTab==='kc') navId='nav-org-transporter';
+    else if(v==='management' || v==='hygieneSchulung' || v==='schulung' || v==='feuerloescher' || v==='kundenfeedback' || v==='teamRating' || v==='guide' || v==='verfuegbarkeit' || v==='dailycheck' || v==='kontrolle' || v==='messen' || v==='dienstplan' || v==='todos' || v==='geburtstage' || v==='menuKontrolle' || v==='zutatenkontrolle' || v==='hygieneauswertung' || v==='epochenCheck' || v==='nutzungsstatistik' || v==='forecastAmpel' || v==='gerichtFotos') navId='nav-org-mehr';
   }
   if(currentStore?.id==='kitchen'){
     // Küche: jeder Menüpunkt hebt sich hervor (Start/Daily teilen sich die Startseite, Daily setzt _homeHideRoles)
@@ -23834,6 +23833,22 @@ async function kfDfbSend(sterne,wahl){
   try{ await api('design_feedback',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify([{store_id:currentStore?.id||null,sterne,wahl,kontext:'breit-probe-2026-11-25'}])}); showToast('Danke! 🙏'); }catch(e){}
 }
 Object.assign(window,{kfWideApply,kfWideToggle,kfDfbShow,kfDfbSend});
+
+// ==== Organisation: "Mehr"-Fenster (seltener genutzte Bereiche) ====
+const KF_MEHR=[['management','Operations · Tini','⚙️'],['broadcast','Nachricht an Standorte','✉️'],['teamFeedback','Team-Feedback','⭐'],['menuKontrolle','Menü-Kontrolle','📋'],['zutatenkontrolle','Zutaten-Kontrolle','🥕'],['hygieneauswertung','Hygiene-Auswertung','🧼'],['hygieneSchulung','Hygiene-Schulung','🎓'],['feuerloescher','Feuerlöscher','🧯'],['epochenCheck','Epochen-Check','🗓️'],['forecastAmpel','Forecast-Kontrolle','🚦'],['gerichtFotos','Soll-Fotos Gerichte','📸'],['nutzungsstatistik','Nutzungsstatistik','📊'],['sweets','Sweets','🍰'],['geburtstage','Geburtstage','🎂']];
+function kfMehrOpen(){
+  if(document.getElementById('kf-mehr')) return;
+  const m=document.createElement('div'); m.id='kf-mehr'; m.setAttribute('role','dialog'); m.setAttribute('aria-label','Mehr');
+  m.style.cssText='position:fixed;inset:0;z-index:99980;background:rgba(3,39,43,.45);display:flex;align-items:flex-end;justify-content:center;';
+  m.innerHTML='<div style="background:#fff;border-radius:18px 18px 0 0;width:100%;max-width:640px;max-height:80vh;overflow:auto;padding:14px 14px 18px;box-shadow:0 -12px 40px rgba(0,0,0,.3);"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><b style="font-size:17px;">Mehr</b><button type="button" onclick="kfMehrClose()" style="min-height:44px;padding:0 14px;border:1px solid #ccc;border-radius:10px;background:#fff;font-weight:600;font-family:inherit;">Schließen</button></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">'
+    +KF_MEHR.map(x=>'<button type="button" onclick="kfMehrGo(\''+x[0]+'\')" style="display:flex;align-items:center;gap:10px;min-height:52px;padding:0 12px;border:1px solid #E5E5E2;border-radius:12px;background:#F5F5F3;font-size:15px;font-weight:600;font-family:inherit;text-align:left;cursor:pointer;"><span aria-hidden="true" style="font-size:20px;">'+x[2]+'</span>'+x[1]+'</button>').join('')
+    +'</div></div>';
+  m.addEventListener('click',e=>{ if(e.target===m) kfMehrClose(); });
+  document.body.appendChild(m);
+}
+function kfMehrClose(){ document.getElementById('kf-mehr')?.remove(); }
+function kfMehrGo(v){ kfMehrClose(); goTo(v); }
+Object.assign(window,{kfMehrOpen,kfMehrClose,kfMehrGo});
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
