@@ -1862,7 +1862,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.342';
+const APP_VERSION='6.99.344';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -23946,38 +23946,47 @@ function kfRepAvg(a){ return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; }
 // ---- Tab Mengen (Ausverkauft-Regel + Rest)
 async function kfRepMengen(R){
   const disp=await apiAllPages(`disposal?disposal_date=gte.${R.von}&disposal_date=lte.${R.bis}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time&order=disposal_date.asc,id.asc`);
-  if(disp===null) return '<div class="kr-c">Die Daten konnten nicht geladen werden.</div>';
   const ST=['3400','lb','1020','boerse'];
   const sName=id=>({lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstr.','3400':'Stadtplatz'}[id]||id);
   const rows=disp.filter(r=>ST.includes(r.store_id));
   if(!rows.length) return '<div class="kr-c" style="color:#666">Für diesen Zeitraum gibt es keine Einträge zur Entsorgung.</div>';
-  const per={}; ST.forEach(id=>per[id]={frueh:0,spaet:0,rest:0,tage:new Set(),n:0,dishes:{}});
-  rows.forEach(r=>{ const p=per[r.store_id]; p.n++; if(r.leftover_qty!=null||r.sold_out_time) p.tage.add(r.disposal_date); p.rest+=Number(r.leftover_qty)||0;
-    if(r.sold_out_time){ if(kfZuFrueh(r.store_id,r.sold_out_time)){ p.frueh++; const k=r.dish_name; (p.dishes[k]=p.dishes[k]||{tage:new Set(),zeit:'99:99'}).tage.add(r.disposal_date); const z=String(r.sold_out_time).slice(0,5); if(z<p.dishes[k].zeit) p.dishes[k].zeit=z; } else p.spaet++; } });
-  const sum=k=>ST.reduce((a,id)=>a+per[id][k],0);
-  const fruehGes=sum('frueh'), spaetGes=sum('spaet'), restGes=Math.round(sum('rest'));
-  const ftF=new Set(rows.filter(r=>kfZuFrueh(r.store_id,r.sold_out_time)).map(r=>r.store_id+'|'+r.disposal_date)).size;
-  const tageEin=ST.reduce((a,id)=>a+per[id].tage.size,0), tageSoll=ST.length*R.werktage;
-  const maxRest=Math.max(1,...ST.map(id=>per[id].rest)), maxAus=Math.max(1,...ST.map(id=>per[id].frueh+per[id].spaet));
+  // Pro Standort und Tag: wie viele der (meist 3) Gerichte waren 30 Min. vor Schluss noch da?
+  const tage={}; rows.forEach(r=>{ const k=r.store_id+'|'+r.disposal_date; const t=tage[k]=tage[k]||{store:r.store_id,datum:r.disposal_date,gerichte:new Set(),frueh:{}};
+    t.gerichte.add(r.dish_name); if(r.sold_out_time && kfZuFrueh(r.store_id,r.sold_out_time)) t.frueh[r.dish_name]=String(r.sold_out_time).slice(0,5); });
+  const per={}; ST.forEach(id=>per[id]={n:[0,0,0,0],rest:0,erst:null,tage:0,fall:{}}); // n[x] = Tage mit x Gerichten noch da (x=0..3)
+  Object.values(tage).forEach(t=>{ const total=Math.max(3,t.gerichte.size); const weg=Object.keys(t.frueh).length; const da=Math.min(3,Math.max(0,total-weg));
+    const p=per[t.store]; p.n[da]++; p.tage++;
+    if(da===0){ Object.entries(t.frueh).forEach(([g,z])=>{ if(!p.erst||z<p.erst.z) p.erst={g,z}; }); } });
+  rows.forEach(r=>{ per[r.store_id].rest+=Number(r.leftover_qty)||0; });
+  const sum=i=>ST.reduce((a,id)=>a+per[id].n[i],0);
+  const n0=sum(0), n1=sum(1), n2=sum(2)+sum(3), tageEin=ST.reduce((a,id)=>a+per[id].tage,0), tageSoll=ST.length*R.werktage;
+  const restGes=Math.round(ST.reduce((a,id)=>a+per[id].rest,0));
   const restTop=ST.slice().sort((a,b)=>per[b].rest-per[a].rest)[0];
-  const tage=(R.werktage>5)?1:1; // Schwellen gelten je Zeitraum: "dauerhaft" = Gericht an mind. 2 Tagen
-  const todo=[]; const fruehSchwelle=R.werktage>5?Math.round(R.werktage*0.6):3;
-  ST.forEach(id=>{ const p=per[id]; const dau=Object.entries(p.dishes).filter(([k,v])=>v.tage.size>=2).sort((a,b)=>b[1].tage.size-a[1].tage.size)[0];
-    if(p.frueh>=fruehSchwelle || dau){ todo.push({sev:0,farbe:'#B3261E',pfeil:'M12 19V5M5 12l7-7 7 7',titel:sName(id)+': Mengen erhöhen',sub:p.frueh+' Gerichte zu früh weg'+(dau?', '+dau[0]+' an '+dau[1].tage.size+' Tagen ab '+dau[1].zeit+' Uhr':'')}); }
-    else if(p.n && p.rest/p.n>=8){ todo.push({sev:1,farbe:'#C2410C',pfeil:'M12 5v14M5 12l7 7 7-7',titel:sName(id)+': weniger einplanen',sub:Math.round(p.rest)+' Portionen Rest'+(p.frueh?'':', nichts zu früh weg')}); }
-    else if(p.n){ todo.push({sev:2,farbe:'#0F6E56',pfeil:'M5 13l4 4L19 7',titel:sName(id)+': passt',sub:(p.spaet?p.spaet+' kurz vor Schluss ausverkauft, ':'')+Math.round(p.rest)+' Portionen Rest'}); } });
+  const maxTage=Math.max(1,...ST.map(id=>per[id].tage)), maxRest=Math.max(1,...ST.map(id=>per[id].rest));
+  const schwelle=R.werktage>5?2:1;
+  const todo=[];
+  ST.forEach(id=>{ const p=per[id]; if(!p.tage) return;
+    if(p.n[0]>=schwelle){ todo.push({sev:0,farbe:'#B3261E',pfeil:'M12 19V5M5 12l7-7 7 7',titel:sName(id)+': Mengen erhöhen',sub:'An '+p.n[0]+' '+(p.n[0]===1?'Tag':'Tagen')+' war 30 Min. vor Schluss kein Gericht mehr da'+(p.erst?' (zuerst '+escAttr(p.erst.g)+' um '+p.erst.z+' Uhr)':'')}); }
+    else if(p.rest/p.tage>=8){ todo.push({sev:1,farbe:'#C2410C',pfeil:'M12 5v14M5 12l7 7 7-7',titel:sName(id)+': weniger einplanen',sub:Math.round(p.rest)+' Portionen Rest'+(p.n[0]?'':', immer mind. 1 Gericht bis kurz vor Schluss da')}); }
+    else { todo.push({sev:2,farbe:'#0F6E56',pfeil:'M5 13l4 4L19 7',titel:sName(id)+': passt',sub:(p.n[1]?p.n[1]+'× nur 1 Gericht noch da (okay), ':'')+Math.round(p.rest)+' Portionen Rest'}); } });
   todo.sort((a,b)=>a.sev-b.sev);
+  const C=[['#B3261E','✕','0 Gerichte (schlecht)'],['#C2410C','!','1 Gericht (okay)'],['#0F6E56','✓','2 Gerichte (mehr als genug)'],['#0A4D3C','✓✓','alle 3 bis kurz vor Schluss']];
+  const seg=(i,v,max)=>v>0?'<span class="kr-s" style="width:'+Math.max(v/max*100,7)+'%;background:'+C[i][0]+'">'+C[i][1]+' '+v+'</span>':'';
+  const aus=ST.map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+(p.tage?[0,1,2,3].map(i=>seg(i,p.n[i],maxTage)).join(''):'<span style="font-size:12px;color:#666;align-self:center;">keine Einträge</span>')+'</div></div>'; }).join('');
+  const leg=C.map(c=>'<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:3px;background:'+c[0]+'"></span>'+c[1]+' '+c[2]+'</span>').join('');
   const bar=(w,bg,txt)=>w>0?'<span class="kr-s" style="width:'+Math.max(w,6)+'%;background:'+bg+'">'+txt+'</span>':'';
-  const aus=ST.map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.frueh/maxAus*100,'#B3261E','✕ '+p.frueh)+bar(p.spaet/maxAus*100,'#0F6E56','✓ '+p.spaet)+((p.frueh+p.spaet)===0?'<span style="font-size:12px;color:#666;align-self:center;">nichts ausverkauft</span>':'')+'</div></div>'; }).join('');
-  const rst=ST.slice().sort((a,b)=>per[b].rest-per[a].rest).map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.rest/maxRest*100,'#C2410C',String(Math.round(p.rest)))+'</div></div>'; }).join('');
+  const rst=ST.slice().sort((a,b)=>per[b].rest-per[a].rest).map(id=>'<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(per[id].rest/maxRest*100,'#C2410C',String(Math.round(per[id].rest)))+'</div></div>').join('');
   const tds=todo.map(t=>'<div class="kr-td" style="border-color:'+t.farbe+'"><svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;color:'+t.farbe+';fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;" aria-hidden="true"><path d="'+t.pfeil+'"/></svg><span><b>'+t.titel+'</b><br><span style="color:#555">'+t.sub+'</span></span></div>').join('');
+  const kp=(farbe,label,zahl,sub,rand)=>'<div class="kr-k" style="border:1.5px solid '+(rand||'#E5E5E2')+'"><div class="kr-kl">'+label+'</div><div class="kr-kz" style="color:'+farbe+'">'+zahl+'</div><div class="kr-ks">'+sub+'</div></div>';
   return '<div class="kr-kp">'
-    +'<div class="kr-k" style="border:1.5px solid '+(fruehGes?'#B3261E':'#E5E5E2')+'"><div class="kr-kl">ZU FRÜH AUSVERKAUFT</div><div class="kr-kz" style="color:#B3261E">'+fruehGes+'</div><div class="kr-ks"><b>'+ftF+' von '+tageSoll+'</b> Filial-Tagen · mehr als 30 Min. vor Schluss</div></div>'
-    +'<div class="kr-k" style="border:1.5px solid #0F6E56"><div class="kr-kl">KURZ VOR SCHLUSS WEG</div><div class="kr-kz" style="color:#0F6E56">'+spaetGes+'</div><div class="kr-ks">✓ gut geplant, genau gewollt</div></div>'
-    +'<div class="kr-k" style="border:1.5px solid #C2410C"><div class="kr-kl">REST</div><div class="kr-kz" style="color:#C2410C">'+restGes+'</div><div class="kr-ks">Portionen'+(restGes?' · am meisten '+sName(restTop)+' ('+Math.round(per[restTop].rest)+')':'')+'</div></div>'
-    +'<div class="kr-k"><div class="kr-kl">DATEN VOLLSTÄNDIG</div><div class="kr-kz">'+tageEin+'/'+tageSoll+'</div><div class="kr-ks">Filial-Tage mit Entsorgung eingetragen</div></div></div>'
-    +'<div class="kr-ch"><div class="kr-c"><div class="kr-ct">AUSVERKAUFT NACH STANDORT (Gerichte)</div><div style="display:flex;gap:14px;font-size:12px;margin-bottom:4px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#B3261E;margin-right:5px;"></span>✕ zu früh</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#0F6E56;margin-right:5px;"></span>✓ kurz vor Schluss</span></div>'+aus+'</div>'
+    +kp('#B3261E','GAR KEIN GERICHT MEHR',n0,'<b>'+n0+' von '+tageEin+'</b> Filial-Tagen · 30 Min. vor Schluss nichts mehr da','#B3261E')
+    +kp('#C2410C','NUR 1 GERICHT NOCH DA',n1,'! okay, so ist es gewollt','#C2410C')
+    +kp('#0F6E56','MIND. 2 GERICHTE DA',n2,'✓ mehr als ausreichend','#0F6E56')
+    +kp('#C2410C','REST',restGes,'Portionen'+(restGes?' · am meisten '+sName(restTop)+' ('+Math.round(per[restTop].rest)+')':''),'#E5E5E2')
+    +'</div>'
+    +'<div class="kr-ch"><div class="kr-c"><div class="kr-ct">WIE VIELE GERICHTE WAREN 30 MIN. VOR SCHLUSS NOCH DA? (Filial-Tage)</div><div style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;margin-bottom:6px;">'+leg+'</div>'+aus+'</div>'
     +'<div class="kr-c"><div class="kr-ct">REST NACH STANDORT (Portionen)</div>'+rst+'</div></div>'
+    +'<div style="font-size:12px;color:#666;margin-top:6px;">Entsorgung eingetragen an '+tageEin+' von '+tageSoll+' Filial-Tagen.</div>'
     +'<div class="kr-ct" style="margin:12px 0 0;">WAS DU TUN SOLLTEST</div><div class="kr-t">'+tds+'</div>';
 }
 
