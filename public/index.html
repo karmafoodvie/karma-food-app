@@ -5502,7 +5502,6 @@ async function renderHome(){
     `:''}
     ${currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles)?`
 
-    ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
     ${(()=>{ const sp1=!!(dcStatus.wek&&dcStatus.kuehl&&dcStatus.wolt); const sp3=!!(sp1 && feedbackDoneHome && sweetsDone && transporterDone && disposalDone && dcStatus.reinCount===2 && (!isKCDay||kcDone)); return kfShiftStepperHtml(sp1?'done':'now', sp3?'done':(sp1?'now':'todo'), sp3?'done':'todo'); })()}
     </div><div class="kf-cols"><div class="kf-col">
     <!-- START BUTTON -->
@@ -5598,7 +5597,7 @@ async function renderHome(){
     `:''}
     ${currentStore?.id==='zentrale'?`
     <div id="kf-braucht"></div>
-    <div onclick="goTo('orgReport')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 0 12px;cursor:pointer;"><span style="font-size:20px;">📊</span><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Report</div><div style="font-size:11px;color:var(--muted);">Zusammenfassung, Mengen, Crew- und Gäste-Bewertung</div></div><span style="color:var(--muted);">→</span></div>
+    <div onclick="goTo('orgReport')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 0 12px;cursor:pointer;"><span style="font-size:20px;">📊</span><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Report</div><div style="font-size:11px;color:var(--muted);">Mengen, Crew- und Gäste-Bewertung</div></div><span style="color:var(--muted);">→</span></div>
     <div class="kf-org-cols"><div class="kf-org-l">
     <div id="zm-org-host"></div>
     <div id="notstand-zentrale-widget"></div>
@@ -24058,9 +24057,7 @@ async function renderOrgReport(){
   try{ html= tab==='crew'?await kfRepCrew(R): tab==='gaeste'?await kfRepGaeste(R): await kfRepMengen(R); }catch(e){ console.error('Report',e); html='<div class="kr-c">Der Report konnte nicht erstellt werden.</div>'; }
   const body=document.getElementById('orgr-body');
   if(body && ORGR.tab===tab){
-    const story=(tab==='mengen'&&ORGR.per==='woche')?'<div id="kf-wochenstory-r"></div>':'';
-    body.innerHTML=story+html;
-    if(story){ window._kfStoryOpen=true; try{ kfWochenStory('kf-wochenstory-r'); }catch(e){} }
+    body.innerHTML=html;
   }
 }
 function orgReportTab(t){ ORGR.tab=t; renderOrgReport(); }
