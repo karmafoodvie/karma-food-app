@@ -1852,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.329';
+const APP_VERSION='6.99.330';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -23604,6 +23604,13 @@ async function kfsNeuerCode(){
   const o=await kfsOverview(); if(o) kfsRender(o);
 }
 async function kfsQuittieren(){ try{ await kfsRpc('fehlversuche_quittieren',{p_sitzung:kfsAdmSess()}); }catch(e){} const o=await kfsOverview(); if(o){ kfsRender(o); kfsBadge((o.anfragen||[]).length+(o.gesperrt||[]).length+(+o.neu||0)); } }
+async function kfsLinuxAblehnen(){
+  const o=KFS.lastO; if(!o) return;
+  const ids=(o.anfragen||[]).filter(a=>/Linux/.test(a.user_agent||'')&&!/Android/.test(a.user_agent||'')).map(a=>a.id);
+  if(!ids.length||!confirm(ids.length+' Linux-Anfragen ablehnen?')) return;
+  for(const id of ids){ try{ await kfsRpc('geraet_ablehnen',{p_sitzung:kfsAdmSess(),p_id:id}); }catch(e){} }
+  const n=await kfsOverview(); if(n){ kfsRender(n); kfsBadge((n.anfragen||[]).length+(n.gesperrt||[]).length+(+n.neu||0)); }
+}
 function kfsRender(o){
   const b=document.getElementById('kfs-body'); if(!b) return;
   const card='background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);';
@@ -23611,8 +23618,22 @@ function kfsRender(o){
   const row=(inner)=>'<div style="'+card+'">'+inner+'</div>';
   let h='';
   const an=o.anfragen||[], ge=o.gesperrt||[];
-  h+='<div style="font-weight:800;margin:6px 0;">Anfragen ('+an.length+')</div>';
-  h+=an.length?an.map(a=>row('<div>'+(a.dringend?'<span style="color:#B3261E;font-weight:800;">🚨 DRINGEND · </span>':'')+'<b style="font-size:17px;">'+kfsEsc(kfsWer(a))+'</b> · Code <b style="font-size:20px;letter-spacing:4px;" data-no-translate>'+kfsEsc(a.code)+'</b></div><div style="font-size:12px;color:#666;">'+kfsEsc(kfsDevName(a.user_agent))+' · '+kfsAgo(a.erstellt_am)+(a.ip?' · IP <span data-no-translate>'+kfsEsc(a.ip)+'</span>':'')+'</div>'+btn('#0F6E56','Freigeben',"kfsFreigeben('"+a.id+"')")+btn('#777','Ablehnen',"kfsAct('geraet_ablehnen','"+a.id+"')"))).join(''):row('<span style="color:#666;">Keine offenen Anfragen.</span>');
+  KFS.lastO=o;
+  const q=(KFS.suche||'').trim().toLowerCase();
+  const istBot=a=>/Linux/.test(a.user_agent||'')&&!/Android/.test(a.user_agent||'');
+  const anSicht=an.filter(a=>!q||[a.code,kfsWer(a),kfsDevName(a.user_agent),a.ip].join(' ').toLowerCase().includes(q));
+  const maxZ=(q||KFS.alle)?999:8, anZeigen=anSicht.slice(0,maxZ);
+  const botN=an.filter(istBot).length;
+  h+='<div style="font-weight:800;margin:6px 0;">Anfragen ('+an.length+')</div>'
+    +'<input id="kfs-suche" type="search" placeholder="Suchen: Code, Name, Standort, Gerät, IP" value="'+kfsEsc(KFS.suche||'')+'" oninput="KFS.suche=this.value;kfsRender(KFS.lastO)" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #D4D4CF;border-radius:10px;font-size:15px;font-family:inherit;margin-bottom:8px;">'
+    +(botN?'<button onclick="kfsLinuxAblehnen()" style="width:100%;min-height:44px;margin-bottom:8px;border:1.5px solid #B3261E;border-radius:10px;background:#fff;color:#B3261E;font-weight:700;font-size:13px;font-family:inherit;">🤖 '+botN+' Linux-Anfragen ablehnen (vermutlich Programme, keine Filialen)</button>':'');
+  const kBtn=(c,t,f)=>'<button onclick="'+f+'" style="min-height:40px;padding:0 12px;border-radius:9px;border:none;background:'+c+';color:#fff;font-weight:700;font-size:13px;font-family:inherit;">'+t+'</button>';
+  h+=anZeigen.length?'<div style="background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:10px;">'+anZeigen.map(a=>'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;">'
+      +'<div style="min-width:0;"><div style="font-size:14px;">'+(a.dringend?'<span style="color:#B3261E;font-weight:800;">🚨 </span>':'')+'<b>'+kfsEsc(kfsWer(a))+'</b> · <b style="letter-spacing:2px;" data-no-translate>'+kfsEsc(a.code)+'</b></div>'
+      +'<div style="font-size:11.5px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kfsEsc(kfsDevName(a.user_agent))+' · '+kfsAgo(a.erstellt_am)+(a.ip?' · <span data-no-translate>'+kfsEsc(a.ip)+'</span>':'')+'</div></div>'
+      +'<div style="display:flex;gap:6px;flex-shrink:0;">'+kBtn('#0F6E56','Freigeben',"kfsFreigeben('"+a.id+"')")+kBtn('#888','✕',"kfsAct('geraet_ablehnen','"+a.id+"')")+'</div></div>').join('')
+      +(anSicht.length>anZeigen.length?'<button onclick="KFS.alle=true;kfsRender(KFS.lastO)" style="width:100%;min-height:44px;border:0;background:none;color:#0F6E56;font-weight:700;font-size:14px;font-family:inherit;">Alle '+anSicht.length+' anzeigen</button>':'')+'</div>'
+    :row('<span style="color:#666;">'+(q?'Keine Treffer.':'Keine offenen Anfragen.')+'</span>');
   h+='<div style="font-weight:800;margin:14px 0 6px;">Gesperrt ('+ge.length+')</div>';
   h+=ge.length?ge.map(a=>{ const zeit=a.gesperrt_bis&&new Date(a.gesperrt_bis)>new Date(o.jetzt); return row('<div>'+(a.dringend?'<span style="color:#B3261E;font-weight:800;">🚨 DRINGEND · </span>':'')+'<b>'+kfsEsc(a.bezeichnung||kfsDevName(a.user_agent))+'</b> <span data-no-translate>('+kfsEsc(a.code)+')</span></div><div style="font-size:12px;color:#666;">'+(zeit?'Zeitsperre bis '+new Date(a.gesperrt_bis).toLocaleTimeString('de-AT',{hour:'2-digit',minute:'2-digit'}):'Dauerhaft gesperrt')+' · '+kfsEsc(kfsWer(a))+(a.ip?' · IP '+kfsEsc(a.ip):'')+'</div>'+btn('#0F6E56','Sofort freigeben',"kfsAct('geraet_freigeben','"+a.id+"')")+(zeit?btn('#2B3A67','Nur Sperre aufheben',"kfsAct('sperre_aufheben','"+a.id+"')"):'')); }).join(''):row('<span style="color:#666;">Nichts gesperrt.</span>');
   h+='<div style="font-weight:800;margin:14px 0 6px;">Freischalt-Code</div>'+row('<div style="font-size:13px;color:#555;">Für ein neues Gerät: Code erzeugen und der Person durchgeben (einmal verwendbar, 24 Std.).</div>'+btn('#2B3A67','Neuen Code erzeugen','kfsNeuerCode()')+((o.codes||[]).length?'<div style="font-size:12px;color:#666;margin-top:6px;">Offen: '+o.codes.map(c=>'<b data-no-translate>'+kfsEsc(c.code)+'</b>').join(', ')+'</div>':''));
@@ -23621,7 +23642,9 @@ function kfsRender(o){
   h+=gs.length?gs.map(a=>row('<div><b>'+kfsEsc(a.bezeichnung||kfsDevName(a.user_agent))+'</b> <span data-no-translate style="color:#888;">('+kfsEsc(a.code)+')</span></div><div style="font-size:12px;color:#666;">'+kfsEsc(kfsDevName(a.user_agent))+' · zuletzt '+kfsAgo(a.zuletzt)+' · '+kfsEsc(kfsWer(a))+' · gültig bis '+(a.gueltig_bis?new Date(a.gueltig_bis).toLocaleDateString('de-AT'):'–')+'</div>'+btn('#777','Umbenennen',"kfsUmbenennen('"+a.id+"','"+kfsEsc(a.bezeichnung||'').replace(/'/g,'')+"')")+btn('#B3261E','Sperren',"kfsSperren('"+a.id+"')")+btn('#555','Entfernen',"kfsEntfernen('"+a.id+"')"))).join(''):row('<span style="color:#666;">Noch keine Geräte freigeschaltet.</span>');
   const v=o.versuche||[];
   h+='<div style="font-weight:800;margin:14px 0 6px;">Fehlversuche (7 Tage)'+(+o.neu?' · <span style="color:#B3261E;">'+o.neu+' neu</span>':'')+'</div>'+row(v.length?v.map(x=>'<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #eee;"><b>'+kfsAgo(x.ts)+'</b> · '+kfsEsc(x.grund==='sperre_ausgeloest'?'🔒 Sperre ausgelöst':x.grund==='pin_falsch'?'falsche PIN':x.grund==='code_falsch'?'falscher Code':x.grund)+(x.store_id?' · '+kfsEsc(x.store_id):'')+' · '+kfsEsc(x.bezeichnung||x.code||'unbekanntes Gerät')+(x.ip?' · <span data-no-translate>'+kfsEsc(x.ip)+'</span>':'')+'</div>').join('')+btn('#555','Als gelesen markieren',"kfsQuittieren()"):'<span style="color:#666;">Keine Fehlversuche.</span>');
+  const _f=document.activeElement&&document.activeElement.id==='kfs-suche'?document.activeElement.selectionStart:null;
   b.innerHTML=h;
+  if(_f!==null){ const e=document.getElementById('kfs-suche'); if(e){ e.focus(); try{ e.setSelectionRange(_f,_f); }catch(x){} } }
 }
 
 // ==== AMAZON-LIEFERUNGEN: Zuteilung durch die Organisation (Pop-up) ====
