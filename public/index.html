@@ -1852,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.330';
+const APP_VERSION='6.99.331';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2489,6 +2489,7 @@ async function loginAs(store){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   try{ kfsAppBanner(); }catch(e){}
+  try{ kfWideApply(); kfDfbCheck(); }catch(e){}
   // Store-Name bleibt auf JEDEM Screen im Titel sichtbar (nicht nur auf der Startseite) — Orientierungshilfe
   document.getElementById('tb-title').textContent = store.id==='zentrale' ? 'Karma Food' : `Karma Food · ${store.name}`;
   const av=document.getElementById('tb-avatar');
@@ -5458,6 +5459,7 @@ async function renderHome(){
       <div style="font-size:12.5px;color:#78350F;margin-top:3px;">Jetzt gleich in der Support Gruppe schreiben, falls noch was fehlt 🚛</div>
     </div>
     `:''; })()}
+    ${(currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles))?'<div class="kf-top">':''}
     ${monthlyCleaningHtml}
     ${(()=>{ /* 10.11.26: Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) für Kitchen + Stadtplatz: Status-Zeile + Pop-up */
       const sgShow=currentStore?.id==='kitchen' && !!window._homeHideRoles; // nur im Daily (Wunsch 10.11.)
@@ -5493,6 +5495,7 @@ async function renderHome(){
 
     ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
     ${(()=>{ const sp1=!!(dcStatus.wek&&dcStatus.kuehl&&dcStatus.wolt); const sp3=!!(sp1 && feedbackDoneHome && sweetsDone && transporterDone && disposalDone && dcStatus.reinCount===2 && (!isKCDay||kcDone)); return kfShiftStepperHtml(sp1?'done':'now', sp3?'done':(sp1?'now':'todo'), sp3?'done':'todo'); })()}
+    </div><div class="kf-cols"><div class="kf-col">
     <!-- START BUTTON -->
     <div class="kf-start" onclick="goTo('dailycheck')" style="background:var(--green);border-radius:12px;padding:10px 14px;cursor:pointer;margin:8px 0 10px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -5512,6 +5515,7 @@ async function renderHome(){
       <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe beim Eröffnen des Stores? Checkliste ansehen</span>
     </div>
 
+    </div><div class="kf-col">
     <!-- PHASE 2: WÄHREND DER SCHICHT -->
     <div class="section-lbl" style="margin-top:4px;margin-bottom:4px;">☕ Während der Schicht</div>
     ${(()=>{
@@ -5558,6 +5562,7 @@ async function renderHome(){
       <span style="font-size:11px;color:var(--muted);text-decoration:underline;cursor:pointer;">❓ Brauchst du Hilfe bei der Reinigung? Checkliste ansehen</span>
     </div>
 
+    </div><div class="kf-col">
     <!-- PHASE 3: NACH DER SCHICHT -->
     <div class="section-lbl" style="margin-top:6px;margin-bottom:4px;">🌙 Nach der Schicht</div>
     ${remindersHtml}
@@ -5579,6 +5584,7 @@ async function renderHome(){
       </div>
     </div>
 
+    </div></div>
     <!-- Karma heute / Guide: jetzt im Karmaverse (Nav unten) -->
     `:''}
     ${currentStore?.id==='zentrale'?`
@@ -23766,6 +23772,68 @@ async function amzAngekommen(id){
 }
 async function amzPackK(id,i){ await amzPack(id,i); amzKitchenCard(); }
 Object.assign(window,{amzPack,amzAngekommen,amzPackK,amzKitchenCard});
+
+// ==== BREITE ANSICHT (Probe) + Design-Feedback ====
+// Probe am Mittwoch 25.11.26: Auf großen Bildschirmen (ab 1100 px) stehen die drei Phasen der Startseite nebeneinander.
+// Am Handy und in kleinen Fenstern ändert sich nichts (die Hüllen sind dort "display:contents"). Danach schaltet sich die
+// Probe von selbst ab; ab 26.11. fragt ein kleines Fenster (Sterne + altes/neues Design), wie es gefallen hat.
+const KF_WIDE_TAG='2026-11-25', KF_DFB_BIS='2026-12-02';
+(function(){ try{ const q=new URLSearchParams(location.search).get('breit'); if(q==='1') localStorage.setItem('kf_wide_force','1'); if(q==='0') localStorage.removeItem('kf_wide_force'); }catch(e){} })();
+function kfWideAktiv(){ try{ return (todayISO()===KF_WIDE_TAG || localStorage.getItem('kf_wide_force')==='1') && localStorage.getItem('kf_wide')!=='0'; }catch(e){ return false; } }
+function kfWideTag(){ try{ return todayISO()===KF_WIDE_TAG || localStorage.getItem('kf_wide_force')==='1'; }catch(e){ return false; } }
+(function(){
+  const st=document.createElement('style'); st.id='kf-wide-css';
+  st.textContent='.kf-top,.kf-cols,.kf-col{display:contents}'
+   +'@media (min-width:1100px){body.kf-wide .kf-top{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start;margin-bottom:12px}'
+   +'body.kf-wide .kf-top>*{margin:0!important;min-width:0}body.kf-wide .kf-top>:empty{display:none}'
+   +'body.kf-wide .kf-top>div[style*="display:flex;gap:8px"]{grid-column:span 2}'
+   +'body.kf-wide .kf-top>#kf-wochenstory,body.kf-wide .kf-top>div:has(>div>.kf-step),body.kf-wide .kf-top>.kf-stepper{grid-column:1/-1}'
+   +'body.kf-wide .kf-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}'
+   +'body.kf-wide .kf-col{display:block;min-width:0}}';
+  document.head.appendChild(st);
+})();
+function kfWideApply(){
+  try{
+    const on=kfWideAktiv() && window.innerWidth>=1100 && !!currentStore && currentStore.id!=='zentrale';
+    document.body.classList.toggle('kf-wide',on);
+    if(on){ try{ localStorage.setItem('kf_wide_seen','1'); }catch(e){} }
+    let b=document.getElementById('kf-wide-sw');
+    const zeigen=kfWideTag() && window.innerWidth>=1100 && !!currentStore && currentStore.id!=='zentrale';
+    if(zeigen&&!b){ b=document.createElement('button'); b.id='kf-wide-sw'; b.type='button'; b.onclick=kfWideToggle;
+      b.style.cssText='position:fixed;right:12px;bottom:78px;z-index:60;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #0F6E56;background:#fff;color:#0F6E56;font-weight:700;font-size:13px;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer;'; document.body.appendChild(b); }
+    if(b){ b.style.display=zeigen?'block':'none'; b.textContent=kfWideAktiv()?'Ansicht: wie gewohnt':'Ansicht: breit (Probe)'; }
+  }catch(e){}
+}
+function kfWideToggle(){ try{ localStorage.setItem('kf_wide',kfWideAktiv()?'0':'1'); }catch(e){} kfWideApply(); }
+window.addEventListener('resize',()=>{ clearTimeout(window._kfWideT); window._kfWideT=setTimeout(kfWideApply,150); });
+// Feedback-Fenster: nur wer die breite Ansicht gesehen hat, nur einmal pro Gerät, nur nach der Probe
+function kfDfbCheck(){
+  try{
+    const t=todayISO();
+    if(t<=KF_WIDE_TAG || t>KF_DFB_BIS || !currentStore || currentStore.id==='zentrale') return;
+    if(localStorage.getItem('kf_wide_seen')!=='1' || localStorage.getItem('kf_dfb_done')==='1') return;
+    if(document.getElementById('kf-dfb')) return;
+    setTimeout(kfDfbShow,4000);
+  }catch(e){}
+}
+function kfDfbShow(){
+  if(document.getElementById('kf-dfb')) return;
+  const d=document.createElement('div'); d.id='kf-dfb'; d.setAttribute('role','dialog'); d.setAttribute('aria-label','Feedback zum Design');
+  d.style.cssText='position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:99990;background:#fff;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.35);padding:14px 16px;width:min(420px,calc(100% - 24px));font-family:inherit;';
+  const stars=[1,2,3,4,5].map(n=>'<button type="button" aria-label="'+n+' Sterne" onclick="kfDfbSend('+n+',null)" style="width:52px;height:52px;border:0;background:none;font-size:34px;line-height:1;cursor:pointer;color:#F5B301;">★</button>').join('');
+  d.innerHTML='<div style="font-weight:800;font-size:15px;margin-bottom:2px;">Wie findet ihr das breite Design von gestern?</div><div style="font-size:12.5px;color:#666;margin-bottom:6px;">Ein Klick genügt, dann ist das Fenster weg.</div>'
+    +'<div style="display:flex;justify-content:center;">'+stars+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:6px;"><button type="button" onclick="kfDfbSend(null,\'alt\')" style="flex:1;min-height:48px;border:1.5px solid #D4D4CF;border-radius:12px;background:#fff;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer;">Lieber das alte</button><button type="button" onclick="kfDfbSend(null,\'neu\')" style="flex:1;min-height:48px;border:0;border-radius:12px;background:#0F6E56;color:#fff;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer;">Lieber das neue</button></div>'
+    +'<button type="button" aria-label="Schließen" onclick="kfDfbSend(null,null)" style="position:absolute;top:4px;right:6px;width:36px;height:36px;border:0;background:none;font-size:18px;color:#888;cursor:pointer;">✕</button>';
+  document.body.appendChild(d);
+}
+async function kfDfbSend(sterne,wahl){
+  try{ localStorage.setItem('kf_dfb_done','1'); }catch(e){}
+  document.getElementById('kf-dfb')?.remove();
+  if(sterne==null && wahl==null) return;
+  try{ await api('design_feedback',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify([{store_id:currentStore?.id||null,sterne,wahl,kontext:'breit-probe-2026-11-25'}])}); showToast('Danke! 🙏'); }catch(e){}
+}
+Object.assign(window,{kfWideApply,kfWideToggle,kfDfbShow,kfDfbSend});
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
