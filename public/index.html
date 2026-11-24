@@ -1855,7 +1855,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.333';
+const APP_VERSION='6.99.334';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5587,7 +5587,9 @@ async function renderHome(){
     <!-- Karma heute / Guide: jetzt im Karmaverse (Nav unten) -->
     `:''}
     ${currentStore?.id==='zentrale'?`
+    <div id="kf-braucht"></div>
     ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
+    <div class="kf-org-cols"><div class="kf-org-l">
     <div id="zm-org-host"></div>
     <div id="notstand-zentrale-widget"></div>
     <details class="card" style="padding:10px 14px;margin-bottom:12px;"><summary style="font-size:13px;font-weight:700;cursor:pointer;">🚗 Essen-Transfer per Uber (schnell)</summary>
@@ -5602,6 +5604,7 @@ async function renderHome(){
     </details>
     <div id="notruf-zentrale-widget"></div>
     <div id="org-dashboard-widget"></div>
+    </div><div class="kf-org-r">
     <div id="org-roles-row" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
     <div style="position:relative;margin-bottom:8px;">
       <button class="role-btn-color" onclick="toggleOrgShopPicker()" style="background:#1D9E75;">
@@ -5611,6 +5614,7 @@ async function renderHome(){
       <span id="org-shop-picker-arrow" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);color:#fff;font-size:16px;pointer-events:none;">→</span>
     </div>
     <div id="org-shop-picker" style="display:none;flex-direction:column;gap:8px;margin:-2px 0 8px;"></div>
+    </div></div>
     ${todayISO()==='2026-09-21' && new Date().getHours()>=13?`
     <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:14px;padding:14px 16px;margin-bottom:14px;">
       <div style="font-size:14px;font-weight:800;color:#78350F;">🗓️ Erinnerung: Feiertags-Logik</div>
@@ -5704,7 +5708,7 @@ async function renderHome(){
   if(currentStore?.id!=='zentrale'&&currentStore?.id!=='kitchen') el.innerHTML+=soLaeuftsHtml(false);
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
-  if(currentStore?.id==='zentrale'){ loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
+  if(currentStore?.id==='zentrale'){ kfBrauchtInit(); loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); amzKitchenCard(); }
   else { loadActiveBroadcastBanner(); loadLieferTracking(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
@@ -11399,8 +11403,8 @@ async function loadOrgDashboard(){
 
     // Transporter/Sweets: Abschick-Marker (nicht "mind. 1 Artikel mit Menge>0") — sonst zählt
     // "bewusst überall 0 gewählt" nie als erledigt.
-    const dot=ok=>`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${ok?'#22C55E':'#EF4444'};"></span>`;
-    const dotNeutral=`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#D9D9D6;" title="Heute nicht gefordert (nur Di & Do)"></span>`;
+    const dot=ok=>`<span aria-label="${ok?'fertig':'fehlt'}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:${ok?'#22C55E':'#EF4444'};color:#fff;font-size:13px;font-weight:800;">${ok?'✓':'✕'}</span>`;
+    const dotNeutral=`<span aria-label="heute nicht nötig" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#E5E5E2;color:#666;font-size:13px;font-weight:800;" title="Heute nicht gefordert (nur Di & Do)">–</span>`;
     const realWeekdayDash=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
     const isKCDayDash=realWeekdayDash===2||realWeekdayDash===4; // Shop-Produkte nur Dienstag & Donnerstag
     // Hygiene-Auswertung jetzt als eigener Button + Tabellen-Ansicht statt automatischem Pop-up
@@ -11417,7 +11421,7 @@ async function loadOrgDashboard(){
       html+=`<tr>
         <td style="text-align:left;"><span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:9px;height:9px;border-radius:50%;background:${col};flex-shrink:0;"></span><span data-no-translate style="font-size:12.5px;font-weight:500;">${s.name.split(' ')[0]}</span></span></td>
         <td>${isKCDayDash?dot(kcSet.has(s.id)):dotNeutral}</td>
-        <td>${forecastStoreAdjusted.has(s.id)?`<span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:#F97316;" title="Filiale hat selbst angepasst — Blick lohnt"></span>`:dot(forecastSet.has(s.id))}</td>
+        <td>${forecastStoreAdjusted.has(s.id)?`<span aria-label="selbst angepasst" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#F97316;color:#fff;font-size:13px;font-weight:800;" title="Filiale hat selbst angepasst — Blick lohnt">✎</span>`:dot(forecastSet.has(s.id))}</td>
         <td>${dot(transporterOk)}</td>
         <td>${dot(sweetsOk)}</td>
         <td>${dot(disposalSet.has(s.id))}</td>
@@ -11425,7 +11429,7 @@ async function loadOrgDashboard(){
     });
     html+='</tbody></table></div>';
     html+=`<div style="font-size:10px;color:var(--muted);margin:4px 2px 0;">
-      <span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:#F97316;vertical-align:middle;"></span> Forecast: Filiale hat selbst angepasst
+      ✓ fertig · ✕ fehlt · ✎ Forecast: Filiale hat selbst angepasst · – heute nicht nötig
     </div>`;
     wrap.innerHTML=html;
     translateEl(wrap);
@@ -23560,6 +23564,7 @@ async function kfsOrgWatch(){
   const run=async()=>{
     const o=await kfsOverview(); if(!o) return;
     const n=(o.anfragen||[]).length+(o.gesperrt||[]).length+(+o.neu||0);
+    KFS.zahlAnfragen=(o.anfragen||[]).length+(o.gesperrt||[]).length; try{ kfBrauchtRender(); }catch(e){}
     kfsBadge(n);
     const urgent=(o.anfragen||[]).concat(o.gesperrt||[]).filter(x=>x.dringend).length;
     const sig=(o.anfragen||[]).length+'/'+urgent+'/'+(+o.neu||0);
@@ -23849,6 +23854,47 @@ function kfMehrOpen(){
 function kfMehrClose(){ document.getElementById('kf-mehr')?.remove(); }
 function kfMehrGo(v){ kfMehrClose(); goTo(v); }
 Object.assign(window,{kfMehrOpen,kfMehrClose,kfMehrGo});
+
+// ==== Organisation: Überblick neu geordnet ("Braucht dich" + zwei Spalten am großen Bildschirm) ====
+(function(){ const st=document.createElement('style'); st.id='kf-org-css';
+  st.textContent='.kf-org-cols,.kf-org-l,.kf-org-r{display:contents}'
+   +'#kf-braucht{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 0 12px}'
+   +'.kf-br{display:flex;align-items:center;gap:8px;min-height:64px;box-sizing:border-box;background:#fff;border-radius:14px;padding:8px 10px;cursor:pointer;text-align:left;font-family:inherit;color:inherit;width:100%}'
+   +'@media (min-width:1100px){#kf-braucht{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}'
+   +'.kf-org-cols{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px;align-items:start}.kf-org-l,.kf-org-r{display:block;min-width:0}}';
+  document.head.appendChild(st); })();
+const KF_BR={zahlen:{}};
+function kfBrauchtRender(){
+  const el=document.getElementById('kf-braucht'); if(!el) return;
+  const z=KF_BR.zahlen, g=(typeof KFS!=='undefined'&&KFS.zahlAnfragen!=null)?KFS.zahlAnfragen:null;
+  const karte=(titel,sub,n,onclick,svg,rot)=>{ const offen=(n===null||n>0); const col=n===null?'#888':(n>0?rot:'#0F6E56');
+    return '<button type="button" class="kf-br" onclick="'+onclick+'" style="border:1.5px solid '+(n>0?rot:'#E5E5E2')+'"><span style="width:38px;height:38px;border-radius:11px;background:'+(n>0?rot+'1A':'#E1F5EE')+';color:'+col+';display:flex;align-items:center;justify-content:center;flex:none;"><svg viewBox="0 0 24 24" style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;" aria-hidden="true">'+svg+'</svg></span><span style="min-width:0;flex:1;"><b style="font-size:14px;line-height:1.2;display:block;">'+titel+'</b><span style="font-size:12px;color:#666;">'+sub+'</span></span><span style="min-width:30px;height:30px;border-radius:15px;background:'+col+';color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;padding:0 6px;box-sizing:border-box;">'+(n===null?'–':(n>9?'9+':n))+'</span></button>'; };
+  el.innerHTML=
+    karte('Geräteanfragen',g===null?'öffnen':'warten auf Freigabe',g,'kfsOpen()','<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>','#B3261E')
+   +karte('Amazon zuteilen',KF_BR.zahlen.amazon>0?'neue Lieferung':'nichts offen',KF_BR.zahlen.amazon??null,'amzOpen()','<path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/>','#C2410C')
+   +karte('Schäden & Mängel','offen',KF_BR.zahlen.maengel??null,"goTo('maengel')",'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>','#C2410C')
+   +karte('Notruf & Meldungen',KF_BR.zahlen.meldungen>0?'siehe unten':'aktuell ruhig',KF_BR.zahlen.meldungen??null,"document.getElementById('zm-org-host')?.scrollIntoView({behavior:'smooth'})",'<path d="M12 3a6 6 0 0 0-6 6v6h12V9a6 6 0 0 0-6-6zM4 19h16"/>','#B3261E');
+}
+async function kfBrauchtLaden(){
+  try{
+    const [mg,ns,zm,en,am]=await Promise.all([
+      api('maengel?status=neq.behoben&select=id').catch(()=>null),
+      api('notstand_meldungen?status=eq.offen&select=id').catch(()=>null),
+      api('zutaten_meldungen?status=eq.offen&select=id').catch(()=>null),
+      api('essen_notruf?erledigt=eq.false&select=id').catch(()=>null),
+      api('amazon_lieferungen?erledigt_am=is.null&ziele=eq.%5B%5D&select=id').catch(()=>null)
+    ]);
+    const n=a=>Array.isArray(a)?a.length:null;
+    KF_BR.zahlen={ maengel:n(mg), amazon:n(am), meldungen:(n(ns)===null&&n(zm)===null&&n(en)===null)?null:(n(ns)||0)+(n(zm)||0)+(n(en)||0) };
+  }catch(e){}
+  kfBrauchtRender();
+}
+function kfBrauchtInit(){
+  kfBrauchtRender(); kfBrauchtLaden();
+  clearInterval(KF_BR.timer);
+  KF_BR.timer=setInterval(()=>{ if(document.getElementById('kf-braucht')) kfBrauchtLaden(); else clearInterval(KF_BR.timer); },60000);
+}
+Object.assign(window,{kfBrauchtInit,kfBrauchtRender,kfBrauchtLaden});
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
