@@ -1858,7 +1858,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.338';
+const APP_VERSION='6.99.339';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5593,6 +5593,7 @@ async function renderHome(){
     `:''}
     ${currentStore?.id==='zentrale'?`
     <div id="kf-braucht"></div>
+    <div id="kf-report"></div>
     ${(()=>{ setTimeout(()=>{ try{ kfWochenStory(); }catch(e){} },500); return '<div id="kf-wochenstory"></div>'; })()}
     <div class="kf-org-cols"><div class="kf-org-l">
     <div id="zm-org-host"></div>
@@ -5656,7 +5657,7 @@ async function renderHome(){
   if(currentStore?.id!=='zentrale'&&currentStore?.id!=='kitchen') el.innerHTML+=soLaeuftsHtml(false);
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
-  if(currentStore?.id==='zentrale'){ kfBrauchtInit(); loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
+  if(currentStore?.id==='zentrale'){ kfBrauchtInit(); kfOrgReport(); loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); amzKitchenCard(); }
   else { loadActiveBroadcastBanner(); loadLieferTracking(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
@@ -23881,6 +23882,72 @@ Object.assign(window,{kfBrauchtInit,kfBrauchtRender,kfBrauchtLaden});
 function kfRailApply(){ try{ const on=!!currentStore && currentStore.id==='zentrale' && window.innerWidth>=1100; document.body.classList.toggle('kf-rail', on); if(on) loadMenuKontrolleBadge(); }catch(e){} }
 window.addEventListener('resize',()=>{ clearTimeout(window._kfRailT); window._kfRailT=setTimeout(kfRailApply,150); });
 Object.assign(window,{kfRailApply});
+
+// ==== Organisation: Wochenreport grafisch (letzte Woche, alle Standorte) ====
+// Regel: ausverkauft bis 30 Min. vor Schluss ist gut (kfZuFrueh), früher ist zu wenig; viel Rest = zu viel eingeplant.
+(function(){ const st=document.createElement('style'); st.id='kf-report-css';
+  st.textContent='#kf-report{margin:0 0 12px}'
+   +'.kr-kp{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}'
+   +'.kr-k{background:#fff;border:1px solid #E5E5E2;border-radius:14px;padding:10px 12px}'
+   +'.kr-kl{font-size:11px;font-weight:700;letter-spacing:.08em;color:#666}'
+   +'.kr-kz{font-family:"Boldonse",sans-serif;font-size:26px;line-height:1.3;margin:2px 0 4px}'
+   +'.kr-ks{font-size:12px;color:#444}'
+   +'.kr-ch{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}'
+   +'.kr-c{background:#fff;border:1px solid #E5E5E2;border-radius:14px;padding:12px 14px}'
+   +'.kr-ct{font-size:11px;font-weight:700;letter-spacing:.08em;color:#666;margin-bottom:6px}'
+   +'.kr-r{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;align-items:center;min-height:36px;font-size:13px}'
+   +'.kr-b{display:flex;gap:2px;height:24px}'
+   +'.kr-s{border-radius:0 6px 6px 0;display:flex;align-items:center;padding:0 7px;color:#fff;font-weight:700;font-size:12px;white-space:nowrap;min-width:0}'
+   +'.kr-t{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px;margin-top:10px}'
+   +'.kr-td{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:10px 12px;background:#fff;border:1.5px solid #E5E5E2;font-size:13px}'
+   +'@media (min-width:1100px){.kr-kp{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.kr-ch{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}';
+  document.head.appendChild(st); })();
+async function kfOrgReport(){
+  const host=document.getElementById('kf-report'); if(!host||!currentStore||currentStore.id!=='zentrale') return;
+  try{
+    const wd=getWeekdayDates(-1), von=wd[1], bis=wd[5], kw=getIsoWeekNumber(von);
+    const disp=await api(`disposal?disposal_date=gte.${von}&disposal_date=lte.${bis}&select=store_id,disposal_date,dish_name,leftover_qty,sold_out_time&limit=3000`).catch(()=>null);
+    if(disp===null){ host.innerHTML=''; return; }
+    const ST=['3400','lb','1020','boerse'];
+    const sName=id=>({lb:'Laurenzerberg',boerse:'Börse','1020':'Ausstellungsstr.','3400':'Stadtplatz'}[id]||id);
+    const rows=disp.filter(r=>ST.includes(r.store_id));
+    const per={}; ST.forEach(id=>per[id]={frueh:0,spaet:0,rest:0,tage:new Set(),n:0,dishes:{}});
+    rows.forEach(r=>{ const p=per[r.store_id]; p.n++; if(r.leftover_qty!=null||r.sold_out_time) p.tage.add(r.disposal_date); p.rest+=Number(r.leftover_qty)||0;
+      if(r.sold_out_time){ if(kfZuFrueh(r.store_id,r.sold_out_time)){ p.frueh++; const k=r.dish_name; (p.dishes[k]=p.dishes[k]||{tage:new Set(),zeit:'99:99'}).tage.add(r.disposal_date); const z=String(r.sold_out_time).slice(0,5); if(z<p.dishes[k].zeit) p.dishes[k].zeit=z; } else p.spaet++; } });
+    const sum=k=>ST.reduce((a,id)=>a+per[id][k],0);
+    const fruehGes=sum('frueh'), spaetGes=sum('spaet'), restGes=Math.round(sum('rest'));
+    const ftF=new Set(rows.filter(r=>kfZuFrueh(r.store_id,r.sold_out_time)).map(r=>r.store_id+'|'+r.disposal_date)).size;
+    const tageEin=ST.reduce((a,id)=>a+per[id].tage.size,0), tageSoll=ST.length*5;
+    const maxRest=Math.max(1,...ST.map(id=>per[id].rest)), maxAus=Math.max(1,...ST.map(id=>per[id].frueh+per[id].spaet));
+    const restTop=ST.slice().sort((a,b)=>per[b].rest-per[a].rest)[0];
+    // Handlungszeilen
+    const todo=[];
+    ST.forEach(id=>{ const p=per[id]; const dau=Object.entries(p.dishes).filter(([k,v])=>v.tage.size>=2).sort((a,b)=>b[1].tage.size-a[1].tage.size)[0];
+      if(p.frueh>=3 || dau){ todo.push({sev:0,farbe:'#B3261E',pfeil:'M12 19V5M5 12l7-7 7 7',titel:sName(id)+': Mengen erhöhen',sub:p.frueh+' Gerichte zu früh weg'+(dau?', '+dau[0]+' an '+dau[1].tage.size+' Tagen ab '+dau[1].zeit+' Uhr':'')}); }
+      else if(p.n && p.rest/p.n>=8){ todo.push({sev:1,farbe:'#C2410C',pfeil:'M12 5v14M5 12l7 7 7-7',titel:sName(id)+': weniger einplanen',sub:Math.round(p.rest)+' Portionen Rest'+(p.frueh?'':', nichts zu früh weg')}); }
+      else if(p.n){ todo.push({sev:2,farbe:'#0F6E56',pfeil:'M5 13l4 4L19 7',titel:sName(id)+': passt',sub:(p.spaet?p.spaet+' kurz vor Schluss ausverkauft, ':'')+Math.round(p.rest)+' Portionen Rest'}); } });
+    todo.sort((a,b)=>a.sev-b.sev);
+    const bar=(w,bg,txt)=>w>0?'<span class="kr-s" style="width:'+Math.max(w,6)+'%;background:'+bg+'">'+txt+'</span>':'';
+    const aus=ST.map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.frueh/maxAus*100,'#B3261E','✕ '+p.frueh)+bar(p.spaet/maxAus*100,'#0F6E56','✓ '+p.spaet)+((p.frueh+p.spaet)===0?'<span style="font-size:12px;color:#666;align-self:center;">nichts ausverkauft</span>':'')+'</div></div>'; }).join('');
+    const rst=ST.slice().sort((a,b)=>per[b].rest-per[a].rest).map(id=>{ const p=per[id]; return '<div class="kr-r"><b>'+sName(id)+'</b><div class="kr-b">'+bar(p.rest/maxRest*100,'#C2410C',String(Math.round(p.rest)))+'</div></div>'; }).join('');
+    const tds=todo.map(t=>'<div class="kr-td" style="border-color:'+t.farbe+'"><svg viewBox="0 0 24 24" style="width:20px;height:20px;flex:none;color:'+t.farbe+';fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;" aria-hidden="true"><path d="'+t.pfeil+'"/></svg><span><b>'+t.titel+'</b><br><span style="color:#555">'+t.sub+'</span></span></div>').join('');
+    const open=(()=>{ try{ return localStorage.getItem('kf_report_zu')!=='1'; }catch(e){ return true; } })();
+    host.innerHTML='<details id="kf-report-d" class="card" style="padding:10px 14px;" '+(open?'open':'')+'><summary style="font-size:13px;font-weight:700;cursor:pointer;min-height:36px;display:flex;align-items:center;">📊 Wochenreport KW '+kw+' · letzte Woche, alle Standorte</summary>'
+      +(rows.length?(
+      '<div class="kr-kp">'
+      +'<div class="kr-k" style="border:1.5px solid '+(fruehGes?'#B3261E':'#E5E5E2')+'"><div class="kr-kl">ZU FRÜH AUSVERKAUFT</div><div class="kr-kz" style="color:#B3261E">'+fruehGes+'</div><div class="kr-ks"><b>'+ftF+' von '+tageSoll+'</b> Filial-Tagen · mehr als 30 Min. vor Schluss</div></div>'
+      +'<div class="kr-k" style="border:1.5px solid #0F6E56"><div class="kr-kl">KURZ VOR SCHLUSS WEG</div><div class="kr-kz" style="color:#0F6E56">'+spaetGes+'</div><div class="kr-ks">✓ gut geplant, genau gewollt</div></div>'
+      +'<div class="kr-k" style="border:1.5px solid #C2410C"><div class="kr-kl">REST IN DER WOCHE</div><div class="kr-kz" style="color:#C2410C">'+restGes+'</div><div class="kr-ks">Portionen'+(restGes?' · am meisten '+sName(restTop)+' ('+Math.round(per[restTop].rest)+')':'')+'</div></div>'
+      +'<div class="kr-k"><div class="kr-kl">DATEN VOLLSTÄNDIG</div><div class="kr-kz">'+tageEin+'/'+tageSoll+'</div><div class="kr-ks">Filial-Tage mit Entsorgung eingetragen</div></div></div>'
+      +'<div class="kr-ch"><div class="kr-c"><div class="kr-ct">AUSVERKAUFT NACH STANDORT (Gerichte)</div><div style="display:flex;gap:14px;font-size:12px;margin-bottom:4px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#B3261E;margin-right:5px;"></span>✕ zu früh</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#0F6E56;margin-right:5px;"></span>✓ kurz vor Schluss</span></div>'+aus+'</div>'
+      +'<div class="kr-c"><div class="kr-ct">REST NACH STANDORT (Portionen)</div>'+rst+'</div></div>'
+      +'<div class="kr-ct" style="margin:12px 0 0;">WAS DU TUN SOLLTEST</div><div class="kr-t">'+tds+'</div>'
+      ):'<div style="font-size:13px;color:#666;padding:8px 2px;">Für letzte Woche gibt es noch keine Einträge zur Entsorgung.</div>')
+      +'</details>';
+    const dd=document.getElementById('kf-report-d'); if(dd) dd.addEventListener('toggle',()=>{ try{ localStorage.setItem('kf_report_zu',dd.open?'0':'1'); }catch(e){} });
+  }catch(e){ console.error('Wochenreport',e); }
+}
+window.kfOrgReport=kfOrgReport;
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
