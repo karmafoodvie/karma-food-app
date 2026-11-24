@@ -1858,7 +1858,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.337';
+const APP_VERSION='6.99.338';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6311,7 +6311,11 @@ async function kfWochenStory(hostId, scope){
   const tag=dt=>new Date(dt+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long'});
   const sName=id=>(typeof NOTRUF_NAMEN!=='undefined'&&NOTRUF_NAMEN[id])||id;
   // Kennzahlen
-  const sold=d.disp.filter(r=>r.sold_out_time).sort((a,b)=>String(a.sold_out_time).localeCompare(String(b.sold_out_time)));
+  const sold=d.disp.filter(r=>kfZuFrueh(r.store_id,r.sold_out_time)).sort((a,b)=>String(a.sold_out_time).localeCompare(String(b.sold_out_time)));
+  const soldSpaet=d.disp.filter(r=>r.sold_out_time && !kfZuFrueh(r.store_id,r.sold_out_time)).length; // erst kurz vor Schluss weg = gut geplant
+  // Dauerhaft zu früh weg: dasselbe Gericht im selben Standort an mind. 2 Tagen der Woche
+  const _fr={}; sold.forEach(r=>{ const k=r.dish_name+'|'+r.store_id; (_fr[k]=_fr[k]||{dish:r.dish_name,store:r.store_id,tage:new Set(),zeiten:[]}); _fr[k].tage.add(r.disposal_date); _fr[k].zeiten.push(String(r.sold_out_time).slice(0,5)); });
+  const dauerhaft=Object.values(_fr).filter(x=>x.tage.size>=2).sort((a,b)=>b.tage.size-a.tage.size);
   const soldDays=new Set(sold.map(r=>r.store_id+'|'+r.disposal_date)).size;
   const restByDish={}; let restSum=0;
   d.disp.forEach(r=>{const q=Number(r.leftover_qty)||0; if(q>0){restByDish[r.dish_name]=(restByDish[r.dish_name]||0)+q; restSum+=q;}});
@@ -6326,19 +6330,22 @@ async function kfWochenStory(hostId, scope){
   // Geschichte: Aufhänger
   let hook, tone='neutral';
   if(!hasData){ hook=d.fail?'Die Daten der letzten Woche konnten nicht geladen werden.':'Für die letzte Woche gibt es noch keine Einträge.'; }
-  else if(soldDays>=3){ hook=`Die Nachfrage war höher als die Menge: an ${soldDays} ${isOrg?'Filial-Tagen':'Tagen'} war etwas ausverkauft.`; tone='warn'; }
+  else if(soldDays>=3){ hook=`Die Nachfrage war höher als die Menge: an ${soldDays} ${isOrg?'Filial-Tagen':'Tagen'} war etwas zu früh ausverkauft (mehr als 30 Min. vor Schluss).`; tone='warn'; }
   else if(restSum>=20){ hook=`Es blieb einiges übrig: ${formatQty(restSum)} Portionen Rest in der Woche.`; tone='warn'; }
-  else if(soldDays>=1){ hook=`Fast eine Punktlandung: nur ${soldDays===1?'einmal':soldDays+'-mal'} ausverkauft und ${formatQty(restSum)} Portionen Rest.`; tone='ok'; }
-  else if(d.disp.length){ hook=`Eine ruhige Woche: nichts ausverkauft, ${formatQty(restSum)} Portionen Rest.`; tone='ok'; }
+  else if(soldDays>=1){ hook=`Fast eine Punktlandung: nur ${soldDays===1?'einmal':soldDays+'-mal'} zu früh ausverkauft und ${formatQty(restSum)} Portionen Rest.`; tone='ok'; }
+  else if(d.disp.length){ hook=`Eine ruhige Woche: nichts zu früh ausverkauft, ${formatQty(restSum)} Portionen Rest.`; tone='ok'; }
   else { hook='Zur Entsorgung wurde letzte Woche nichts eingetragen.'; }
   const lines=[];
   if(hasData){
     lines.push(['In Zahlen',`Entsorgung an ${dispDays} ${isOrg?'Filial-Tagen':'von 5 Tagen'} eingetragen, ${d.fb.length} Team-Feedback${d.fb.length===1?'':'s'}, Bestellungen an ${ordDays} ${isOrg?'Filial-Tagen':'Tagen'}.`]);
     if(sold.length){ const f=sold[0]; lines.push(['Am schnellsten weg',`${f.dish_name} war am ${tag(f.disposal_date)}${isOrg?' in '+sName(f.store_id):''} schon um ${String(f.sold_out_time).slice(0,5)} Uhr ausverkauft.`]); }
+    if(soldSpaet){ lines.push(['Kurz vor Schluss weg',`${soldSpaet}× war ein Gericht erst in den letzten 30 Minuten ausverkauft. Das ist gut geplant.`]); }
+    if(dauerhaft.length){ const x=dauerhaft[0]; lines.push(['Dauerhaft zu früh weg',`${x.dish}${isOrg?' in '+sName(x.store):''}: an ${x.tage.size} Tagen ausverkauft (zuerst um ${x.zeiten.sort()[0]} Uhr). Das zeigt, dass es beliebt ist.`]); }
     if(topRest){ lines.push(['Am meisten übrig',`${topRest[0]}: ${formatQty(topRest[1])} Portionen über die Woche.`]); }
     if(best){ lines.push(['Dem Team hat geschmeckt',`${best[0]} (Ø ${best[1].toFixed(1).replace('.',',')} von 5${worst&&worst[0]!==best[0]&&worst[1]<best[1]?`), am schwächsten ${worst[0]} (Ø ${worst[1].toFixed(1).replace('.',',')}`:''}).`]); }
     let next='';
-    if(soldDays>=2&&sold.length) next=`Für diese Woche die Menge bei ${sold[0].dish_name} im Forecast prüfen, sie war zu knapp.`;
+    if(dauerhaft.length) next=`Menge bei ${dauerhaft[0].dish}${isOrg?' ('+sName(dauerhaft[0].store)+')':''} im Forecast erhöhen: es war an ${dauerhaft[0].tage.size} Tagen zu früh weg.`;
+    else if(soldDays>=2&&sold.length) next=`Für diese Woche die Menge bei ${sold[0].dish_name} im Forecast prüfen, sie war zu knapp.`;
     else if(topRest&&topRest[1]>=10) next=`Für diese Woche bei ${topRest[0]} etwas weniger einplanen.`;
     else if(dispDays<(isOrg?10:4)) next='Bitte die Entsorgung jeden Tag eintragen, sonst fehlt die Grundlage für die Mengenplanung.';
     else next='Mengen passen, so weitermachen.';
@@ -7303,7 +7310,7 @@ async function renderForecastTrial(){
     const k=d.store_id+'|'+d.disposal_date+'|'+mapDishNameToCategory(d.dish_name, d.slot);
     const ex=dispMap[k]||{leftover:0, soldOut:false, time:null};
     ex.leftover+=(Number(d.leftover_qty)||0);
-    if(d.sold_out_time){ ex.soldOut=true; ex.time=d.sold_out_time.slice(0,5); }
+    if(kfZuFrueh(d.store_id,d.sold_out_time)){ ex.soldOut=true; ex.time=d.sold_out_time.slice(0,5); }
     dispMap[k]=ex;
   });
 
@@ -7892,7 +7899,7 @@ async function openStoreDishHistory(dish, dateStr){
     const ck=d.disposal_date+'|'+mapDishNameToCategory(d.dish_name, d.slot);
     const ex=dispByDateCat[ck]||{leftover:0, soldOutTime:null};
     ex.leftover+=(Number(d.leftover_qty)||0);
-    if(d.sold_out_time) ex.soldOutTime=d.sold_out_time.slice(0,5);
+    if(kfZuFrueh(currentStore.id,d.sold_out_time)) ex.soldOutTime=d.sold_out_time.slice(0,5);
     dispByDateCat[ck]=ex;
   });
   const catIsLasagne=cat==='Lasagne', catIsMeatballs=cat==='Meatballs';
@@ -8045,7 +8052,7 @@ async function renderForecastOrderTab(el, tabHtml){
     if(!lastWeekDisposalByDate[d.disposal_date])lastWeekDisposalByDate[d.disposal_date]={};
     const ex=lastWeekDisposalByDate[d.disposal_date][cat]||{leftoverPortionen:0,soldOutEarly:false};
     ex.leftoverPortionen+=(d.leftover_qty||0);
-    ex.soldOutEarly=ex.soldOutEarly||!!d.sold_out_time;
+    ex.soldOutEarly=ex.soldOutEarly||kfZuFrueh(currentStore.id,d.sold_out_time);
     lastWeekDisposalByDate[d.disposal_date][cat]=ex;
   });
   const dayReasonMap={}; // dateStr -> "☀️ 26°C · kein Feiertag" (rein informativ, pro Tag einmal)
@@ -11514,7 +11521,7 @@ async function renderOrgPlanTab(){
     const k=d.disposal_date+'|'+c;
     const ex=dispByDateCat[k]||{leftover:0, soldOutTime:null};
     ex.leftover+=(Number(d.leftover_qty)||0);
-    if(d.sold_out_time) ex.soldOutTime=d.sold_out_time.slice(0,5);
+    if(kfZuFrueh(orgPlanStore,d.sold_out_time)) ex.soldOutTime=d.sold_out_time.slice(0,5);
     dispByDateCat[k]=ex;
   });
 
@@ -11630,7 +11637,7 @@ async function renderOrgSimple(){
     const k=d.store_id+'|'+d.disposal_date+'|'+c;
     const ex=dispMap[k]||{leftover:0, soldOutTime:null};
     ex.leftover+=(Number(d.leftover_qty)||0);
-    if(d.sold_out_time) ex.soldOutTime=d.sold_out_time.slice(0,5);
+    if(kfZuFrueh(d.store_id,d.sold_out_time)) ex.soldOutTime=d.sold_out_time.slice(0,5);
     dispMap[k]=ex;
   });
 
@@ -11809,7 +11816,7 @@ async function renderOrgStoreForecast(){
     const ck=d.disposal_date+'|'+mapDishNameToCategory(d.dish_name, d.slot);
     const ex=dispByDateCat[ck]||{leftover:0, soldOutTime:null};
     ex.leftover+=(Number(d.leftover_qty)||0);
-    if(d.sold_out_time) ex.soldOutTime=d.sold_out_time.slice(0,5);
+    if(kfZuFrueh(orgPlanStore,d.sold_out_time)) ex.soldOutTime=d.sold_out_time.slice(0,5);
     dispByDateCat[ck]=ex;
   });
 
@@ -11995,7 +12002,7 @@ async function renderOrgStoreForecast(){
           const vals=occs.map(o=>o.sizes.find(s=>s.l===MLBL[t.k]).qty);
           const avgVal=vals.reduce((a,b)=>a+b,0)/vals.length;
           const soldOutN=occs.filter(o=>o.soldOutTime).length;
-          const earlyN=occs.filter(o=>o.soldOutTime && Number(o.soldOutTime.split(':')[0])<13).length;
+          const earlyN=occs.filter(o=>o.soldOutTime && (kfMinVorSchluss(orgPlanStore,o.soldOutTime)||0)>=60).length;
           let factor=1, reason=`Ø letzte ${occs.length}`;
           if(soldOutN>=2){ factor=earlyN>=2?1.25:1.15; reason=`${soldOutN}/${occs.length}× ausverkauft (Ø letzte ${occs.length})`; }
           else if(soldOutN===1){ factor=earlyN?1.2:1.1; reason=`1× ausverkauft (Ø letzte ${occs.length})`; }
@@ -12283,7 +12290,7 @@ async function renderOrgForecast(){
     const cat=mapDishNameToCategory(d.dish_name, d.slot);
     const prev=prevDispMap[d.store_id][cat]||{leftover:0,soldOutEarly:false};
     prev.leftover+=(d.leftover_qty||0);
-    if(d.sold_out_time) prev.soldOutEarly=true;
+    if(kfZuFrueh(d.store_id,d.sold_out_time)) prev.soldOutEarly=true;
     prevDispMap[d.store_id][cat]=prev;
   });
 
@@ -12328,7 +12335,7 @@ async function renderOrgForecast(){
     const cat=mapDishNameToCategory(d.dish_name, d.slot);
     const ex=prevDispByDateStore[d.disposal_date][d.store_id][cat]||{leftover:0,soldOutEarly:false,soldOutTime:null};
     ex.leftover+=(d.leftover_qty||0);
-    if(d.sold_out_time){ ex.soldOutEarly=true; ex.soldOutTime=d.sold_out_time.slice(0,5); }
+    if(kfZuFrueh(d.store_id,d.sold_out_time)){ ex.soldOutEarly=true; ex.soldOutTime=d.sold_out_time.slice(0,5); }
     prevDispByDateStore[d.disposal_date][d.store_id][cat]=ex;
   });
 
@@ -18242,11 +18249,24 @@ function disposalRerenderCall(){ return currentView==='orgForecast'?'renderOrgFo
 function toggleDisposalExact(cb){ disposalShowExact=cb.checked; }
 window.toggleDisposalExact=toggleDisposalExact;
 
+// Schlusszeiten (Mittag) und Regel "ausverkauft": Bis 30 Minuten vor Schluss ausverkauft ist in Ordnung (gut geplant),
+// früher ist zu wenig. Zentral, damit Wochenzusammenfassung, Forecast-Vorschläge, Ampel und Rückblick dieselbe Logik nutzen.
+const KF_SCHLUSS={boerse:'14:00',lb:'14:00','3400':'15:00',kitchen:'15:00','1020':'15:00'};
+const KF_SCHLUSS_PUFFER=30;
+function kfMinVorSchluss(storeId,t){
+  if(!t) return null;
+  const s=KF_SCHLUSS[storeId]||'15:00';
+  const a=String(t).slice(0,5).split(':').map(Number), b=s.split(':').map(Number);
+  if(!isFinite(a[0])||!isFinite(a[1])) return null;
+  return (b[0]*60+b[1])-(a[0]*60+a[1]);
+}
+function kfZuFrueh(storeId,t){ const m=kfMinVorSchluss(storeId,t); return m!==null && m>KF_SCHLUSS_PUFFER; }
 // Ampel-Einstufung — dieselben Schwellenwerte, die die App auch für die Forecast-Vorschläge nutzt
 // (>10 übrig = zu viel, 5-10 = etwas zu viel, ausverkauft = zu wenig, sonst = genau richtig).
-function disposalAmpel(leftoverQty, soldOutTime){
+function disposalAmpel(leftoverQty, soldOutTime, storeId){
   if(leftoverQty==null) return null;
-  if(leftoverQty===0 || soldOutTime) return {icon:'🔥', label:'ausverkauft', bg:'#FEE2E2', border:'#DC2626', color:'#991B1B'};
+  if(soldOutTime && kfZuFrueh(storeId,soldOutTime)) return {icon:'🔥', label:'zu früh ausverkauft', bg:'#FEE2E2', border:'#DC2626', color:'#991B1B'};
+  if(soldOutTime) return {icon:'✓', label:'kurz vor Schluss ausverkauft', bg:'#DCFCE7', border:'#16A34A', color:'#166534'};
   if(leftoverQty>10) return {icon:'📦', label:'zu viel', bg:'#FED7AA', border:'#C2410C', color:'#9A3412'};
   if(leftoverQty>4) return {icon:'📦', label:'etwas zu viel', bg:'#FEF3C7', border:'#D97706', color:'#92400E'};
   return {icon:'✓', label:'genau richtig', bg:'#DCFCE7', border:'#16A34A', color:'#166534'};
@@ -18320,7 +18340,7 @@ async function renderDisposalOverviewHtml(){
       slots.forEach(slot=>{
         const rec=dayDisp.find(d=>d.store_id===store.id && d.slot===slot);
         if(!rec || rec.leftover_qty==null){ html+=`<td style="text-align:center;padding:8px 4px;color:var(--border);">–</td>`; return; }
-        const ampel=disposalAmpel(rec.leftover_qty, rec.sold_out_time);
+        const ampel=disposalAmpel(rec.leftover_qty, rec.sold_out_time, store.id);
         const soldOutLabel=rec.sold_out_time?rec.sold_out_time.slice(0,5):'';
         if(disposalShowExact){
           html+=`<td style="text-align:center;padding:6px 3px;">
@@ -20936,7 +20956,7 @@ async function renderMorgenKoch(el, tabHtml, dayOffset=null){
       const dispRec=(disposalBySlotStore[dishObj.slot]||{})[s.id];
       let ampelBadge='';
       if(dispRec && dispRec.leftover_qty!=null){
-        const a=disposalAmpel(dispRec.leftover_qty, dispRec.sold_out_time);
+        const a=disposalAmpel(dispRec.leftover_qty, dispRec.sold_out_time, s.id);
         ampelBadge=`<div style="font-size:9.5px;font-weight:700;color:${a.color};margin-top:1px;">${a.icon} ${dispRec.leftover_qty}</div>`;
       }
       const neuBadge=isNewSinceLastSeen?`<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:#EF4444;margin-left:3px;vertical-align:middle;" title="Seit deinem letzten Blick geändert"></span>`:'';
