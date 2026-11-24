@@ -1855,7 +1855,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.335';
+const APP_VERSION='6.99.336';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2495,6 +2495,7 @@ async function loginAs(store){
   document.getElementById('app').style.display='flex';
   try{ kfsAppBanner(); }catch(e){}
   try{ kfWideApply(); kfDfbCheck(); }catch(e){}
+  try{ kfRailApply(); }catch(e){}
   // Store-Name bleibt auf JEDEM Screen im Titel sichtbar (nicht nur auf der Startseite) — Orientierungshilfe
   document.getElementById('tb-title').textContent = store.id==='zentrale' ? 'Karma Food' : `Karma Food · ${store.name}`;
   const av=document.getElementById('tb-avatar');
@@ -23838,6 +23839,20 @@ function kfBrauchtInit(){
   KF_BR.timer=setInterval(()=>{ if(document.getElementById('kf-braucht')) kfBrauchtLaden(); else clearInterval(KF_BR.timer); },60000);
 }
 Object.assign(window,{kfBrauchtInit,kfBrauchtRender,kfBrauchtLaden});
+
+// ==== Organisation: Navigation als Seitenleiste auf großen Bildschirmen (ab 1100 px) ====
+(function(){ const st=document.createElement('style'); st.id='kf-rail-css';
+  st.textContent='@media (min-width:1100px){'
+   +'body.kf-rail{max-width:none;margin:0 0 0 96px}'
+   +'body.kf-rail #app{max-width:1320px;margin:0 auto;width:100%}'
+   +'body.kf-rail #bottomnav{left:0;top:0;bottom:0;transform:none;width:96px;max-width:none !important;zoom:1 !important;flex-direction:column;justify-content:flex-start;padding:14px 8px;gap:6px;border-top:0;border-right:1px solid var(--border);overflow-y:auto;z-index:50}'
+   +'body.kf-rail #bottomnav .nav-btn{flex:none;padding:12px 4px;gap:5px;font-size:12px;font-weight:600;line-height:1.15;border-radius:14px}'
+   +'body.kf-rail #bottomnav .nav-btn svg{width:26px;height:26px}'
+   +'body.kf-rail #content{padding-bottom:24px !important}}';
+  document.head.appendChild(st); })();
+function kfRailApply(){ try{ document.body.classList.toggle('kf-rail', !!currentStore && currentStore.id==='zentrale' && window.innerWidth>=1100); }catch(e){} }
+window.addEventListener('resize',()=>{ clearTimeout(window._kfRailT); window._kfRailT=setTimeout(kfRailApply,150); });
+Object.assign(window,{kfRailApply});
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
 // würde ein auf diesem Gerät gespeichertes Staff-Login (localStorage 'kf_store', domainweit,
