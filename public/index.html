@@ -1852,7 +1852,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.327';
+const APP_VERSION='6.99.328';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2488,6 +2488,7 @@ async function loginAs(store){
   currentStore=store;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
+  try{ kfsAppBanner(); }catch(e){}
   // Store-Name bleibt auf JEDEM Screen im Titel sichtbar (nicht nur auf der Startseite) — Orientierungshilfe
   document.getElementById('tb-title').textContent = store.id==='zentrale' ? 'Karma Food' : `Karma Food · ${store.name}`;
   const av=document.getElementById('tb-avatar');
@@ -23437,6 +23438,29 @@ async function kfsAngabenSenden(){
   catch(e){ m.style.color='#A32D2D'; m.textContent='Hat nicht geklappt. Bitte nochmal.'; }
 }
 function kfsWer(a){ const w=[a.standort,a.person].filter(Boolean).join(' · '); return w||(a.letzte_filiale?'zuletzt '+a.letzte_filiale:'Standort unbekannt'); }
+// Hinweis IN der App: Geräte in der Übergangszeit sind meist schon angemeldet und sehen den Anmelde-Bildschirm nie.
+// Deshalb steht der Code zusätzlich als Leiste ganz oben, bis das Gerät freigeschaltet ist.
+function kfsAppBanner(){
+  try{
+    const st=KFS.grace; if(!KFS.on||!st||document.getElementById('kfs-appbanner')) return;
+    const app=document.getElementById('app'); if(!app) return;
+    const d=document.createElement('div'); d.id='kfs-appbanner';
+    d.style.cssText='background:#FEF3C7;color:#78350F;padding:9px 12px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #F59E0B;';
+    d.innerHTML='<span>🔐 Dieses Gerät ist noch nicht freigeschaltet. <b>Code <span style="letter-spacing:2px;font-size:16px;" data-no-translate>'+kfsEsc(st.anfrage_code)+'</span></b> bitte der Organisation durchgeben.</span><button type="button" onclick="kfsAppAngaben()" style="min-height:40px;padding:0 14px;border:0;border-radius:10px;background:#0F6E56;color:#fff;font-weight:700;font-size:13px;font-family:inherit;">Standort melden</button>';
+    app.insertBefore(d,app.firstChild);
+    clearInterval(KFS.bpoll);
+    KFS.bpoll=setInterval(async()=>{ try{ const r=await kfsRpc('geraet_status',{p_token:kfsToken()}); const x=r&&r[0]; if(x&&x.status==='freigegeben'){ clearInterval(KFS.bpoll); d.remove(); } }catch(e){} },60000);
+  }catch(e){}
+}
+function kfsAppAngaben(){
+  if(document.getElementById('kfs-angmodal')) return;
+  const m=document.createElement('div'); m.id='kfs-angmodal';
+  m.style.cssText='position:fixed;inset:0;z-index:99996;background:rgba(3,39,43,.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+  m.innerHTML='<div style="background:#fff;border-radius:16px;max-width:340px;width:100%;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,.35);"><div style="font-weight:800;font-size:17px;margin-bottom:4px;">Standort melden</div>'+kfsAngabenHtml()+'<button type="button" onclick="document.getElementById(\'kfs-angmodal\').remove()" style="width:100%;min-height:44px;margin-top:6px;border:1px solid #ccc;border-radius:10px;background:#fff;font-size:14px;font-family:inherit;">Schließen</button></div>';
+  m.addEventListener('click',e=>{ if(e.target===m) m.remove(); });
+  document.body.appendChild(m);
+}
+Object.assign(window,{kfsAppBanner,kfsAppAngaben});
 function kfsGraceHint(st){
   try{
     if(document.getElementById('kfs-grace')) return;
