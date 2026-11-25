@@ -1862,7 +1862,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.346';
+const APP_VERSION='6.99.347';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -24036,9 +24036,9 @@ async function kfRepCrew(R){
     +'<div class="kr-k"><div class="kr-kl">BEWERTUNGEN</div><div class="kr-kz">'+cur.length+'</div><div class="kr-ks">'+(prev.length?'Vorperiode: '+prev.length:'')+'</div></div>'
     +'<div class="kr-k"><div class="kr-kl">BESTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+(top[0]?escAttr(top[0].name)+'<br>Ø '+kfRepNum(top[0].wert)+' (n='+top[0].n+')':'–')+'</div></div>'
     +'<div class="kr-k"><div class="kr-kl">SCHWÄCHSTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+(dishes.length>1?escAttr(dishes[dishes.length-1].name)+'<br>Ø '+kfRepNum(dishes[dishes.length-1].wert)+' (n='+dishes[dishes.length-1].n+')':'–')+'</div></div></div>'
-    +kfRepKritik(cur,sName,'Crew')+kfRepSaeulen(reihe,'ENTWICKLUNG PRO WOCHE · Ø Crew-Bewertung')
+    +kfRepSaeulen(reihe,'ENTWICKLUNG PRO WOCHE · Ø Crew-Bewertung')
     +'<div class="kr-ch" style="margin-top:10px;"><div class="kr-c"><div class="kr-ct">NACH STANDORT (Ø)</div>'+kfRepBalken(stores,5,'#0F6E56')+'</div>'
-    +'<div class="kr-c"><div class="kr-ct">GERICHTE (mind. 3 Bewertungen)</div>'+(top.length?'<div style="font-size:12px;font-weight:700;color:#0F6E56;margin:2px 0">✓ am besten</div>'+kfRepBalken(top,5,'#0F6E56'):'')+(flop.length?'<div style="font-size:12px;font-weight:700;color:#B3261E;margin:8px 0 2px">✕ am schwächsten</div>'+kfRepBalken(flop,5,'#B3261E'):'')+'</div></div>';
+    +'<div class="kr-c"><div class="kr-ct">GERICHTE (mind. 3 Bewertungen)</div>'+(top.length?'<div style="font-size:12px;font-weight:700;color:#0F6E56;margin:2px 0">✓ am besten</div>'+kfRepBalken(top,5,'#0F6E56'):'')+(flop.length?'<div style="font-size:12px;font-weight:700;color:#B3261E;margin:8px 0 2px">✕ am schwächsten</div>'+kfRepBalken(flop,5,'#B3261E'):'')+'</div></div>'+kfRepKritik(cur,sName,'Crew');
 }
 
 // ---- Tab Gäste-Bewertung
@@ -24064,9 +24064,9 @@ async function kfRepGaeste(R){
     +'<div class="kr-k"><div class="kr-kl">BEWERTUNGEN</div><div class="kr-kz">'+cur.length+'</div><div class="kr-ks">'+(wenig?'⚠ noch wenige, Zahlen mit Vorsicht lesen':(prev.length?'Vorperiode: '+prev.length:''))+'</div></div>'
     +'<div class="kr-k"><div class="kr-kl">BESTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+escAttr(dishes[0].name)+'<br>Ø '+kfRepNum(dishes[0].wert)+' (n='+dishes[0].n+')</div></div>'
     +'<div class="kr-k"><div class="kr-kl">SCHWÄCHSTES GERICHT</div><div class="kr-ks" style="font-size:14px;font-weight:700;margin-top:6px;">'+(dishes.length>1?escAttr(dishes[dishes.length-1].name)+'<br>Ø '+kfRepNum(dishes[dishes.length-1].wert)+' (n='+dishes[dishes.length-1].n+')':'–')+'</div></div></div>'
-    +kfRepKritik(cur.map(x=>({dish:x.dish_name||'?',store:x.location||'Gast',datum:x.menu_date,v:x.rating,tags:x.quick_tags||[],text:x.comment&&String(x.comment).trim()?[x.comment]:[]})),id=>id,'Gäste')+kfRepSaeulen(reihe,'ENTWICKLUNG PRO WOCHE · Ø Gäste-Bewertung')
+    +kfRepSaeulen(reihe,'ENTWICKLUNG PRO WOCHE · Ø Gäste-Bewertung')
     +'<div class="kr-ch" style="margin-top:10px;"><div class="kr-c"><div class="kr-ct">NACH STANDORT (Ø)</div>'+kfRepBalken(locs,5,'#0F6E56')+'</div>'
-    +'<div class="kr-c"><div class="kr-ct">GÄSTE-KOMMENTARE (zuletzt)</div>'+(kommentare.length?kommentare.map(k=>'<div style="font-size:13px;padding:6px 0;border-bottom:1px solid #eee;"><b>'+'★'.repeat(k.rating)+'</b> '+escAttr(k.dish_name||'')+'<br><span style="color:#555">„'+escAttr(String(k.comment).slice(0,160))+'“</span></div>').join(''):'<span style="color:#666;font-size:13px">Keine Kommentare in diesem Zeitraum.</span>')+'</div></div>';
+    +'<div class="kr-c"><div class="kr-ct">GÄSTE-KOMMENTARE (zuletzt)</div>'+(kommentare.length?kommentare.map(k=>'<div style="font-size:13px;padding:6px 0;border-bottom:1px solid #eee;"><b>'+'★'.repeat(k.rating)+'</b> '+escAttr(k.dish_name||'')+'<br><span style="color:#555">„'+escAttr(String(k.comment).slice(0,160))+'“</span></div>').join(''):'<span style="color:#666;font-size:13px">Keine Kommentare in diesem Zeitraum.</span>')+'</div></div>'+kfRepKritik(cur.map(x=>({dish:x.dish_name||'?',store:x.location||'Gast',datum:x.menu_date,v:x.rating,tags:x.quick_tags||[],text:x.comment&&String(x.comment).trim()?[x.comment]:[]})),id=>id,'Gäste');
 }
 
 async function renderOrgReport(){
