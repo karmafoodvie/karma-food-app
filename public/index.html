@@ -1862,7 +1862,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.348';
+const APP_VERSION='6.99.350';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -4197,8 +4197,13 @@ function tabBarHtml(tabs, activeKey, onclickFn, color='var(--green)'){
 // ─── Legacy: DISH_IMAGES (Compat-Alias, nicht mehr befüllen) ─────────────────
 const DISH_IMAGES = {};
 
+window._scoreAt=window._scoreAt||{};
 async function computeAndSaveScore(storeId){
   const today=todayISO();
+  // Ladezeit: die Tageswerte (7 Lese-, 1 Lösch- und 1 Schreibzugriff) nicht bei jedem Öffnen der Startseite neu rechnen, höchstens alle 2 Minuten je Filiale
+  const _k=storeId+'|'+today, _t=window._scoreAt[_k];
+  if(_t && Date.now()-_t<120000) return;
+  window._scoreAt[_k]=Date.now();
   try{
     const [wek,rein,kuehl,disposal,forecast] = await Promise.all([
       api(`wareneingang?store_id=eq.${storeId}&datum=eq.${today}&select=id`).catch(()=>[]),
