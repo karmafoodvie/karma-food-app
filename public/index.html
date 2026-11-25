@@ -1869,7 +1869,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.362';
+const APP_VERSION='6.99.363';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2547,7 +2547,7 @@ async function loginAs(store){
     document.getElementById('nav-org-transporter').style.display='flex';
     document.getElementById('nav-org-kc').style.display='flex';
     document.getElementById('nav-org-feedback').style.display='flex';
-    document.getElementById('nav-kitchen-daily').style.display='flex';
+    document.getElementById('nav-kitchen-daily').style.display='none'; // Daily steckt jetzt in Kassa
     loadOrgRolesRow();
   }
   if(store.id==='1020'){
@@ -2716,8 +2716,8 @@ function goTo(v, noPush=false){
   }
   if(currentStore?.id==='kitchen'){
     // Küche: jeder Menüpunkt hebt sich hervor (Start/Daily teilen sich die Startseite, Daily setzt _homeHideRoles)
-    if(v==='home') navId=window._homeHideRoles?'nav-kitchen-daily':'nav-home';
-    else if(v==='kitchenDaily') navId='nav-kitchen-daily';
+    if(v==='home') navId=window._homeHideRoles?'nav-org-sweets':'nav-home';
+    else if(v==='kitchenDaily') navId='nav-org-sweets';
     else if(v==='sweets') navId='nav-org-sweets';
     else if(v==='kitchen') navId='nav-org-kueche';
     else if(v==='pack' && activePackTab==='transporter') navId='nav-org-transporter';
@@ -5673,7 +5673,7 @@ async function renderHome(){
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
   if(currentStore?.id==='zentrale'){ kfBrauchtInit(); loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
-  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); amzKitchenCard(); }
+  else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); }
   else { loadActiveBroadcastBanner(); loadLieferTracking(); }
   if(currentStore?.id!=='zentrale') checkEssenNotruf();
 }
@@ -11460,14 +11460,7 @@ async function loadOrgRolesRow(){
   }).join('');
   // "Daily" hat keine zugeordnete Person, deshalb als eigene Kachel direkt hier angehängt statt
   // über org_roles — gleicher Stil, nur ohne Namens-Bearbeitung (nichts zum Umbenennen da).
-  if(currentStore?.id==='kitchen'){
-    rolesHtml=`<div>
-      <button class="role-btn-color" onclick="window._homeHideRoles=true;goTo('home')" style="background:#334155;">
-        <span class="role-btn-role">📅 Daily</span>
-        <span class="role-btn-name">Business</span>
-      </button>
-    </div>`+rolesHtml;
-  }
+  // (Daily ist seit 6.99.363 kein eigener Knopf mehr: es steckt als erster Reiter im Bereich "Kassa")
   // Grundreinigung (18.08.26): kein eigener Button mehr hier — läuft jetzt als Tab innerhalb
   // der "Kassa"-Kachel (vormals Sweets/Team), da Organisation dieselbe Kachel ebenfalls sieht
   // und darüber weiterhin read-only Zugriff hat.
@@ -22986,7 +22979,8 @@ async function renderSweets(){
     const col=TEAMTAB_COLORS[key];
     return `<button class="cl-tab" onclick="switchTeamTab('${key}')" style="border-color:${col};font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;${active?`background:${col};color:#fff;`:`background:${col}15;color:${col};`}">${label}</button>`;
   };
-  let tabsHtml=`<div class="cl-tabs">${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Rezepte')}${ttab('grundreinigung','🧹 Grundreinigung')}${ttab('bestellen','📦 Bestellen')}${ttab('stadtgemeinde','🏛️ Stadtgemeinde')}</div>`;
+  const dailyTab=currentStore?.id==='kitchen'?`<button class="cl-tab" onclick="window._homeHideRoles=true;goTo('home')" style="border-color:#334155;font-family:'Boldonse',sans-serif;font-weight:400;letter-spacing:0.3px;line-height:1.4;background:#33415515;color:#334155;">📅 Daily</button>`:'';
+  let tabsHtml=`<div class="cl-tabs">${dailyTab}${ttab('sweets','🍰 Sweets')}${ttab('produktion','🫖 Rezepte')}${ttab('grundreinigung','🧹 Grundreinigung')}${ttab('bestellen','📦 Bestellen')}${ttab('stadtgemeinde','🏛️ Stadtgemeinde')}</div>`;
 
   const stores=await api('stores?select=id,name&order=id');
   // WICHTIG (korrigiert): Anders als beim Transporter packt das Sweets-Team AM SELBEN TAG ein
@@ -23740,6 +23734,7 @@ async function amzListeHtml(){
       +'<div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:600;" data-no-translate>'+amzEsc(z.name)+' · '+z.menge+'× '+amzEsc(it.artikel)+'</div>'
       +(z.notiz?'<div style="font-size:11.5px;color:#92400E;">📝 '+amzEsc(z.notiz)+'</div>':'')
       +'<div style="font-size:11px;color:var(--muted);">'+(AMZ_STATUS[it.status]||it.status)+(!da&&it.erwartet?' · '+amzEsc(it.erwartet):'')+(da?'':' — noch nicht da, nicht einpacken')+'</div></div>'
+      +(!da?'<button onclick="amzAngekommen('+it.id+')" style="min-height:44px;padding:0 14px;border-radius:10px;border:0;background:#0F6E56;color:#fff;font-weight:700;font-size:13px;font-family:inherit;white-space:nowrap;">✅ Angekommen</button>':'')
       +(da?'<button onclick="amzPack('+it.id+','+i+')" style="min-height:44px;padding:0 14px;border-radius:10px;border:1.5px solid '+(fertig?'#3B6D11':'#F97316')+';background:'+(fertig?'#EAF3DE':'#fff')+';color:'+(fertig?'#3B6D11':'#C2410C')+';font-weight:700;font-size:13px;">'+(fertig?'✓ eingepackt':'Einpacken')+'</button>':'<span style="font-size:11px;color:var(--muted);white-space:nowrap;">wartet</span>')
       +'</div>';
   });
@@ -23773,10 +23768,10 @@ async function amzKitchenCard(){
   }catch(e){ console.error(e); }
 }
 async function amzAngekommen(id){
-  try{ await api('amazon_lieferungen?id=eq.'+id,{method:'PATCH',body:JSON.stringify({status:'zugestellt'})}); showToast('✓ Angekommen — ab jetzt einpackbar'); amzKitchenCard(); }
+  try{ await api('amazon_lieferungen?id=eq.'+id,{method:'PATCH',body:JSON.stringify({status:'zugestellt'})}); showToast('✓ Angekommen — ab jetzt einpackbar'); if(typeof renderPack==='function') renderPack(); }
   catch(e){ showToast('Fehler beim Speichern',true); }
 }
-async function amzPackK(id,i){ await amzPack(id,i); amzKitchenCard(); }
+async function amzPackK(id,i){ await amzPack(id,i); }
 Object.assign(window,{amzPack,amzAngekommen,amzPackK,amzKitchenCard});
 
 // ==== BREITE ANSICHT (Probe) + Design-Feedback ====
