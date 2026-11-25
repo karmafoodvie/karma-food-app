@@ -1869,7 +1869,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.355';
+const APP_VERSION='6.99.356';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -23769,8 +23769,9 @@ Object.assign(window,{amzPack,amzAngekommen,amzPackK,amzKitchenCard});
 // Probe von selbst ab; ab 26.11. fragt ein kleines Fenster (Sterne + altes/neues Design), wie es gefallen hat.
 const KF_WIDE_TAG='2026-11-25', KF_DFB_BIS='2026-12-02';
 (function(){ try{ const q=new URLSearchParams(location.search).get('breit'); if(q==='1') localStorage.setItem('kf_wide_force','1'); if(q==='0') localStorage.removeItem('kf_wide_force'); }catch(e){} })();
-function kfWideAktiv(){ return true; } // fix seit 25.11.26: breite Ansicht ist für die Filialen ab 1100 px Standard (kein Schalter mehr)
-function kfWideTag(){ return false; } // Probe-Schalter entfällt
+function kfHandyModus(){ try{ return localStorage.getItem('kf_ansicht')==='handy'; }catch(e){ return false; } } // pro Gerät wählbar: breit (Standard am Computer) oder Handy-Ansicht
+function kfWideAktiv(){ return !kfHandyModus(); }
+function kfWideTag(){ return true; } // Umschalter Breit/Handy ist am Computer immer da
 (function(){
   const st=document.createElement('style'); st.id='kf-wide-css';
   st.textContent='.kf-top,.kf-cols,.kf-col{display:contents}'
@@ -23787,20 +23788,24 @@ function kfWideTag(){ return false; } // Probe-Schalter entfällt
    +'body.kf-wide .kf-start .badge,body.kf-wide .kf-wrap .badge{display:flex;align-items:center;min-height:44px;font-size:14px !important;padding:0 14px;border-radius:10px}'
    +'body.kf-wide{max-width:none !important}body.kf-wide #bottomnav{max-width:none !important}}';
   document.head.appendChild(st);
+  const sh=document.createElement('style'); sh.id='kf-handy-css';
+  sh.textContent='@media (min-width:700px){body.kf-handy{max-width:480px !important}body.kf-handy #topbar,body.kf-handy #content,body.kf-handy #bottomnav{zoom:1 !important}body.kf-handy #bottomnav{max-width:480px !important}body.kf-handy #content{padding:14px 14px 90px !important}}';
+  document.head.appendChild(sh);
 })();
 function kfWideApply(){
   try{
     const on=kfWideAktiv() && window.innerWidth>=1100 && !!currentStore && currentStore.id!=='zentrale';
     document.body.classList.toggle('kf-wide',on);
+    document.body.classList.toggle('kf-handy',kfHandyModus() && window.innerWidth>=700 && !!currentStore && currentStore.id!=='zentrale');
     if(on){ try{ localStorage.setItem('kf_wide_seen','1'); }catch(e){} }
     let b=document.getElementById('kf-wide-sw');
-    const zeigen=kfWideTag() && window.innerWidth>=1100 && !!currentStore && currentStore.id!=='zentrale';
+    const zeigen=kfWideTag() && window.innerWidth>=700 && !!currentStore && currentStore.id!=='zentrale';
     if(zeigen&&!b){ b=document.createElement('button'); b.id='kf-wide-sw'; b.type='button'; b.onclick=kfWideToggle;
       b.style.cssText='position:fixed;right:12px;bottom:78px;z-index:60;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #0F6E56;background:#fff;color:#0F6E56;font-weight:700;font-size:13px;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer;'; document.body.appendChild(b); }
-    if(b){ b.style.display=zeigen?'block':'none'; b.textContent=kfWideAktiv()?'Ansicht: wie gewohnt':'Ansicht: breit (Probe)'; }
+    if(b){ b.style.display=zeigen?'block':'none'; b.textContent=kfHandyModus()?'Ansicht: breit':'Ansicht: Handy'; }
   }catch(e){}
 }
-function kfWideToggle(){ try{ localStorage.setItem('kf_wide',kfWideAktiv()?'0':'1'); }catch(e){} kfWideApply(); }
+function kfWideToggle(){ try{ if(kfHandyModus()) localStorage.removeItem('kf_ansicht'); else localStorage.setItem('kf_ansicht','handy'); }catch(e){} kfWideApply(); }
 window.addEventListener('resize',()=>{ clearTimeout(window._kfWideT); window._kfWideT=setTimeout(kfWideApply,150); });
 // Feedback-Fenster: nur wer die breite Ansicht gesehen hat, nur einmal pro Gerät, nur nach der Probe
 function kfDfbCheck(){
