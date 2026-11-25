@@ -1862,7 +1862,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.344';
+const APP_VERSION='6.99.345';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5597,7 +5597,7 @@ async function renderHome(){
     `:''}
     ${currentStore?.id==='zentrale'?`
     <div id="kf-braucht"></div>
-    <div onclick="goTo('orgReport')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 0 12px;cursor:pointer;"><span style="font-size:20px;">📊</span><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Report</div><div style="font-size:11px;color:var(--muted);">Mengen, Crew- und Gäste-Bewertung</div></div><span style="color:var(--muted);">→</span></div>
+    <div onclick="goTo('orgReport')" style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 0 12px;cursor:pointer;"><span style="font-size:20px;">📊</span><div style="flex:1;"><div style="font-size:13px;font-weight:700;">Report</div><div style="font-size:11px;color:var(--muted);">Mengen und Feedback (Crew, Gäste)</div></div><span style="color:var(--muted);">→</span></div>
     <div class="kf-org-cols"><div class="kf-org-l">
     <div id="zm-org-host"></div>
     <div id="notstand-zentrale-widget"></div>
@@ -23814,7 +23814,7 @@ async function kfDfbSend(sterne,wahl){
 Object.assign(window,{kfWideApply,kfWideToggle,kfDfbShow,kfDfbSend});
 
 // ==== Organisation: "Mehr"-Fenster (seltener genutzte Bereiche) ====
-const KF_MEHR=[['orgReport','Report (Mengen, Crew, Gäste)','📊'],['management','Operations · Tini','⚙️'],['broadcast','Nachricht an Standorte','✉️'],['teamFeedback','Team-Feedback','⭐'],['menuKontrolle','Menü-Kontrolle','📋'],['zutatenkontrolle','Zutaten-Kontrolle','🥕'],['hygieneauswertung','Hygiene-Auswertung','🧼'],['hygieneSchulung','Hygiene-Schulung','🎓'],['feuerloescher','Feuerlöscher','🧯'],['epochenCheck','Epochen-Check','🗓️'],['forecastAmpel','Forecast-Kontrolle','🚦'],['gerichtFotos','Soll-Fotos Gerichte','📸'],['nutzungsstatistik','Nutzungsstatistik','📊'],['sweets','Sweets','🍰'],['geburtstage','Geburtstage','🎂']];
+const KF_MEHR=[['orgReport','Report (Mengen, Feedback)','📊'],['management','Operations · Tini','⚙️'],['broadcast','Nachricht an Standorte','✉️'],['teamFeedback','Team-Feedback','⭐'],['menuKontrolle','Menü-Kontrolle','📋'],['zutatenkontrolle','Zutaten-Kontrolle','🥕'],['hygieneauswertung','Hygiene-Auswertung','🧼'],['hygieneSchulung','Hygiene-Schulung','🎓'],['feuerloescher','Feuerlöscher','🧯'],['epochenCheck','Epochen-Check','🗓️'],['forecastAmpel','Forecast-Kontrolle','🚦'],['gerichtFotos','Soll-Fotos Gerichte','📸'],['nutzungsstatistik','Nutzungsstatistik','📊'],['sweets','Sweets','🍰'],['geburtstage','Geburtstage','🎂']];
 function kfMehrOpen(){
   if(document.getElementById('kf-mehr')) return;
   const m=document.createElement('div'); m.id='kf-mehr'; m.setAttribute('role','dialog'); m.setAttribute('aria-label','Mehr');
@@ -23906,7 +23906,7 @@ Object.assign(window,{kfRailApply});
    +'@media (min-width:1100px){.kr-kp{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.kr-ch{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}';
   document.head.appendChild(st); })();
 // ==== Organisation: Report-Seite (Mengen · Crew-Bewertung · Gäste-Bewertung; Woche / Monat) ====
-const ORGR={tab:'mengen',per:'woche'};
+const ORGR={tab:'mengen',sub:'crew',per:'woche'};
 function kfRepRange(per){
   const heute=new Date();
   const iso=d=>isoLocal(d);
@@ -24048,21 +24048,23 @@ async function kfRepGaeste(R){
 
 async function renderOrgReport(){
   const el=document.getElementById('v-orgReport'); if(!el) return;
-  const tabs=tabBarHtml([{key:'mengen',label:'📦 Mengen'},{key:'crew',label:'👩‍🍳 Crew'},{key:'gaeste',label:'😋 Gäste'}],ORGR.tab,'orgReportTab','#0F6E56');
+  const tabs=tabBarHtml([{key:'mengen',label:'📦 Mengen'},{key:'feedback',label:'💬 Feedback'}],ORGR.tab,'orgReportTab','#0F6E56');
   const per=[['woche','Letzte Woche'],['monat','Dieser Monat'],['vormonat','Letzter Monat'],['jahr','Jahr '+new Date().getFullYear()]].map(([k,t])=>'<button type="button" onclick="orgReportPer(\''+k+'\')" style="flex:1;min-height:44px;border-radius:10px;border:'+(ORGR.per===k?'2px solid #0F6E56':'1.5px solid var(--border)')+';background:'+(ORGR.per===k?'#E1F5EE':'#fff')+';color:#1a1a18;font-weight:'+(ORGR.per===k?'700':'500')+';font-size:13px;font-family:inherit;cursor:pointer;">'+t+'</button>').join('');
   const R=kfRepRange(ORGR.per);
   el.innerHTML=backToHomeHtml()+pageHeaderHtml('📊','Report',R.label,'#0F6E56')+tabs+'<div style="display:flex;gap:6px;margin:-4px 0 10px;">'+per+'</div><div id="orgr-body"><div style="padding:30px;text-align:center;color:var(--muted);">Wird geladen…</div></div>';
   const tab=ORGR.tab;
   let html='';
-  try{ html= tab==='crew'?await kfRepCrew(R): tab==='gaeste'?await kfRepGaeste(R): await kfRepMengen(R); }catch(e){ console.error('Report',e); html='<div class="kr-c">Der Report konnte nicht erstellt werden.</div>'; }
+  const sub=ORGR.sub; try{ html= tab==='feedback'?(sub==='gaeste'?await kfRepGaeste(R):await kfRepCrew(R)): await kfRepMengen(R); }catch(e){ console.error('Report',e); html='<div class="kr-c">Der Report konnte nicht erstellt werden.</div>'; }
   const body=document.getElementById('orgr-body');
   if(body && ORGR.tab===tab){
-    body.innerHTML=html;
+    const subBar=tab==='feedback'?tabBarHtml([{key:'crew',label:'👩‍🍳 Crew'},{key:'gaeste',label:'😋 Gäste'}],ORGR.sub,'orgReportSub','#0F6E56'):'';
+    body.innerHTML=subBar+html;
   }
 }
 function orgReportTab(t){ ORGR.tab=t; renderOrgReport(); }
+function orgReportSub(t){ ORGR.sub=t; renderOrgReport(); }
 function orgReportPer(p){ ORGR.per=p; renderOrgReport(); }
-Object.assign(window,{renderOrgReport,orgReportTab,orgReportPer});
+Object.assign(window,{renderOrgReport,orgReportTab,orgReportSub,orgReportPer});
 
 
 // Öffentliche Kundenfeedback-Route (?feedback=1): initLogin() bewusst NICHT aufrufen — sonst
