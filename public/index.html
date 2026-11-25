@@ -1862,7 +1862,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.350';
+const APP_VERSION='6.99.351';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -23762,8 +23762,8 @@ Object.assign(window,{amzPack,amzAngekommen,amzPackK,amzKitchenCard});
 // Probe von selbst ab; ab 26.11. fragt ein kleines Fenster (Sterne + altes/neues Design), wie es gefallen hat.
 const KF_WIDE_TAG='2026-11-25', KF_DFB_BIS='2026-12-02';
 (function(){ try{ const q=new URLSearchParams(location.search).get('breit'); if(q==='1') localStorage.setItem('kf_wide_force','1'); if(q==='0') localStorage.removeItem('kf_wide_force'); }catch(e){} })();
-function kfWideAktiv(){ try{ return (todayISO()===KF_WIDE_TAG || localStorage.getItem('kf_wide_force')==='1') && localStorage.getItem('kf_wide')!=='0'; }catch(e){ return false; } }
-function kfWideTag(){ try{ return todayISO()===KF_WIDE_TAG || localStorage.getItem('kf_wide_force')==='1'; }catch(e){ return false; } }
+function kfWideAktiv(){ return true; } // fix seit 25.11.26: breite Ansicht ist für die Filialen ab 1100 px Standard (kein Schalter mehr)
+function kfWideTag(){ return false; } // Probe-Schalter entfällt
 (function(){
   const st=document.createElement('style'); st.id='kf-wide-css';
   st.textContent='.kf-top,.kf-cols,.kf-col{display:contents}'
@@ -23792,6 +23792,7 @@ window.addEventListener('resize',()=>{ clearTimeout(window._kfWideT); window._kf
 // Feedback-Fenster: nur wer die breite Ansicht gesehen hat, nur einmal pro Gerät, nur nach der Probe
 function kfDfbCheck(){
   try{
+    return; // Feedback-Fenster zur Probe entfällt, die breite Ansicht ist jetzt fix
     const t=todayISO();
     if(t<=KF_WIDE_TAG || t>KF_DFB_BIS || !currentStore || currentStore.id==='zentrale') return;
     if(localStorage.getItem('kf_wide_seen')!=='1' || localStorage.getItem('kf_dfb_done')==='1') return;
