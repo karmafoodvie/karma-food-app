@@ -1869,7 +1869,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.368';
+const APP_VERSION='6.99.369';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -6125,7 +6125,7 @@ function renderOrder(){
 
   if(activeOrderTab==='sweets'){
     html+=`<div style="background:#FEF3F7;border:1px solid #F9A8D4;border-radius:8px;padding:8px 12px;margin-top:-4px;margin-bottom:4px;font-size:12px;color:#BE185D;display:flex;align-items:center;gap:6px;">
-      <span>${sweetsOrderLocked()?'🔒':'⏰'}</span><span>${sweetsOrderLocked()?'Sweets-Bestellung ist <strong>seit 14:00 Uhr fix</strong> — die Bestellung selbst ist gesperrt. Etwas vergessen? Unten einen <strong>Nachtrag</strong> schicken.':'Sweets-Bestellung bitte bis <strong>14:00 Uhr</strong> für den nächsten Tag abschicken'}</span>
+      <span>${sweetsOrderLocked()?'🔒':'⏰'}</span><span>${sweetsOrderLocked()?'Sweets-Bestellung ist <strong>seit 14:00 Uhr fix</strong> — die Bestellung selbst ist gesperrt. Etwas vergessen? Unten einen <strong>Nachtrag</strong> schicken.':'Sweets-Bestellung bitte bis <strong>14:00 Uhr</strong> abschicken'}<br>🚚 <strong>Geliefert wird am ${sweetsLieferDatum().lang}</strong></span>
     </div>`;
   }
 
@@ -8833,6 +8833,13 @@ async function sweetsMarkErledigt(){
   }
 }
 Object.assign(window,{sweetsMarkErledigt,sweetsErledigtRefresh});
+// Lieferdatum der Sweets: Bestellung heute (bis 14:00), das Team packt heute, der Transporter liefert am nächsten Werktag
+// (Samstag/Sonntag gibt es keine Sweets-Lieferung, Freitag-Bestellungen kommen am Montag).
+function sweetsLieferDatum(){
+  const d=new Date(); do{ d.setDate(d.getDate()+1); }while([0,6].includes(d.getDay()));
+  return {lang:d.toLocaleDateString('de-AT',{weekday:'long',day:'2-digit',month:'2-digit'}), kurz:d.toLocaleDateString('de-AT',{weekday:'short',day:'2-digit',month:'2-digit'})};
+}
+window.sweetsLieferDatum=sweetsLieferDatum;
 function sweetsOrderLocked(){
   if(activeOrderTab!=='sweets' || currentStore?.id==='zentrale') return false;
   const h=Number(new Intl.DateTimeFormat('en-GB',{hour:'numeric',hourCycle:'h23',timeZone:'Europe/Vienna'}).format(new Date()));
@@ -8940,7 +8947,7 @@ async function submitOrder(){
       const failedNames=failedDeletes.map(aid=>articles.find(a=>a.id===aid)?.name||('Artikel #'+aid)).join(', ');
       showToast(`⚠️ Bitte nochmal prüfen: ${failedNames} — Änderung evtl. nicht angekommen`, true);
     } else {
-      showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!', submissionMarkerFailed);
+      showToast(submissionMarkerFailed?`⚠️ Markierung fehlgeschlagen: ${submissionErrorDetail}`:'✓ '+tab.title+' erfolgreich abgeschickt!'+(activeOrderTab==='sweets'?' Lieferung am '+sweetsLieferDatum().kurz:''), submissionMarkerFailed);
     }
     const goBackToSchichtende=schichtendeReturnFlag;
     const _afterOrder=()=>{ if(goBackToSchichtende) schichtendeContinue(); else goTo('home'); };
@@ -16909,7 +16916,7 @@ async function renderSchichtende(){
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone||_man.has('forecast_menge'), link:'order', orderTab:'forecast', group:'kueche'},
     {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0 || _man.has('beilagen_anpassen'), link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
-    {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone||_man.has('sweets'), link:'order', orderTab:'sweets', group:'bestellungen'},
+    {id:'sweets', label:'Sweets bestellt', sub:'Lieferung am '+sweetsLieferDatum().kurz, done:sweetsDone||_man.has('sweets'), link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone||_man.has('transporter'), link:'order', orderTab:'transporter', group:'bestellungen'},
     ...(isKCDaySchichtende?[{id:'kc', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände der Shop-Produkte', done:kcDone||_man.has('kc'), link:'order', orderTab:'kc', group:'bestellungen'}]:[]),
     {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null, group:'sonstiges', optional:true},
@@ -16926,7 +16933,7 @@ async function renderSchichtende(){
     dailycheck: {emoji:'🌡️', label:'Daily Check-up', sub:'Wareneingang · Kühlung', link:'dailycheck'},
     reinigung_protokoll: {emoji:'🧽', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', link:null},
     uebergabe: {emoji:'✍️', label:'Übergabe-Notiz', sub:'Optional — nur falls es was für die nächste Schicht zu wissen gibt', link:null},
-    sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Bestellung für morgen', link:'order', orderTab:'sweets'},
+    sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Lieferung am '+sweetsLieferDatum().kurz, link:'order', orderTab:'sweets'},
     transporter:{emoji:'🚚', label:'Transporter bestellt', sub:'Verpackungen & Reinigung', link:'order', orderTab:'transporter'},
     kc:         {emoji:'📦', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände Shop-Produkte', link:'order', orderTab:'kc'},
     uebergabe:  {emoji:'✍️', label:'Übergabe-Notiz', sub:'Hinweis für nächste Schicht', link:null}
