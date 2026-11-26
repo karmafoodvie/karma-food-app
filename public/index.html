@@ -19645,7 +19645,7 @@ async function kdSgPopupCheck(force){
     if(!offen.length) return;
     if(offen.every(r=>window._kdSgPopSeen.has(Number(r.id)))) return;
   }
-  if(!force){ try{
+  if(!force && currentStore?.id==='kitchen'){ try{ // Ton nur in der Kitchen (Organisation hat einen eigenen, leisen Hinweis: kdSgOrgPing)
     const k='kf_sg_bing_'+heute; const known=new Set(JSON.parse(localStorage.getItem(k)||'[]'));
     if(offen.some(r=>!known.has(Number(r.id)))){ kfChime(); offen.forEach(r=>known.add(Number(r.id))); localStorage.setItem(k,JSON.stringify([...known])); }
   }catch(e){} }
@@ -19774,8 +19774,21 @@ Object.assign(window,{kdSgSet,kdSgToggle,kdSgReload});
 // ── Globale Online-Bestell-Leiste (12.11.26): in der Kitchen auf JEDER Seite sichtbar, bis alles gepackt ist
 // (Haken im Pop-up) — damit alle mitdenken. Antippen öffnet das Pop-up. Prüft jede Minute; neue Bestellungen
 // öffnen das Pop-up automatisch (kdSgPopupCheck(false)).
+// Organisation: neue Online-Bestellung (Stadtgemeinde & Co.) nur als Ton + kurzer Hinweis, kein Pop-up zum Abhaken (das macht die Kitchen)
+async function kdSgOrgPing(){
+  try{
+    const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0];
+    const d=await sgCall('?action=list&datum='+heute);
+    const rows=(d.bestellungen||[]).filter(r=>r.stelle_id&&!r.storniert);
+    const k='kf_sg_org_'+heute; const first=localStorage.getItem(k)===null; const known=new Set(JSON.parse(localStorage.getItem(k)||'[]'));
+    const neu=rows.filter(r=>!known.has(Number(r.id)));
+    if(neu.length){ rows.forEach(r=>known.add(Number(r.id))); localStorage.setItem(k,JSON.stringify([...known])); if(!first||window._kdSgOrgInit){ kfChime(); showToast('🏛️ Neue Online-Bestellung ('+neu.length+')'); } }
+    window._kdSgOrgInit=true;
+  }catch(e){}
+}
 async function kdSgGlobal(){
   const el=document.getElementById('sg-global'); if(!el) return;
+  if(currentStore?.id==='zentrale'){ el.innerHTML=''; kdSgOrgPing(); return; }
   if(currentStore?.id!=='kitchen'){ el.innerHTML=''; return; }
   try{
     const heute=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().split('T')[0];
