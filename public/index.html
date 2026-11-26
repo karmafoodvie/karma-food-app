@@ -1869,7 +1869,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.365';
+const APP_VERSION='6.99.366';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5364,6 +5364,7 @@ async function renderHome(){
       transporterDone=submittedTabs.has('transporter');
       kcDone=(kcSubToday||[]).length>0;
       sweetsDone=submittedTabs.has('sweets');
+      { const _m=seManuell(); if(_m.has('sweets')) sweetsDone=true; if(_m.has('transporter')) transporterDone=true; if(_m.has('kc')) kcDone=true; if(_m.has('entsorgung')) disposalDone=true; if(_m.has('feedback')) feedbackDoneHome=true; }
 
       // Freitags-Reminder: Forecast für die kommende Woche checken, bevors ins Wochenende geht
       if(dayIdx===4){ // Freitag
@@ -15339,6 +15340,12 @@ const SCHICHTENDE_WIZARD_STEPS={
   transporter:{label:'Transporter bestellen', link:'order', orderTab:'transporter'},
   kc:{label:'Shop Produkte', link:'order', orderTab:'kc'}
 };
+// Schritt gilt als erledigt, sobald man ihn einmal durchlaufen und auf "Weiter" getippt hat (nicht erst beim Abschicken):
+// pro Gerät, Filiale und Tag gemerkt; zeigt sich im Schicht-Abschluss und bei den Chips der Startseite.
+function seManuellKey(){ try{ return 'kf_se_'+(currentStore?.id||'')+'_'+todayISO(); }catch(e){ return 'kf_se_x'; } }
+function seManuell(){ try{ return new Set(JSON.parse(localStorage.getItem(seManuellKey())||'[]')); }catch(e){ return new Set(); } }
+function seMarkieren(id){ try{ const m=seManuell(); m.add(id); localStorage.setItem(seManuellKey(),JSON.stringify([...m])); }catch(e){} }
+window.seManuell=seManuell; window.seMarkieren=seMarkieren;
 function schichtendeOpenStep(i){
   const w=schichtendeWizard; if(!w) return;
   const m=SCHICHTENDE_WIZARD_STEPS[w.ids[i]]; if(!m){ schichtendeWizard=null; schichtendeReturnFlag=false; goTo('schichtende'); return; }
@@ -15376,6 +15383,7 @@ async function schichtendeNextClick(){
     const dirty=[...document.querySelectorAll('#forecast-table-wrap input[data-dish]')].some(i=>i.value!==i.dataset.original);
     if(dirty && !(await kfConfirm('Du hast Änderungen noch nicht gespeichert. Trotzdem weiter?'))) return;
   }
+  if(schichtendeWizard){ const sid=schichtendeWizard.ids[schichtendeWizard.i]; if(sid) seMarkieren(sid); }
   schichtendeContinue();
 }
 window.schichtendeNextClick=schichtendeNextClick;
@@ -16887,16 +16895,17 @@ async function renderSchichtende(){
   const realWeekdaySchichtende=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
   const isKCDaySchichtende=realWeekdaySchichtende===2||realWeekdaySchichtende===4; // Shop-Produkte nur Di & Do
 
+  const _man=seManuell(); // einmal durchlaufen (Weiter getippt) zählt als erledigt
   const schritte=[
-    {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:(wekToday||[]).length>0 && (kuehlToday||[]).length>0, link:'dailycheck', group:'kueche'},
-    {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0, link:'disposal', group:'kueche'},
-    {id:'feedback', label:'Food-Feedback', sub:'Wie hat\'s geschmeckt? Kurz eintragen', done:(feedbackToday||[]).length>0, link:'waehrend', group:'kueche'},
-    {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone, link:'order', orderTab:'forecast', group:'kueche'},
-    {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0, link:'order', orderTab:'kueche', group:'kueche'},
+    {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:((wekToday||[]).length>0 && (kuehlToday||[]).length>0)||_man.has('dailycheck'), link:'dailycheck', group:'kueche'},
+    {id:'entsorgung', label:'Entsorgung eingetragen', sub:'Restmengen aller Gerichte', done:(disposalToday||[]).length>0||_man.has('entsorgung'), link:'disposal', group:'kueche'},
+    {id:'feedback', label:'Food-Feedback', sub:'Wie hat\'s geschmeckt? Kurz eintragen', done:(feedbackToday||[]).length>0||_man.has('feedback'), link:'waehrend', group:'kueche'},
+    {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone||_man.has('forecast_menge'), link:'order', orderTab:'forecast', group:'kueche'},
+    {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0 || _man.has('beilagen_anpassen'), link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
-    {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone, link:'order', orderTab:'sweets', group:'bestellungen'},
-    {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone, link:'order', orderTab:'transporter', group:'bestellungen'},
-    ...(isKCDaySchichtende?[{id:'kc', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände der Shop-Produkte', done:kcDone, link:'order', orderTab:'kc', group:'bestellungen'}]:[]),
+    {id:'sweets', label:'Sweets bestellt', sub:'Bestellung für morgen', done:sweetsDone||_man.has('sweets'), link:'order', orderTab:'sweets', group:'bestellungen'},
+    {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone||_man.has('transporter'), link:'order', orderTab:'transporter', group:'bestellungen'},
+    ...(isKCDaySchichtende?[{id:'kc', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände der Shop-Produkte', done:kcDone||_man.has('kc'), link:'order', orderTab:'kc', group:'bestellungen'}]:[]),
     {id:'uebergabe', label:'Übergabe-Notiz', sub:'Hinweise für die nächste Schicht', done:(uebergabeToday||[]).length>0 && (uebergabeToday[0]?.notiz?.trim()?.length>0), link:null, group:'sonstiges', optional:true},
     {id:'abschluss', label:'Abschluss-Checkliste', sub:`${clDoneCount} von ${clTotal} Punkten — optionale Hilfe`, done:clDoneCount===clTotal && clTotal>0, link:'check', group:'sonstiges', optional:true}
   ];
