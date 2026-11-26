@@ -1869,7 +1869,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.367';
+const APP_VERSION='6.99.368';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5587,7 +5587,7 @@ async function renderHome(){
     <!-- PHASE 3: NACH DER SCHICHT -->
     <div class="section-lbl" style="margin-top:6px;margin-bottom:4px;">🌙 Nach der Schicht</div>
     ${remindersHtml}
-    <div class="kf-wrap" onclick="goTo('schichtende')" style="background:#E0521F;border-radius:12px;padding:10px 14px;cursor:pointer;margin-bottom:6px;">
+    <div class="kf-wrap" onclick="schichtendeStart(schichtendeAlleIds())" style="background:#E0521F;border-radius:12px;padding:10px 14px;cursor:pointer;margin-bottom:6px;">
       <div style="display:flex;align-items:center;justify-content:space-between;">
         <div>
           <div style="font-weight:600;color:#fff;font-size:14px;">🌙 Let's wrap up the shift!</div>
@@ -15354,6 +15354,12 @@ function schichtendeOpenStep(i){
   goTo(m.link);
   window.scrollTo({top:0});
 }
+// Alle Schritte in fester Reihenfolge (Shop Produkte nur Di & Do) — für den Durchlauf "einmal durch alles"
+function schichtendeAlleIds(){
+  const d=new Date().getDay();
+  return ['dailycheck','entsorgung','feedback','forecast_menge','beilagen_anpassen','sweets','transporter','kc'].filter(id=>id!=='kc'||d===2||d===4);
+}
+window.schichtendeAlleIds=schichtendeAlleIds;
 function schichtendeStart(ids){
   const list=(ids||[]).filter(id=>SCHICHTENDE_WIZARD_STEPS[id]);
   if(!list.length){ goTo('schichtende'); return; }
@@ -16957,9 +16963,9 @@ async function renderSchichtende(){
   // OFFENE SCHRITTE — nach Themen gruppiert, damit es nicht wie eine riesige Liste wirkt
   if(open.length>0){
     if(requiredOpen.length>0){
-      const wizIds=requiredOpen.filter(x=>SCHICHTENDE_WIZARD_STEPS[x.id]).map(x=>x.id);
+      const wizIds=schichtendeAlleIds();
       if(wizIds.length && !alreadySubmitted){
-        html+=`<button class="submit-btn" style="margin:0 0 12px;font-size:15px;padding:14px;background:#1a1a18;color:#D4FF3F;" onclick="schichtendeStart(${escAttr(JSON.stringify(wizIds))})">▶ Schritt für Schritt durchführen (${wizIds.length})</button>`;
+        html+=`<button class="submit-btn" style="margin:0 0 12px;font-size:15px;padding:14px;background:#1a1a18;color:#D4FF3F;" onclick="schichtendeStart(${escAttr(JSON.stringify(wizIds))})">▶ Alle Schritte nacheinander durchgehen (${wizIds.length})</button>`;
       }
       html+=`<div style="font-size:12px;font-weight:600;color:var(--sub);margin:2px 0 2px;">🔓 Das fehlt noch (${requiredOpen.length}):</div>`;
     }
