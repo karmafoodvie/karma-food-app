@@ -1922,7 +1922,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.385';
+const APP_VERSION='6.99.386';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -18965,6 +18965,15 @@ async function renderSamosaTableHtml(){
   // auch eine Menge bekommt, nicht nur die Stores.
   const stores=await api('stores?select=id,name&order=id').catch(()=>[]);
   const storeList=stores.filter(s=>s.id!=='zentrale' && s.id!=='1070');
+  // Freitags (Bestelltag) einmal pro Tag direkt auf die kommende Woche springen — die Bestellung am Freitag gilt immer für die
+  // nächste Woche; wer im Fenster der laufenden Woche ausfüllt, bestellt versehentlich für die falsche Woche (Rückmeldung 27.11.26).
+  { const _td=todayISO();
+    if(new Date().getDay()===5 && _samosaAutoDay!==_td){
+      _samosaAutoDay=_td; _samosaWeekOffset=1;
+      const _lk=await api('samosa_lock?select=locked_until_monday&order=locked_until_monday.desc&limit=1').catch(()=>[]);
+      const _lu=_lk?.[0]?.locked_until_monday;
+      if(_lu && getWeekdayDates(1)[1]<=_lu) _samosaWeekOffset=2;
+    } }
   const weekDates=getWeekdayDates(_samosaWeekOffset);
   const todayWeekday=_samosaWeekOffset===0?new Date().getDay():-1; // "heute"-Hervorhebung nur in der aktuellen Woche
   const WD_LABEL={1:'Montag',2:'Dienstag',3:'Mittwoch',4:'Donnerstag'};
@@ -19058,6 +19067,8 @@ async function renderSamosaTableHtml(){
   });
   summary+=`Gesamt Woche: ${weekTotal}`;
   const summaryEsc=summary.replace(/`/g,'\\`').replace(/</g,'&lt;');
+  const _samWarn=(_samosaWeekOffset||0)<1?'<div style="background:#FEF3C7;border:1px solid #FBBF24;border-radius:10px;padding:9px 12px;margin-top:14px;font-size:12px;color:#78350F;">⚠️ Das ist nicht die kommende Woche. Die Bestellung für den Produzenten gilt für die <strong>nächste Woche</strong>. <span onclick="_samosaWeekOffset=1;renderPack();" style="text-decoration:underline;font-weight:700;cursor:pointer;">Zur nächsten Woche →</span></div>':'';
+  html+=_samWarn;
   html+=`<div style="margin-top:14px;">
     <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">📋 Für den Produzenten</div>
     <textarea id="samosa-copy-text" readonly style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;font-size:13px;min-height:110px;resize:vertical;font-family:inherit;box-sizing:border-box;background:var(--card);">${summary}</textarea>
@@ -19072,6 +19083,10 @@ async function renderSamosaTableHtml(){
 async function copySamosaText(){
   const el=document.getElementById('samosa-copy-text');
   if(!el) return;
+  if((_samosaWeekOffset||0)<1){
+    const _wd=getWeekdayDates(_samosaWeekOffset||0), _f=d=>d.slice(8,10)+'.'+d.slice(5,7);
+    if(!(await kfConfirm('Du kopierst die Woche '+_f(_wd[1])+'-'+_f(_wd[4])+'. Das ist nicht die kommende Woche. Die Bestellung am Freitag gilt für die nächste Woche. Trotzdem kopieren?'))) return;
+  }
   navigator.clipboard?.writeText(el.value).then(()=>showToast('✔ In Zwischenablage kopiert')).catch(()=>{
     el.select(); document.execCommand('copy'); showToast('✔ Kopiert');
   });
