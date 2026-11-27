@@ -1922,7 +1922,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.383';
+const APP_VERSION='6.99.384';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5520,9 +5520,8 @@ async function renderHome(){
   el.innerHTML=`
     ${enteredStoreViaOrg && currentStore?.id!=='zentrale'?`<div onclick="backToOrg()" style="display:flex;align-items:center;gap:8px;background:#2B3A67;color:#fff;border-radius:10px;padding:9px 14px;margin:0 0 8px;cursor:pointer;font-size:12.5px;font-weight:600;">← Zurück zu Organisation<span style="margin-left:auto;opacity:0.8;font-weight:400;">gerade in: ${currentStore?.name||''}</span></div>`:''}
     <div class="kf-greeting" style="font-size:14px;font-weight:600;padding:2px 0;">Guten Tag 👋 <span style="font-size:11px;color:var(--muted);font-weight:400;">${today}</span></div>
-    ${feiertagBannerHtml()}
-    ${messeInfoHtml}
-    ${messeBewertungHtml}
+    <div class="kf-info">${feiertagBannerHtml()}${messeInfoHtml}</div>
+    <div class="kf-todo">${messeBewertungHtml}</div>
     <div id="lieferung-track-widget"></div>
     <div id="broadcast-banner-widget"></div>
     ${(()=>{ const n=new Date(); const mins=n.getHours()*60+n.getMinutes(); const inWindow=mins>=765&&mins<=795; /* 12:45–13:15 */
@@ -5533,7 +5532,7 @@ async function renderHome(){
     </div>
     `:''; })()}
     ${(currentStore?.id!=='zentrale' && homeMode!=='kontrolle' && (currentStore?.id!=='kitchen' || window._homeHideRoles))?'<div class="kf-top">':''}
-    ${monthlyCleaningHtml}
+    ${monthlyCleaningHtml?'<div class="kf-todo">'+monthlyCleaningHtml+'</div>':''}
     ${(()=>{ /* 10.11.26: Online-Bestellungen (Stadtgemeinde · KH · Essl · Baubehörde) für Kitchen + Stadtplatz: Status-Zeile + Pop-up */
       const sgShow=currentStore?.id==='kitchen' && !!window._homeHideRoles; // nur im Daily (Wunsch 10.11.)
       if(sgShow) setTimeout(()=>{ kdSgReload().catch(()=>{}); kdSgPopupCheck(false); },600);
@@ -5558,7 +5557,7 @@ async function renderHome(){
     </div>
     `:''}
     ${currentStore?.id!=='zentrale' && currentStore?.id!=='kitchen' && new Date().getDay()===5?`
-    <div onclick="goTo('freitagCheckliste')" style="background:linear-gradient(135deg,#D4FF3F,#B8E62E);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <div class="kf-todo" onclick="goTo('freitagCheckliste')" style="background:linear-gradient(135deg,#D4FF3F,#B8E62E);border-radius:14px;padding:14px 16px;margin-bottom:14px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
       <div style="font-size:14px;font-weight:800;color:#1a1a18;">🎉 It's Friday — yay!</div>
       <div style="font-size:12px;color:#3a3a35;margin-top:3px;">Let's get our store prepped for the weekend, woohoo 🧹</div>
       <div style="font-size:11px;color:#3a3a35;margin-top:6px;text-decoration:underline;">Freitags-Checkliste öffnen →</div>
@@ -5724,6 +5723,7 @@ async function renderHome(){
   if(currentStore?.id!=='zentrale'&&currentStore?.id!=='kitchen') el.innerHTML+=soLaeuftsHtml(false);
   translateEl(el);
   setTimeout(applyHomeGrid, 50);
+  try{ kfHomeWide(); }catch(e){ console.error(e); }
   if(currentStore?.id==='zentrale'){ kfBrauchtInit(); loadOrgRolesRow(); loadOrgDashboard(); loadMenuKontrolleBadge(); renderNotrufZentrale(); renderNotstandZentrale(); loadZmOrg(); }
   else if(currentStore?.id==='kitchen'){ loadOrgRolesRow(); loadLieferTracking(); }
   else { loadActiveBroadcastBanner(); loadLieferTracking(); }
@@ -24067,8 +24067,89 @@ function kfWideApply(){
     if(zeigen&&!b){ b=document.createElement('button'); b.id='kf-wide-sw'; b.type='button'; b.onclick=kfWideToggle;
       b.style.cssText='position:fixed;right:12px;bottom:78px;z-index:60;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #0F6E56;background:#fff;color:#0F6E56;font-weight:700;font-size:13px;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer;'; document.body.appendChild(b); }
     if(b){ b.style.display=zeigen?'block':'none'; b.textContent=kfHandyModus()?'Ansicht: breit':'Ansicht: Handy'; }
+    const _prev=window._kfHwState; window._kfHwState=on; // Startseite wird je nach Ansicht anders aufgebaut
+    if(_prev!==undefined && _prev!==on && typeof currentView!=='undefined' && currentView==='home' && typeof renderHome==='function') renderHome();
   }catch(e){}
 }
+// ── Startseite Breitansicht (27.11.26): Begrüßung + Notruf oben, Check-up/Abschluss links, Während der Schicht rechts, "Heute wichtig" unten (Zu erledigen / Infos zum Wegklicken)
+function kfHwKey(){ return 'kf_hw_x_'+todayISO(); }
+function kfHwGeschlossen(){ try{ return JSON.parse(localStorage.getItem(kfHwKey())||'[]'); }catch(e){ return []; } }
+function kfHwSchliessen(k){ try{ const a=kfHwGeschlossen(); if(!a.includes(k)){ a.push(k); localStorage.setItem(kfHwKey(),JSON.stringify(a)); } }catch(e){} }
+function kfHomeWide(){
+  const el=document.getElementById('v-home');
+  if(!el || !document.body.classList.contains('kf-wide') || !el.querySelector('.kf-col')) return;
+  el.querySelectorAll('#kf-hello,#kf-hw').forEach(x=>x.remove());
+  const cols=el.querySelector('.kf-cols'); if(!cols) return;
+  const g=el.querySelector('.kf-greeting'), sos=el.querySelector('.kf-top>div[style*="display:flex;gap:8px"]');
+  let chip=null;
+  if(g){ const h=document.createElement('div'); h.id='kf-hello'; g.parentNode.insertBefore(h,g); h.appendChild(g);
+    chip=document.createElement('button'); chip.type='button'; chip.id='kf-hw-chip'; chip.onclick=()=>{ const x=document.getElementById('kf-hw'); if(x) x.scrollIntoView({behavior:'smooth',block:'start'}); };
+    h.appendChild(chip); if(sos) h.appendChild(sos); }
+  const hw=document.createElement('section'); hw.id='kf-hw'; hw.setAttribute('aria-label','Heute wichtig');
+  hw.innerHTML='<div><div class="kf-hw-l">Zu erledigen <span class="kf-hw-n" id="kf-hw-n1">0</span></div><div id="kf-hw-todo"></div><div class="kf-hw-leer" id="kf-hw-l1">Alles erledigt. Danke!</div></div>'
+    +'<div><div class="kf-hw-l">Infos <span class="kf-hw-n kf-hw-n0" id="kf-hw-n2">0</span></div><div id="kf-hw-info"></div><div class="kf-hw-leer" id="kf-hw-l2">Keine Infos.</div></div>';
+  cols.parentNode.insertBefore(hw,cols.nextSibling);
+  const todo=hw.querySelector('#kf-hw-todo'), info=hw.querySelector('#kf-hw-info');
+  const bw=el.querySelector('#broadcast-banner-widget'); if(bw) todo.appendChild(bw);
+  el.querySelectorAll('.kf-todo').forEach(x=>{ if(!hw.contains(x)) todo.appendChild(x); });
+  const closed=kfHwGeschlossen();
+  el.querySelectorAll('.kf-info').forEach(w=>{
+    [...w.children].forEach(n=>{
+      const key=(n.textContent||'').replace(/\s+/g,' ').trim().slice(0,60); if(!key) return;
+      if(closed.includes(key)) return;
+      const row=document.createElement('div'); row.className='kf-hw-row'; row.appendChild(n);
+      const x=document.createElement('button'); x.type='button'; x.className='kf-hw-x'; x.setAttribute('aria-label','Ausblenden'); x.textContent='✕';
+      x.onclick=()=>{ kfHwSchliessen(key); row.remove(); upd(); };
+      row.appendChild(x); info.appendChild(row);
+    });
+    w.remove();
+  });
+  function upd(){
+    let t=0; [...todo.children].forEach(c=>{ if(c.id==='broadcast-banner-widget') t+=c.children.length; else if((c.textContent||'').trim()) t+=1; });
+    const i=info.children.length;
+    hw.querySelector('#kf-hw-n1').textContent=t; hw.querySelector('#kf-hw-n2').textContent=i;
+    hw.querySelector('#kf-hw-n1').style.display=t?'':'none';
+    hw.querySelector('#kf-hw-l1').style.display=t?'none':'block'; hw.querySelector('#kf-hw-l2').style.display=i?'none':'block';
+    hw.style.display=(t||i)?'':'none';
+    if(chip){ chip.style.display=t?'inline-flex':'none'; chip.textContent='⚑ '+t+' zu erledigen ↓'; }
+  }
+  upd();
+  try{ new MutationObserver(upd).observe(todo,{childList:true,subtree:true,characterData:true}); }catch(e){}
+  const top=el.querySelector('.kf-top');
+  if(top){ const sicht=[...top.children].some(c=>(c.textContent||'').trim() && getComputedStyle(c).display!=='none'); if(!sicht) top.style.display='none'; }
+}
+window.kfHomeWide=kfHomeWide;
+(function(){
+  const st=document.createElement('style'); st.id='kf-hw-css';
+  st.textContent=`@media (min-width:1100px){
+body.kf-wide .kf-cols{grid-template-columns:minmax(0,5fr) minmax(0,7fr);grid-template-areas:"a b" "c b";grid-template-rows:auto 1fr;gap:10px 14px}
+body.kf-wide .kf-col:nth-child(1){grid-area:a}body.kf-wide .kf-col:nth-child(2){grid-area:b}body.kf-wide .kf-col:nth-child(3){grid-area:c}
+body.kf-wide .kf-col{background:var(--card,#fff);border:1px solid var(--border);border-radius:14px;padding:10px 12px}
+body.kf-wide .kf-col:nth-child(1)::before{content:"Check-up"}body.kf-wide .kf-col:nth-child(3)::before{content:"Abschluss"}
+body.kf-wide .kf-col:nth-child(1)::before,body.kf-wide .kf-col:nth-child(3)::before{display:block;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--sub);margin:0 0 6px}
+body.kf-wide .kf-top{grid-template-columns:minmax(0,1fr)}
+body.kf-wide .kf-top>.kf-stepper,body.kf-wide .kf-top>div:has(>div>.kf-step){display:none!important}
+body.kf-wide #kf-hello{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px;margin:0 0 10px}
+body.kf-wide #kf-hello>.kf-greeting{margin:0}
+body.kf-wide #kf-hw-chip{margin-left:auto;align-items:center;min-height:40px;padding:0 14px;border:0;border-radius:999px;background:#E94E1B;color:#fff;font:700 13px inherit;font-family:inherit;cursor:pointer}
+body.kf-wide #kf-hello>div[style*="display:flex;gap:8px"]{margin:0!important;flex:0 1 auto}
+body.kf-wide #kf-hw{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px 28px;background:var(--card,#fff);border:1px solid var(--border);border-radius:14px;padding:12px;margin-top:10px}
+body.kf-wide .kf-hw-l{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--sub);margin:0 0 6px;display:flex;align-items:center;gap:8px}
+body.kf-wide .kf-hw-n{background:#E94E1B;color:#fff;border-radius:999px;font-size:11px;padding:0 7px;letter-spacing:0}
+body.kf-wide .kf-hw-n0{background:var(--border);color:var(--sub)}
+body.kf-wide .kf-hw-leer{display:none;color:var(--sub);font-size:12.5px;padding:4px 0}
+body.kf-wide #kf-hw [style*="background"]:not(button):not(span){background:transparent!important;border:0!important;box-shadow:none!important}
+body.kf-wide #kf-hw-todo>*{margin:0 0 6px!important}
+body.kf-wide #kf-hw #kf-hw-todo>:not(:empty){border-left:3px solid #E94E1B!important;padding-left:10px!important}
+body.kf-wide #kf-hw-todo>:empty{display:none}
+body.kf-wide #kf-hw-todo>*>*{margin-bottom:6px!important}
+body.kf-wide .kf-hw-row{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-top:1px solid var(--border)}
+body.kf-wide .kf-hw-row:first-child{border-top:0;padding-top:0}
+body.kf-wide .kf-hw-row>:first-child{flex:1;min-width:0;margin:0!important;padding:0!important;color:var(--sub)!important;font-size:12.5px!important}
+body.kf-wide .kf-hw-x{width:34px;height:34px;flex:none;border:0;background:transparent;color:var(--sub);font-size:15px;border-radius:8px;cursor:pointer}
+}`;
+  document.head.appendChild(st);
+})();
 function kfWideToggle(){ try{ if(kfHandyModus()) localStorage.removeItem('kf_ansicht'); else localStorage.setItem('kf_ansicht','handy'); }catch(e){} kfWideApply(); }
 window.addEventListener('resize',()=>{ clearTimeout(window._kfWideT); window._kfWideT=setTimeout(kfWideApply,150); });
 // Feedback-Fenster: nur wer die breite Ansicht gesehen hat, nur einmal pro Gerät, nur nach der Probe
