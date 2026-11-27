@@ -344,6 +344,10 @@ button,[onclick],a,summary,label,input,select{touch-action:manipulation;-webkit-
 .gw-note.bad{background:#FDECEA;color:#B3261E}
 .gw-send{margin-top:10px;width:100%;min-height:50px;border:0;border-radius:13px;background:var(--green);color:#fff;font-weight:700;font-size:15px;cursor:pointer}
 .gw-send:disabled{opacity:.4;cursor:not-allowed}
+/* Catering-Zahl am Küchen-Reiter (27.11.26) */
+.kf-cat-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#EF4444;color:#fff;font-family:'Geist',sans-serif;font-size:11px;font-weight:700;margin-left:3px;vertical-align:middle;animation:kfCatGlow 1.8s ease-in-out infinite}
+@keyframes kfCatGlow{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0)}}
+@media (prefers-reduced-motion:reduce){.kf-cat-badge{animation:none}}
 /* ===== Anpassbar an den Bildschirm ===== */
 /* Handy bleibt schmal; Tablets und Computer nutzen die Breite (Karten stehen dann zweispaltig) */
 @media (min-width:700px){ body{max-width:860px;} #bottomnav{max-width:860px;} #content{padding:16px 20px 90px;} }
@@ -1918,7 +1922,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.374';
+const APP_VERSION='6.99.375';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -20282,13 +20286,15 @@ async function renderKitchen(){
   // Tab-Labels: Forecast zeigt immer die korrekte Woche mit Datum Mo–Fr
   const forecastDateRange=new Date(nwWeekDates[1]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'})+'–'+new Date(nwWeekDates[5]+'T00:00:00').toLocaleDateString('de-AT',{day:'2-digit',month:'2-digit'});
   const forecastTabLabel='📅 '+(kitchenWeekOffset===0?'Diese Woche':'Nächste Woche')+'<br><span style="font-size:10px;font-weight:400;">'+forecastDateRange+'</span>';
+  let _catN=0; try{ const _cr=await api(`caterings?status=eq.aktiv&datum=gte.${todayISO()}&select=id`).catch(()=>[]); _catN=(_cr||[]).length; }catch(e){}
+  const catTabLabel='🍽️ Catering'+(_catN?' <span class="kf-cat-badge">'+_catN+'</span>':'');
   const menuTabLabel='🗓️ Menüs<br><span style="font-size:10px;font-weight:400;">Woche '+CURRENT_MENU_WOCHE+'</span>';
   const morgenTabLabel='🌅 '+nextCookDayLabel+(hasUnseenMorgenChanges?' <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#EF4444;margin-left:2px;vertical-align:middle;"></span>':'');
   // 29.09.26 (Wunsch Tini, Testversion): "Entsorgung"-Tab hier raus (steht eh rückwirkend schon
   // unter "Heute"/Morgen-Tab) und durch die neue wöchentliche Transgourmet-Bestellung ersetzt —
   // Küche trägt IST-Bestand ein (reine Zählung, keine automatische Mengenberechnung), analog zum
   // bestehenden Küchenlager-Muster. Weiterleitung an Simone ist noch nicht angebunden (folgt später).
-  html+=`<div class="cl-tabs">${ktab('morgen',morgenTabLabel)}${ktab('plan',menuTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('tgbestellung','🚛 Wochenbestellung')}${ktab('monitoring','🌡️ Monitoring')}</div>`;
+  html+=`<div class="cl-tabs">${ktab('morgen',morgenTabLabel)}${ktab('plan',menuTabLabel)}${ktab('catering',catTabLabel)}${ktab('supply','🥗 Beilagen')}${ktab('schrankerl','🥡 Schrankerl')}${ktab('tgbestellung','🚛 Wochenbestellung')}${ktab('monitoring','🌡️ Monitoring')}</div>`;
 
   if(kitchenTab==='daily'){
     // Daily Business — Store-Ansicht für Kassenbereich (Während der Schicht)
@@ -20402,6 +20408,8 @@ async function renderKitchen(){
       html+=`</div>`;
     });
   }
+
+  if(kitchenTab==='catering'){ window._kitchenTabsHtml=html; await renderCatering(); return; }
 
   if(kitchenTab==='supply'){
     html+=await renderBeilagenTableHtml('kueche');
@@ -22459,13 +22467,15 @@ const CATERING_DEFAULT_HINWEIS='NUR IN PLASTIKBOXEN GELIEFERT!! KEIN EQUIPMENT! 
 let _cateringList=[];
 function cateringDateLabel(d){ return new Date(d+'T00:00:00').toLocaleDateString('de-AT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); }
 function cateringCanEdit(){ return currentStore?.id==='zentrale'||currentStore?.id==='kitchen'; }
+// Catering läuft als eigene Ansicht (v-catering) UND als Reiter in der Küche (Zahl am Reiter, 27.11.26)
+function _catEmbedded(){ return currentView==='kitchen' && kitchenTab==='catering'; }
+function _catEl(){ return document.getElementById(_catEmbedded()?'v-kitchen':'v-catering'); }
 async function renderCatering(){
-  const el=document.getElementById('v-catering');
+  const el=_catEl();
   const today=todayISO();
   const rows=await api(`caterings?status=eq.aktiv&datum=gte.${today}&select=*&order=datum.asc`).catch(()=>[]);
   _cateringList=rows||[];
-  let html=backToHomeHtml();
-  html+=pageHeaderHtml('🍽️','Catering','Produktionspläne — ersetzt die PDFs in der WhatsApp-Gruppe','#0F6E56');
+  let html=_catEmbedded()?(window._kitchenTabsHtml||''):(backToHomeHtml()+pageHeaderHtml('🍽️','Catering','Produktionspläne — ersetzt die PDFs in der WhatsApp-Gruppe','#0F6E56'));
   if(cateringCanEdit()) html+=`<div style="display:flex;gap:8px;margin-bottom:14px;"><button onclick="showCateringForm()" style="flex:1;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;">➕ Neues Catering</button><button onclick="document.getElementById('cat-pdf-in').click()" title="Produktionsplan als PDF hochladen" style="flex:1;padding:11px;border:1.5px solid #0F6E56;border-radius:10px;background:#fff;color:#0F6E56;font-size:13.5px;font-weight:700;cursor:pointer;">📤 PDF hochladen</button><input id="cat-pdf-in" type="file" accept="application/pdf,.pdf" style="display:none;" onchange="cateringImportPdf(this)"></div>`;
   if(!_cateringList.length) html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine anstehenden Caterings.</div>`;
   _cateringList.forEach(c=>{
@@ -22531,9 +22541,9 @@ function cateringText(c){
 }
 function showCateringDetail(id){
   const c=_cateringList.find(x=>x.id===id); if(!c) return;
-  const el=document.getElementById('v-catering');
+  const el=_catEl();
   const row=(l,v)=>v?`<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><div style="width:105px;color:var(--muted);flex-shrink:0;">${l}</div><div style="flex:1;font-weight:500;">${escAttr(String(v))}</div></div>`:'';
-  let html=`<div onclick="renderCatering()" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">‹ Zurück zur Catering-Liste</div>`;
+  let html=(_catEmbedded()?(window._kitchenTabsHtml||''):'')+`<div onclick="renderCatering()" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">‹ Zurück zur Catering-Liste</div>`;
   html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);">CATERING PRODUKTIONSPLAN</div><div style="font-size:22px;font-weight:800;margin-bottom:10px;">${escAttr(c.kunde)}</div>`;
   html+=`<div class="card" style="padding:6px 14px;margin-bottom:10px;">${row('Veranstaltungsdatum',cateringDateLabel(c.datum))}${row('Ort',c.ort)}${row('Ankunft Location',c.ankunft)}${row('Kontakt vor Ort',c.kontakt)}${row('Personen',c.personen?c.personen+' PAX':'')}</div>`;
   if(c.hinweis) html+=`<div style="background:#FEF2F2;border:1.5px solid #DC2626;color:#991B1B;border-radius:10px;padding:10px 12px;font-size:12.5px;font-weight:800;margin-bottom:12px;">⚠️ ${escAttr(c.hinweis)}</div>`;
