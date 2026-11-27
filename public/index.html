@@ -1922,7 +1922,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.380';
+const APP_VERSION='6.99.381';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5445,14 +5445,7 @@ async function renderHome(){
         const monthKey=now.toISOString().slice(0,7); // 'YYYY-MM'
         const monthlyDone=await api(`monthly_cleaning_done?store_id=eq.${currentStore.id}&month_key=eq.${monthKey}&select=id`).catch(()=>[]);
         if(!(monthlyDone||[]).length){
-          monthlyCleaningHtml=`<div class="kf-reminder" style="background:#F0FDFA;border:1px solid #5EEAD4;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-              <span style="font-size:16px;">🧽</span>
-              <span style="font-size:13px;font-weight:600;color:#0F766E;">Monatliche Tiefenreinigung fällig</span>
-            </div>
-            <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">☕ Kaffeemaschine reinigen · 🍲 Bain Maries entkalken · 🧊 Kühlschrank enteisen · 🪴 Pflanzen gießen</div>
-            <button onclick="markMonthlyCleaningDone()" style="width:100%;background:#0D9488;color:#fff;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;">✓ Erledigt für diesen Monat</button>
-          </div>`;
+          monthlyCleaningHtml='<div class="kf-reminder" style="background:#F0FDFA;border:1px solid #5EEAD4;border-radius:10px;padding:8px 12px;margin-bottom:8px;font-size:12.5px;color:#0F766E;"><span style="font-weight:700;">🧽 Monatliche Tiefenreinigung fällig.</span> <span style="color:var(--sub);">Am Schichtende bei „Let\'s wrap up the shift“ abhaken.</span></div>';
         }
       }
     }catch(e){console.error(e);}
@@ -5776,12 +5769,36 @@ function toggleDishAllergeneCard(i){
 window.toggleDishAllergeneCard=toggleDishAllergeneCard;
 
 
+// Monatliche Tiefenreinigung (27.11.26, Wunsch Tini): Hinweis bei Start your shift, Checkliste mit "Erledigt" bei End your shift
+const MONTHLY_CLEAN_ITEMS=['☕ Kaffeemaschine reinigen','🍲 Bain Maries entkalken','🧊 Kühlschrank enteisen','🪴 Pflanzen gießen'];
+async function monthlyCleaningDue(){
+  try{
+    if(!currentStore||currentStore.id==='zentrale'||currentStore.id==='kitchen') return false;
+    const now=new Date(), last=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+    if(now.getDate()<last-6) return false;
+    const mk=now.toISOString().slice(0,7);
+    const d=await api('monthly_cleaning_done?store_id=eq.'+currentStore.id+'&month_key=eq.'+mk+'&select=id').catch(()=>[]);
+    return !(d||[]).length;
+  }catch(e){ return false; }
+}
+function tiefenChecklistHtml(){
+  const t=window._tdTicks||[]; const ok0=MONTHLY_CLEAN_ITEMS.every((x,i)=>t[i]);
+  return '<div style="margin-top:10px;border-top:0.5px solid var(--border);padding-top:8px;">'
+    +MONTHLY_CLEAN_ITEMS.map((x,i)=>'<label style="display:flex;align-items:center;gap:12px;min-height:44px;cursor:pointer;"><input type="checkbox" class="td-cb" '+(t[i]?'checked ':'')+'onchange="tdUpdate()" style="width:22px;height:22px;accent-color:#0D9488;flex-shrink:0;"><span style="font-size:14px;">'+x+'</span></label>').join('')
+    +'<button id="td-btn" onclick="markMonthlyCleaningDone()" '+(ok0?'':'disabled ')+'style="width:100%;margin-top:8px;background:#0D9488;color:#fff;border:none;border-radius:10px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;opacity:'+(ok0?'1':'.45')+';">✓ Tiefenreinigung erledigt</button></div>';
+}
+function tdUpdate(){
+  const all=[...document.querySelectorAll('.td-cb')]; window._tdTicks=all.map(x=>x.checked);
+  const ok=all.length>0&&all.every(x=>x.checked); const b=document.getElementById('td-btn');
+  if(b){ b.disabled=!ok; b.style.opacity=ok?'1':'.45'; }
+}
+window.tdUpdate=tdUpdate;
 async function markMonthlyCleaningDone(){
   const monthKey=new Date().toISOString().slice(0,7);
   try{
     await api('monthly_cleaning_done',{method:'POST',body:JSON.stringify([{store_id:currentStore.id,month_key:monthKey}])});
-    showToast('✓ Danke — bis nächsten Monat!');
-    renderHome();
+    showToast('✓ Danke — bis nächsten Monat!'); window._tdTicks=[];
+    if(currentView==='schichtende') renderSchichtende(); else renderHome();
   }catch(e){console.error(e);showToast('Fehler beim Speichern: '+(e?.message||String(e)).slice(0,120),true);}
 }
 window.markMonthlyCleaningDone=markMonthlyCleaningDone;
@@ -17002,6 +17019,7 @@ async function renderSchichtende(){
   const realWeekdaySchichtende=new Date().getDay(); // 0=So,1=Mo,2=Di,3=Mi,4=Do,5=Fr,6=Sa
   const isKCDaySchichtende=realWeekdaySchichtende===2||realWeekdaySchichtende===4; // Shop-Produkte nur Di & Do
 
+  const tiefenDue=await monthlyCleaningDue();
   const _man=seManuell(); // einmal durchlaufen (Weiter getippt) zählt als erledigt
   const schritte=[
     {id:'dailycheck', label:'Daily Check-up vollständig', sub:'Wareneingang & Kühlung', done:((wekToday||[]).length>0 && (kuehlToday||[]).length>0)||_man.has('dailycheck'), link:'dailycheck', group:'kueche'},
@@ -17010,6 +17028,7 @@ async function renderSchichtende(){
     {id:'forecast_menge', label:'Portionsmengen für morgen', sub:'Forecast anpassen/bestätigen', done:forecastDone||_man.has('forecast_menge'), link:'order', orderTab:'forecast', group:'kueche'},
     {id:'beilagen_anpassen', label:'Saucen, Limetten & Dressings', sub:'Nur bei Bedarf anpassen — Grundmenge gilt sonst automatisch', done:(beilagenAdjustedTomorrow||[]).length>0 || (beilagenReviewedToday||[]).length>0 || _man.has('beilagen_anpassen'), link:'order', orderTab:'kueche', group:'kueche'},
     {id:'reinigung_protokoll', label:'Reinigung & Desinfektion', sub:'Endreinigung bestätigen', done:!!(reinToday||[])[0]?.reinigung_erledigt && !!(reinToday||[])[0]?.desinfektion_erledigt, link:null, group:'kueche'},
+    ...(tiefenDue?[{id:'tiefenreinigung', label:'Monatliche Tiefenreinigung', sub:'Alle Punkte abhaken', done:false, soft:true, link:null, group:'kueche'}]:[]),
     {id:'sweets', label:'Sweets bestellt', sub:'Lieferung am '+sweetsLieferDatum().kurz, done:sweetsDone||_man.has('sweets'), link:'order', orderTab:'sweets', group:'bestellungen'},
     {id:'transporter', label:'Transporter bestellt', sub:'Verpackungen, Reinigung, Food & Drinks', done:transporterDone||_man.has('transporter'), link:'order', orderTab:'transporter', group:'bestellungen'},
     ...(isKCDaySchichtende?[{id:'kc', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände der Shop-Produkte', done:kcDone||_man.has('kc'), link:'order', orderTab:'kc', group:'bestellungen'}]:[]),
@@ -17030,10 +17049,11 @@ async function renderSchichtende(){
     sweets:     {emoji:'🍰', label:'Sweets bestellt', sub:'Lieferung am '+sweetsLieferDatum().kurz, link:'order', orderTab:'sweets'},
     transporter:{emoji:'🚚', label:'Transporter bestellt', sub:'Verpackungen & Reinigung', link:'order', orderTab:'transporter'},
     kc:         {emoji:'📦', label:'Shop Produkte ausgefüllt', sub:'IST-Bestände Shop-Produkte', link:'order', orderTab:'kc'},
-    uebergabe:  {emoji:'✍️', label:'Übergabe-Notiz', sub:'Hinweis für nächste Schicht', link:null}
+    uebergabe:  {emoji:'✍️', label:'Übergabe-Notiz', sub:'Hinweis für nächste Schicht', link:null},
+    tiefenreinigung: {emoji:'🧽', label:'Monatliche Tiefenreinigung', sub:'Alle Punkte abhaken, dann „Erledigt“. Blockiert den Abschluss nicht.', link:null}
   };
 
-  const requiredSteps=schritte.filter(s=>!s.optional);
+  const requiredSteps=schritte.filter(s=>!s.optional && !s.soft); // soft = sichtbar, blockiert den Abschluss aber nicht
   const open=schritte.filter(s=>!s.done);
   const done=schritte.filter(s=>s.done && !s.optional);
   const requiredOpen=requiredSteps.filter(s=>!s.done);
@@ -17095,6 +17115,7 @@ async function renderSchichtende(){
             ${linkFn?`<button onclick="${linkFn}" style="background:var(--green);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">→</button>`:''}
           </div>
           ${s.id==='uebergabe'?`<textarea id="uebergabe-text" placeholder="Was soll die nächste Schicht wissen?" style="width:100%;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-height:80px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea><button class="submit-btn" style="margin-top:8px;" onclick="saveUebergabeNotiz()">Notiz speichern ✔</button>`:''}
+          ${s.id==='tiefenreinigung'?tiefenChecklistHtml():''}
           ${isReinigung?(()=>{
             const r=(reinToday||[])[0];
             return `<div style="margin-top:10px;border-top:0.5px solid var(--border);padding-top:8px;">
