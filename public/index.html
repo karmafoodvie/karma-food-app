@@ -1922,7 +1922,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.381';
+const APP_VERSION='6.99.383';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -5647,12 +5647,12 @@ async function renderHome(){
         <span style="color:#fff;font-size:18px;">→</span>
       </div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">
-        ${feedbackDoneHome?'<span class="badge badge-ok" style="font-size:10px;">😋 Food-Feedback ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">😋 Food-Feedback</span>'}
-        ${sweetsDone?'<span class="badge badge-ok" style="font-size:10px;">Sweets ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Sweets</span>'}
-        ${transporterDone?'<span class="badge badge-ok" style="font-size:10px;">Transporter ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Transporter</span>'}
-        ${isKCDay?(kcDone?'<span class="badge badge-ok" style="font-size:10px;">Shop Produkte ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Shop Produkte</span>'):''}
-        ${disposalDone?'<span class="badge badge-ok" style="font-size:10px;">Entsorgung ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Entsorgung</span>'}
-        ${dcStatus.reinCount===2?'<span class="badge badge-ok" style="font-size:10px;">Reinigung & Desinfektion ✓</span>':'<span class="badge badge-warn" style="font-size:10px;">Reinigung & Desinfektion</span>'}
+        ${feedbackDoneHome?'<span class="badge badge-ok" onclick="event.stopPropagation();seChipGo(\'feedback\')" style="font-size:10px;cursor:pointer;">😋 Food-Feedback ✓</span>':'<span class="badge badge-warn" onclick="event.stopPropagation();seChipGo(\'feedback\')" style="font-size:10px;cursor:pointer;">😋 Food-Feedback</span>'}
+        ${sweetsDone?'<span class="badge badge-ok" onclick="event.stopPropagation();seChipGo(\'sweets\')" style="font-size:10px;cursor:pointer;">Sweets ✓</span>':'<span class="badge badge-warn" onclick="event.stopPropagation();seChipGo(\'sweets\')" style="font-size:10px;cursor:pointer;">Sweets</span>'}
+        ${transporterDone?'<span class="badge badge-ok" onclick="event.stopPropagation();seChipGo(\'transporter\')" style="font-size:10px;cursor:pointer;">Transporter ✓</span>':'<span class="badge badge-warn" onclick="event.stopPropagation();seChipGo(\'transporter\')" style="font-size:10px;cursor:pointer;">Transporter</span>'}
+        ${isKCDay?(kcDone?'<span class="badge badge-ok" onclick="event.stopPropagation();seChipGo(\'kc\')" style="font-size:10px;cursor:pointer;">Shop Produkte ✓</span>':'<span class="badge badge-warn" onclick="event.stopPropagation();seChipGo(\'kc\')" style="font-size:10px;cursor:pointer;">Shop Produkte</span>'):''}
+        ${disposalDone?'<span class="badge badge-ok" onclick="event.stopPropagation();seChipGo(\'entsorgung\')" style="font-size:10px;cursor:pointer;">Entsorgung ✓</span>':'<span class="badge badge-warn" onclick="event.stopPropagation();seChipGo(\'entsorgung\')" style="font-size:10px;cursor:pointer;">Entsorgung</span>'}
+        ${dcStatus.reinCount===2?'<span class="badge badge-ok" onclick="event.stopPropagation();seChipGo(\'reinigung\')" style="font-size:10px;cursor:pointer;">Reinigung & Desinfektion ✓</span>':'<span class="badge badge-warn" onclick="event.stopPropagation();seChipGo(\'reinigung\')" style="font-size:10px;cursor:pointer;">Reinigung & Desinfektion</span>'}
       </div>
     </div>
 
@@ -15433,6 +15433,9 @@ function schichtendeAlleIds(){
   return ['dailycheck','entsorgung','feedback','forecast_menge','beilagen_anpassen','sweets','transporter','kc'].filter(id=>id!=='kc'||d===2||d===4);
 }
 window.schichtendeAlleIds=schichtendeAlleIds;
+// Chip im "Let's wrap up the shift"-Kasten (Startseite): direkt zu diesem Schritt, danach geht es mit den restlichen weiter
+function seChipGo(id){ const ids=schichtendeAlleIds(); const i=ids.indexOf(id); if(i<0){ goTo('schichtende'); return; } schichtendeStart(ids.slice(i)); }
+window.seChipGo=seChipGo;
 function schichtendeStart(ids){
   const list=(ids||[]).filter(id=>SCHICHTENDE_WIZARD_STEPS[id]);
   if(!list.length){ goTo('schichtende'); return; }
