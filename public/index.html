@@ -1918,7 +1918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.372';
+const APP_VERSION='6.99.373';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -2918,9 +2918,14 @@ async function loadMenuTausch(){
 function menuTauschFuerWocheTag(woche, tag){
   const grenze=new Date(); grenze.setDate(grenze.getDate()-7);
   const g=grenze.toISOString().split('T')[0];
+  // Nur der NÄCHSTE Termin dieser Woche+Tag-Kombination zählt (ab letzter Woche). Sonst greift ein Tausch in
+  // der Zukunft (z.B. 07.01.27) auch für den Donnerstag der W2-Rotation am 10.12. (Fehler 27.11.26, Simone).
+  const naechster=ds=>{ for(let i=0;i<=28;i++){ const dt=new Date(g+'T00:00:00'); dt.setDate(dt.getDate()+i);
+    const x=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+    if(WEEKDAY_MENU_KEY[dt.getDay()]===tag && getMenuWocheForDate(x)===woche) return x; } return null; };
+  const termin=naechster();
   for(const ds of Object.keys(MENU_TAUSCH)){
-    if(ds<g) continue;
-    if(getMenuWocheForDate(ds)!==woche || WEEKDAY_MENU_KEY[new Date(ds+'T00:00:00').getDay()]!==tag) continue;
+    if(ds<g || ds!==termin) continue;
     const q=MENU_TAUSCH[ds], qtag=WEEKDAY_MENU_KEY[new Date(q+'T00:00:00').getDay()]; if(!qtag) continue;
     const qw=getMenuWocheForDate(q);
     return {datum:ds, quelle:q, era:getMenuEraForDate(q), woche:qw, tag:qtag, key:`w${qw}_${qtag}`};
