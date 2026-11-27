@@ -1918,7 +1918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.371';
+const APP_VERSION='6.99.372';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -15708,7 +15708,7 @@ function dailyCheckLieferungHtml(fcRows,supRows,wek,wekPrev){
         <div style="flex:1;height:6px;border-radius:6px;background:var(--border);overflow:hidden;"><div id="dl-bar" style="height:100%;width:0;background:var(--green);transition:width .2s;"></div></div>
         <div id="dl-count" style="font-size:11px;font-weight:700;color:var(--sub);white-space:nowrap;"></div>
       </div>
-      <div style="font-size:10.5px;color:var(--muted);margin-bottom:7px;">Alles angekommen? ✓ antippen — oder Menge mit − / + korrigieren, dann passen sich alle Listen an.</div>
+      <div style="font-size:10.5px;color:var(--muted);margin-bottom:7px;">Nur ändern, wenn etwas fehlt oder anders ist: Menge mit − / + korrigieren, dann passen sich alle Listen an. Sonst nichts tippen.</div>
       <button type="button" onclick="dlConfirmAll()" style="width:100%;padding:9px;border-radius:10px;border:none;background:var(--green);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✓ Alles stimmt – alles angekommen</button>
       ${dishIdx.length?hdr('🍽️ Tagesgerichte','Menge + Temperatur (über 65°)','#9A3412','#FFEDD5')+dishIdx.map(i=>rowHtml(rows[i],i)).join(''):''}
       ${supIdx.length?hdr('🥗 Beilagen','nur Menge','#166534','#DCFCE7')+supIdx.map(i=>rowHtml(rows[i],i)).join(''):''}
@@ -15739,8 +15739,8 @@ function dlProgress(){
   const rows=[...document.querySelectorAll('.dl-row')]; if(!rows.length) return;
   const done=rows.filter(r=>r.dataset.state).length, diff=rows.filter(r=>r.dataset.state==='diff').length;
   const bar=document.getElementById('dl-bar'), c=document.getElementById('dl-count');
-  if(bar){ bar.style.width=(done/rows.length*100)+'%'; bar.style.background=diff?'#F97316':'var(--green)'; }
-  if(c) c.textContent=done+' / '+rows.length+' bestätigt'+(diff?' · '+diff+' abweichend':'');
+  if(bar){ bar.style.width=(diff?100:100)+'%'; bar.style.background=diff?'#F97316':'var(--green)'; }
+  if(c) c.textContent=diff?(diff+' abweichend'):'wie bestellt';
 }
 function dlTempPaint(inp){
   if(!inp||!inp.id||!inp.id.startsWith('wek-temp-')||inp.id.startsWith('wek-temp-row')) return;
@@ -15787,7 +15787,7 @@ function dlCollect(){
   const rows=[...document.querySelectorAll('.dl-row')];
   const out=[]; let open=null;
   rows.forEach(r=>{
-    if(!r.dataset.state){ open=open||r.dataset.name; return; }
+    // Optional (27.11.26): nicht angetippte Zeilen gelten als "stimmt wie bestellt" (Menge steht schon im Feld)
     out.push({kind:r.dataset.kind,name:r.dataset.name,groesse:r.dataset.groesse||'',erwartet:parseFloat(r.dataset.exp),geliefert:parseFloat(String(r.querySelector('[id^="dl-step-"] input').value).replace(',','.'))});
   });
   return {rows:out, open};
@@ -15809,7 +15809,6 @@ async function dlApplyDiffs(rows,today){
 async function saveDailyCheckAll(){
   const today=todayISO();
   const dl=dlCollect();
-  if(dl.open){ showToast('Bitte Lieferung bestätigen: '+dl.open+' (oder „Alles stimmt“)'); document.getElementById('dl-card')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
   const tempRows=[...document.querySelectorAll('[id^="wek-temp-row-"]')].filter(r=>r.style.display!=='none');
   if(!tempRows.length){ showToast('Bitte mindestens eine angelieferte Ware auswählen'); return; }
   const temperaturen={};
