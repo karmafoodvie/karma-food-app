@@ -1922,7 +1922,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.378';
+const APP_VERSION='6.99.379';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -22479,17 +22479,29 @@ async function renderCatering(){
   if(cateringCanEdit()) html+=`<div style="display:flex;gap:8px;margin-bottom:14px;"><button onclick="showCateringForm()" style="flex:1;padding:11px;border:none;border-radius:10px;background:#D4FF3F;color:#1a1a18;font-size:13.5px;font-weight:700;cursor:pointer;">➕ Neues Catering</button><button onclick="document.getElementById('cat-pdf-in').click()" title="Produktionsplan als PDF hochladen" style="flex:1;padding:11px;border:1.5px solid #0F6E56;border-radius:10px;background:#fff;color:#0F6E56;font-size:13.5px;font-weight:700;cursor:pointer;">📤 PDF hochladen</button><input id="cat-pdf-in" type="file" accept="application/pdf,.pdf" style="display:none;" onchange="cateringImportPdf(this)"></div>`;
   if(!_cateringList.length) html+=`<div class="card" style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Keine anstehenden Caterings.</div>`;
   _cateringList.forEach(c=>{
-    const left=(c.packliste||[]).filter(p=>!p.done).length;
-    const days=Math.round((new Date(c.datum+'T00:00:00')-new Date(today+'T00:00:00'))/86400000);
+    const total=(c.packliste||[]).length, left=(c.packliste||[]).filter(x=>!x.done).length;
+    const dt=new Date(c.datum+'T00:00:00');
+    const days=Math.round((dt-new Date(today+'T00:00:00'))/86400000);
     const when=days===0?'HEUTE':days===1?'MORGEN':'in '+days+' Tagen';
-    html+=`<div class="card" onclick="showCateringDetail(${c.id})" style="padding:12px 14px;margin-bottom:8px;cursor:pointer;${days<=1?'border-color:#F97316;':''}">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
-        <strong style="font-size:14px;">${escAttr(c.kunde)}</strong>
-        <span style="font-size:10.5px;font-weight:700;color:${days<=1?'#C2410C':'var(--muted)'};">${when}</span>
-      </div>
-      <div style="font-size:12px;color:var(--sub);margin-top:3px;">${cateringDateLabel(c.datum)} · ${c.personen||'?'} PAX${c.ankunft?' · Ankunft '+escAttr(c.ankunft):''}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:3px;">${left?`☐ ${left} Packpunkt${left>1?'e':''} offen`:((c.packliste||[]).length?'☑ alles eingepackt':'')}</div>
-    </div>`;
+    const soon=days<=1;
+    const wd=dt.toLocaleDateString('de-AT',{weekday:'short'}).replace('.','').toUpperCase();
+    const mon=dt.toLocaleDateString('de-AT',{month:'short'}).replace('.','').toUpperCase();
+    const tile='<div style="flex:none;width:62px;border-radius:12px;padding:7px 0;text-align:center;background:'+(soon?'#E94E1B':'#D4FF3F')+';color:'+(soon?'#fff':'#1a1a18')+';">'
+      +'<div style="font-size:11px;font-weight:800;letter-spacing:.06em;">'+wd+'</div>'
+      +'<div style="font-family:Boldonse,sans-serif;font-size:24px;line-height:1.15;">'+dt.getDate()+'</div>'
+      +'<div style="font-size:11px;font-weight:800;letter-spacing:.06em;">'+mon+'</div></div>';
+    const logo=c.logo?'<img src="'+c.logo+'" alt="" style="height:30px;max-width:90px;object-fit:contain;flex:none;">':'';
+    const chip=(t,bg,fg)=>'<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+bg+';color:'+fg+';white-space:nowrap;">'+t+'</span>';
+    const chips=chip(when,soon?'#FDEBE4':'#F1F1EE',soon?'#C2410C':'#5C5C57')
+      +(c.personen?chip(c.personen+' PAX','#E3F3EE','#0F6E56'):'')
+      +(c.unvertraeglichkeiten?chip('🥜 Unverträglichkeiten','#FFF4D6','#7A5B00'):'')
+      +(total?chip(left?('☐ '+(total-left)+'/'+total+' eingepackt'):'☑ alles eingepackt',left?'#F1F1EE':'#E3F3EE',left?'#5C5C57':'#0F6E56'):'');
+    const where=[c.ankunft?'Ankunft '+escAttr(c.ankunft):'',c.beginn?'Beginn '+escAttr(c.beginn):'',c.ort?escAttr(c.ort):''].filter(Boolean).join(' · ');
+    html+='<div class="card" onclick="showCateringDetail('+c.id+')" style="padding:12px;margin-bottom:8px;cursor:pointer;display:flex;gap:12px;align-items:center;'+(soon?'border-color:#F97316;':'')+'">'
+      +tile
+      +'<div style="flex:1;min-width:0;"><div style="display:flex;align-items:center;gap:10px;justify-content:space-between;"><strong style="font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;">'+escAttr(c.kunde)+'</strong>'+logo+'</div>'
+      +(where?'<div style="font-size:12px;color:var(--sub);margin-top:2px;">'+where+'</div>':'')
+      +'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">'+chips+'</div></div></div>';
   });
   el.innerHTML=html; translateEl(el);
 }
@@ -22510,8 +22522,10 @@ async function openCateringPdf(id){
     if(!c) throw new Error('nicht gefunden');
     const {jsPDF}=await _loadJsPdf();
     const doc=new jsPDF({unit:'mm',format:'a4'});
+    let _lg=null; if(c.logo){ _lg=await new Promise(r=>{ const im=new Image(); im.onload=()=>r({w:im.naturalWidth,h:im.naturalHeight}); im.onerror=()=>r(null); im.src=c.logo; }); }
     let y=18; const L=18, W=174;
     const txt=(t,size,bold,col)=>{ doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(size); doc.setTextColor(...(col||[26,26,24])); doc.splitTextToSize(String(t),W).forEach(ln=>{ if(y>280){doc.addPage();y=18;} doc.text(ln,L,y); y+=size*0.5; }); };
+    if(_lg){ const lh=16, lw=Math.min(50,lh*_lg.w/_lg.h); try{ doc.addImage(c.logo,/^data:image\/png/.test(c.logo)?'PNG':'JPEG',L+W-lw,14,lw,lh); }catch(e){} }
     txt('CATERING Produktionsplan',11,true,[110,110,110]); y+=2;
     txt(c.kunde,22,true); y+=4;
     const facts=[['Veranstaltungsdatum',cateringDateLabel(c.datum)],['Ort',c.ort],['Ankunft Location',c.ankunft],['Beginn Veranstaltung',c.beginn],['Kontakt vor Ort',c.kontakt],['Personen',c.personen?c.personen+' PAX':'']].filter(f=>f[1]);
@@ -22543,7 +22557,7 @@ function showCateringDetail(id){
   const el=_catEl();
   const row=(l,v)=>v?`<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><div style="width:105px;color:var(--muted);flex-shrink:0;">${l}</div><div style="flex:1;font-weight:500;">${escAttr(String(v))}</div></div>`:'';
   let html=(_catEmbedded()?(window._kitchenTabsHtml||''):'')+`<div onclick="renderCatering()" style="display:flex;align-items:center;gap:6px;color:var(--green);font-size:13px;font-weight:500;margin-bottom:12px;cursor:pointer;">‹ Zurück zur Catering-Liste</div>`;
-  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);">CATERING PRODUKTIONSPLAN</div><div style="font-size:22px;font-weight:800;margin-bottom:10px;">${escAttr(c.kunde)}</div>`;
+  html+=`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);">CATERING PRODUKTIONSPLAN</div><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;"><div style="font-size:22px;font-weight:800;">${escAttr(c.kunde)}</div>${c.logo?`<img src="${c.logo}" alt="" style="height:44px;max-width:140px;object-fit:contain;">`:''}</div>`;
   html+=`<div class="card" style="padding:6px 14px;margin-bottom:10px;">${row('Veranstaltungsdatum',cateringDateLabel(c.datum))}${row('Ort',c.ort)}${row('Ankunft Location',c.ankunft)}${row('Beginn Veranstaltung',c.beginn)}${row('Kontakt vor Ort',c.kontakt)}${row('Personen',c.personen?c.personen+' PAX':'')}</div>`;
   if(c.unvertraeglichkeiten) html+=`<div style="background:#FFF7ED;border:1.5px solid #F97316;color:#9A3412;border-radius:10px;padding:10px 12px;font-size:12.5px;font-weight:700;margin-bottom:12px;">🥜 Unverträglichkeiten / Sonderwünsche: ${escAttr(c.unvertraeglichkeiten)}</div>`;
   if(c.hinweis) html+=`<div style="background:#FEF2F2;border:1.5px solid #DC2626;color:#991B1B;border-radius:10px;padding:10px 12px;font-size:12.5px;font-weight:800;margin-bottom:12px;">⚠️ ${escAttr(c.hinweis)}</div>`;
@@ -22577,6 +22591,22 @@ function closeCateringForm(){ document.getElementById('catering-modal')?.remove(
 // ── Catering-Formular (27.11.26, Wunsch Simone): Eckdaten, Unverträglichkeiten, Service-Blöcke, Allgemeine Hinweise, Packliste mit Mengen
 const CAT_PACK_STD=[['Grüne Bain Marie',1],['Silberne Bain Marie',1],['Behälter für Toppings',1],['Servietten',1],['Hay Körbe für Besteck',1],['Vorlegebesteck (Schöpfer für Curry, Reis...)',1],['Kleine Löffel für Saucen',1],['Zangen für Kräuter, Limetten',1],['Salatschüssel',1],['Ausgedruckte Menüs',0],['Basis-Equipment (Müllsäcke, Handschuhe, Desinfektionsmittel, Hangerl, Papierrolle)',0],['Flaschenöffner',0],['Serviertablett',0]];
 let _cfBl=[], _cfCustom=[];
+let _cfLogo=null;
+function cfLogoShow(){ const pv=document.getElementById('cf-logo-prev'), d=document.getElementById('cf-logo-del'); if(pv) pv.innerHTML=_cfLogo?'<img src="'+_cfLogo+'" alt="Logo" style="height:40px;max-width:140px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:4px;background:#fff;">':''; if(d) d.style.display=_cfLogo?'inline-block':'none'; }
+function cfLogoDel(){ _cfLogo=null; const f=document.getElementById('cf-logo-file'); if(f) f.value=''; cfLogoShow(); }
+// Logo im Browser auf max. 240×120 verkleinern (PNG bleibt PNG, sonst JPEG), damit die Zeile klein bleibt
+function cfLogoPick(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  if(!/^image\//.test(f.type)){ showToast('Bitte eine Bilddatei wählen',true); return; }
+  const rd=new FileReader();
+  rd.onload=()=>{ const im=new Image(); im.onload=()=>{
+    const k=Math.min(1,240/im.naturalWidth,120/im.naturalHeight), w=Math.max(1,Math.round(im.naturalWidth*k)), h=Math.max(1,Math.round(im.naturalHeight*k));
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h; const cx=cv.getContext('2d'); const png=/png|svg|webp|gif/.test(f.type);
+    if(!png){ cx.fillStyle='#fff'; cx.fillRect(0,0,w,h); } cx.drawImage(im,0,0,w,h);
+    _cfLogo=cv.toDataURL(png?'image/png':'image/jpeg',0.88); cfLogoShow();
+  }; im.onerror=()=>showToast('Bild konnte nicht gelesen werden',true); im.src=rd.result; };
+  rd.readAsDataURL(f);
+}
 function catBloeckeAusMenue(menue,extras){
   const out=[]; let cur=null;
   (menue||[]).forEach(m=>{
@@ -22619,6 +22649,7 @@ function showCateringForm(id,prefill){
   closeCateringForm();
   const c=id?_cateringList.find(x=>x.id===id):null;
   const p=c||prefill||null; // p = Werte fürs Formular (bestehend oder aus PDF-Import)
+  _cfLogo=(p&&p.logo)||null;
   _cfBl=p?catBloecke(p).map(b=>({name:b.name||'',zeit:b.zeit||'',menue:b.menue||'',hinweis:b.hinweis||''})):[{name:'Frühstück',zeit:'',menue:'',hinweis:''},{name:'Mittagessen',zeit:'',menue:'',hinweis:''}];
   const prevPack=(p&&p.packliste)||[]; const stdNames=CAT_PACK_STD.map(x=>x[0]);
   _cfCustom=prevPack.filter(x=>!stdNames.includes(x.t)).map(x=>({t:x.t,q:x.q||0}));
@@ -22636,6 +22667,7 @@ function showCateringForm(id,prefill){
     +inp('kunde','Kunde / Veranstaltung *',p&&p.kunde,'z.B. WU Wien Innovation Office')+inp('datum','Veranstaltungsdatum *',p&&p.datum,'','date')+inp('ort','Veranstaltungsort',p&&p.ort,'Adresse oder Ort')
     +inp('kontakt','Kontakt vor Ort',p&&p.kontakt,'Name + Telefon')+inp('personen','Anzahl Personen (PAX)',p&&p.personen,'16','number')+inp('ankunft','Ankunft Location',p&&p.ankunft,'11:30','time')
     +inp('beginn','Beginn Veranstaltung',p&&p.beginn,'','time')+'</div>'
+    +'<div style="margin-top:10px;"><label style="font-size:11.5px;color:var(--muted);display:block;margin-bottom:4px;">Logo des Kunden (optional)</label><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><div id="cf-logo-prev"></div><input id="cf-logo-file" type="file" accept="image/*" onchange="cfLogoPick(this)" style="font-size:12.5px;max-width:100%;"><button type="button" id="cf-logo-del" onclick="cfLogoDel()" style="display:none;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:#B91C1C;font-size:12px;cursor:pointer;">Logo entfernen</button></div></div>'
     +sec('Unverträglichkeiten / Sonderwünsche')+ta('unv','',p&&p.unvertraeglichkeiten,'z.B. 3 laktosefrei, 1 vegan, 1 glutenfrei, 1 Soja',2)
     +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><div>'+sec('Service-Blöcke')+'</div><button type="button" onclick="cfAddBlock()" style="margin-top:12px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;">+ Block hinzufügen</button></div>'
     +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Frühstück, Mittag, Snack, Abend — beliebig hinzufügen</div><div id="cf-blocks"></div>'
@@ -22649,7 +22681,7 @@ function showCateringForm(id,prefill){
     +(c?'<button onclick="cancelCatering('+c.id+')" style="width:100%;margin-top:8px;padding:9px;border:none;background:none;color:#B91C1C;font-size:12px;cursor:pointer;">Catering absagen / entfernen</button>':'')
     +'</div>';
   document.body.appendChild(ov);
-  cfRenderBl(); cfRenderCustom();
+  cfRenderBl(); cfRenderCustom(); cfLogoShow();
 }
 async function saveCatering(id,pdf){
   const g=k=>(document.getElementById('cf-'+k)?.value||'').trim();
@@ -22664,7 +22696,7 @@ async function saveCatering(id,pdf){
   _cfCustom.forEach(cc=>{ const it={t:cc.t,done:doneSet.has(cc.t)}; if(cc.q>0) it.q=cc.q; pack.push(it); });
   const menue=[]; bloecke.forEach(b=>{ menue.push('## '+[b.name,b.zeit].filter(Boolean).join(' · ')); String(b.menue||'').split('\n').map(x=>x.trim()).filter(Boolean).forEach(x=>menue.push(x)); }); // Altformat bleibt befüllt
   const body={kunde,datum,ort:g('ort')||null,ankunft:g('ankunft')||null,beginn:g('beginn')||null,kontakt:g('kontakt')||null,personen:g('personen')?parseInt(g('personen'),10):null,hinweis:g('hinweis')||null,
-    unvertraeglichkeiten:g('unv')||null,bloecke,menue,extras:[],packliste:pack,updated_at:new Date().toISOString()};
+    unvertraeglichkeiten:g('unv')||null,logo:_cfLogo||null,bloecke,menue,extras:[],packliste:pack,updated_at:new Date().toISOString()};
   const b=document.getElementById('cf-save'); if(b){b.disabled=true;b.textContent='Speichert…';}
   try{
     let newId=id;
