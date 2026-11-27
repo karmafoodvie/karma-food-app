@@ -328,6 +328,7 @@ button,[onclick],a,summary,label,input,select{touch-action:manipulation;-webkit-
 .gw-empty{color:var(--muted);font-size:13.5px;padding:4px 0}
 .gw-link{background:none;border:0;color:var(--green);font-weight:700;font-size:13.5px;padding:8px 0;min-height:40px;text-align:left;cursor:pointer}
 .gw-fine{border-top:1px solid var(--border);padding-top:8px}
+.gw-zf.open .gw-fine{margin-top:8px}
 .gw-hint{font-size:12px;color:var(--muted);margin-bottom:6px}
 .gw-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 @media (max-width:480px){.gw-g{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -1917,7 +1918,7 @@ function renderKontrolleView(){
 function renderKontrolleOverlay(){ goTo('kontrolle'); }
 function setHomeMode(m){ homeMode=m; renderHome(); }
 // Hygiene-Schulung: pro Person statt pro Filiale, Selbst-Eintragung durch Mitarbeitende
-const APP_VERSION='6.99.370';
+const APP_VERSION='6.99.371';
 
 const HYGIENE_INHALTE = ['Temperatur der Waren','Temperaturkontrolle der Kühlflächen/Geräte','Lagerung und Ausgabe der Speisen','Wareneingangskontrolle','Reinigung der Oberflächen','Reinigung der Kaffeemaschine und Eiswürfelmaschine'];
 const HYGIENE_TRAINER = ['Adi','Simone','Tini'];
@@ -16256,8 +16257,8 @@ function gwRender(){
   else if(g>0&&GW.kind){ const d=g-t; if(d===0){ st='<div class="gw-note ok">✓ Passt zu '+gwEur(g)+'</div>'; ok=true; } else st='<div class="gw-note bad">● Bitte Stückelung prüfen: '+gwEur(Math.abs(d))+(d>0?' fehlen':' zu viel')+'</div>'; }
   root.innerHTML=`<div class="gw-step"><span class="no">1</span><b>Wie viel soll gewechselt werden?</b></div><div class="gw-quick">${chips}</div>
     <div class="gw-step"><span class="no">2</span><b>Wie soll es sein?</b></div><div class="gw-how">${how}</div>
-    <div class="gw-step"><span class="no">3</span><b>Das bekommst du</b></div><div class="gw-zettel">${z}</div>
-    <button type="button" class="gw-link" data-gwf="1">${GW.fine?'✕ Schließen':'✎ Genau festlegen'}</button>${fine}${st}
+    <div class="gw-step"><span class="no">3</span><b>Das bekommst du</b></div><div class="gw-zf${GW.fine?' open':''}"><div class="gw-zettel">${z}</div>${fine}</div>
+    <button type="button" class="gw-link" data-gwf="1">${GW.fine?'✕ Schließen':'✎ Genau festlegen'}</button>${st}
     <button type="button" class="gw-send" data-gws="1" ${ok?'':'disabled'}>💶 ${ok?'Wechselgeld anfragen ('+gwEur(g)+')':'Wechselgeld anfragen'}</button>`;
 }
 document.addEventListener('click',function(e){
@@ -23911,7 +23912,7 @@ function kfWideTag(){ return true; } // Umschalter Breit/Handy ist am Computer i
    +'body.kf-wide .kf-start,body.kf-wide .kf-wrap{padding:10px 16px !important;margin:0 0 4px !important}'
    +'body.kf-wide .kf-start .badge,body.kf-wide .kf-wrap .badge{font-size:12px !important;padding:5px 12px}'
    +'body.kf-wide .ord-cols{column-count:2;column-gap:28px}body.kf-wide .ord-cols>*{break-inside:avoid;-webkit-column-break-inside:avoid}'
-   +'body.kf-wide .gw-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-areas:"a b" "a c";grid-template-rows:auto 1fr;gap:12px;align-items:start}body.kf-wide .gw-a{grid-area:a;margin-bottom:0}body.kf-wide .gw-b{grid-area:b;margin-bottom:0}body.kf-wide .gw-c{grid-area:c;margin-top:0 !important}'
+   +'body.kf-wide .gw-zf.open{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}body.kf-wide .gw-zf.open .gw-fine{margin-top:0;border-top:0;padding-top:0}body.kf-wide .gw-zf.open .gw-g{grid-template-columns:repeat(2,minmax(0,1fr))}body.kf-wide .gw-zf.open .gw-c2 button{width:30px;height:30px}body.kf-wide .gw-zf.open .gw-n{min-width:18px}body.kf-wide .gw-zf.open .gw-den{padding-left:6px}body.kf-wide .gw-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-areas:"a b" "a c";grid-template-rows:auto 1fr;gap:12px;align-items:start}body.kf-wide .gw-a{grid-area:a;margin-bottom:0}body.kf-wide .gw-b{grid-area:b;margin-bottom:0}body.kf-wide .gw-c{grid-area:c;margin-top:0 !important}'
    +'body.kf-wide{max-width:none !important}body.kf-wide #bottomnav{max-width:none !important}}';
   document.head.appendChild(st);
   const sh=document.createElement('style'); sh.id='kf-handy-css';
